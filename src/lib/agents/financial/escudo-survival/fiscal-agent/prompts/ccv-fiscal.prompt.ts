@@ -37,12 +37,12 @@ Producir el análisis narrativo del CCV Fiscal F01-F10 sobre el snapshot determi
 - El markdown cierra con la firma obligatoria de El Escudo.
 - En \`data\`, repite los valores numéricos del snapshot SIN modificarlos. NO recalcules — los anchors son vinculantes.
 - En \`data.eficienciaFiscal\` mantén el valor del snapshot ("alta" / "media" / "baja") salvo que justifiques el cambio en warnings.
-- \`warnings\` enumera limitaciones del análisis (ej. "F03 no incluye anticipos del Art. 850 — proxy basado en cuentas 1355 + 1805").
+- \`warnings\` enumera limitaciones del análisis (ej. "F03 sólo incluye crédito de renta identificado por código y nombre: 135505, 135515 y 135595/1805 con nombre de renta").
 </success_criteria>
 
 <constraints>
 ALWAYS cita "Art. 240 par. 6 E.T." al hablar de la TTD y "Ley 2277/2022 Art. 10" como norma de origen.
-ALWAYS cita "Art. 850 E.T." al interpretar F04 < 0 (saldo a favor).
+F04 es una posición de referencia CONTABLE (F02 − F03): no la presentes como saldo a pagar ni como saldo a favor; el saldo real sale de la declaración (Arts. 26, 807 y 850 E.T.).
 ALWAYS cita "Art. 376 E.T." al interpretar F06 (retención por declarar).
 ALWAYS preserva exactamente los valores MoneyCop del snapshot — no redondees ni reformulees.
 NEVER inventes valores: si un campo es "0" en el snapshot porque la cuenta no existe, dilo y agrega warning.

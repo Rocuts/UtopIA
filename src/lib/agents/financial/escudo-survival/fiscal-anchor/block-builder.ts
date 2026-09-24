@@ -62,7 +62,7 @@ export function buildFiscalAnchorBlockMarkdown(block: FiscalAnchorBlock): string
   lines.push(`- F01 · UAI contable: ${formatCopFromCents(BigInt(block.f01))}`);
   lines.push(`- F02 · Impuesto referencia 35% (Art. 240 E.T.): ${formatCopFromCents(BigInt(block.f02))}`);
   lines.push(`- F03 · Crédito de renta (135505 + 135515; 135595/1805 sólo si el nombre es de renta): ${formatCopFromCents(BigInt(block.f03))}`);
-  lines.push(`- F04 · Saldo neto (F02 − F03): ${formatCopFromCents(BigInt(block.f04))}  [positivo = a pagar; negativo = saldo a favor Art. 850 E.T.]`);
+  lines.push(`- F04 · Posición de referencia contable (F02 − F03): ${formatCopFromCents(BigInt(block.f04))}  [estimación contable, NO liquidación: no es saldo a pagar ni saldo a favor; requiere renta líquida depurada (Art. 26 E.T.) y anticipo (Art. 807 E.T.)]`);
   lines.push(`- F05 · IVA por pagar (|Cta.2408|): ${formatCopFromCents(BigInt(block.f05))}`);
   lines.push(`- F06 · Retefuente por declarar (|Cta.2365|): ${formatCopFromCents(BigInt(block.f06))}`);
   lines.push(`- F07 · ICA por pagar (|Cta.2368|): ${formatCopFromCents(BigInt(block.f07))}`);

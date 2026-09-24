@@ -342,12 +342,12 @@ export const dict = {
               cards: {
                 tet: {
                   title: 'Tasa Efectiva de Tributación',
-                  metric: 'TET',
+                  metric: 'TET contable',
                   norma: 'Art. 240 E.T.',
                 },
                 retention: {
                   title: 'Escudo de Retenciones',
-                  metric: 'Saldo a favor proyectado',
+                  metric: 'Saldo a favor (requiere declaración)',
                   norma: 'Art. 670 E.T.',
                 },
                 antiDian: {
@@ -363,7 +363,7 @@ export const dict = {
                 dividend: {
                   title: 'Optimización de Dividendos',
                   metric: 'Ahorro vs distribuir',
-                  norma: 'Art. 242 / Art. 36-3 E.T.',
+                  norma: 'Art. 242 E.T.',
                 },
               },
               synthesis: {
@@ -397,14 +397,14 @@ export const dict = {
               norma: 'Art. 240 E.T.',
             },
             f03: {
-              title: 'Retenciones Acumuladas',
-              description: 'Crédito fiscal contra impuesto',
-              norma: 'Cta. 1355',
+              title: 'Crédito de Renta',
+              description: 'Retenciones y anticipos de renta (sin ReteIVA, ReteICA ni otros impuestos)',
+              norma: 'Ctas. 135505 / 135515',
             },
             f04: {
-              title: 'Neto a Pagar / Saldo a Favor',
-              description: 'F02 − F03 (negativo = favor)',
-              norma: 'Art. 850 E.T.',
+              title: 'Posición de Referencia Contable',
+              description: 'F02 − F03 · estimación contable, no liquidación (no es saldo a pagar ni a favor)',
+              norma: 'Arts. 26 y 807 E.T. (requiere depuración)',
             },
             f05: {
               title: 'Provisión IVA por Pagar',
@@ -447,7 +447,7 @@ export const dict = {
             },
             alertas: {
               A5_SIN_PROVISION: 'Impuesto de Renta sin provisionar — riesgo Art. 647 E.T.',
-              SALDO_A_FAVOR: 'Saldo a favor disponible',
+              SALDO_A_FAVOR: 'Posible saldo a favor (estimación contable, no liquidación) — verificar contra la declaración',
               VENCIMIENTO_15D: 'Vencimiento próximo (≤15 días)',
               F10_BAJA: 'Eficiencia fiscal baja',
               ICA_ESTIMACION_SIN_CIIU: 'ICA estimado sin CIIU verificado — Decreto 352/2002',
@@ -487,8 +487,8 @@ export const dict = {
               header: 'CONTEXTO FISCAL AUTOMÁTICO',
               f01: 'F01 UAI Contable',
               f02: 'F02 Impuesto Referencia (35%)',
-              f03: 'F03 Retenciones Acumuladas',
-              f04: 'F04 Neto a Pagar/Saldo a Favor',
+              f03: 'F03 Crédito de renta (retenciones y anticipos de renta)',
+              f04: 'F04 Posición de referencia contable (estimación, no liquidación)',
               f05: 'F05 Provisión IVA',
               f06: 'F06 Retefuente por Declarar',
               f07: 'F07 ICA Retenido',
@@ -535,8 +535,8 @@ export const dict = {
                 subtitle: 'F01-F10 · Capa 1 Agente Fiscal',
                 f01: 'UAI Contable',
                 f02: 'Impuesto Referencia (35%)',
-                f03: 'Retenciones Acumuladas',
-                f04: 'Neto a Pagar / Saldo a Favor',
+                f03: 'Crédito de Renta',
+                f04: 'Posición de Referencia Contable (estimación)',
                 f05: 'Provisión IVA',
                 f06: 'Retefuente por Declarar',
                 f07: 'ICA Retenido',
@@ -592,8 +592,8 @@ export const dict = {
               cards: {
                 tet: {
                   title: 'Tasa Efectiva de Tributación',
-                  metric: 'TET actual',
-                  norma: 'Art. 240 par.6 E.T.',
+                  metric: 'TET contable actual',
+                  norma: 'Razón contable (impuesto/UAI)',
                 },
                 retention: {
                   title: 'Escudo de Retenciones',
@@ -613,7 +613,7 @@ export const dict = {
                 dividend: {
                   title: 'Optimización de Dividendos',
                   metric: 'Recomendación',
-                  norma: 'Arts. 36-3 / 242 E.T.',
+                  norma: 'Arts. 242 y 242-1 E.T.',
                 },
               },
               synthesis: {
@@ -1843,12 +1843,12 @@ export const dict = {
               cards: {
                 tet: {
                   title: 'Effective Tax Rate',
-                  metric: 'TET',
+                  metric: 'Accounting TET',
                   norma: 'Art. 240 E.T.',
                 },
                 retention: {
                   title: 'Retention Shield',
-                  metric: 'Projected balance in favor',
+                  metric: 'Credit balance (requires tax return)',
                   norma: 'Art. 670 E.T.',
                 },
                 antiDian: {
@@ -1864,7 +1864,7 @@ export const dict = {
                 dividend: {
                   title: 'Dividend Optimizer',
                   metric: 'Savings vs distributing',
-                  norma: 'Art. 242 / Art. 36-3 E.T.',
+                  norma: 'Art. 242 E.T.',
                 },
               },
               synthesis: {
@@ -1898,14 +1898,14 @@ export const dict = {
               norma: 'Art. 240 E.T.',
             },
             f03: {
-              title: 'Accumulated Withholdings',
-              description: 'Tax credit against liability',
-              norma: 'Acct. 1355',
+              title: 'Income-Tax Credit',
+              description: 'Income-tax withholdings and advances (excludes VAT, ICA and other taxes)',
+              norma: 'Accts. 135505 / 135515',
             },
             f04: {
-              title: 'Net Payable / Credit Balance',
-              description: 'F02 − F03 (negative = credit)',
-              norma: 'Art. 850 E.T.',
+              title: 'Accounting Reference Position',
+              description: 'F02 − F03 · accounting estimate, not a tax assessment (neither payable nor credit balance)',
+              norma: 'Arts. 26 & 807 E.T. (requires tax reconciliation)',
             },
             f05: {
               title: 'VAT Payable Provision',
@@ -1948,7 +1948,7 @@ export const dict = {
             },
             alertas: {
               A5_SIN_PROVISION: 'Income Tax not provisioned — Art. 647 Tax Statute risk',
-              SALDO_A_FAVOR: 'Credit balance available',
+              SALDO_A_FAVOR: 'Possible credit balance (accounting estimate, not an assessment) — verify against the tax return',
               VENCIMIENTO_15D: 'Deadline approaching (≤15 days)',
               F10_BAJA: 'Low fiscal efficiency',
               ICA_ESTIMACION_SIN_CIIU: 'ICA estimated without verified CIIU code — Decree 352/2002',
@@ -1988,8 +1988,8 @@ export const dict = {
               header: 'AUTOMATIC TAX CONTEXT',
               f01: 'F01 Pre-tax Income',
               f02: 'F02 Reference Tax (35%)',
-              f03: 'F03 Accumulated Withholdings',
-              f04: 'F04 Net Payable / Credit Balance',
+              f03: 'F03 Income-tax credit (withholdings and advances)',
+              f04: 'F04 Accounting reference position (estimate, not an assessment)',
               f05: 'F05 VAT Provision',
               f06: 'F06 Withholding Tax to File',
               f07: 'F07 ICA Withheld',
@@ -2036,8 +2036,8 @@ export const dict = {
                 subtitle: 'F01-F10 · Fiscal Agent Layer 1',
                 f01: 'Pre-tax Income',
                 f02: 'Reference Tax (35%)',
-                f03: 'Accumulated Withholdings',
-                f04: 'Net Payable / Credit Balance',
+                f03: 'Income-Tax Credit',
+                f04: 'Accounting Reference Position (estimate)',
                 f05: 'VAT Provision',
                 f06: 'ICA Provision',
                 f07: 'Property / Vehicles',
@@ -2093,8 +2093,8 @@ export const dict = {
               cards: {
                 tet: {
                   title: 'Effective Tax Rate',
-                  metric: 'Current TET',
-                  norma: 'Art. 240 par.6 T.S.',
+                  metric: 'Current accounting TET',
+                  norma: 'Accounting ratio (tax/PBT)',
                 },
                 retention: {
                   title: 'Withholding Shield',
@@ -2114,7 +2114,7 @@ export const dict = {
                 dividend: {
                   title: 'Dividend Optimizer',
                   metric: 'Recommendation',
-                  norma: 'Arts. 36-3 / 242 T.S.',
+                  norma: 'Arts. 242 & 242-1 T.S.',
                 },
               },
               synthesis: {

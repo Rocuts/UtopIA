@@ -15,7 +15,6 @@ import type {
   Insight,
   InsightSeverity,
 } from '@/lib/notifications/insight-types';
-import { saldoAFavorCents } from '../fiscal-agent/tools/risk-score-calculator';
 
 interface AlertMeta {
   /** Código corto del trigger (sentinel_alerts.trigger_code, varchar ≤ 8). */
@@ -38,11 +37,14 @@ const ALERT_META: Record<FiscalAlerta['codigo'], AlertMeta> = {
     titulo: 'Utilidad sin impuesto causado',
     accionLabel: 'Provisionar impuesto de renta',
   },
+  // F04 < 0 es una estimación contable (UAI × 35% − F03), no el saldo a favor
+  // de la declaración: sin impacto monetario ni acción de devolución
+  // (auditoría 2026-09, tributario-modulos-02; riesgo Art. 670 E.T.).
   SALDO_A_FAVOR: {
     triggerCode: 'ESC_SF',
     severity: 'informativo',
-    titulo: 'Saldo a favor identificado',
-    accionLabel: 'Solicitar devolución o compensación',
+    titulo: 'Posible saldo a favor (estimación contable, no liquidación)',
+    accionLabel: 'Verificar contra la declaración de renta (Formulario 110)',
   },
   VENCIMIENTO_15D: {
     triggerCode: 'ESC_V15',
@@ -77,9 +79,7 @@ function impactoCentsForAlert(
     case 'A5_SIN_PROVISION':
       // Impuesto de referencia no provisionado (F02).
       return anchor.f02;
-    case 'SALDO_A_FAVOR':
-      // Saldo a favor procedimentable (|F04| si F04 < 0).
-      return saldoAFavorCents(anchor);
+    // SALDO_A_FAVOR: sin impacto. |F04| no es un saldo a favor determinable.
     default:
       return undefined;
   }

@@ -35,18 +35,19 @@ Redactar la respuesta jurídica a la actuación DIAN identificada en el contexto
 
 <constraints>
 ALWAYS cita los artículos del E.T. de procedimiento aplicables según el tipo de actuación:
-  - Art. 752 E.T. para requerimiento ordinario (plazo 15 días hábiles).
+  - Arts. 684 y 686 E.T. para requerimiento ordinario (el plazo que fije el acto, mínimo 15 días calendario — Art. 261 Ley 223/1995).
+  - Arts. 703 y 707 E.T. para requerimiento especial (respuesta en 3 meses).
   - Art. 685 E.T. para emplazamiento para corregir (plazo 1 mes).
   - Art. 715 E.T. para emplazamiento previo por no declarar.
-  - Art. 707 E.T. para pliego de cargos (plazo 3 meses).
+  - Pliego de cargos: 1 mes para responder el traslado de cargos (p. ej. Arts. 651 y 860 E.T.).
   - Art. 702 E.T. para liquidación oficial de revisión.
   - Art. 720 E.T. para recurso de reconsideración (plazo 2 meses).
 ALWAYS cita el parágrafo del Art. 647 E.T. (texto literal del catálogo) cuando se invoque la defensa de diferencia de criterio razonable.
-ALWAYS cita "Art. 709 E.T." cuando menciones reducción al 25% por aceptación del pliego de cargos; "Art. 713 E.T." cuando menciones reducción al 50% por aceptación de la liquidación oficial; "Art. 640 E.T." cuando menciones reducciones por principios de gradualidad / proporcionalidad / favorabilidad.
+ALWAYS cita "Art. 709 E.T." cuando menciones la reducción de la sanción por INEXACTITUD a la cuarta parte por aceptar los hechos en la respuesta al requerimiento especial o a su ampliación; "Art. 713 E.T." para la reducción a la mitad al aceptar la liquidación oficial de revisión; "Art. 640 E.T." para gradualidad / proporcionalidad / favorabilidad. Para pliegos de otras sanciones usa sólo las reducciones del artículo que regula esa sanción.
 NEVER cites "Concepto 100208221-1352" para la defensa de diferencia de criterio — ESE CONCEPTO NO ESTÁ VERIFICADO en normograma y está en la blacklist. La defensa SIEMPRE se ampara en el parágrafo Art. 647 E.T.
 NEVER inventes números de radicación de Conceptos DIAN — si no aparecen en el catálogo, NO los uses.
 If el tipo de actuación es "desconocido" entonces dilo en warnings, redacta una carta neutra solicitando aclaración a la DIAN y NO inventes plazos.
-If el contribuyente acepta total o parcialmente los cargos entonces invoca explícitamente la reducción correspondiente (Art. 709 / 713 / 644 / 640 según corresponda).
+If el contribuyente acepta total o parcialmente los hechos entonces invoca explícitamente la reducción correspondiente (Art. 709 / 713 / 640 o la del artículo de la sanción, según corresponda).
 </constraints>
 
 <context>

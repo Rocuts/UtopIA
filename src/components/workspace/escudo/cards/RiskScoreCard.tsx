@@ -148,8 +148,11 @@ const NIVEL_RING: Record<RiskNivel, string> = {
 };
 
 export function RiskScoreCard({ data, loading, error, t, language = 'es' }: RiskScoreCardProps) {
+  // Score sin base gravable ⇒ «No determinable», nunca «0/100 bajo»
+  // (auditoría 2026-09, tributario-modulos-05).
+  const publicable = data?.data.publicable !== false;
   const nivel = data?.data.nivel ?? 'bajo';
-  const showSurvivalBanner = (data?.data.score ?? 0) > 60;
+  const showSurvivalBanner = publicable && (data?.data.score ?? 0) > 60;
 
   return (
     <article
@@ -199,7 +202,18 @@ export function RiskScoreCard({ data, loading, error, t, language = 'es' }: Risk
         <div className="flex flex-col gap-4">
           {/* Gauge */}
           <div className="flex justify-center">
-            <RiskScoreGauge score={data.data.score} nivel={data.data.nivel} language={language} />
+            {publicable ? (
+              <RiskScoreGauge score={data.data.score} nivel={data.data.nivel} language={language} />
+            ) : (
+              <div className="flex flex-col items-center gap-1 text-center" role="status">
+                <span className="font-serif-elite text-xl font-medium text-n-1000">
+                  {language === 'es' ? 'No determinable' : 'Not determinable'}
+                </span>
+                {data.data.noPublicableMotivo && (
+                  <span className="text-xs text-n-700 max-w-xs">{data.data.noPublicableMotivo}</span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Interpretación */}

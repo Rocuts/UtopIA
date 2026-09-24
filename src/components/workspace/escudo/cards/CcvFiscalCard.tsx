@@ -3,12 +3,12 @@
 /**
  * CcvFiscalCard — Módulo 1: Cuadro de Control de Variables Fiscales (F01-F10).
  *
- * Muestra el cuadro F01-F10 en un grid 2 columnas + alerta TET si F09 < 15%
- * (Art. 10 Ley 2277/2022). Color F09: verde ≥ 25%, ámbar 15-25%, rojo < 15%.
+ * Muestra el cuadro F01-F10 en un grid 2 columnas. F09 es una razón contable
+ * (sin semáforo contra el 15% de la TTD); F04 es una estimación contable.
  */
 
 import { BarChart3, TrendingDown, TrendingUp, Minus } from 'lucide-react';
-import { AlertIndicator, NormaCitation } from '@/components/workspace/cards/SurvivalCard';
+import { NormaCitation } from '@/components/workspace/cards/SurvivalCard';
 import { cn } from '@/lib/utils';
 import { formatCopFromCents } from '@/lib/agents/financial/contracts/money';
 import type { CcvModuleResult } from '@/lib/agents/financial/escudo-survival/fiscal-agent';
@@ -34,18 +34,9 @@ function fmtPct(n: number): string {
   }).format(n);
 }
 
-// F09 color thresholds (Art. 10 Ley 2277/2022 — tasa mínima 15%)
-function f09Color(pct: number): string {
-  if (pct < 15) return 'text-danger';
-  if (pct < 25) return 'text-warning';
-  return 'text-success';
-}
-
-function f09AlertLevel(pct: number): 'rojo' | 'amarillo' | 'verde' {
-  if (pct < 15) return 'rojo';
-  if (pct < 25) return 'amarillo';
-  return 'verde';
-}
+// F09 es una razón contable (impuesto causado / UAI), NO la TTD del Art. 240
+// par. 6 E.T. (ID/UD): no se colorea contra el 15% ni se rotula con esa norma
+// (auditoría 2026-09, tributario-modulos-15).
 
 // ---------------------------------------------------------------------------
 // Row type for the F01-F10 table
@@ -87,19 +78,18 @@ interface CcvFiscalCardProps {
 }
 
 export function CcvFiscalCard({ data, loading, error, t, language = 'es' }: CcvFiscalCardProps) {
-  const f09Alert = data ? f09AlertLevel(data.data.f09Pct) : 'verde';
 
   const rows: FRow[] = data
     ? [
         { key: 'f01', label: t.f01, value: fmtCop(data.data.f01), norma: 'Art. 26 E.T.', isMoney: true },
         { key: 'f02', label: t.f02, value: fmtCop(data.data.f02), norma: 'Art. 240 E.T.', isMoney: true, bold: true },
-        { key: 'f03', label: t.f03, value: fmtCop(data.data.f03), norma: 'Cta. 1355', isMoney: true },
-        { key: 'f04', label: t.f04, value: fmtCop(data.data.f04), norma: 'Art. 850 E.T.', isMoney: true, bold: true },
+        { key: 'f03', label: t.f03, value: fmtCop(data.data.f03), norma: '135505 / 135515', isMoney: true },
+        { key: 'f04', label: t.f04, value: fmtCop(data.data.f04), norma: language === 'es' ? 'Estimación contable' : 'Accounting estimate', isMoney: true, bold: true },
         { key: 'f05', label: t.f05, value: fmtCop(data.data.f05), norma: 'Cta. 2408', isMoney: true },
         { key: 'f06', label: t.f06, value: fmtCop(data.data.f06), norma: 'Cta. 2365', isMoney: true },
         { key: 'f07', label: t.f07, value: fmtCop(data.data.f07), norma: 'Cta. 2368', isMoney: true },
         { key: 'f08', label: t.f08, value: fmtCop(data.data.f08), norma: 'Cta. 24XX', isMoney: true, bold: true },
-        { key: 'f09', label: t.f09, value: fmtPct(data.data.f09Pct / 100), norma: 'Art. 240 par.6 E.T.', isPct: true },
+        { key: 'f09', label: t.f09, value: fmtPct(data.data.f09Pct / 100), norma: language === 'es' ? 'Razón contable (impuesto/UAI)' : 'Accounting ratio (tax/PBT)', isPct: true },
         { key: 'f10', label: t.f10, value: fmtPct(data.data.f10Pct / 100), norma: 'Art. 240 E.T.', isPct: true },
       ]
     : [];
@@ -115,12 +105,7 @@ export function CcvFiscalCard({ data, loading, error, t, language = 'es' }: CcvF
     <article
       className={cn(
         'relative flex flex-col gap-5 p-6 rounded-xl h-full',
-        'glass-elite-elevated ring-1',
-        f09Alert === 'rojo'
-          ? 'ring-[rgb(239_68_68_/_0.3)]'
-          : f09Alert === 'amarillo'
-          ? 'ring-[rgb(234_179_8_/_0.28)]'
-          : 'ring-[rgb(34_197_94_/_0.25)]',
+        'glass-elite-elevated ring-1 ring-n-200/40',
       )}
       aria-labelledby="ccv-fiscal-title"
       aria-busy={loading}
@@ -148,9 +133,6 @@ export function CcvFiscalCard({ data, loading, error, t, language = 'es' }: CcvF
             <p className="text-xs text-n-500 mt-0.5">{t.subtitle}</p>
           </div>
         </div>
-        {!loading && !error && data && (
-          <AlertIndicator level={f09Alert} language={language} />
-        )}
       </div>
 
       {/* Body */}
@@ -196,7 +178,7 @@ export function CcvFiscalCard({ data, loading, error, t, language = 'es' }: CcvF
                     <td
                       className={cn(
                         'py-1.5 pr-3 text-right tabular-nums',
-                        row.key === 'f09' ? f09Color(data.data.f09Pct) : 'text-n-1000',
+                        'text-n-1000',
                         row.bold && 'font-semibold',
                       )}
                     >

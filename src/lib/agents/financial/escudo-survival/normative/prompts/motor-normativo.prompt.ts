@@ -19,7 +19,13 @@
 // Juicio en "If X then Y otherwise Z".
 // ---------------------------------------------------------------------------
 
-import { UVT_2026_COP } from '@/lib/accounting/tax-engine/constants';
+import {
+  RTF_OTROS_INGRESOS_THRESHOLD_UVT,
+  RTF_THRESHOLD_UVT,
+  UVT_2026_COP,
+} from '@/lib/accounting/tax-engine/constants';
+import { aproximarValorAbsolutoUvt } from '@/lib/tools/sanction-calculator';
+import { extractCalendarDigit } from '../../fiscal-anchor/dian-calendar';
 import { MOTOR_NORMATIVO_CATALOG } from '../catalog';
 import type {
   NormativeCatalogue,
@@ -110,13 +116,19 @@ function renderBlacklist(blacklist: readonly BlacklistEntry[]): string {
 ${lines.join('\n\n')}`;
 }
 
-function renderNITCalendarHint(nitContext: string): string {
-  // El calendario completo por NIT vive en fiscal-anchor/dian-calendar.ts.
-  // Aquí solo extraemos el último dígito para un hint rápido en el prompt.
-  const lastDigit = nitContext.replace(/\D/g, '').slice(-1);
-  if (!lastDigit) return '';
-
-  return `Contexto NIT (último dígito ${lastDigit}): consultar fiscal-anchor/dian-calendar.ts para plazos exactos por dígito.`;
+/**
+ * Hint del dígito de calendario. Decreto 2229 de 2023: se atiende el último
+ * dígito del NIT SIN el dígito de verificación (auditoría 2026-09,
+ * tributario-calc-05 — antes tomaba el DV: "901714014-6" → 6 en vez de 4).
+ * Misma regla que el calendario determinista del Âncora (extractCalendarDigit).
+ */
+export function renderNITCalendarHint(nitContext: string): string {
+  const { digito, ambiguo } = extractCalendarDigit(nitContext);
+  if (digito < 0) return '';
+  if (ambiguo) {
+    return 'Contexto NIT: dígito de calendario no determinable (NIT sin separador del dígito de verificación). No derives fechas de vencimiento; usa el calendario del Bloque Âncora.';
+  }
+  return `Contexto NIT: último dígito sin DV = ${digito} (Decreto 2229 de 2023). Las fechas exactas de vencimiento vienen del calendario del Bloque Âncora; no las derives de memoria.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -138,7 +150,9 @@ export function buildMotorNormativoPrompt(
   opts: MotorNormativoPromptOptions,
   catalogue: NormativeCatalogue = MOTOR_NORMATIVO_CATALOG,
 ): string {
-  const uvtFormatted = new Intl.NumberFormat('es-CO').format(UVT_2026_COP);
+  const fmt = (n: number) => new Intl.NumberFormat('es-CO').format(n);
+  const uvtFormatted = fmt(UVT_2026_COP);
+  const sancionMinima = fmt(aproximarValorAbsolutoUvt(10 * UVT_2026_COP));
 
   // ── 1. Guardrail estable (stable header — cache-friendly) ─────────────────
   const guardrail = `Eres el Motor Normativo del Agente Fiscal de El Escudo. Tu función es razonar sobre normas tributarias colombianas vigentes al año gravable 2026. Conoces el Estatuto Tributario, las leyes de reforma, la doctrina DIAN whitelisted, la jurisprudencia constitucional y del Consejo de Estado, las NIIF para PYMES, NIC y NIA aplicables en Colombia.
@@ -151,22 +165,23 @@ ALWAYS expresar valores monetarios en formato colombiano: $1.234.567,89 (punto m
 
   // ── 2. Constantes operativas 2026 (estable) ───────────────────────────────
   const context2026 = `CONSTANTES OPERATIVAS 2026 (vinculantes — no modificar):
-  • UVT 2026: $${uvtFormatted} COP (Resolución DIAN 000187 / 2025-12-19)
+  • UVT 2026: $${uvtFormatted} COP (Resolución DIAN 000238 del 15-dic-2025)
   • Tarifa general renta PJ: 35% (Art. 240 E.T.)
-  • Sobretasa financiera/seguros/bolsa/reaseguros: +5pp = 40% hasta 2027 (Art. 240 par. 2 E.T.)
-  • Sobretasa hidroeléctricas: +3pp = 38% hasta 2026 (Art. 240 par. 2 E.T.)
-  • TTD mínima: 15% [parágrafo 6 Art. 240 E.T. — vigente desde AG 2023]
+  • Sobretasa financiera/seguros/bolsa/reaseguros: +5pp = 40% hasta 2027, con renta gravable ≥ 120.000 UVT (Art. 240 par. 2 E.T.)
+  • Sobretasa hidroeléctricas: +3pp = 38% en 2023-2026, con renta gravable ≥ 30.000 UVT (Art. 240 par. 4 E.T.)
+  • TTD mínima: 15% sobre utilidad depurada [parágrafo 6 Art. 240 E.T. — vigente desde AG 2023]; requiere ID y UD verificados
   • Tarifa GO general: 15% (Art. 313 E.T. — Ley 2277/2022)
   • Tarifa IVA general: 19% (Art. 468 E.T.)
   • ReteIVA general: 15% del IVA (Art. 437-1 E.T.)
   • Sanción inexactitud: 100% mayor valor impuesto (Art. 648 E.T.)
-  • Sanción extemporaneidad: 5%/10% mensual, tope 100% impuesto (Art. 641 E.T.)
-  • Sanción mínima: 10 UVT = $${new Intl.NumberFormat('es-CO').format(10 * UVT_2026_COP)} COP (Art. 639 E.T.)
-  • Descuento I+D+i: 30% (Art. 256 E.T.) — tope conjunto Arts. 255+256+257+257-1 = 25% impuesto (Art. 258 E.T.)
+  • Sanción extemporaneidad antes del emplazamiento: 5% por mes o fracción, tope 100% del impuesto (Art. 641 E.T.)
+  • Sanción extemporaneidad posterior al emplazamiento: 10% por mes o fracción, tope 200% del impuesto (Art. 642 E.T.)
+  • Sanción mínima: 10 UVT = $${sancionMinima} COP (Art. 639 E.T.; aproximación Art. 868 E.T.)
+  • Descuento I+D+i: 30% (Art. 256 E.T.) — tope conjunto Arts. 255+256+257 = 25% impuesto (Art. 258 E.T.)
   • Descuento IVA activos fijos: 100% (Art. 258-1 E.T.) — fuera del tope conjunto
   • Umbral agentes retención PN comerciantes: 30.000 UVT (Art. 368-2 E.T.)
-  • Umbral mínimo retención (servicios/compras): 4 UVT (Art. 401 E.T.)
-  • Plazo DIAN para resolver devoluciones: 50 días hábiles (20 con garantía bancaria) (Art. 855 E.T.)`;
+  • Base mínima de retención desde el 01-jul-2026: servicios ${RTF_THRESHOLD_UVT} UVT; compras y otros ingresos ${RTF_OTROS_INGRESOS_THRESHOLD_UVT} UVT (DUR 1625/2016 mod. Decreto 0572/2025; ver catálogo de retención)
+  • Plazo DIAN para resolver devoluciones: 50 días hábiles (Art. 855 E.T.); 20 días con garantía de entidad bancaria o compañía de seguros (Art. 860 E.T.)`;
 
   // ── 3. Artículos del E.T. relevantes ─────────────────────────────────────
   const articulosSection = `ARTÍCULOS E.T. VIGENTES 2026 (catálogo verificado):

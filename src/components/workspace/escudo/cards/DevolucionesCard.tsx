@@ -3,8 +3,9 @@
 /**
  * DevolucionesCard — Módulo 6: Devoluciones de Saldos a Favor.
  *
- * Saldo a favor (hero number) + viabilidad + checklist documentos +
- * alerta prescripción si saldo > 18 meses sin solicitar (Art. 854).
+ * Saldo a favor DECLARADO (hero number) + viabilidad + checklist documentos.
+ * Sin la declaración el saldo es N/D: F04 es una estimación contable y no
+ * se presenta como saldo a favor (auditoría 2026-09, tributario-modulos-02).
  */
 
 import { PiggyBank, AlertCircle, CheckSquare } from 'lucide-react';
@@ -36,6 +37,7 @@ const VIABILIDAD_CONFIG = {
   media: { alert: 'amarillo' as const, label: { es: 'Viabilidad media', en: 'Medium viability' } },
   baja: { alert: 'rojo' as const, label: { es: 'Baja viabilidad', en: 'Low viability' } },
   no_aplica: { alert: 'verde' as const, label: { es: 'No aplica', en: 'N/A' } },
+  no_determinable: { alert: 'amarillo' as const, label: { es: 'No determinable', en: 'Not determinable' } },
 };
 
 interface DevolucionesCardProps {
@@ -48,7 +50,8 @@ interface DevolucionesCardProps {
 
 export function DevolucionesCard({ data, loading, error, t, language = 'es' }: DevolucionesCardProps) {
   const viabilidad = data ? VIABILIDAD_CONFIG[data.data.viabilidad] : null;
-  const saldoPositivo = data ? BigInt(data.data.saldoAFavor) > BigInt(0) : false;
+  const saldo = data?.data.saldoAFavor ?? null;
+  const saldoPositivo = saldo !== null && /^-?\d+$/.test(saldo) ? BigInt(saldo) > BigInt(0) : false;
 
   return (
     <article
@@ -114,8 +117,15 @@ export function DevolucionesCard({ data, loading, error, t, language = 'es' }: D
                 saldoPositivo ? 'text-success' : 'text-n-1000',
               )}
             >
-              {fmtCop(data.data.saldoAFavor)}
+              {saldo === null ? (language === 'es' ? 'N/D' : 'N/A') : fmtCop(saldo)}
             </span>
+            {saldo === null && (
+              <p className="mt-1 text-xs text-n-700">
+                {language === 'es'
+                  ? 'Requiere el saldo a favor liquidado en la declaración de renta (Formulario 110). F04 es una estimación contable, no un saldo a favor.'
+                  : 'Requires the credit balance assessed in the income tax return (Form 110). F04 is an accounting estimate, not a credit balance.'}
+              </p>
+            )}
             {saldoPositivo && (
               <span className="ml-2 text-xs text-success">{language === 'es' ? '← a su favor' : '← in your favor'}</span>
             )}

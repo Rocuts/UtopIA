@@ -25,9 +25,8 @@
 //        > 100%          → +15
 //        50-100%         → +8
 //        < 50%           → +0
-//   5. Saldo a favor sin solicitar:
-//        > $50M y no se ha solicitado → +10
-//        sino                          → +0
+//   5. Saldo a favor sin solicitar: 0 puntos — F04 es una estimación
+//      contable, no un saldo a favor determinable (auditoría 2026-09).
 //
 // Niveles:
 //   0-20   → bajo
@@ -43,8 +42,6 @@ import type { FiscalAnchorBlock } from '../../fiscal-anchor/types';
 import type { RiskFactorBreakdown, RiskNivel } from '../types';
 
 const ZERO = BigInt(0);
-
-const SALDO_FAVOR_MATERIALIDAD_COP = 50_000_000;
 
 export interface RiskScorePrecomputedData {
   score: number;
@@ -121,8 +118,11 @@ function ingresosComparativoCents(
 //     balance del cliente real, era el 43% de un score de 70/100 que enciende
 //     Modo Supervivencia (`score > 60`).
 //
-//   · UAI > 0 y grupo 54 poblado — aquí sí el cociente mide lo que dice medir
-//     y se aplica la escala del par. 6 del Art. 240 E.T. (TTD 15%).
+//   · UAI > 0 y grupo 54 poblado — aquí el cociente es medible y se aplica
+//     una escala HEURÍSTICA INTERNA de riesgo. F09 es una razón contable
+//     (impuesto causado / UAI), NO la TTD del par. 6 del Art. 240 E.T. (ID/UD):
+//     el umbral del 15% se usa como referencia interna, no como incumplimiento
+//     legal (auditoría 2026-09, tributario-modulos-15).
 //
 // El discriminante de la rama 2 es el propio hecho contable (Clase 54 = $0),
 // corroborado con la alerta que el anchor ya trae.
@@ -131,7 +131,7 @@ function factorTet(
   anchor: FiscalAnchorBlock,
   impuestoCausadoCents: bigint,
 ): RiskFactorBreakdown {
-  const descripcion = 'Tasa efectiva de tributación (F09)';
+  const descripcion = 'Tasa efectiva contable (F09 = impuesto causado / UAI) — heurística interna';
   const f01Cents = BigInt(anchor.f01);
 
   // Rama 1 — sin base gravable positiva el cociente no es medible.
@@ -176,16 +176,16 @@ function factorTet(
     puntos = 30;
     detalle =
       `F09 = ${f09}% con provisión causada de ${formatCopFromCents(impuestoCausadoCents)} sobre ` +
-      `una UAI de ${formatCopFromCents(f01Cents)} — tasa efectiva prácticamente nula. Activa Modo Supervivencia.`;
+      `una UAI de ${formatCopFromCents(f01Cents)} — tasa efectiva contable prácticamente nula (heurística interna; no es la TTD).`;
   } else if (f09 < 15) {
     puntos = 20;
-    detalle = `F09 = ${f09}% — debajo del umbral 15% de TTD (Art. 240 par. 6 E.T.).`;
+    detalle = `F09 = ${f09}% — tasa efectiva contable baja (heurística interna, referencia 15%). No es la TTD del Art. 240 par. 6 E.T., que exige impuesto y utilidad depurados.`;
   } else if (f09 <= 25) {
     puntos = 5;
-    detalle = `F09 = ${f09}% — por encima del umbral pero todavía revisable.`;
+    detalle = `F09 = ${f09}% — tasa efectiva contable moderada (heurística interna), todavía revisable.`;
   } else {
     puntos = 0;
-    detalle = `F09 = ${f09}% — tasa efectiva consistente con tarifa general.`;
+    detalle = `F09 = ${f09}% — tasa efectiva contable consistente con la tarifa general.`;
   }
   return { factor: 'tet_baja', descripcion, puntos, detalle };
 }
@@ -352,31 +352,31 @@ function factorCrecimiento(pp: PreprocessedBalance): RiskFactorBreakdown {
 // Factor 5 — Saldo a favor sin solicitar
 // ---------------------------------------------------------------------------
 
+// F04 = F02 − F03 es una posición de referencia CONTABLE (UAI × 35% − crédito
+// de renta). Sin renta líquida depurada (Art. 26 E.T.), descuentos ni anticipo
+// del año siguiente (Art. 807 E.T.) no existe un saldo a favor determinable, y
+// sumar puntos por «saldo a favor sin solicitar» empujaría a pedir una
+// devolución que puede ser improcedente (Art. 670 E.T.). El factor se conserva
+// en el desglose con 0 puntos y el motivo (auditoría 2026-09,
+// tributario-modulos-02).
 function factorSaldoFavor(anchor: FiscalAnchorBlock): RiskFactorBreakdown {
   const f04Cents = BigInt(anchor.f04);
-  // F04 < 0 → saldo a favor (F02 < F03).
   if (f04Cents >= ZERO) {
     return {
       factor: 'saldo_favor_sin_solicitar',
       descripcion: 'Saldo a favor sin solicitud activa',
       puntos: 0,
-      detalle: 'No se identifica saldo a favor del periodo según F04.',
-    };
-  }
-  const saldoFavorCop = Number((-f04Cents) / BigInt(100));
-  if (saldoFavorCop > SALDO_FAVOR_MATERIALIDAD_COP) {
-    return {
-      factor: 'saldo_favor_sin_solicitar',
-      descripcion: 'Saldo a favor sin solicitud activa',
-      puntos: 10,
-      detalle: `Saldo a favor estimado supera $50.000.000 (Art. 850 E.T.). Si no se solicita devolución / compensación, prescribe en 2 años (Art. 854 E.T.).`,
+      detalle: 'La estimación contable F04 no muestra un posible saldo a favor.',
     };
   }
   return {
     factor: 'saldo_favor_sin_solicitar',
     descripcion: 'Saldo a favor sin solicitud activa',
     puntos: 0,
-    detalle: `Saldo a favor identificado pero por debajo del umbral de materialidad ($50.000.000).`,
+    detalle:
+      `F04 = ${formatCopFromCents(f04Cents)} es una estimación contable (UAI × 35% − F03), no el ` +
+      'saldo a favor de la declaración. No determinable sin renta líquida depurada (Art. 26 E.T.), ' +
+      'descuentos y anticipo del año siguiente (Art. 807 E.T.); factor sin puntos.',
   };
 }
 
@@ -470,10 +470,11 @@ export function computeRiskScore(input: RiskInput): RiskScorePrecomputedData {
 }
 
 /**
- * El saldo a favor en MoneyCop (para devoluciones / supervivencia).
- * Solo positivo si F04 < 0; cero en otro caso.
+ * Magnitud de la estimación contable |F04| cuando F04 < 0, en MoneyCop; `null`
+ * cuando F04 ≥ 0. NO es el saldo a favor de la declaración: sólo sirve como
+ * referencia rotulada «estimación contable, no liquidación».
  */
-export function saldoAFavorCents(anchor: FiscalAnchorBlock): string {
+export function posibleSaldoAFavorContableCents(anchor: FiscalAnchorBlock): string | null {
   const f04 = BigInt(anchor.f04);
-  return f04 < ZERO ? serializeMoneyCop(-f04) : '0';
+  return f04 < ZERO ? serializeMoneyCop(-f04) : null;
 }

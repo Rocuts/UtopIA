@@ -8,8 +8,12 @@
 //   A5_SIN_PROVISION  (error)   → impuestoCausado = 0 y F01 > 0 (la empresa
 //                                 reporta utilidad pero no causó impuesto;
 //                                 incumple Art. 240 E.T. + NIC 12 §46).
-//   SALDO_A_FAVOR     (info)    → F04 < 0 (saldo a favor procedimentable
-//                                 vía Art. 850 E.T.).
+//   SALDO_A_FAVOR     (info)    → F04 < 0: POSIBLE saldo a favor como
+//                                 estimación contable (UAI × 35% − F03). No es
+//                                 liquidación: sin renta líquida depurada
+//                                 (Art. 26), descuentos ni anticipo del año
+//                                 siguiente (Art. 807) no hay saldo a favor
+//                                 determinable ni acción de devolución.
 //   VENCIMIENTO_15D   (warning) → cualquier vencimiento.estado === 'proximo'.
 //   F10_BAJA          (warning) → F10 < 10% (cobertura de retenciones baja;
 //                                 expone a flujo de caja en cierre fiscal).
@@ -20,6 +24,15 @@ import type { FiscalDerivedMetrics } from './internal-types';
 
 const ZERO = BigInt(0);
 const F10_UMBRAL_BAJO_PCT = 10;
+
+/**
+ * F04 = F02 − F03 parte de la UAI contable, no de la renta líquida depurada
+ * (Art. 26 E.T.), no resta descuentos (Arts. 254-260) ni suma el anticipo del
+ * año siguiente (Art. 807 E.T.). El saldo a favor real sale de la declaración
+ * (Formulario 110) y sólo sobre él procede la devolución (Art. 850 E.T.).
+ */
+export const NORMA_POSIBLE_SALDO_A_FAVOR =
+  'Estimación contable (F02 − F03), no liquidación: el saldo a favor sale de la declaración (Arts. 26, 807 y 850 E.T.)';
 
 export interface EvaluateFiscalAlertsInput {
   metrics: FiscalDerivedMetrics;
@@ -43,13 +56,15 @@ export function evaluateFiscalAlerts(input: EvaluateFiscalAlertsInput): FiscalAl
     });
   }
 
-  // SALDO_A_FAVOR — F04 negativa.
+  // SALDO_A_FAVOR — F04 negativa. Se conserva el código (contrato UI) pero el
+  // texto dice lo que la cifra es: una estimación contable, no un saldo a favor
+  // de la declaración (auditoría 2026-09, tributario-modulos-02).
   if (metrics.f04Cents < ZERO) {
     alertas.push({
       codigo: 'SALDO_A_FAVOR',
       severidad: 'info',
-      mensaje: 'escudo.fiscal.alert.saldo_a_favor',
-      norma: 'Art. 850 E.T.',
+      mensaje: 'escudo.fiscal.alert.posible_saldo_a_favor_estimacion',
+      norma: NORMA_POSIBLE_SALDO_A_FAVOR,
     });
   }
 

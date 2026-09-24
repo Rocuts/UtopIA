@@ -169,6 +169,30 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     tags: ['renta', 'deduccion', 'activos_fijos', 'derogado', 'PJ'],
   },
 
+  // ─── RENTA — DEROGADO (Art. 36-3) ─────────────────────────────────────────
+  // Auditoría 2026-09 (tributario-calc-01). Texto del corpus:
+  // estatuto_tributario_completo.md — «Artículo derogado a partir del 1 de
+  // enero de 2023 por el artículo 96 de la Ley 2277 de 2022».
+  {
+    id: 'ART_36_3_ET',
+    cita: 'Art. 36-3 E.T.',
+    titulo: 'Capitalizaciones no gravadas para los socios o accionistas — DEROGADO',
+    resumen:
+      'DEROGADO desde el 1-ene-2023 por el art. 96 de la Ley 2277 de 2022. Cubría la capitalización de la revalorización del patrimonio (y, en sociedades con acciones en bolsa, ciertas utilidades). DIAN Concepto 2769 de 2026: la capitalización sigue el régimen general de distribución de utilidades (Arts. 48-49, 242, 242-1 E.T.). No citar como INCRGNO vigente.',
+    textoLiteral: null,
+    estado: 'DEROGADO',
+    modificaciones: [
+      {
+        norma: 'Ley 2277 de 2022, Art. 96',
+        fecha: '2022-12-13',
+        cambio: 'Derogó el Art. 36-3 E.T. a partir del 1 de enero de 2023.',
+      },
+    ],
+    urlOficial:
+      'https://estatuto.co/?articulo=36-3',
+    tags: ['renta', 'dividendos', 'capitalizacion', 'derogado', 'socios'],
+  },
+
   // ─── TARIFAS DE RENTA ─────────────────────────────────────────────────────
   {
     id: 'ART_240_ET',
@@ -988,7 +1012,7 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     cita: 'Art. 639 E.T.',
     titulo: 'Sanción mínima',
     resumen:
-      'Ninguna sanción puede ser inferior a 10 UVT. En 2026: 10 × $52.374 = $523.740 COP.',
+      'Ninguna sanción puede ser inferior a 10 UVT. En 2026: 10 × $52.374 = $523.740, que se aproxima a $524.000 COP (Art. 868 E.T.).',
     textoLiteral: null,
     estado: 'VIGENTE_2026',
     modificaciones: [],
@@ -1150,7 +1174,7 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     cita: 'Art. 771-5 E.T.',
     titulo: 'Bancarización — limitación de pagos en efectivo',
     resumen:
-      'Para reconocimiento fiscal (deducción, costo, IVA descontable), los pagos deben realizarse por medios diferentes al efectivo. §2: tope individual 100 UVT por NIT ($5.237.400 COP 2026). §1: tope general 40.000 UVT ($2.094.960.000) o 40% de pagos en efectivo o 35% de costos/deducciones totales (el menor).',
+      'Para reconocimiento fiscal (deducción, costo, IVA descontable), los pagos deben realizarse por medios diferentes al efectivo. §2: tope de 100 UVT por PAGO individual en efectivo (cada transacción, no acumulado por beneficiario — C.E. sentencia 26676 de 2023) ($5.237.400 COP 2026). §1: se reconocen los pagos en efectivo hasta el menor entre el 40% de lo pagado (máximo 40.000 UVT = $2.094.960.000) y el 35% de los costos y deducciones totales.',
     textoLiteral: null,
     estado: 'VIGENTE_2026',
     modificaciones: [],

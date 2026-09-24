@@ -17,7 +17,7 @@ export type FiscalAnchorBlock = {
   f02: string;
   /** F03 — Crédito imputable a renta (135505, 135515; 135595/1805 sólo si el nombre lo indica) en centavos. */
   f03: string;
-  /** F04 — Neto a Pagar / Saldo a Favor = F02 − F03 en centavos (negativo = saldo a favor). Art. 850 E.T. */
+  /** F04 — Posición de referencia contable = F02 − F03 en centavos. Estimación contable, NO liquidación: no es saldo a pagar ni saldo a favor (Arts. 26, 807 y 850 E.T.). */
   f04: string;
   /** F05 — Provisión IVA por Pagar (abs Cta. 2408) en centavos. */
   f05: string;

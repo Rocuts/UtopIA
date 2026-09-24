@@ -29,6 +29,7 @@ export async function runRiskScoreAgent(
 SCORE_RIESGO_DIAN_PRECOMPUTADO (vinculante — no recalcular):
   Score total: ${breakdown.score}/100
   Nivel: ${breakdown.nivel}
+  Publicable: ${breakdown.publicable ? 'sí' : `no — ${breakdown.noPublicableMotivo}`}
   Factores:
 ${breakdown.factores
   .map(
@@ -41,7 +42,7 @@ ANCLAS_FISCALES (referencia):
   F01 UAI: ${formatCopFromCents(BigInt(input.fiscalAnchor.f01))}
   F02 Imp. ref. 35%: ${formatCopFromCents(BigInt(input.fiscalAnchor.f02))}
   F03 Retenciones: ${formatCopFromCents(BigInt(input.fiscalAnchor.f03))}
-  F04 Saldo neto: ${formatCopFromCents(BigInt(input.fiscalAnchor.f04))}
+  F04 Posición de referencia contable (estimación, no liquidación): ${formatCopFromCents(BigInt(input.fiscalAnchor.f04))}
   F09 TET: ${input.fiscalAnchor.f09}%
   F10 Cobertura: ${input.fiscalAnchor.f10}%
 
@@ -64,5 +65,20 @@ ${input.instructions ?? '(sin instrucciones adicionales)'}
     signal: opts.signal,
   });
 
-  return json;
+  // Score, nivel, factores y publicabilidad: siempre los de computeRiskScore
+  // (auditoría 2026-09, tributario-modulos-05). El LLM sólo narra.
+  return {
+    ...json,
+    data: {
+      ...json.data,
+      score: breakdown.score,
+      nivel: breakdown.nivel,
+      factores: breakdown.factores,
+      publicable: breakdown.publicable,
+      noPublicableMotivo: breakdown.noPublicableMotivo,
+    },
+    warnings: breakdown.publicable || !breakdown.noPublicableMotivo
+      ? json.warnings
+      : [...json.warnings, breakdown.noPublicableMotivo],
+  };
 }

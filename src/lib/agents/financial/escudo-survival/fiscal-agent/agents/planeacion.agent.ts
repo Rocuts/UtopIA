@@ -6,7 +6,7 @@ import { formatCopFromCents } from '@/lib/agents/financial/contracts/money';
 import { buildPlaneacionPrompt } from '../prompts/planeacion.prompt';
 import { planeacionModuleSchema } from '../schemas';
 import { callFiscalAgent } from '../runtime';
-import type { FiscalAgentInput, PlaneacionModuleResult } from '../types';
+import type { FiscalAgentInput, PlaneacionEscenario, PlaneacionModuleResult } from '../types';
 
 export interface PlaneacionAgentOptions {
   input: FiscalAgentInput;
@@ -27,7 +27,7 @@ ANCLAS_FISCALES_VINCULANTES (Bloque Âncora Capa 1 — no recalcular):
   F01 UAI: ${formatCopFromCents(BigInt(anchor.f01))}
   F02 Impuesto referencia (tarifa 35%): ${formatCopFromCents(BigInt(anchor.f02))}
   F03 Retenciones a favor: ${formatCopFromCents(BigInt(anchor.f03))}
-  F04 Saldo neto: ${formatCopFromCents(BigInt(anchor.f04))}
+  F04 Posición de referencia contable (estimación, no liquidación): ${formatCopFromCents(BigInt(anchor.f04))}
   F09 TET actual: ${anchor.f09}%
 
 DATOS_EMPRESA:
@@ -58,5 +58,29 @@ ${input.instructions ?? '(sin instrucciones adicionales)'}
     signal: opts.signal,
   });
 
-  return json;
+  // impuestoBase = F02; ahorro = base − escenario y % en BigInt (auditoría
+  // 2026-09, tributario-modulos-16). Escenario N/D ⇒ ahorro N/D.
+  const base = BigInt(anchor.f02);
+  const fix = (e: PlaneacionEscenario): PlaneacionEscenario => {
+    if (e.impuestoEscenario === null || !/^-?\d+$/.test(e.impuestoEscenario)) {
+      return { ...e, impuestoBase: anchor.f02, impuestoEscenario: null, ahorroEstimado: null, ahorroPct: null };
+    }
+    const esc = BigInt(e.impuestoEscenario);
+    const ahorro = base - esc > BigInt(0) ? base - esc : BigInt(0);
+    // Porcentaje con 2 decimales, redondeo half-up (escala ×10⁵ antes de dividir).
+    const pct = base > BigInt(0) ? Math.round(Number((ahorro * BigInt(100_000)) / base) / 10) / 100 : null;
+    return { ...e, impuestoBase: anchor.f02, ahorroEstimado: ahorro.toString(), ahorroPct: pct };
+  };
+  const { conservador, base: escBase, agresivo } = json.data.escenarios;
+  return {
+    ...json,
+    data: {
+      ...json.data,
+      escenarios: { conservador: fix(conservador), base: fix(escBase), agresivo: fix(agresivo) },
+    },
+    warnings: [
+      ...json.warnings,
+      'Escenarios medidos contra F02 (UAI × 35%): estimación contable, no liquidación. Sólo cuentan partidas conciliatorias incrementales no reconocidas ya en la UAI.',
+    ],
+  };
 }
