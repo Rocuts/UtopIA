@@ -2042,9 +2042,24 @@ function incomeLineAnchorErrors(
   const estado = 'Estado de Resultados';
   const structural = period === 'primary';
   const rotulo = (i: number) => `${lines[i].account} — ${lines[i].label}`;
-  const { byKey, multi } = codedRows(lines, (k) => /^[4-7]/.test(k));
+  const { byKey, multi, uncoded } = codedRows(lines, (k) => /^[4-7]/.test(k));
   if (structural) {
     for (const { index, codes } of multi) out.push(multiCodeMessage(estado, etiqueta, rotulo(index), codes));
+  }
+  // Un código que no es de resultados (clases 1, 2, 8, 9…) no entra en la
+  // cascada ni se ancla a nada del ERI; la clase 3 sólo como desglose del ORI
+  // (grupo 38), que contrastan E6/E6b. Mismo criterio que el gate de
+  // exportación, para que la fase NIIF selle lo que la exportación bloquea.
+  for (const i of uncoded) {
+    const digits = lines[i].account?.match(/\d+/g) ?? [];
+    if (digits.length === 0 || digits.some((d) => d.startsWith('3'))) continue;
+    const raw = periodCell(lines[i], period);
+    if (raw === null || parseMoneyCop(raw) === ZERO) continue;
+    out.push(
+      `E21. ${estado} (${etiqueta}): el renglón "${rotulo(i)}" lleva un código que no es de resultados ` +
+        `(clases 4–7 del PUC) e imprime ${fmtCop(parseMoneyCop(raw))}: no entra en la cascada del estado ni ` +
+        `se ancla al balance de prueba.`,
+    );
   }
   if (byKey.size === 0) return out;
   // Orientación de la clase 4 (firmada o en magnitudes): la del total de las

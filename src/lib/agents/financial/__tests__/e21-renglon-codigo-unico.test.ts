@@ -203,6 +203,19 @@ describe('E21 — un código repetido sólo en las porciones de un grupo partido
     expect(e.some((m) => /Patrimonio \(periodo 2025\): el código 31 aparece en 2 renglones/.test(m))).toBe(true);
   });
 
+  it('ERI: un renglón con un código que no es de resultados (1105, 2805, 9) no se imprime; el 38 del ORI no es E21', () => {
+    for (const acc of ['1105', '2805', '9']) {
+      const e = e21((j) => {
+        j.incomeStatement.lines.push(linea(acc, 'Utilidad neta del ejercicio', '9999999900', null, { isAbsolute: true }));
+      });
+      expect(e.join('\n')).toMatch(new RegExp(`"${acc} — Utilidad neta del ejercicio" lleva un código que no es de resultados`));
+    }
+    const ori = e21((j) => {
+      j.incomeStatement.lines.push(linea('3805', 'Superávit por revaluación (ORI)', '0', '0'));
+    });
+    expect(ori).toEqual([]);
+  });
+
   it('un sub-renglón con código de detalle se ancla a su hoja: 510599 inexistente es error; 510506 + 516015 cuadran', () => {
     const inventado = e21((j) => {
       const l51 = eri(j, '51');
