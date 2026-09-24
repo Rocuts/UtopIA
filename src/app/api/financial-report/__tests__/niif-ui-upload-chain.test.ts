@@ -334,3 +334,49 @@ describe('UI → /niif: columna de saldo inicial = saldos de apertura', () => {
     expect(pass1Prompt()).toContain('NO es P&G comparativo');
   });
 });
+
+// ---------------------------------------------------------------------------
+// P4 (a) — cadena UI completa con un balance "en miles de pesos": el upload
+// informa la unidad, la UI reenvía el archivo con `unitMultiplier` y /niif
+// recibe `rawData` con la directiva y los totales en pesos.
+// ---------------------------------------------------------------------------
+describe('UI → /niif: unidad declarada con confirmación (P4-a)', () => {
+  const CSV_MILES = BALANCED_CSV.split('\n')
+    .map((line, i) =>
+      i === 0
+        ? 'codigo,nombre,nivel,saldo 2025 (miles de pesos)'
+        : line.replace(/,(\d+)$/, (_, n: string) => `,${Number(n) / 1000}`),
+    )
+    .join('\n');
+
+  async function uploadConfirmed(csv: string, unitMultiplier: string): Promise<UploadJson & { unit?: { requiresConfirmation: boolean } }> {
+    const fd = new FormData();
+    fd.append('file', new File([csv], 'balance.csv'));
+    fd.append('context', 'balance.csv');
+    fd.append('unitMultiplier', unitMultiplier);
+    const res = await uploadPOST(new Request('http://localhost/api/upload', { method: 'POST', body: fd }));
+    expect(res.status).toBe(200);
+    return (await res.json()) as UploadJson & { unit?: { requiresConfirmation: boolean } };
+  }
+
+  it('sin confirmar: el upload lo avisa y /niif responde 422 sin llamar al LLM', async () => {
+    const up = (await upload(CSV_MILES, 'balance.csv')) as UploadJson & { unit?: { requiresConfirmation: boolean } };
+    expect(up.unit?.requiresConfirmation).toBe(true);
+    const r = await callNiif(clientNiifBody(up));
+    expect(r.status).toBe(422);
+    expect(captured).toHaveLength(0);
+  });
+
+  it('confirmado "miles": la UI envía rawData con la directiva y el prompt lleva los totales en pesos', async () => {
+    const up = await uploadConfirmed(CSV_MILES, '1000');
+    expect(up.unit?.requiresConfirmation).toBe(false);
+    const body = clientNiifBody(up);
+    expect(String(body.rawData).split('\n')[0]).toBe('[unidad-confirmada=miles]');
+    // El handoff reconoce el texto confirmado: el preprocesado del reenvío viaja.
+    expect(body.preprocessed).toBeDefined();
+    await callNiif(body);
+    const prompt = pass1Prompt();
+    expect(prompt).toContain('TOTALES VINCULANTES');
+    expect(prompt).toMatch(/200\.000\.000/);
+  });
+});

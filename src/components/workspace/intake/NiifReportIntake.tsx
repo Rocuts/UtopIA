@@ -30,10 +30,14 @@ import type { FieldConfidence } from './useDocumentExtraction';
 import { IntakePreview } from './IntakePreview';
 import { HechosEmpresaConfirm } from './HechosEmpresaConfirm';
 import {
+  applyIntakeDirectives,
   collectMissingRequired,
   resolveExtractedFiscalPeriod,
   resolveNiifRawData,
 } from './niifIntakeValidation';
+import { UnitConfirmationPanel } from './UnitConfirmationPanel';
+import { MaturityOverridesEditor } from './MaturityOverridesEditor';
+import type { UnidadMonetaria, Vencimiento } from '@/lib/upload/ingest-directives';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -366,7 +370,18 @@ export function NiifReportIntake() {
   const [skippedUpload, setSkippedUpload] = useState(false);
   // Hechos del negocio EXCLUIDOS de esta corrida (confirmación pre-reporte). Efímero.
   const [excludedFactIds, setExcludedFactIds] = useState<string[]>([]);
-  const { state: extractionState, uploadAndExtract, reset: resetExtraction } = useDocumentExtraction();
+  const {
+    state: extractionState,
+    uploadAndExtract,
+    confirmUnit,
+    reset: resetExtraction,
+  } = useDocumentExtraction();
+  // P4-b: excepciones de vencimiento por cuenta (opcionales). Efímeras como
+  // `excludedFactIds`: viajan como directiva en `rawData` al enviar.
+  const [maturityOverrides, setMaturityOverrides] = useState<Record<string, Vencimiento>>({});
+  // P4-a: unidad de un balance PEGADO a mano ('' = sin confirmar: pesos). La
+  // de un archivo la confirma /api/upload y ya viene en el texto extraído.
+  const [manualUnit, setManualUnit] = useState<UnidadMonetaria | ''>('');
 
   // Derive confidence map: when extraction is done, use it; otherwise all 'none'
   const confidenceMap: Record<string, FieldConfidence> =
@@ -505,15 +520,26 @@ export function NiifReportIntake() {
   const extractedRawText =
     extractionState.status === 'done' ? extractionState.extracted?.rawText : undefined;
   const resolvedRawData = resolveNiifRawData(extractedRawText, values.rawData);
+  // P4-a: unidad declarada por el archivo subido y su confirmación.
+  const unitInfo =
+    extractionState.status === 'done' && !skippedUpload ? extractionState.extracted?.unit ?? null : null;
+  const unitPending = unitInfo?.requiresConfirmation === true;
 
   const handleSubmit = useCallback(() => {
     const extractedRaw =
       extractionState.status === 'done' ? extractionState.extracted?.rawText : undefined;
-    const finalRawData = resolveNiifRawData(extractedRaw, values.rawData);
+    // Confirmaciones del intake (P4) escritas como directivas en `rawData`:
+    // /niif, Stage 0 y /export re-derivan el balance de este mismo texto.
+    const finalRawData = applyIntakeDirectives(resolveNiifRawData(extractedRaw, values.rawData), {
+      vencimientos: maturityOverrides,
+      unidadConfirmada: extractedRaw ? undefined : manualUnit || undefined,
+    });
 
     // Guarda dura: el backend exige rawData.min(1). Sin esto el usuario llegaba
     // al final del wizard y recibía un HTTP 400 críptico.
     if (!finalRawData) return;
+    // Unidad declarada sin confirmar: /niif respondería 422 (recalculo-final-03).
+    if (extractionState.status === 'done' && extractionState.extracted?.unit?.requiresConfirmation) return;
 
     const finalIntake: NiifReportIntakeType = {
       ...values,
@@ -539,6 +565,8 @@ export function NiifReportIntake() {
   }, [
     values,
     excludedFactIds,
+    maturityOverrides,
+    manualUnit,
     extractionState,
     startNewConsultation,
     setPipelineInput,
@@ -586,8 +614,9 @@ export function NiifReportIntake() {
           niifGroup: values.niifGroup,
         },
         resolvedRawData,
+        { unitPending },
       ),
-    [values.company, values.fiscalPeriod, values.niifGroup, resolvedRawData],
+    [values.company, values.fiscalPeriod, values.niifGroup, resolvedRawData, unitPending],
   );
 
   // ─── Step 1: Upload Document ──────────────────────────────────────────────
@@ -711,10 +740,22 @@ export function NiifReportIntake() {
           <span className="text-danger">*</span>
         </div>
         {extractedRawText ? (
-          <p className="text-xs text-n-600 flex items-center gap-1.5">
-            <CheckCircle className="w-3.5 h-3.5 text-success shrink-0" />
-            {t.rawDataFromFile}
-          </p>
+          <div className="space-y-3">
+            <p className="text-xs text-n-600 flex items-center gap-1.5">
+              <CheckCircle className="w-3.5 h-3.5 text-success shrink-0" />
+              {t.rawDataFromFile}
+            </p>
+            {/* P4-a: el archivo declara "en miles / millones" → confirmación explícita. */}
+            {unitInfo && (unitInfo.declared || unitInfo.confirmed) && (
+              <UnitConfirmationPanel
+                unit={unitInfo}
+                status={extractionState.unitConfirmation.status}
+                error={extractionState.unitConfirmation.error}
+                onConfirm={(u) => void confirmUnit(u)}
+                t={t}
+              />
+            )}
+          </div>
         ) : (
           <>
             <label htmlFor="niif-raw-data" className="block text-xs text-n-600 mb-1.5">
@@ -740,9 +781,29 @@ export function NiifReportIntake() {
             {!resolvedRawData && (
               <p className="text-2xs text-danger mt-1">{t.rawDataMissing}</p>
             )}
+            {/* P4-a: unidad de los importes pegados; sin elección = pesos. */}
+            <div className="mt-2">
+              <label htmlFor="niif-manual-unit" className="block text-xs text-n-700 mb-1">
+                {t.unitManualLabel}
+              </label>
+              <select
+                id="niif-manual-unit"
+                value={manualUnit}
+                onChange={(e) => setManualUnit(e.target.value as UnidadMonetaria | '')}
+                className="px-3 py-2 rounded-lg border border-n-200 text-sm text-n-900 bg-n-0 focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500"
+              >
+                <option value="">{t.unitManualNone}</option>
+                <option value="pesos">{t.unitPesos}</option>
+                <option value="miles">{t.unitMiles}</option>
+                <option value="millones">{t.unitMillones}</option>
+              </select>
+            </div>
           </>
         )}
       </div>
+
+      {/* P4-b: excepciones de vencimiento por cuenta (opcional). */}
+      <MaturityOverridesEditor value={maturityOverrides} onChange={setMaturityOverrides} t={t} />
 
       {/* Company data section */}
       <div>

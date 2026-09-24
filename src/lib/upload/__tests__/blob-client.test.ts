@@ -222,3 +222,27 @@ describe('uploadDocument — Blob no disponible', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+// P4 (a): la confirmación de unidad viaja en los dos caminos con el mismo nombre
+// de campo que lee /api/upload.
+describe('uploadDocument — unitMultiplier (P4-a)', () => {
+  it('camino directo: campo multipart `unitMultiplier`', async () => {
+    await uploadDocument(fileOfSize(1024), 'balance.csv', undefined, { unitMultiplier: 1000 });
+    const form = fetchMock.mock.calls[0][1]?.body as FormData;
+    expect(form.get('unitMultiplier')).toBe('1000');
+  });
+
+  it('sin confirmación el formulario no lleva el campo', async () => {
+    await uploadDocument(fileOfSize(1024), 'balance.csv');
+    const form = fetchMock.mock.calls[0][1]?.body as FormData;
+    expect(form.has('unitMultiplier')).toBe(false);
+  });
+
+  it('camino Blob: `unitMultiplier` en el JSON', async () => {
+    uploadMock.mockResolvedValue({ url: 'https://x.blob.vercel-storage.com/grande.xlsx' });
+    await uploadDocument(fileOfSize(30 * 1024 * 1024, 'grande.xlsx'), 'grande.xlsx', undefined, {
+      unitMultiplier: 1000000,
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({ unitMultiplier: 1000000 });
+  });
+});
