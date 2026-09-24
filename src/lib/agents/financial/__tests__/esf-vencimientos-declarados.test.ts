@@ -480,4 +480,71 @@ describe('fillComparativeBreakdownFromSnapshot — formas que no son el completa
       [null, 'Total activo no corriente', '0', '20000'],
     ]);
   });
+
+  // Revisión I2: el modelo rotula sus subtotales igual que el completado
+  // ("Total activo corriente") y ubica un grupo en un bloque distinto del que
+  // le da el snapshot comparativo (17 diferidos en corriente), con su columna
+  // comparativa ya escrita. Antes el renglón conservaba la cifra del modelo y
+  // el grupo se añadía otra vez en el bloque no corriente: comparativo doble.
+  const lm = (account: string | null, label: string, amount: string, cmp: string | null, level: 2 | 3 = 2) => ({
+    account, label, amountPrimary: amount, amountComparative: cmp, level,
+    isAbsolute: false, confidence: null, anomalyFlag: null,
+  });
+  const comparativeSum = (lines: NiifReportJson['balanceSheet']['assets']) =>
+    lines.filter((x) => x.account !== null).reduce((acc, x) => acc + BigInt(x.amountComparative ?? '0'), ZERO);
+
+  it('revisión I2: un grupo que el modelo ubica en otro bloque y ya trae comparativo no se duplica', () => {
+    const comparative = snap('2024', [['110505', 800], ['170505', 200]]);
+    const json = makeCoherentNiifReport();
+    json.company.comparativePeriod = '2024';
+    json.balanceSheet.assets = [
+      lm('11', 'Efectivo', '100000', '80000'),
+      lm('17', 'Gastos pagados por anticipado', '30000', '20000'),
+      lm(null, 'Total activo corriente', '130000', '100000', 3),
+    ] as never;
+    const { json: filled, filled: which } = fillComparativeBreakdownFromSnapshot(json, comparative);
+    expect(which).toEqual([]);
+    expect(filled.balanceSheet.assets).toEqual(json.balanceSheet.assets);
+    expect(comparativeSum(filled.balanceSheet.assets)).toBe(BigInt(100000));
+  });
+
+  it('revisión I2: si otro grupo falta, el renglón recibe la cifra de su grupo y no aparece dos veces', () => {
+    const comparative = snap('2024', [['110505', 800], ['130505', 50], ['170505', 200]]);
+    const json = makeCoherentNiifReport();
+    json.company.comparativePeriod = '2024';
+    json.balanceSheet.assets = [
+      lm('11', 'Efectivo', '100000', '80000'),
+      lm('17', 'Gastos pagados por anticipado', '30000', '99999'),
+      lm(null, 'Total activo corriente', '130000', '179999', 3),
+    ] as never;
+    const { json: filled } = fillComparativeBreakdownFromSnapshot(json, comparative);
+    expect(
+      filled.balanceSheet.assets.map((x) => [x.account, x.amountPrimary, x.amountComparative]),
+    ).toEqual([
+      ['11', '100000', '80000'],
+      ['13', '0', '5000'],
+      ['17', '30000', '20000'],
+      [null, '130000', '105000'],
+    ]);
+    expect(comparativeSum(filled.balanceSheet.assets)).toBe(BigInt(105000));
+  });
+
+  it('revisión I2: un grupo que el modelo partió en dos renglones con comparativo propio se deja como vino', () => {
+    // El 12 del comparativo no está en la sección: sin la salvaguarda, el
+    // completado corría, ponía los $300 del 13 en el renglón corriente y
+    // dejaba los $100 del modelo en el no corriente (13 contado dos veces).
+    const comparative = snap('2024', [['110505', 800], ['120505', 40], ['130505', 300]]);
+    const json = makeCoherentNiifReport();
+    json.company.comparativePeriod = '2024';
+    json.balanceSheet.assets = [
+      lm('11', 'Efectivo', '100000', '80000'),
+      lm('13', 'Deudores corto plazo', '20000', '20000'),
+      lm(null, 'Total activo corriente', '120000', '100000', 3),
+      lm('13', 'Deudores largo plazo', '10000', '10000'),
+      lm(null, 'Total activo no corriente', '10000', '10000', 3),
+    ] as never;
+    const { json: filled, filled: which } = fillComparativeBreakdownFromSnapshot(json, comparative);
+    expect(which).toEqual([]);
+    expect(filled.balanceSheet.assets).toEqual(json.balanceSheet.assets);
+  });
 });

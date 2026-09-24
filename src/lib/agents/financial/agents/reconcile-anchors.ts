@@ -877,21 +877,58 @@ export function fillComparativeBreakdownFromSnapshot<T extends ReconcilableRepor
     if (!comparativeByKey) continue;
     const lostLayout = recovered !== null && detail.some((d) => d.term === null);
 
+    // Renglón que YA trae cifra comparativa en un bloque distinto del que le
+    // da al grupo el snapshot comparativo (revisión I2). El completado
+    // determinista del analista deja la columna comparativa en null, así que
+    // esa cifra la escribió el modelo, con su propia ubicación del grupo (p.
+    // ej. 17 en corriente con subtotales rotulados como los del completado).
+    // Añadir el grupo en el otro bloque y conservar la cifra del modelo lo
+    // contaría dos veces. Si el grupo tiene un solo renglón en la sección, la
+    // cifra comparativa del grupo (todos sus plazos) va a ese renglón, como
+    // antes de P4-b; si tiene varios, no hay forma segura de repartirla y la
+    // sección se deja como la entregó el modelo.
+    const comparativeKeysByGroup = new Map<string, string[]>();
+    for (const [k, v] of comparativeByKey) {
+      comparativeKeysByGroup.set(v.account, [...(comparativeKeysByGroup.get(v.account) ?? []), k]);
+    }
+    const linesPerGroup = new Map<string, number>();
+    for (const d of detail) linesPerGroup.set(d.line.account!, (linesPerGroup.get(d.line.account!) ?? 0) + 1);
+    const claimed = new Map<string, bigint>();
+    const consumed = new Set<string>();
+    let ambiguous = false;
+    for (const d of detail) {
+      if (d.line.amountComparative === null || comparativeByKey.has(d.key)) continue;
+      const groupKeys = comparativeKeysByGroup.get(d.line.account!);
+      if (!groupKeys) continue;
+      if (linesPerGroup.get(d.line.account!) !== 1) {
+        ambiguous = true;
+        break;
+      }
+      claimed.set(d.key, groupKeys.reduce((acc, k) => acc + comparativeByKey!.get(k)!.cents, ZERO));
+      for (const k of groupKeys) consumed.add(k);
+    }
+    if (ambiguous) continue;
+
     const yaTieneComparativo = detail.every((d) => d.line.amountComparative !== null);
-    const faltantes = [...comparativeByKey.keys()].filter((k) => !detail.some((d) => d.key === k));
+    const faltantes = [...comparativeByKey.keys()].filter(
+      (k) => !consumed.has(k) && !detail.some((d) => d.key === k),
+    );
     if (yaTieneComparativo && faltantes.length === 0 && !lostLayout) continue;
 
     const conComparativo: TermedLine[] = detail.map(({ line: l, term, key }) => {
       const cmp = comparativeByKey!.get(key);
+      const groupCents = claimed.get(key);
       return {
         term,
         line: {
           ...l,
           amountComparative: cmp
             ? serializeMoneyCop(cmp.cents)
-            : // El grupo no existía el año anterior: `null` es la verdad (cuenta
-              // nueva del periodo), no un cero que el lector leería como saldo.
-              l.amountComparative,
+            : groupCents !== undefined
+              ? serializeMoneyCop(groupCents)
+              : // El grupo no existía el año anterior: `null` es la verdad (cuenta
+                // nueva del periodo), no un cero que el lector leería como saldo.
+                l.amountComparative,
           confidence: 'high',
         } as unknown as BalanceLine,
       };
