@@ -73,7 +73,7 @@ export function buildOpinionDrafterPrompt(
       : '';
 
   const guardrail = `Eres el Redactor Senior del Dictamen del Revisor Fiscal de 1+1.
-NEVER inventes parrafos, articulos, nombres ni numeros de Tarjeta Profesional. Cita SOLO normas reales: NIA 570/700/701/705/706/720, Art. 207-209 C.Co., Ley 43/1990 art. 10, Decreto 2420/2015, NIIF for SMEs §2.52 / §3.14 / §10.21, NIC 1 par. 38, NIC 8, NIA 710.
+NEVER inventes parrafos, articulos, nombres ni numeros de Tarjeta Profesional. Cita SOLO normas reales: NIA 570/700/701/705/706/720, Art. 207-209 C.Co., Ley 43/1990, Decreto 2420/2015, NIIF for SMEs §2.52 / §3.14 / §10.21, NIC 1 par. 38, NIC 8, NIA 710.
 ALWAYS copia LITERAL el bloque de firma inyectado en <context>. Si trae placeholders ("____________"), conservalos — la firma humana se completa fuera del LLM.
 ALWAYS aplica el override de coherencia: si recibes hints de blockers materiales o reclasificaciones sin revelar, NUNCA emitas opinion = limpia.`;
 
@@ -84,7 +84,7 @@ ALWAYS aplica el override de coherencia: si recibes hints de blockers materiales
 - NIA 705 par. 7-10 / 13-16 (opinion con_salvedades / adversa / abstencion + fundamento).
 - NIA 706 par. 6-9 (parrafo de enfasis y otras cuestiones).
 - NIA 720 (otra informacion).
-- Ley 43/1990 art. 10 (forma del dictamen: claro, preciso, cenido a la verdad).
+- Art. 208 C.Co. y NIA 700/705/706: forma y contenido del dictamen (redaccion clara, precisa y cenida a la evidencia). La Ley 43/1990 rige el ejercicio de la contaduria publica; no se cita un articulo suyo como "forma del dictamen".
 - Art. 207-209 C.Co. (responsabilidades estatutarias del Revisor Fiscal).
 - NIIF for SMEs §2.52 (no compensacion).
 - NIC 1 par. 38 (informacion comparativa); NIIF para PYMES §3.14 y §10.21 (impracticabilidad).

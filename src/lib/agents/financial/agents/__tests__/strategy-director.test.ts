@@ -61,7 +61,23 @@ describe('valoracion-11 — signos en el Markdown del Strategy Director', () => 
     queue.push(strategyJson());
     const res = await run();
     expect(res.projectedCashFlow).toContain('- Saldo Final Año +3: ($250.000.000,00)');
-    expect(res.kpiDashboard).toContain('| liquidity | Capital de trabajo | AC − PC | ($250.000.000,00) |');
+    // Pendiente #2 (auditoría integral 2026-09-24): sin preprocesado el KPI no
+    // tiene base determinista y se publica N/D, no la cifra del modelo.
+    expect(res.kpiDashboard).toContain('| liquidity | Capital de trabajo | Capital de trabajo: sin fórmula determinista | N/D |');
+    expect(res.kpiDashboard).not.toContain('($250.000.000,00)');
+
+    // Con preprocesado el capital de trabajo se recalcula (AC − PC) y conserva el signo.
+    queue.push(strategyJson());
+    const pre = {
+      primary: {
+        period: '2025',
+        controlTotals: { activoCorriente: 50 * M, pasivoCorriente: 300 * M, capitalTrabajo: -250 * M, efectivoCuenta11: 50 * M },
+      },
+    } as unknown as PreprocessedBalance;
+    const withPre = await run(pre);
+    expect(withPre.kpiDashboard).toContain(
+      '| liquidity | Capital de trabajo | Activo corriente − Pasivo corriente — calculado por el sistema | ($250.000.000,00) |',
+    );
   });
 });
 
@@ -237,5 +253,37 @@ describe('e2e-niif-17 — tendencias con comparativo', () => {
     expect(res.json?.trends).toBeNull();
     expect(res.breakEvenAnalysis).toContain('_Sin periodo comparativo disponible._');
     expect(res.breakEvenAnalysis).not.toContain('+20,0%');
+  });
+});
+
+// pipeline-flujo-20: el dashboard abreviaba miles de millones como "B"; en
+// español "billón" es 10^12 (un millón de millones) y "$2,0 B" se lee ×1.000.
+describe('pipeline-flujo-20 — abreviado del dashboard ejecutivo', () => {
+  it('miles de millones se imprimen en millones ($X.XXX M), nunca como "B"', async () => {
+    queue.push(strategyJson({
+      executiveDashboard: {
+        rows: [
+          { label: 'Total Activo', primary: c(2_000 * M), comparative: c(1_500 * M), variation: c(500 * M), variationPct: '33,3', commentary: 'x' },
+          { label: 'Utilidad Neta', primary: c(-4_196.56 * M), comparative: c(-30 * M), variation: c(-4_166.56 * M), variationPct: null, commentary: 'x' },
+          { label: 'Efectivo', primary: c(12.34 * M), comparative: null, variation: null, variationPct: null, commentary: 'x' },
+        ],
+        executiveCommentary: 'x',
+      },
+    }));
+    const out = await run();
+    expect(out.kpiDashboard).toContain('| Total Activo | $2.000 M | $1.500 M | $500 M |');
+    expect(out.kpiDashboard).toContain('| Utilidad Neta | $-4.196,6 M | $-30 M | $-4.166,6 M |');
+    expect(out.kpiDashboard).toContain('| Efectivo | $12,3 M |');
+    expect(out.kpiDashboard).not.toMatch(/\$[\d.,-]+ B\b/);
+  });
+
+  it('el Editor Jefe HTML recibe la misma regla (millones, sin "B")', async () => {
+    const { buildHtmlEditorUserContent } = await import('../../prompts/html-editor.prompt');
+    const content = buildHtmlEditorUserContent({
+      niifReport: {} as never, strategyReport: {} as never, governanceReport: {} as never,
+      company: { name: 'ACME', nit: '900', fiscalPeriod: '2025' } as never, metadata: {} as never, language: 'es',
+    } as never);
+    expect(content).toContain('se escribe igual en millones ($2.429 M)');
+    expect(content).toMatch(/un billón es un millón de millones/);
   });
 });

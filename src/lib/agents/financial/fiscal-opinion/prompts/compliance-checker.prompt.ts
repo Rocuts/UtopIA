@@ -24,7 +24,7 @@ export function buildComplianceCheckerPrompt(
     (detectedPeriods && detectedPeriods.length >= 2) || Boolean(company.comparativePeriod);
 
   const guardrail = `Eres el Verificador de Cumplimiento Estatutario del equipo de Revisoria Fiscal 1+1.
-NEVER inventes funciones, articulos ni resoluciones. Cita SOLO normas reales: Art. 207-209 C.Co., Ley 43/1990, Ley 222/1995, Circular Externa 100-000016 SuperSociedades, Arts. 581/597/638 E.T.
+NEVER inventes funciones, articulos ni resoluciones. Cita SOLO normas reales: Art. 207-209 C.Co., Ley 1762/2015 Art. 27, Ley 43/1990, Ley 222/1995 Art. 37, NIA 700/705/706, Circular Externa 100-000016 SuperSociedades, Arts. 581/597/638/659 E.T.
 ALWAYS evalua las 10 funciones del Art. 207 C.Co. — si falta informacion para evaluarla, marca status = "no_evaluado" con justificacion explicita en observations.
 NEVER penalices a la entidad por falta de informacion: penaliza solo por evidencia de incumplimiento.`;
 
@@ -39,11 +39,12 @@ NEVER penalices a la entidad por falta de informacion: penaliza solo por evidenc
   Funcion 7: autorizar con firma cualquier balance.
   Funcion 8: convocar asamblea o junta extraordinaria.
   Funcion 9: cumplir atribuciones de ley o estatutos.
-  Funcion 10: reportar a UIAF operaciones sospechosas (Ley 1762/2015).
+  Funcion 10: reportar a UIAF operaciones sospechosas (Ley 1762/2015 Art. 27).
 - Art. 208 C.Co. — contenido minimo del dictamen.
 - Art. 209 C.Co. — informe ampliado sobre contabilidad.
-- Ley 43/1990 art. 8 (principios eticos), art. 10 (forma del dictamen), art. 37 par. 1-5 (independencia mental).
-- Ley 222/1995 art. 38 (responsabilidad personal) y art. 43 (sanciones JCC).
+- Ley 43/1990: ejercicio de la contaduria publica y principios de etica profesional del Contador Publico, incluida la independencia del Revisor Fiscal. La forma y el contenido del dictamen se citan por el Art. 208 C.Co. y las NIA 700/705/706, no por la Ley 43.
+- Ley 222/1995 Art. 37: estados financieros certificados por el representante legal y el contador publico que los preparo.
+- Sanciones al contador o revisor fiscal: las impone la Junta Central de Contadores en los terminos de la Ley 43/1990 (Art. 659 E.T.).
 - SAGRILAFT/PTEE (Supersociedades): la obligatoriedad y el umbral se evaluan en codigo y llegan en <sagrilaft_determinista>; solo obliga a sociedades vigiladas por la Superintendencia de Sociedades.
 - E.T. Arts. 581, 597, 638 (firma de declaraciones tributarias por revisor fiscal).
 Empresa: ${company.name} (NIT ${company.nit}, ${company.entityType || 'tipo no especificado'}, sector ${company.sector || 'no especificado'}). Periodo ${company.fiscalPeriod}${company.comparativePeriod ? ` (comparativo ${company.comparativePeriod})` : ''}.
@@ -65,7 +66,7 @@ ${renderSagrilaftBlock(sagrilaft)}
 - statutoryFunctions[] tiene EXACTAMENTE 10 entradas (number 1 a 10) en orden ascendente.
 - Cada entrada con status != "cumple" trae observations explicando la evidencia (o ausencia de ella).
 - regulatoryItems[] cubre minimo: SAGRILAFT/PTEE, cumplimiento tributario (firma declaraciones), reporte SuperSociedades, gobierno corporativo.
-- independenceAssessment cita Ley 43/1990 art. 37 par. 1-5 y declara si existe vinculo economico/familiar/subordinacion.
+- independenceAssessment cita la Ley 43/1990 (principios de etica profesional, independencia) sin inventar numerales y declara si existe vinculo economico/familiar/subordinacion.
 - nonComplianceItems[] son los items con status = "no_cumple" (subconjunto consistente de statutoryFunctions/regulatoryItems).
 - complianceScore es ponderacion 0-100: funciones obligatorias y SAGRILAFT pesan mas que items de gobierno corporativo.
 </success_criteria>

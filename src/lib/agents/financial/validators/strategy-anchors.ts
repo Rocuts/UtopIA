@@ -34,8 +34,9 @@ import { computeEbitdaMargin, type EbitdaResult } from '@/lib/pillars/ebitda';
 import { buildPeriodAnchors } from '../contracts/anchors';
 import { formatCopFromCents } from '../contracts/money';
 import type { NiifReportJson } from '../contracts/niif-report';
-import type { StrategyReportJson } from '../contracts/strategy-report';
+import type { KpiJson, StrategyReportJson } from '../contracts/strategy-report';
 import type { StrategicAnalysisResult, StrategyQualifications } from '../types';
+import { checkStrategyNarrative } from './narrative-anchors';
 
 // ---------------------------------------------------------------------------
 // Contratos
@@ -217,7 +218,9 @@ function normalizeLabel(label: string): string {
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .replace(/\([^)]*\)/g, ' ')
-    .replace(/[:.;,]/g, ' ')
+    // "MARGEN_OPERATIVO" / "MARGEN_NETO" son los nombres que el propio prompt
+    // del Director pide para los KPIs anclados: el guion bajo es un espacio.
+    .replace(/[:.;,_]/g, ' ')
     // e2e-niif-14: "Utilidad neta 2025" es el mismo rubro que "Utilidad neta";
     // el año del rótulo no lo saca del ancla.
     .replace(/\b(?:19|20)\d{2}\b/g, ' ')
@@ -286,6 +289,63 @@ const KPI_ANCHORS: ReadonlyArray<{ field: KpiField; re: RegExp }> = [
 function kpiFieldOf(name: string): KpiField | null {
   const n = normalizeLabel(name);
   return KPI_ANCHORS.find((k) => k.re.test(n))?.field ?? null;
+}
+
+/**
+ * KPIs que el preprocesador publica en TOTALES VINCULANTES pero que no
+ * estaban en `KPI_ANCHORS`: se recomputan desde `controlTotals` y se
+ * sobrescriben (pendiente #2 de la auditoría integral 2026-09-24). El
+ * validador los cruza igual que a los demás.
+ */
+type RecomputedField = 'margenBruto' | 'cicloConversionEfectivo' | 'capitalTrabajo';
+
+const RECOMPUTED_KPIS: ReadonlyArray<{
+  field: RecomputedField;
+  re: RegExp;
+  unit: KpiJson['unit'];
+  formula: { es: string; en: string };
+}> = [
+  {
+    field: 'margenBruto',
+    re: /^margen (bruto|de utilidad bruta)$/,
+    unit: 'percent',
+    formula: {
+      es: 'Utilidad bruta / Ingresos operacionales netos (41 − 4175) × 100 — calculado por el sistema',
+      en: 'Gross profit / Net operating revenue (41 − 4175) × 100 — computed by the system',
+    },
+  },
+  {
+    field: 'cicloConversionEfectivo',
+    re: /^ciclo (de )?(conversion (del? )?efectivo|caja|efectivo)$/,
+    unit: 'days',
+    formula: {
+      es: 'Días de cartera + días de inventario − días de proveedores — calculado por el sistema',
+      en: 'Receivable days + inventory days − payable days — computed by the system',
+    },
+  },
+  {
+    field: 'capitalTrabajo',
+    re: /^capital (de )?trabajo( neto)?$/,
+    unit: 'cop',
+    formula: {
+      es: 'Activo corriente − Pasivo corriente — calculado por el sistema',
+      en: 'Current assets − Current liabilities — computed by the system',
+    },
+  },
+];
+
+function recomputedOf(name: string): (typeof RECOMPUTED_KPIS)[number] | null {
+  const n = normalizeLabel(name);
+  return RECOMPUTED_KPIS.find((k) => k.re.test(n)) ?? null;
+}
+
+/** Valor recomputable: `undefined` = sin campo; `null` = N/D publicado. */
+function recomputedValue(snapshot: PeriodSnapshot | null | undefined, field: RecomputedField): number | null | undefined {
+  const ct = snapshot?.controlTotals as unknown as Record<string, unknown> | undefined;
+  if (!ct || !(field in ct)) return undefined;
+  const v = ct[field];
+  if (v === null) return null;
+  return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
 }
 
 function kpiValue(snapshot: PeriodSnapshot | null | undefined, field: KpiField): number | null | undefined {
@@ -545,8 +605,39 @@ export function reconcileStrategyAnchors(
       );
     }
 
+    const recomputed = field ? null : recomputedOf(kpi.name);
+    if (recomputed && hasPreprocessed) {
+      const checkRecomputed = (label: string, printed: string, snapshot: PeriodSnapshot | null | undefined) => {
+        const expected = recomputedValue(snapshot, recomputed.field);
+        if (recomputed.unit !== 'cop') {
+          checkRatio(label, printed, expected, suffix);
+          return;
+        }
+        if (expected === undefined || isNd(printed)) return;
+        const emitted = moneyOrUndefined(printed);
+        if (emitted === undefined) return;
+        verifiedCount += 1;
+        const expectedCents = expected === null ? null : pesosToCents(expected);
+        if (expectedCents === null || emitted !== expectedCents) {
+          deviations.push(
+            t(
+              `${label}: el Director de Estrategia emitió ${money(emitted)} frente a ${expectedCents === null ? 'N/D' : money(expectedCents)} del balance.`,
+              `${label}: the Strategy Director emitted ${money(emitted)} versus ${expectedCents === null ? 'N/A' : money(expectedCents)} from the trial balance.`,
+            ),
+          );
+        }
+      };
+      checkRecomputed(where, kpi.resultPrimary, sources.primary);
+      if (hasComparative && kpi.resultComparative !== null && sources.comparative) {
+        checkRecomputed(`${where} (${t('comparativo', 'comparative')})`, kpi.resultComparative, sources.comparative);
+      }
+      continue;
+    }
     if (!field || !hasPreprocessed) {
-      unverifiable.push(where);
+      // Publicado N/D (applyKpiAnchors): no hay cifra impresa que declarar.
+      const printedNothing =
+        isNd(kpi.resultPrimary) && (kpi.resultComparative === null || isNd(kpi.resultComparative));
+      if (!printedNothing) unverifiable.push(where);
       continue;
     }
     checkRatio(where, kpi.resultPrimary, kpiValue(sources.primary, field), suffix);
@@ -699,6 +790,18 @@ export function reconcileStrategyAnchors(
     }
   }
 
+  // -- Cifras en prosa (pendiente #2 de la auditoría integral 2026-09-24) --
+  // Comentario ejecutivo, diagnósticos, recomendaciones y solvencia: una
+  // mención de un concepto anclado (utilidad neta, activos, patrimonio,
+  // efectivo, ingresos, EBITDA, ROE, fecha de corte) con otra cifra sella la
+  // Parte II igual que un rubro del dashboard. Proyecciones y referencias
+  // sectoriales no se juzgan.
+  const narrative = checkStrategyNarrative(json, sources, language);
+  verifiedCount += narrative.checked;
+  deviations.push(
+    ...narrative.motivos.map((m) => t(`Prosa — ${m}`, `Narrative — ${m}`)),
+  );
+
   // -- Sin ancla por construcción -----------------------------------------
   unverifiable.push(
     t(
@@ -709,6 +812,204 @@ export function reconcileStrategyAnchors(
   );
 
   return { deviations, unverifiable: Array.from(new Set(unverifiable)), verifiedCount };
+}
+
+// ---------------------------------------------------------------------------
+// KPIs sin ancla → N/D; recomputables → sobrescritos (pendiente #2)
+// ---------------------------------------------------------------------------
+// Antes, un KPI sin ancla determinista ("Margen EBITDA ajustado", "Índice de
+// solvencia", o cualquier KPI cuando no llegó el preprocesado) se imprimía con
+// la cifra del modelo en el visor, el Excel y el HTML, rotulado "no
+// verificable". Ahora:
+//   - KPI con ancla (`KPI_ANCHORS`) y preprocesado → se conserva: el
+//     validador lo cruza y sella la Parte II si difiere.
+//   - KPI recomputable (margen bruto, ciclo de conversión del efectivo,
+//     capital de trabajo) → se sobrescribe con el valor del preprocesador (o
+//     N/D con su motivo).
+//   - Cualquier otro KPI (o todos, sin preprocesado) → N/D con motivo: no se
+//     publica la cifra del modelo, ni su fórmula con números ni su diagnóstico.
+// Idempotente: los exportadores lo re-aplican sobre JSON persistidos.
+// ---------------------------------------------------------------------------
+
+export interface KpiAnchorOutcome {
+  json: StrategyReportJson;
+  /** KPIs publicados N/D por falta de ancla (nombre). */
+  neutralized: string[];
+  /** KPIs recalculados por el sistema (nombre). */
+  recomputed: string[];
+}
+
+export interface KpiAnchorOptions {
+  language?: 'es' | 'en';
+  /**
+   * Sin preprocesado, conservar los KPIs con ancla por nombre y los
+   * recomputables tal como llegan (exportadores: la fase ya los validó o
+   * neutralizó y el gate servidor los re-cruza cuando hay balance). En la
+   * fase (`false`) sin preprocesado todo KPI es N/D.
+   */
+  keepWhenNoSource?: boolean;
+}
+
+function kpiNdMotivo(snapshot: PeriodSnapshot | null | undefined, field: string): string | null {
+  const motivos = snapshot?.controlTotals?.kpiNdMotivos as Record<string, string | undefined> | undefined;
+  return motivos?.[field] ?? null;
+}
+
+function formatRecomputed(value: number, unit: KpiJson['unit']): string {
+  if (unit === 'cop') return pesosToCents(value).toString(10);
+  if (unit === 'days') return String(Math.round(value));
+  return value.toFixed(1).replace('.', ',');
+}
+
+export function applyKpiAnchors(
+  input: StrategyReportJson,
+  sources: StrategyAnchorSources,
+  options: KpiAnchorOptions = {},
+): KpiAnchorOutcome {
+  const es = options.language !== 'en';
+  const t = (spanish: string, english: string) => (es ? spanish : english);
+  const json: StrategyReportJson = structuredClone(input);
+  const neutralized: string[] = [];
+  const recomputed: string[] = [];
+  const hasSource = !!sources.primary;
+  const keep = !hasSource && options.keepWhenNoSource === true;
+  const noSourceMotivo = t(
+    'N/D — sin balance preprocesado no hay base determinista para este indicador; el sistema no publica la cifra estimada por el modelo.',
+    'N/A — without the preprocessed trial balance there is no deterministic base for this ratio; the system does not publish the model estimate.',
+  );
+  const noAnchorMotivo = t(
+    'N/D — indicador sin ancla determinista en el balance preprocesado; el sistema no publica la cifra estimada por el modelo.',
+    'N/A — ratio without a deterministic anchor in the preprocessed trial balance; the system does not publish the model estimate.',
+  );
+
+  const asNd = (kpi: KpiJson, motivo: string): KpiJson => ({
+    ...kpi,
+    formula: t(`${kpi.name}: sin fórmula determinista`, `${kpi.name}: no deterministic formula`),
+    resultPrimary: 'ND',
+    resultComparative: kpi.resultComparative === null ? null : 'ND',
+    yoyVariation: null,
+    diagnosis: motivo,
+    confidence: 'low',
+    anomalyFlag: null,
+    sparklinePoints: null,
+  });
+
+  json.kpis = (json.kpis ?? []).map((kpi) => {
+    if (kpiFieldOf(kpi.name)) {
+      if (hasSource || keep) return kpi;
+      neutralized.push(kpi.name);
+      return asNd(kpi, noSourceMotivo);
+    }
+    const rec = recomputedOf(kpi.name);
+    if (rec) {
+      if (keep) return kpi;
+      if (!hasSource) {
+        neutralized.push(kpi.name);
+        return asNd(kpi, noSourceMotivo);
+      }
+      const primary = recomputedValue(sources.primary, rec.field);
+      if (primary === undefined) {
+        neutralized.push(kpi.name);
+        return asNd(kpi, noAnchorMotivo);
+      }
+      recomputed.push(kpi.name);
+      const comparativeValue = sources.comparative ? recomputedValue(sources.comparative, rec.field) : undefined;
+      const resultPrimary = primary === null ? 'ND' : formatRecomputed(primary, rec.unit);
+      const resultComparative =
+        kpi.resultComparative === null || comparativeValue === undefined
+          ? null
+          : comparativeValue === null
+            ? 'ND'
+            : formatRecomputed(comparativeValue, rec.unit);
+      // El diagnóstico del modelo se conserva sólo si citaba el mismo valor.
+      const printed = parsePrinted(kpi.resultPrimary);
+      const sameValue =
+        primary !== null &&
+        (rec.unit === 'cop'
+          ? moneyOrUndefined(kpi.resultPrimary) === pesosToCents(primary)
+          : printed.length > 0 && matchesAtPrintedPrecision(printed, primary));
+      const motivo = primary === null ? (kpiNdMotivo(sources.primary, rec.field) ?? noAnchorMotivo) : null;
+      return {
+        ...kpi,
+        unit: rec.unit,
+        formula: es ? rec.formula.es : rec.formula.en,
+        resultPrimary,
+        resultComparative,
+        yoyVariation: null,
+        diagnosis:
+          motivo ??
+          (sameValue
+            ? kpi.diagnosis
+            : t(
+                'Valor recalculado por el sistema desde el balance preprocesado; el diagnóstico del modelo citaba otra cifra y se omite.',
+                'Value recomputed by the system from the preprocessed trial balance; the model diagnosis cited another figure and is omitted.',
+              )),
+        confidence: primary === null ? 'low' : kpi.confidence,
+        anomalyFlag: sameValue ? kpi.anomalyFlag : null,
+        sparklinePoints: null,
+      };
+    }
+    neutralized.push(kpi.name);
+    return asNd(kpi, noAnchorMotivo);
+  });
+
+  // DuPont sin preprocesado no tiene contra qué cruzarse (en la fase).
+  if (json.dupontAnalysis && !hasSource && !keep) {
+    json.dupontAnalysis = {
+      roe: 'ND',
+      netMargin: 'ND',
+      assetTurnover: 'ND',
+      financialLeverage: 'ND',
+      drivingFactor: noSourceMotivo,
+    };
+    neutralized.push('DuPont');
+  }
+
+  return { json, neutralized, recomputed };
+}
+
+/** Cifra del modelo que `applyKpiAnchors` no publica (KPI N/D o recalculado). */
+export interface DiscardedKpiFigure {
+  name: string;
+  unit: KpiJson['unit'];
+  /** Valor tal como lo emitió el modelo (MoneyCop en 'cop'; decimal en el resto). */
+  value: string;
+  /** Banda sectorial del KPI: sus cotas no son la cifra descartada. */
+  band: string;
+}
+
+/**
+ * Cifras que el modelo emitió para un KPI y que el sistema no publica: el KPI
+ * quedó N/D o se recalculó con otro valor. El validador del HTML (R7) exige
+ * que no reaparezcan junto al nombre del KPI.
+ */
+export function discardedKpiFigures(
+  original: StrategyReportJson,
+  anchored: StrategyReportJson,
+): DiscardedKpiFigure[] {
+  const out: DiscardedKpiFigure[] = [];
+  (original.kpis ?? []).forEach((kpi, i) => {
+    const published = anchored.kpis?.[i];
+    if (!published || published.name !== kpi.name) return;
+    const pairs: Array<[string | null, string | null]> = [
+      [kpi.resultPrimary, published.resultPrimary],
+      [kpi.resultComparative, published.resultComparative],
+    ];
+    for (const [emitted, shown] of pairs) {
+      if (emitted === null || isNd(emitted) || emitted === shown) continue;
+      const money = kpi.unit === 'cop' ? moneyOrUndefined(emitted) : undefined;
+      const printed = kpi.unit === 'cop' ? [] : parsePrinted(emitted);
+      if (money === undefined && printed.length === 0) continue;
+      // Mismo valor con otra escritura ("62.5" frente a "62,5"): no se descartó nada.
+      if (shown !== null && !isNd(shown)) {
+        if (money !== undefined && moneyOrUndefined(shown) === money) continue;
+        const shownValue = parsePrinted(shown)[0]?.value;
+        if (shownValue !== undefined && matchesAtPrintedPrecision(printed, shownValue)) continue;
+      }
+      out.push({ name: kpi.name, unit: kpi.unit, value: emitted, band: kpi.benchmarkBand?.description ?? '' });
+    }
+  });
+  return out;
 }
 
 // ---------------------------------------------------------------------------

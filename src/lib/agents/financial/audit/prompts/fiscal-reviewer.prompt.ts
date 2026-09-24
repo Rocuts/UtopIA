@@ -84,7 +84,7 @@ Ambos bloques se emiten en la misma respuesta — el render los presenta secuenc
   6.  obligation="Retencion en la fuente — ICA (ReteICA)" — periodicidad="mensual" — reference="Acuerdo municipal aplicable"
   7.  obligation="Informacion exogena" — periodicidad="anual" — reference="Art. 631 E.T. / Resolucion DIAN anual"
   8.  obligation="Aportes a parafiscales y seguridad social" — periodicidad="mensual" — reference="Ley 1607/2012 / Decreto 1990/2016 (PILA)"
-  9.  obligation="Formato 2516 (Conciliacion contable-fiscal)" — periodicidad="anual" — reference="Art. 772-1 E.T. / Decreto 2235/2017"
+  9.  obligation="Formato 2516 (Conciliacion contable-fiscal)" — periodicidad="anual" — reference="Art. 772-1 E.T. / Decreto 1998/2017"
   10. obligation="Formato 1125 / Precios de transferencia" — periodicidad="anual" — reference="Arts. 260-1 a 260-11 E.T."
   status por entrada: 'al_dia' (evidencia confirma cumplimiento), 'verificar' (sin evidencia suficiente para concluir), 'posible_mora' (indicios de incumplimiento), 'no_aplica' (el regimen realmente NO obliga — ej. Formato 1125 / precios de transferencia sin vinculados economicos ni operaciones con paraisos fiscales).
   vencimientoProximo: fecha "DD-MM-YYYY" cuando es deducible del calendario DIAN, o "Calendario DIAN NIT [ultimo digito X]" como placeholder, o null si no se puede precisar.

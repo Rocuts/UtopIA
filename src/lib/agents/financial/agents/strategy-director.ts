@@ -18,6 +18,7 @@ import {
 import { formatCopFromCents, parseMoneyCop } from '../contracts/money';
 import { buildDegradationNotice } from './reconcile-anchors';
 import {
+  applyKpiAnchors,
   deterministicTrends,
   fmtTrendPct,
   strategyAnchorSources,
@@ -104,6 +105,17 @@ export async function runStrategyDirector(
 
   const verified = reconcileStrategyReport(result.json, strategyAnchorsFrom(preprocessed));
   applyDeterministicTrends(verified, preprocessed);
+  // KPIs sin ancla → N/D con motivo; recomputables → valor del preprocesador
+  // (pendiente #2 de la auditoría integral 2026-09-24). El JSON que viaja al
+  // visor, al Excel y al Editor Jefe HTML ya no lleva la cifra del modelo.
+  const kpiAnchors = applyKpiAnchors(
+    verified.json,
+    strategyAnchorSources(preprocessed, niifOutput.json ?? null),
+    { language },
+  );
+  verified.json = kpiAnchors.json;
+  verified.checks.kpisNeutralized = kpiAnchors.neutralized;
+  verified.checks.kpisRecomputed = kpiAnchors.recomputed;
   const strategic = toStrategicAnalysisResult(verified.json, verified.checks);
   if (result.meta?.degraded === true) {
     const notice = buildDegradationNotice(
@@ -151,6 +163,10 @@ export interface StrategyChecks {
   trendsNdMotivo?: string | null;
   /** Por qué no hay tendencias (sin comparativo / comparativo impracticable). */
   noTrendsReason?: string | null;
+  /** KPIs publicados N/D por falta de ancla determinista (`applyKpiAnchors`). */
+  kpisNeutralized?: string[];
+  /** KPIs recalculados por el sistema desde el preprocesado. */
+  kpisRecomputed?: string[];
 }
 
 function pesosToCents(v: unknown): bigint | null {
@@ -335,8 +351,9 @@ function applyDeterministicTrends(
 // ---------------------------------------------------------------------------
 
 function fmt(value: string, unit: KpiJson['unit'] = 'cop'): string {
-  // Sentinel "ND" (Parte 6 spec v2.0): KPI no confiable — preservar literal.
-  if (value === 'ND') return 'ND';
+  // Sentinel "ND" (Parte 6 spec v2.0): KPI no confiable. Se imprime "N/D",
+  // la forma que lee el usuario en el visor, el Excel y el HTML (pendiente #2).
+  if (value === 'ND') return 'N/D';
   // Con signo (valoracion-11): un capital de trabajo negativo no es positivo.
   if (unit === 'cop') return formatCopFromCents(parseMoneyCop(value), false);
   if (unit === 'percent') return `${value}%`;
@@ -346,19 +363,18 @@ function fmt(value: string, unit: KpiJson['unit'] = 'cop'): string {
 }
 
 /**
- * Formato compacto $X.XXX M / $X,X B para el Dashboard Ejecutivo (Parte 8.2 spec).
+ * Formato compacto $X.XXX M para el Dashboard Ejecutivo (Parte 8.2 spec).
  * Why: el reporte C-Level necesita escaneo visual rápido — pesos crudos saturan.
- * Mantiene formato es-CO (coma decimal). El umbral B salta cuando |M| ≥ 1.000.
+ * Mantiene formato es-CO (punto de miles, coma decimal) y SIEMPRE en millones
+ * (pipeline-flujo-20): el antiguo "$2,0 B" se lee como billón, que en español
+ * es 10^12, cuando el valor eran miles de millones. "$2.000 M" no es ambiguo.
+ * El negativo conserva la forma "$-40 M" que leen los validadores.
  */
 function formatCopAsMillions(centsStr: string): string {
   const cents = parseMoneyCop(centsStr);
   const pesos = Number(cents) / 100;
   const millions = pesos / 1_000_000;
-  if (Math.abs(millions) >= 1000) {
-    const billones = millions / 1000;
-    return `$${billones.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 2 })} B`;
-  }
-  return `$${millions.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 1 })} M`;
+  return `$${millions.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 1, useGrouping: true })} M`;
 }
 
 function renderDashboard(json: StrategyReportJson): string {
@@ -373,9 +389,9 @@ function renderDashboard(json: StrategyReportJson): string {
   ].join('\n');
   const rows = dash.rows
     .map((r: ExecutiveDashboardRowJson) => {
-      // Why: Dashboard ejecutivo usa formato compacto $X.XXX M / $X B (Parte 8.2
-      // spec). La tabla detallada de KPIs y demás secciones conservan pesos
-      // completos vía formatCopFromCents.
+      // Why: Dashboard ejecutivo usa formato compacto $X.XXX M (Parte 8.2
+      // spec; nunca "B", pipeline-flujo-20). La tabla detallada de KPIs y demás
+      // secciones conservan pesos completos vía formatCopFromCents.
       const primary = formatCopAsMillions(r.primary);
       const comparative = r.comparative !== null
         ? formatCopAsMillions(r.comparative)
@@ -390,7 +406,20 @@ function renderDashboard(json: StrategyReportJson): string {
   return [header, rows, '', `> ${dash.executiveCommentary}`].join('\n');
 }
 
-function renderKpis(json: StrategyReportJson): string {
+/** Campo de DuPont: 'ND' → 'N/D' (sin unidad). */
+function dupontField(v: string, suffix = ''): string {
+  return v === 'ND' ? 'N/D' : `${v}${suffix}`;
+}
+
+/**
+ * Sección "## 2. KPIs FINANCIEROS" en Markdown. Exportada para que el Excel
+ * re-renderice la tabla desde el JSON con `applyKpiAnchors` re-aplicado
+ * (informes persistidos antes del cambio).
+ */
+export function renderStrategyKpisMarkdown(
+  json: StrategyReportJson,
+  checks?: Pick<StrategyChecks, 'kpisNeutralized' | 'kpisRecomputed'>,
+): string {
   const header = [
     '## 2. KPIs FINANCIEROS',
     '',
@@ -409,19 +438,32 @@ function renderKpis(json: StrategyReportJson): string {
     })
     .join('\n');
 
+  const provenance: string[] = [];
+  if (checks?.kpisRecomputed && checks.kpisRecomputed.length > 0) {
+    provenance.push(`Recalculados por el sistema desde el balance preprocesado: ${checks.kpisRecomputed.join(', ')}.`);
+  }
+  const ndKpis = (checks?.kpisNeutralized ?? []).filter((n) => n !== 'DuPont');
+  if (ndKpis.length > 0) {
+    provenance.push(
+      `Publicados N/D por no tener ancla determinista (no se imprime la cifra estimada por el modelo): ${ndKpis.join(', ')}.`,
+    );
+  }
+
   const dupont = json.dupontAnalysis
     ? [
         '',
         '### Análisis DuPont',
-        `- ROE: ${json.dupontAnalysis.roe}%`,
-        `- Margen Neto: ${json.dupontAnalysis.netMargin}%`,
-        `- Rotación de Activos: ${json.dupontAnalysis.assetTurnover}`,
-        `- Apalancamiento Financiero: ${json.dupontAnalysis.financialLeverage}`,
+        `- ROE: ${dupontField(json.dupontAnalysis.roe, '%')}`,
+        `- Margen Neto: ${dupontField(json.dupontAnalysis.netMargin, '%')}`,
+        `- Rotación de Activos: ${dupontField(json.dupontAnalysis.assetTurnover)}`,
+        `- Apalancamiento Financiero: ${dupontField(json.dupontAnalysis.financialLeverage)}`,
         `- Driver dominante: ${json.dupontAnalysis.drivingFactor}`,
       ].join('\n')
     : '';
 
-  return [header, rows, dupont].filter(Boolean).join('\n');
+  return [header, rows, provenance.length > 0 ? `\n_${provenance.join(' ')}_` : '', dupont]
+    .filter(Boolean)
+    .join('\n');
 }
 
 /** Porcentaje decimal ("12.5") → es-CO ("12,50%"); 'ND' → 'N/D'. */
@@ -592,7 +634,7 @@ function toStrategicAnalysisResult(
   json: StrategyReportJson,
   checks?: StrategyChecks,
 ): StrategicAnalysisResult {
-  const kpiDashboard = [renderDashboard(json), '', renderKpis(json)].join('\n');
+  const kpiDashboard = [renderDashboard(json), '', renderStrategyKpisMarkdown(json, checks)].join('\n');
   const trendsAndBreakEven = renderTrendsAndBreakEven(json, checks);
   const projectedCashFlow = renderProjections(json, checks);
   const strategicRecommendations = renderRecommendations(json);

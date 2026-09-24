@@ -11,6 +11,8 @@
 
 import { describe, expect, it } from 'vitest';
 import { consolidateSplitReport } from '../split-consolidation';
+import { makeExportableReport } from '../__fixtures__/coherent-niif-report';
+import { composeEditorialReport } from '@/lib/export/pdf-elite-react/compose';
 import { parseTrialBalanceCSV, preprocessTrialBalance } from '@/lib/preprocessing/trial-balance';
 import type { PeriodSnapshot, PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 
@@ -91,5 +93,64 @@ describe('consolidateSplitReport — tipo societario del prompt de Gobierno (pro
   it('una S.A. no dispara V9', () => {
     const pp = preprocessTrialBalance(parseTrialBalanceCSV(TWO_PERIODS));
     expect(codes(run(pp, 'S.A.', reservaSas))).not.toContain('V9');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// pipeline-flujo-21 — override "Continuar de todas formas" en el camino partido
+// ---------------------------------------------------------------------------
+// El flag `provisional` del Doctor de Datos sólo lo leía el orquestador legacy
+// (sin llamador en la UI): en el camino partido el informe salía sin marca
+// BORRADOR aunque el usuario lo hubiera pedido como borrador.
+describe('consolidateSplitReport — override provisional (pipeline-flujo-21)', () => {
+  const pp = () => preprocessTrialBalance(parseTrialBalanceCSV(TWO_PERIODS));
+  const withOverride = (niifContent: string, provisional?: { active: boolean; reason: string }) =>
+    consolidateSplitReport({
+      company: { ...COMPANY, entityType: 'SAS' } as never,
+      preprocessed: pp(),
+      rawData: 'NIT 900123456-8\nDEMO SAS',
+      niifContent,
+      strategyContent: 'Estrategia.',
+      governanceContent: 'Acta de asamblea.',
+      language: 'es',
+      now: new Date('2026-03-01T00:00:00Z'),
+      provisional,
+    });
+
+  it('sin override no hay encabezado BORRADOR', () => {
+    const r = withOverride('Estados financieros 2025. Monto $[___].');
+    expect(r.validation.ok).toBe(false);
+    expect(r.consolidatedReport).not.toContain('BORRADOR — VALIDACION PENDIENTE');
+  });
+
+  it('con override el consolidado sale como BORRADOR con la razón y los errores; los gates no cambian', () => {
+    const base = withOverride('Estados financieros 2025. Monto $[___].');
+    const r = withOverride('Estados financieros 2025. Monto $[___].', {
+      active: true,
+      reason: 'El cliente necesita el borrador para la junta del lunes',
+    });
+    expect(r.consolidatedReport.startsWith('> ⚠️ **BORRADOR — VALIDACION PENDIENTE**')).toBe(true);
+    expect(r.consolidatedReport).toContain('Razon declarada: "El cliente necesita el borrador para la junta del lunes"');
+    expect(r.consolidatedReport).toContain(`> - ${r.validation.errors[0]}`);
+    expect(r.validation).toEqual(base.validation);
+    expect(r.emittability).toEqual(base.emittability);
+  });
+
+  it('con override y validación limpia el informe igual se marca BORRADOR', () => {
+    const r = withOverride('Estados financieros 2025.', { active: true, reason: 'Borrador pedido por el usuario' });
+    expect(r.consolidatedReport).toContain('BORRADOR — VALIDACION PENDIENTE');
+    expect(r.consolidatedReport).toContain('(la validacion post-render no reporto errores)');
+  });
+
+  it('un override inactivo no marca nada', () => {
+    const r = withOverride('Estados financieros 2025.', { active: false, reason: 'x' });
+    expect(r.consolidatedReport).not.toContain('BORRADOR');
+  });
+
+  it('el PDF estampa BORRADOR sobre el consolidado marcado', () => {
+    const r = withOverride('Estados financieros 2025.', { active: true, reason: 'Borrador pedido por el usuario' });
+    const report = { ...makeExportableReport(), consolidatedReport: r.consolidatedReport };
+    const pdf = composeEditorialReport({ report, preprocessed: null, language: 'es' } as never);
+    expect(pdf.meta.watermark).toBe('BORRADOR');
   });
 });

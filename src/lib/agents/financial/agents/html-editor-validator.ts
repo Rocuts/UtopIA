@@ -38,9 +38,23 @@ import {
 } from '../contracts/html-editor';
 import type { NiifReportJson } from '../contracts/niif-report';
 import { formatCopFromCents, parseMoneyCop } from '../contracts/money';
-import { buildPeriodAnchors } from '../contracts/anchors';
-import { extractCopTokens } from '../validators/report-validator';
-import type { PeriodSnapshot, PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
+import {
+  buildNarrativeConcepts,
+  checkNarrativeUnits,
+  checkRoeUnits,
+  findForeignCutoffYears,
+  narrativeSourcesFromPreprocessed,
+  windowAfter,
+  type NarrativeUnit,
+} from '../validators/narrative-anchors';
+import {
+  applyKpiAnchors,
+  discardedKpiFigures,
+  strategyAnchorSources,
+  type DiscardedKpiFigure,
+} from '../validators/strategy-anchors';
+import { StrategyReportSchema } from '../contracts/strategy-report';
+import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 
 type ParsedDocument = ReturnType<typeof parseHTML>['document'];
 
@@ -910,8 +924,28 @@ export function reconcileBindingFigures(
   // ── R6 · conceptos anclados citados en prosa o abreviados (e2e-niif-11) ──
   failures.push(...checkAnchoredConceptsInText(document, input));
 
+  // El Editor Jefe recibe los KPIs de la Parte II ya anclados (recalculados
+  // por el sistema o N/D, pendiente #2 de la auditoría integral 2026-09-24).
+  const strategy = StrategyReportSchema.safeParse(input.strategyReport);
+  const anchoredStrategy = strategy.success
+    ? applyKpiAnchors(
+        strategy.data,
+        strategyAnchorSources(input.preprocessed ?? undefined, input.niifReport),
+        { keepWhenNoSource: true },
+      ).json
+    : null;
+
+  // ── R7 · KPI publicado N/D (o recalculado) con la cifra del modelo ───────
+  if (strategy.success && anchoredStrategy) {
+    failures.push(...checkDiscardedKpiFigures(document, discardedKpiFigures(strategy.data, anchoredStrategy)));
+  }
+
   // ── R2 · cifras del HTML que no se rastrean al payload ───────────────────
-  const allowed = collectPayloadRenderings(input);
+  // Sobre el payload tal como lo recibió el Editor Jefe: la cifra del modelo de
+  // un KPI publicado N/D o recalculado ya no es rastreable.
+  const allowed = collectPayloadRenderings(
+    anchoredStrategy ? { ...input, strategyReport: anchoredStrategy } : input,
+  );
   const figurePattern = /\$\d{1,3}(?:\.\d{3})+(?:,\d{2})?/g;
   const untraceable: string[] = [];
   const seenUntraceable = new Set<string>();
@@ -1133,136 +1167,20 @@ function checkPeriodColumns(document: ParsedDocument, niif: NiifReportJson): Che
 // la sigue en la misma frase o fila (completa o abreviada, a su precisión):
 // vale la del periodo actual o la del comparativo; una variación ("disminuyó
 // $10M") no se juzga. Sin ancla para el concepto no se acusa nada.
-
-interface MoneyConcept {
-  label: string;
-  re: RegExp;
-  /** Pesos del periodo actual y del comparativo (valores válidos). */
-  values: number[];
-  /** El preprocesador lo publica N/D: cualquier cifra impresa carece de base. */
-  nd: boolean;
-  /** Tipo de rótulo para el signo: 'pos' (utilidad), 'neg' (pérdida) o neutro. */
-  polarity?: (match: string) => 'pos' | 'neg' | null;
-  /** Rótulo genérico que sólo cuenta como primera celda de una fila de tabla. */
-  rowLabelOnly?: RegExp;
-}
-
-interface TextUnit {
-  text: string;
-  firstCell: string | null;
-}
+//
+// El núcleo (conceptos, ventana, signo, ROE, fecha de corte) vive en
+// `validators/narrative-anchors.ts` y es el mismo que cruza la prosa de las
+// Partes II y III antes de que lleguen al HTML (pendiente #2 de la auditoría
+// integral 2026-09-24). Aquí sólo se leen las unidades de texto del DOM.
 
 const R6_RULE = '§1.1 · Reconciliación JSON↔HTML — concepto anclado con otra cifra';
-const VARIATION_WORDS =
-  /variaci|aument|disminu|increment|reducci|redujo|cay[oó]|ca[ií]da|crec|diferencia|cambio|pas[oó]\s+de|mejor[oó]|empeor|frente\s+a|respecto|\bvs\.?/i;
-const POSITIVE_WORDS = /positiv|super[aá]vit|excedente|ganancia/i;
-const NEGATIVE_WORDS = /negativ|p[eé]rdida|d[eé]ficit/i;
-const ROE_LABEL = /\bROE\b|rentabilidad\s+(?:del|sobre\s+el)\s+patrimonio/i;
-
-function centsToPesos(v: string | null | undefined): number | null {
-  if (typeof v !== 'string' || !/^-?\d+$/.test(v)) return null;
-  return Number(BigInt(v)) / 100;
-}
-
-function snapshotPesos(snapshot: PeriodSnapshot | null | undefined, key: string): number | null {
-  const a = buildPeriodAnchors(snapshot ?? undefined);
-  const c = (a?.cents as Record<string, bigint | undefined> | undefined)?.[key];
-  return typeof c === 'bigint' ? Number(c) / 100 : null;
-}
-
-function ctNumber(snapshot: PeriodSnapshot | null | undefined, key: string): number | null | undefined {
-  const ct = snapshot?.controlTotals as unknown as Record<string, unknown> | undefined;
-  if (!ct || !(key in ct)) return undefined;
-  const v = ct[key];
-  if (v === null) return null;
-  return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
-}
-
-function comparativeSnapshot(pp: PreprocessedBalance | null): PeriodSnapshot | null {
-  if (!pp || pp.comparativos_impracticables === true) return null;
-  return pp.comparative ?? null;
-}
-
-function buildMoneyConcepts(input: ReconciliationInput): MoneyConcept[] {
-  const niif = input.niifReport;
-  const pp = input.preprocessed ?? null;
-  const primary = pp?.primary ?? null;
-  const comparative = comparativeSnapshot(pp);
-  const vals = (...xs: Array<number | null | undefined>) =>
-    xs.filter((x): x is number => typeof x === 'number' && Number.isFinite(x));
-  const bs = niif?.balanceSheet;
-  const is = niif?.incomeStatement;
-  const concepts: MoneyConcept[] = [
-    {
-      label: 'Utilidad neta',
-      re: /\b(?:utilidad|ganancia|p[eé]rdida|resultado)\s+net[ao]\b(?:\s+del\s+(?:ejercicio|per[ií]odo|a[nñ]o))?/gi,
-      values: vals(centsToPesos(is?.netIncomePrimary), centsToPesos(is?.netIncomeComparative)),
-      nd: false,
-      polarity: (m) => (/p[eé]rdida/i.test(m) ? 'neg' : /utilidad|ganancia/i.test(m) ? 'pos' : null),
-    },
-    {
-      label: 'Total Activo',
-      re: /\b(?:total\s+(?:de\s+)?activos?|activos?\s+totales?)\b(?!\s+(?:no\s+)?corrientes?)/gi,
-      values: vals(centsToPesos(bs?.totalAssetsPrimary), centsToPesos(bs?.totalAssetsComparative)),
-      nd: false,
-    },
-    {
-      label: 'Total Pasivo',
-      re: /\b(?:total\s+(?:de\s+)?pasivos?|pasivos?\s+totales?)\b(?!\s+(?:no\s+)?corrientes?)(?!\s*(?:y|\+|m[aá]s)\s*(?:el\s+)?patrimonio)/gi,
-      values: vals(centsToPesos(bs?.totalLiabilitiesPrimary), centsToPesos(bs?.totalLiabilitiesComparative)),
-      nd: false,
-    },
-    {
-      label: 'Total Patrimonio',
-      // "Total patrimonio", "el patrimonio al cierre", "el patrimonio al 31 de
-      // diciembre de 2025" (notas en prosa, e2e-niif-10).
-      re: /\b(?:total\s+(?:del?\s+)?patrimonio|patrimonio\s+(?:total|al\s+cierre|al\s+31\s+de\s+diciembre(?:\s+(?:de|del)\s+\d{4})?))\b/gi,
-      values: vals(centsToPesos(bs?.totalEquityPrimary), centsToPesos(bs?.totalEquityComparative)),
-      nd: false,
-    },
-    {
-      label: 'Efectivo al cierre',
-      // El cierre del comparativo es la apertura del periodo actual.
-      re: /\befectivo(?:\s+y\s+equivalentes(?:\s+(?:de|al)\s+efectivo)?)?\s+al\s+(?:cierre|final)(?:\s+del\s+(?:per[ií]odo|ejercicio|a[nñ]o))?(?:\s+(?:de|del)\s+\d{4})?/gi,
-      values: vals(centsToPesos(niif?.cashFlow?.cashClosing), centsToPesos(niif?.cashFlow?.cashOpening)),
-      nd: false,
-    },
-  ];
-  if (primary) {
-    const ebitdaP = ctNumber(primary, 'ebitda');
-    if (ebitdaP !== undefined) {
-      concepts.push({
-        label: 'EBITDA',
-        // No "margen EBITDA" ni "EBITDA YoY": esos no son el monto.
-        re: /(?<!margen\s(?:de\s)?)\bEBITDA\b(?!\s*(?:YoY|\/|%))/gi,
-        values: vals(ebitdaP, ctNumber(comparative, 'ebitda')),
-        nd: ebitdaP === null,
-      });
-    }
-    const revenue = vals(
-      ...['ingresosOperacionales', 'ingresosNetos', 'ingresos'].flatMap((k) => [
-        snapshotPesos(primary, k),
-        snapshotPesos(comparative, k),
-      ]),
-    );
-    if (revenue.length > 0) {
-      concepts.push({
-        label: 'Ingresos',
-        re: /\bingresos\s+(?:operacionales\s+netos|operacionales|netos|totales|de\s+actividades\s+ordinarias)\b/gi,
-        rowLabelOnly: /^ingresos(?:\s+(?:operacionales(?:\s+netos)?|netos|totales|de actividades ordinarias))?$/i,
-        values: revenue,
-        nd: false,
-      });
-    }
-  }
-  return concepts.filter((c) => c.values.length > 0 || c.nd);
-}
+const R6_OPTIONS = { language: 'es' as const, subject: { es: 'el HTML', en: 'the HTML' } };
 
 /** Texto de las unidades que el lector ve como una frase o una fila. */
-function textUnits(document: ParsedDocument): TextUnit[] {
+function textUnits(document: ParsedDocument): NarrativeUnit[] {
   const clean = (t: string) =>
-    t.replace(/ /g, ' ').replace(/\$\s+/g, '$').replace(/\s+/g, ' ').trim();
-  const out: TextUnit[] = [];
+    t.replace(/\u00a0/g, ' ').replace(/\$\s+/g, '$').replace(/\s+/g, ' ').trim();
+  const out: NarrativeUnit[] = [];
   const blocks = document.querySelectorAll(
     'p, li, h1, h2, h3, h4, h5, h6, caption, figcaption, blockquote, dd, dt',
   );
@@ -1279,161 +1197,102 @@ function textUnits(document: ParsedDocument): TextUnit[] {
   return out;
 }
 
-/** Tramo tras el rótulo hasta el fin de la frase o la mención de otro concepto. */
-function windowAfter(text: string, from: number, stops: RegExp[]): string {
-  const rest = text.slice(from, from + 160);
-  // Fin de frase: signo seguido de espacio o fin (el punto de miles va seguido de dígito).
-  const sentenceEnd = /[.;!?](?=\s|$)/.exec(rest);
-  let cut = sentenceEnd ? sentenceEnd.index + 1 : rest.length;
-  for (const re of stops) {
-    const hit = new RegExp(re.source, re.flags.replace('g', '')).exec(rest);
-    if (hit && hit.index > 0 && hit.index < cut) cut = hit.index;
+// ---------------------------------------------------------------------------
+// R7 — KPI de la Parte II publicado N/D (o recalculado) con la cifra del modelo
+// ---------------------------------------------------------------------------
+// Pendiente #2 de la auditoría integral 2026-09-24: un KPI sin ancla
+// determinista se publica N/D y uno recomputable con el valor del sistema. El
+// Editor Jefe ya recibe el JSON anclado, pero la cifra del modelo puede seguir
+// viva en otra prosa del payload: si reaparece junto al nombre del KPI (fila,
+// tarjeta o frase), el HTML imprime una cifra sin base.
+
+const R7_RULE = '§1.1 · Reconciliación JSON↔HTML — KPI sin ancla con la cifra del modelo';
+
+const foldText = (t: string) =>
+  t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ');
+
+/** Formas impresas de la cifra descartada (regex sobre texto plegado). */
+function discardedPatterns(d: DiscardedKpiFigure): RegExp[] {
+  if (d.unit === 'cop') {
+    let cents: bigint;
+    try {
+      cents = parseMoneyCop(d.value);
+    } catch {
+      return [];
+    }
+    return acceptableRenderings(cents).map((r) => new RegExp(`${escapeRegExp(r)}(?![.,]?\\d)`));
   }
-  return rest.slice(0, cut);
+  const m = /^[-+−]?\s*(\d+)(?:[.,](\d+))?/.exec(d.value.trim());
+  if (!m) return [];
+  const [, int, dec] = m;
+  // "23,7" / "23.7" / "23,70"; un entero de un dígito es demasiado ambiguo.
+  if (!dec && int.length < 2) return [];
+  const decimals = dec ? `[.,]${escapeRegExp(dec)}0*` : '(?:[.,]0+)?';
+  return [new RegExp(`(?<![\\d.,])${escapeRegExp(int)}${decimals}(?![\\d]|[.,]\\d)`)];
 }
 
-function fmtPesos(n: number): string {
-  return formatCopFromCents(BigInt(Math.round(n * 100)), false);
+function checkDiscardedKpiFigures(
+  document: ParsedDocument,
+  discarded: DiscardedKpiFigure[],
+): ChecklistFailure[] {
+  if (discarded.length === 0) return [];
+  const units = textUnits(document).map((u) => foldText(u.text));
+  const out: ChecklistFailure[] = [];
+  const seen = new Set<string>();
+  for (const d of discarded) {
+    const name = foldText(d.name).trim();
+    if (name.length < 3) continue;
+    const band = foldText(d.band).trim();
+    const patterns = discardedPatterns(d);
+    if (patterns.length === 0) continue;
+    for (const text of units) {
+      const at = text.indexOf(name);
+      if (at < 0) continue;
+      // Lo que sigue al nombre en la misma fila o frase, sin la banda sectorial.
+      let tail = windowAfter(text, at + name.length, []);
+      if (band) tail = tail.split(band).join(' ');
+      if (!patterns.some((re) => re.test(tail))) continue;
+      const key = `${d.name}|${d.value}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        rule: R7_RULE,
+        detail:
+          `El KPI "${d.name}" se publica N/D o recalculado por el sistema, pero el HTML imprime la cifra ` +
+          `que estimó el modelo (${d.unit === 'cop' ? formatCopFromCents(parseMoneyCop(d.value), false) : d.value}).`,
+        severity: 'block',
+      });
+    }
+  }
+  return out;
 }
 
 function checkAnchoredConceptsInText(
   document: ParsedDocument,
   input: ReconciliationInput,
 ): ChecklistFailure[] {
-  const out: ChecklistFailure[] = [];
-  const seen = new Set<string>();
-  const push = (detail: string) => {
-    if (seen.has(detail)) return;
-    seen.add(detail);
-    out.push({ rule: R6_RULE, detail, severity: 'block' });
-  };
-  const concepts = buildMoneyConcepts(input);
+  const sources = narrativeSourcesFromPreprocessed(input.preprocessed ?? null, input.niifReport);
+  // El JSON NIIF manda en el HTML (lo que el Editor Jefe recibe como vinculante);
+  // sin preprocesado no hay ingresos, EBITDA ni ROE contra los cuales cruzar.
   const units = textUnits(document);
-
-  for (const unit of units) {
-    for (const concept of concepts) {
-      const stops = [...concepts.filter((c) => c !== concept).map((c) => c.re), ROE_LABEL];
-      const matches: Array<{ index: number; text: string }> = [];
-      const re = new RegExp(concept.re.source, concept.re.flags);
-      let m: RegExpExecArray | null;
-      while ((m = re.exec(unit.text)) !== null) matches.push({ index: m.index, text: m[0] });
-      if (concept.rowLabelOnly && unit.firstCell && concept.rowLabelOnly.test(unit.firstCell)) {
-        matches.push({ index: 0, text: unit.firstCell });
-      }
-      for (const hit of matches) {
-        const win = windowAfter(unit.text, hit.index + hit.text.length, stops);
-        const token = extractCopTokens(win).find((t) => !t.percent);
-        if (!token) continue;
-        const before = win.slice(0, token.index);
-        if (VARIATION_WORDS.test(before)) continue;
-        const shown = token.abbreviated ? `${fmtPesos(token.value)} (abreviado)` : fmtPesos(token.value);
-        const context = `"${unit.text.slice(hit.index, hit.index + 90)}"`;
-        if (concept.nd) {
-          push(`${concept.label}: el HTML imprime ${shown} en ${context} y el preprocesador lo publica N/D (sin base verificable).`);
-          continue;
-        }
-        const tol = Math.max(1, token.roundingTolerance);
-        const match = concept.values.find((v) => Math.abs(Math.abs(token.value) - Math.abs(v)) <= tol);
-        if (match === undefined) {
-          push(
-            `${concept.label}: el HTML imprime ${shown} en ${context} y el reporte da ` +
-              `${concept.values.map(fmtPesos).join(' / ')}.`,
-          );
-          continue;
-        }
-        if (match === 0) continue;
-        // Signo: el rótulo ("pérdida" / "utilidad") o el calificativo
-        // ("positivo" / "negativo") contra el signo del ancla.
-        const labelPolarity = concept.polarity?.(hit.text) ?? null;
-        const negWord = NEGATIVE_WORDS.test(before);
-        const posWord = POSITIVE_WORDS.test(before);
-        const presentedNegative = token.value < 0 || labelPolarity === 'neg' || negWord;
-        const presentedPositive = token.value >= 0 && !negWord && (labelPolarity === 'pos' || posWord);
-        if (match < 0 && presentedPositive) {
-          push(`${concept.label}: es negativa (${fmtPesos(match)}) y el HTML la presenta como positiva en ${context}.`);
-        } else if (match > 0 && presentedNegative) {
-          push(`${concept.label}: es positiva (${fmtPesos(match)}) y el HTML la presenta como negativa en ${context}.`);
-        }
-      }
-    }
-  }
-
-  out.push(...checkRoeInText(units, input));
-  out.push(...checkCutoffInProse(units, input.niifReport));
-  return out;
-}
-
-/** ROE citado en prosa o tablas contra el del preprocesador (a la precisión impresa). */
-function checkRoeInText(units: TextUnit[], input: ReconciliationInput): ChecklistFailure[] {
-  const pp = input.preprocessed ?? null;
-  if (!pp?.primary) return [];
-  const p = ctNumber(pp.primary, 'roe');
-  if (p === undefined) return [];
-  const c = ctNumber(comparativeSnapshot(pp), 'roe');
-  const valid = [p, c].filter((x): x is number => typeof x === 'number' && Number.isFinite(x));
-  const out: ChecklistFailure[] = [];
-  const seen = new Set<string>();
-  for (const unit of units) {
-    const re = new RegExp(ROE_LABEL.source, 'gi');
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(unit.text)) !== null) {
-      const win = windowAfter(unit.text, m.index + m[0].length, []);
-      const pct = /([<>≥≤]\s*)?([-−+]?\s*\d{1,3}(?:[.,]\d+)?)\s*%/.exec(win);
-      if (!pct || pct[1]) continue; // "> 15 %" es una banda, no el ROE
-      const before = win.slice(0, pct.index);
-      if (VARIATION_WORDS.test(before) || /sector|benchmark|meta|objetivo|banda|referencia|m[ií]nimo/i.test(before)) {
-        continue;
-      }
-      const raw = pct[2].replace(/\s/g, '').replace('−', '-').replace('+', '');
-      const decimals = /[.,]/.test(raw) ? raw.split(/[.,]/)[1].length : 0;
-      const value = Number(raw.replace(',', '.'));
-      if (!Number.isFinite(value)) continue;
-      const tol = 0.5 * 10 ** -decimals + 1e-9;
-      let detail: string | null = null;
-      if (valid.length === 0) {
-        detail = `ROE: el HTML imprime ${pct[2].trim()} % y el preprocesador lo publica N/D (sin base verificable).`;
-      } else if (!valid.some((v) => Math.abs(v - value) <= tol)) {
-        detail =
-          `ROE: el HTML imprime ${pct[2].trim()} % y el preprocesador calcula ` +
-          `${valid.map((v) => `${v.toFixed(1).replace('.', ',')} %`).join(' / ')}.`;
-      }
-      if (detail && !seen.has(detail)) {
-        seen.add(detail);
-        out.push({ rule: R6_RULE, detail, severity: 'block' });
-      }
-    }
-  }
-  return out;
-}
-
-/**
- * R5 en prosa: una frase que declara el corte de los estados ("estados
- * financieros al 31 de diciembre de 2024") con un año distinto del periodo del
- * reporte. Un año comparativo citado como tal ("… de 2024 (comparativo)") o
- * los dos cortes ("… de 2025 y 2024") no se acusan.
- */
-function checkCutoffInProse(units: TextUnit[], niif: NiifReportJson): ChecklistFailure[] {
-  const primaryYear = yearOf(niif?.company?.fiscalPeriod);
-  if (!primaryYear) return [];
-  const found = new Set<string>();
-  for (const unit of units) {
-    const re =
-      /\b(?:estados?(?:\s+financieros?|\s+de\s+situaci[oó]n\s+financiera)?|cifras|informe|corte|cierre)\s+(?:con\s+corte\s+)?(?:al|a)\s+31\s+de\s+diciembre\s+(?:de|del)\s+(\d{4})(?!\s*(?:y|e)\s+\d{4})/gi;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(unit.text)) !== null) {
-      const tail = unit.text.slice(m.index + m[0].length, m.index + m[0].length + 40);
-      if (/comparativ|anterior/i.test(tail)) continue;
-      if (m[1] !== primaryYear) found.add(m[1]);
-    }
-  }
-  if (found.size === 0) return [];
-  return [
-    {
+  const concepts = buildNarrativeConcepts(sources);
+  const money = checkNarrativeUnits(units, concepts, R6_OPTIONS);
+  const roe = checkRoeUnits(units, sources.primary, sources.comparative, R6_OPTIONS);
+  const out: ChecklistFailure[] = [...money.findings, ...roe.findings].map((f) => ({
+    rule: R6_RULE,
+    detail: f.detail,
+    severity: 'block' as const,
+  }));
+  const primaryYear = yearOf(input.niifReport?.company?.fiscalPeriod);
+  const foreign = findForeignCutoffYears(units, primaryYear);
+  if (foreign.length > 0) {
+    out.push({
       rule: '§1.1 · Periodo del reporte — fecha de corte',
       detail:
-        `El texto declara estados con corte al 31 de diciembre de ${[...found].join(', ')} y el reporte NIIF ` +
+        `El texto declara estados con corte al 31 de diciembre de ${foreign.join(', ')} y el reporte NIIF ` +
         `corresponde al periodo ${primaryYear}.`,
       severity: 'block',
-    },
-  ];
+    });
+  }
+  return out;
 }

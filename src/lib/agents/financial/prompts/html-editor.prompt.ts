@@ -33,6 +33,8 @@ import {
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { buildResilienceSection0 } from './resilience-section0';
+import { applyKpiAnchors, strategyAnchorSources } from '../validators/strategy-anchors';
+import { revivePreprocessedBalance } from '@/lib/preprocessing/json-safe';
 
 /**
  * Memoización proceso-local del spec verbatim. Una sola I/O síncrona por
@@ -111,6 +113,26 @@ ${rows}
 </cifras_vinculantes>`;
 }
 
+/**
+ * KPIs de la Parte II tal como deben imprimirse (pendiente #2 de la auditoría
+ * integral 2026-09-24): un KPI sin ancla determinista viaja como "ND" con su
+ * motivo y uno recomputable con el valor del preprocesador, aunque el JSON del
+ * cliente sea anterior al cambio. El Editor Jefe nunca ve la cifra del modelo.
+ */
+function strategyForPrompt(input: HtmlEditorInput): HtmlEditorInput['strategyReport'] {
+  let preprocessed = null;
+  try {
+    preprocessed = input.preprocessed ? revivePreprocessedBalance(input.preprocessed) : null;
+  } catch {
+    preprocessed = null;
+  }
+  return applyKpiAnchors(
+    input.strategyReport,
+    strategyAnchorSources(preprocessed ?? undefined, input.niifReport),
+    { language: input.language, keepWhenNoSource: true },
+  ).json;
+}
+
 export function buildHtmlEditorUserContent(input: HtmlEditorInput, hechosEmpresa?: string): string {
   // Las cifras del acta también viajan preformateadas (auditoría 2026-09,
   // pipeline-flujo-09): el validador las exige literalmente.
@@ -133,7 +155,7 @@ ${JSON.stringify(input.niifReport, null, 2)}
 </niif_report>
 
 <strategy_report>
-${JSON.stringify(input.strategyReport, null, 2)}
+${JSON.stringify(strategyForPrompt(input), null, 2)}
 </strategy_report>
 
 <governance_report>
@@ -169,9 +191,10 @@ ${hechosEmpresa ?? ''}
   - Cifras en formato técnico: enteros de 9+ dígitos sin separadores ("241367788864"), notación científica ($2.23E9), "X centavos" donde X es un entero crudo de 9+ dígitos.
   Si una nota técnica contiene cualquiera de los patrones anteriores, reescribirla en términos contables del cliente o omitirla. Toda cifra se renderiza en formato $1.234.567,89.
 - ALWAYS: las cifras del bloque <cifras_vinculantes> se COPIAN literalmente en los estados financieros. Ya vienen en pesos: no se convierten desde los centavos del JSON, no se redondean, no se abrevian.
-- If una cifra del JSON no está en <cifras_vinculantes>, entonces conviértela dividiendo los centavos entre 100 y formatea $1.234.567,89; si además es una magnitud de contexto narrativo (no una línea de estado financiero), puedes abreviarla como $X.XXX M según §1.9/L38.
+- If una cifra del JSON no está en <cifras_vinculantes>, entonces conviértela dividiendo los centavos entre 100 y formatea $1.234.567,89; si además es una magnitud de contexto narrativo (no una línea de estado financiero), puedes abreviarla como $X.XXX M según §1.9/L38. If la magnitud llega a miles de millones then se escribe igual en millones ($2.429 M), otherwise $X,X M: la forma "$2,4 B" de §5 no se usa en español, porque un billón es un millón de millones (10^12).
 - NEVER: invent values not present in the JSON payloads; only cite numbers from niif_report / strategy_report / governance_report / metadata.
 - ALWAYS: cada nota en prosa tomada del JSON NIIF o de Gobierno (notas de los estados, notas técnicas, notas a los estados financieros del gobierno) lleva al inicio la leyenda visible "Narrativa generada por IA — no auditada" (misma leyenda que el PDF y el Excel).
+- NEVER: imprimir una cifra para un KPI cuyo resultPrimary/resultComparative sea "ND": se presenta "N/D" con el motivo de su diagnosis. If un KPI trae "ND" then la tarjeta, la tabla y la prosa dicen N/D, otherwise se copia el valor del JSON.
 - NEVER: citar montos en esas notas en prosa salvo las cifras de <cifras_vinculantes>. If una nota trae un monto que no está en <cifras_vinculantes> then remite al estado financiero correspondiente sin repetir la cifra, otherwise copia la cifra vinculante literal.
 - NEVER: usar Plus Jakarta Sans, Geist, Helvetica, ni ninguna otra familia tipográfica fuera de Source Serif 4 / Inter / IBM Plex Mono.
 - If unsure about a presentation decision not covered by the spec, default to §12 principio de incertidumbre y omite el dato con marca <!-- DECISION_REQUIRED -->.
