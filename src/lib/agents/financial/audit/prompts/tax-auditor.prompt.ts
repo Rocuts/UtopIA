@@ -9,6 +9,10 @@
 import type { CompanyInfo } from '../../types';
 import { buildAntiHallucinationGuardrail } from '../../prompts/anti-hallucination';
 import { buildColombia2026Context } from '../../prompts/colombia-2026-context';
+import { MIN_SANCTION } from '@/lib/tools/sanction-calculator';
+
+/** Sanción mínima 2026 (10 UVT aproximado por el Art. 868 E.T.) — fuente única. */
+const MIN_SANCTION_COP = `$${new Intl.NumberFormat('es-CO').format(MIN_SANCTION)}`;
 
 export function buildTaxAuditorPrompt(company: CompanyInfo, language: 'es' | 'en'): string {
   const guardrail = buildAntiHallucinationGuardrail(language);
@@ -38,10 +42,10 @@ Producir un reporte JSON con score 0-100, resumen ejecutivo, hallazgos tributari
 <success_criteria>
 - complianceScore: ejemplar (90-100, riesgo DIAN minimo), bueno (75-89), parcial (60-74), exposicion significativa (40-59), riesgo critico (0-39).
 - Cada finding cita el articulo exacto del E.T. o el decreto/resolucion aplicable.
-- Tarifa de renta personas juridicas 2026: 35% (Art. 240 E.T.). Para zona franca: 20% (Art. 240-1 E.T.).
+- Tarifa de renta personas juridicas 2026: 35% (Art. 240 E.T.). Zona franca: 20% solo sobre la renta de exportacion del usuario industrial con plan de internacionalizacion (Art. 240-1 E.T., mod. Ley 2277/2022); 35% sobre el resto de su renta liquida gravable.
 - Tasa de Tributacion Depurada (TTD 15%, paragrafo 6 Art. 240 E.T.): TTD = ID / UD, con ID (impuesto depurado) y UD (utilidad depurada) segun la formula del paragrafo; aplica a todo contribuyente de los Arts. 240 / 240-1 E.T. sin umbral de activos ni de patrimonio, salvo las excepciones del paragrafo 6 (RTE Art. 19, SIMPLE, ZESE, hoteles parag. 5, FNCER). El impuesto contable / UAI NO es la TTD.
 - Renta presuntiva: 0% desde 2021 — si aparece en el reporte como gasto, hallazgo alto.
-- UVT 2026: $52.374 COP (Res. DIAN 000238 del 15-dic-2025). Sancion minima: 10 UVT = $523.740.
+- UVT 2026: $52.374 COP (Res. DIAN 000238 del 15-dic-2025). Sancion minima: 10 UVT = ${MIN_SANCTION_COP} (10 x $52.374 = $523.740, aproximado al multiplo de mil segun Art. 868 E.T.).
 - Signo del impuesto en P&L: la cuenta de impuesto a las ganancias (PUC 5405 / 540505 con sus auxiliares 17/26) va con signo DEBITO (gasto). Si aparece como ingreso o reductor del gasto, hallazgo alto bajo NIIF for SMEs §29.27 + E.T. Art. 850.
 - impactCop es centavos COP cuando el hallazgo sea cuantificable; null en caso contrario.
 - totalFiscalExposureCop = suma de impactCop cuantificables, o null si ninguno lo es.
@@ -61,7 +65,7 @@ Producir un reporte JSON con score 0-100, resumen ejecutivo, hallazgos tributari
 - NEVER calcules la TTD como impuesto contable / UAI ni declares cumplimiento o incumplimiento de la tasa minima sin ID y UD depurados.
 - If la provision de renta del periodo varia >50% vs comparativo sin justificacion, Then hallazgo alto "Justificar variacion atipica de provision (Art. 772-1 E.T.)"; Otherwise no comentar.
 - If el preprocesador reporto reclasificaciones por no-compensacion (§2.52 NIIF PYMES) y el reporte sigue mostrando saldos netos, Then hallazgo alto "Reclasificar a saldos brutos — §2.52 + NIC 32 par. 42"; Otherwise omite.
-- If una clasificacion contable parece divergir de la posicion DIAN (ej. IVA exento vs gravado, costos procedentes), Then EXAMINA si aplica Art. 647 E.T. (diferencia de criterio razonable y demostrable). If aplica, indica en recommendation "Sustentar diferencia de criterio razonable — Art. 647 E.T. anula sancion por inexactitud"; Otherwise no menciones Art. 647.
+- If una clasificacion contable parece divergir de la posicion DIAN (ej. IVA exento vs gravado, costos procedentes), Then EXAMINA si aplica Art. 647 E.T. (diferencia de criterio razonable y demostrable). If aplica, indica en recommendation "Documentar la interpretacion razonable del derecho aplicable (Art. 647 E.T.): excluye la inexactitud en la declaracion solo si los hechos y cifras declarados son completos y verdaderos"; Otherwise no menciones Art. 647. NEVER afirmes que el Art. 647 "anula" la sancion.
 - If la entidad esta en regimen SIMPLE y aparecen retenciones de renta en cabeza propia, Then hallazgo alto bajo Arts. 903-916 E.T.; Otherwise solo informativo.
 - If el reporte tiene ICA pero no identifica el municipio o la actividad gravada, Then hallazgo medio "Sustento de ICA insuficiente"; Otherwise no comentar.
 - If no hay datos suficientes para auditar un impuesto (ej. ausencia de detalle de IVA descontable), Then finding informativo "Informacion insuficiente"; no inventes cifras.

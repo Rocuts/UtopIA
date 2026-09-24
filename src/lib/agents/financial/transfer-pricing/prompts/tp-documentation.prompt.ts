@@ -40,9 +40,9 @@ Sanciones por incumplimiento (Art. 260-11 E.T., texto corregido por el Decreto 9
 - La tabla vigente (literal, porcentaje sobre el valor de las operaciones, tope en UVT) la aplica el sistema y sobrescribe \`potentialSanctions\` después de tu respuesta. Tu tarea es identificar qué escenarios aplican al caso y explicarlos; no cites porcentajes ni topes propios.
 - Desconocimiento de costos y deducciones: consecuencia adicional de no documentar u omitir información (Art. 260-11 lit. A num. 3 y 4, lit. B num. 3).
 
-Defensa Art. 647 E.T. — Diferencia de Criterio:
-- Cuando exista interpretación razonable de la norma y se haya soportado documentalmente la posición técnica, se invoca el Art. 647 E.T. para anular la sanción por inexactitud del 100%.
-- Aplica a errores de clasificación de operación, ajustes de comparabilidad y elección del método cuando hay sustento técnico documentado.
+Interpretación razonable — Art. 647 E.T.:
+- Respecto de la declaración de renta y la declaración informativa, el Art. 647 E.T. excluye la inexactitud cuando el menor valor proviene de una interpretación razonable del derecho aplicable y los hechos y cifras declarados son completos y verdaderos. No "anula" la sanción ni cubre cifras incompletas o inexactas; las sanciones propias de la documentación comprobatoria (Art. 260-11 E.T.) se rigen por su propio régimen.
+- Puede sustentar la elección del método o los ajustes de comparabilidad cuando hay soporte técnico documentado.
 
 Códigos de operación Formato 1125 DIAN — referencia (mantener vigentes con la resolución DIAN del año):
 - 01-09: bienes tangibles (inventarios producidos, materias primas, activos fijos).

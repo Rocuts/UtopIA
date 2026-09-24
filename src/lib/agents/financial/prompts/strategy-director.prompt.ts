@@ -34,12 +34,19 @@ import type { ReportMode } from '../contracts/base';
 import { buildAntiHallucinationGuardrail } from './anti-hallucination';
 import { buildColombia2026Context } from './colombia-2026-context';
 import { buildResilienceSection0 } from './resilience-section0';
+import { buildMacroVigenteBlock, type MacroSnapshot } from '../valuation/macro-context';
 
 export interface StrategyDirectorEliteContext {
   comparativosImpracticables?: boolean;
   actividadInferida?: { sectorCIIU: string; descripcion: string; evidencia?: string };
   /** Bloque <hechos_empresa> pre-renderizado (Ola 2). '' o undefined = no se inyecta. */
   hechosEmpresa?: string | null;
+  /**
+   * Variables macro con fecha de vigencia y fuente (valoracion-18). Sin dato
+   * verificado el bloque <macro_vigente> sale en N/D y el agente declara
+   * cualquier supuesto macro con fuente y fecha.
+   */
+  macro?: MacroSnapshot | null;
 }
 
 export function buildStrategyDirectorPrompt(
@@ -118,7 +125,8 @@ ${isComparative ? `- Modo comparativo: KPIs presentan resultComparative y yoyVar
 - MUST: en el Flujo de Caja proyectado, el Saldo Inicial Caja es EXCLUSIVAMENTE PUC 11 (Efectivo y Equivalentes) — NO Activo Corriente total, NO Deudores (PUC 13), NO Inventarios (PUC 14), NO Inversiones (PUC 12).
 - MUST: Cuentas por Pagar (PUC 23), Obligaciones Laborales (PUC 25) e Impuestos por Pagar (PUC 24) son salidas obligatorias del Año +1 (exigibilidad legal CST + calendario DIAN).
 - MUST: impuesto proyectado = UAI proyectada × 35% (Art. 240 E.T.) como supuesto de planeación, declarado en assumptionsNote como estimación y no como liquidación (la base fiscal real es la renta líquida). La Tasa de Tributación Depurada (Art. 240 par. 6) no se modela sin impuesto depurado y utilidad depurada verificados. El pago de caja se refleja en el periodo SIGUIENTE, según el calendario DIAN 2026 por tipo de contribuyente y último dígito del NIT.
-- MUST: separar Gastos Fijos Administrativos (indexados a inflación 4-5% IPC) de Costos de Operación (escalables a ingresos). Documentar el factor en assumptionsNote.
+- MUST: separar Gastos Fijos Administrativos (indexados a la inflación del bloque <macro_vigente>) de Costos de Operación (escalables a ingresos). Documentar el factor en assumptionsNote.
+- NEVER usar una tasa macro (inflación, crecimiento del PIB, tasas de interés, TRM) sin fecha de vigencia y fuente. If el bloque <macro_vigente> trae el dato then úsalo citando su vigencia y fuente otherwise declara el valor usado como SUPUESTO en assumptionsNote con su fuente y fecha, o marca el escenario como no calibrable (N/D).
 - MUST: cada KPI lleva confidence ∈ {high, medium, low} (v8.1 §1.5):
   - high: cifra anclada a TOTALES VINCULANTES sin ajuste.
   - medium: derivada de cálculo con un solo input ajustado por el curator.
@@ -202,9 +210,7 @@ otherwise copiar el KPI vinculante del bloque (misma fórmula del preprocesador:
 
 Esta regla cubre el bug clásico de dividir entre un denominador ~$0 que produce resultados astronómicos sin sentido económico (ej. 36.500 días de inventario).
 
-Macro-supuestos Colombia 2026 (referenciales):
-- PIB esperado: 2-3% (BanRep / DANE).
-- IPC inflación: 4-5% (BanRep meta 3% +/- rango).
+Parámetros normativos 2026 (las variables macro —inflación, crecimiento, tasas, TRM— NO se fijan aquí: vienen del bloque <macro_vigente> del <context> con fecha y fuente, o se declaran como supuesto):
 - UVT 2026: $52.374 COP (DIAN).
 - Tarifa renta PJ: 35% (Art. 240 E.T., Ley 2277/2022).
 - Tasa de Tributación Depurada (TTD, Art. 240 parágrafo 6 E.T.): piso del 15% medido como impuesto depurado / utilidad depurada; si es menor se liquida un impuesto a adicionar. No es una tarifa sustituta y sin ID/UD verificados no se calcula.
@@ -218,9 +224,10 @@ Macro-supuestos Colombia 2026 (referenciales):
   If un escenario proyecta reparto de utilidades a socio persona natural residente then modela la carga con la tarifa marginal del Art. 241 que declares como supuesto y trata el 15% como retencion imputable otherwise no cifres impuesto al dividendo y limita la recomendacion a la politica de reparto.
 
 Estructura de los 3 escenarios obligatorios cuando no haya gate de liquidez:
-- Conservative: ingresos −15% YoY, costos indexados a inflación máxima (5%), impuesto UAI proyectada × 35%.
-- Base: ingresos crecen al PIB esperado (2,5%), costos a inflación esperada (4%), impuesto UAI proyectada × 35%.
-- Aggressive: ingresos +15% YoY (justificado por palanca específica), costos a inflación mínima (4%), impuesto UAI proyectada × 35%.
+- Conservative: ingresos −15% YoY, costos indexados a la inflación de <macro_vigente> más un margen de estrés declarado en assumptionsNote, impuesto UAI proyectada × 35%.
+- Base: ingresos con el crecimiento que declare assumptionsNote (tasa YoY del Agente 1 cuando el comparativo es válido, o supuesto con fuente y fecha), costos a la inflación de <macro_vigente>, impuesto UAI proyectada × 35%.
+- Aggressive: ingresos +15% YoY (justificado por palanca específica), costos a la inflación de <macro_vigente>, impuesto UAI proyectada × 35%.
+If la inflación de <macro_vigente> es N/D then cada escenario declara en assumptionsNote la inflación usada como supuesto con su fuente y fecha; NEVER la presentes como dato vigente.
 
 If Activo Corriente < Pasivo Corriente then projectedCashFlow.liquidityGate.triggered=true, scenarios=[], controlKpis=[] y la primera recommendation es priority=high + horizon=immediate citando la brecha en pesos; el message de liquidityGate es LITERAL "ALERTA DE LIQUIDEZ: AC ($X) < PC ($Y). Brecha: $Z. NO se proyecta flujo hasta resolver esta inconsistencia." (reemplazar X, Y, Z con los valores de TOTALES VINCULANTES) otherwise projectar normalmente.
 
@@ -280,6 +287,8 @@ El Agente 1 declaró impracticabilidad del comparativo (NIIF for SMEs §3.14, §
 - Año +1: ${projectionYears[0]}
 - Año +2: ${projectionYears[1]}
 - Año +3: ${projectionYears[2]}
+
+${buildMacroVigenteBlock(elite?.macro)}
 
 ${elite?.hechosEmpresa ?? ''}
 
