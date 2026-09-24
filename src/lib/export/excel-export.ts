@@ -179,12 +179,44 @@ interface PeriodLayout {
  * Construye un PeriodLayout consumible desde el contrato T1
  * (preprocessed.primary, preprocessed.comparative, preprocessed.periods[]).
  */
+/**
+ * Resumen del periodo POSTERIOR al curator (normativa-metricas NM-04).
+ *
+ * `snapshot.summary` se calcula antes del curator: R1 reclasifica un activo
+ * negativo (sobregiro) al pasivo y R8 cierra el resultado en el patrimonio,
+ * pero el resumen conservaba los totales previos. El .xlsx imprimía entonces
+ * Total Activo 1.150 M en KPIs y Resumen (y como total de la hoja Balance sin
+ * JSON) frente a 1.180 M en el balance, el PDF y las anclas, con un
+ * endeudamiento calculado sobre la otra base. Los totales del balance, la
+ * utilidad neta y la ecuación salen de `controlTotals` —la base de las anclas y
+ * de los ratios—; el resto del resumen (ingresos, gastos, costos) no lo altera
+ * el curator.
+ */
+function postCuratorSummary(p: PreprocessedBalance['primary']): PeriodView['summary'] {
+  const ct = p.controlTotals;
+  if (!ct) return p.summary;
+  const cents = (ct as { cents?: { activo?: bigint; pasivo?: bigint; patrimonio?: bigint } }).cents;
+  const diffCents =
+    typeof cents?.activo === 'bigint' && typeof cents.pasivo === 'bigint' && typeof cents.patrimonio === 'bigint'
+      ? cents.activo - cents.pasivo - cents.patrimonio
+      : BigInt(Math.round((ct.activo - ct.pasivo - ct.patrimonio) * 100));
+  return {
+    ...p.summary,
+    totalAssets: ct.activo,
+    totalLiabilities: ct.pasivo,
+    totalEquity: ct.patrimonio,
+    netIncome: ct.utilidadNeta,
+    equationBalance: Number(diffCents) / 100,
+    equationBalanced: diffCents === BigInt(0),
+  };
+}
+
 function buildPeriodLayout(prep: PreprocessedBalance): PeriodLayout {
   const all: PeriodView[] = prep.periods.map((p) => ({
     period: p.period,
     periodoTipo: p.periodoTipo,
     classes: p.classes,
-    summary: p.summary,
+    summary: postCuratorSummary(p),
     discrepancies: p.discrepancies,
     missingExpectedAccounts: p.missingExpectedAccounts,
     controlTotals: p.controlTotals,
@@ -195,7 +227,7 @@ function buildPeriodLayout(prep: PreprocessedBalance): PeriodLayout {
     period: prep.primary.period,
     periodoTipo: prep.primary.periodoTipo,
     classes: prep.primary.classes,
-    summary: prep.primary.summary,
+    summary: postCuratorSummary(prep.primary),
     discrepancies: prep.primary.discrepancies,
     missingExpectedAccounts: prep.primary.missingExpectedAccounts,
     controlTotals: prep.primary.controlTotals,
@@ -219,7 +251,7 @@ function buildPeriodLayout(prep: PreprocessedBalance): PeriodLayout {
         period: prep.comparative.period,
         periodoTipo: prep.comparative.periodoTipo,
         classes: prep.comparative.classes,
-        summary: prep.comparative.summary,
+        summary: postCuratorSummary(prep.comparative),
         discrepancies: prep.comparative.discrepancies,
         missingExpectedAccounts: prep.comparative.missingExpectedAccounts,
         controlTotals: prep.comparative.controlTotals,

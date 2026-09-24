@@ -1356,6 +1356,41 @@ function buildRecommendations(report: FinancialReport): RecommendationItem[] {
 
 // ─── Appendix ─────────────────────────────────────────────────────────────────
 
+/**
+ * Motivo de descuadre de la ecuación calculado ANTES del curator que el
+ * resumen POSTERIOR al curator ya resolvió (normativa-metricas NM-04).
+ *
+ * `validation.reasons` se escribe al construir el snapshot, antes de R1/R8: con
+ * un sobregiro reclasificado al pasivo y el resultado cerrado en el patrimonio,
+ * el apéndice imprimía "Activo (1.150.000.000,00) != Pasivo (470.000.000,00) +
+ * Patrimonio (…)" al lado de un balance de $1.180.000.000,00 que sí cuadra.
+ * Sólo se descartan los motivos de ECUACIÓN, y sólo si los totales de control
+ * (la base de las anclas, el balance y el PDF) cuadran al centavo; los motivos
+ * de integridad y los bloqueos del curator se conservan siempre.
+ */
+function isResolvedPreCuratorEquationReason(reason: string, snap: PeriodSnapshot | undefined): boolean {
+  if (!snap) return false;
+  const persistent = new Set([
+    ...(snap.validation?.integrityReasons ?? []),
+    ...(snap.validation?.curatorBlockingReasons ?? []),
+  ]);
+  if (persistent.has(reason)) return false;
+  if (
+    !/ecuaci[oó]n contable no cuadra|descuadre coincide aproximadamente con la utilidad|Total Patrimonio .* < 1% del Activo/i.test(
+      reason,
+    )
+  ) {
+    return false;
+  }
+  const ct = snap.controlTotals;
+  if (!ct) return false;
+  const cents = (ct as { cents?: { activo?: bigint; pasivo?: bigint; patrimonio?: bigint } }).cents;
+  if (typeof cents?.activo === 'bigint' && typeof cents.pasivo === 'bigint' && typeof cents.patrimonio === 'bigint') {
+    return cents.activo === cents.pasivo + cents.patrimonio;
+  }
+  return Math.round(ct.activo * 100) === Math.round(ct.pasivo * 100) + Math.round(ct.patrimonio * 100);
+}
+
 function buildAppendix(
   report: FinancialReport,
   preprocessed: PreprocessedBalance | null | undefined,
@@ -1374,7 +1409,9 @@ function buildAppendix(
   const validationWarnings: string[] = [];
   if (preprocessed) {
     const primary = (preprocessed as { primary?: PeriodSnapshot }).primary;
-    const primaryWarnings = primary?.validation?.reasons ?? [];
+    const primaryWarnings = (primary?.validation?.reasons ?? []).filter(
+      (w) => !isResolvedPreCuratorEquationReason(String(w), primary),
+    );
     for (const w of primaryWarnings) validationWarnings.push(scrubInternalMetadata(String(w)));
     const adjustments = primary?.validation?.adjustments ?? [];
     for (const a of adjustments) validationWarnings.push(scrubInternalMetadata(String(a)));
