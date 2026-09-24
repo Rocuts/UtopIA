@@ -257,7 +257,7 @@ describe('buildConsolidatedAuditReport — findings listing', () => {
 // ---------------------------------------------------------------------------
 
 describe('buildConsolidatedAuditReport — opinion type rendering', () => {
-  const opinions: AuditOpinionType[] = ['favorable', 'con_salvedades', 'desfavorable', 'abstension'];
+  const opinions: AuditOpinionType[] = ['favorable', 'con_salvedades', 'desfavorable', 'abstension', 'no_emitida'];
 
   for (const opinion of opinions) {
     it(`renders opinion=${opinion} in the metadata table and closing banner`, () => {
@@ -277,6 +277,7 @@ describe('buildConsolidatedAuditReport — opinion type rendering', () => {
         con_salvedades: 'CON SALVEDADES',
         desfavorable: 'DESFAVORABLE',
         abstension: 'ABSTENCION',
+        no_emitida: 'NO EMITIDA',
       };
       expect(md).toContain(labelMap[opinion]);
     });

@@ -57,6 +57,16 @@ export interface AuditFinding {
    *   se omite o se usa el periodo primario.
    */
   period?: string;
+  /**
+   * NIA 705 par. 5/8: efectos materiales Y generalizados. Solo lo emite el
+   * Revisor Fiscal; condiciona la opinión desfavorable (adversa).
+   */
+  pervasive?: boolean | null;
+  /**
+   * NIA 705 par. 9: imposibilidad de obtener evidencia suficiente
+   * (limitación al alcance). Condiciona la abstención de opinión.
+   */
+  scopeLimitation?: boolean | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +99,35 @@ export type AuditOpinionType =
   | 'favorable'           // Sin salvedades — clean opinion
   | 'con_salvedades'      // Con salvedades — qualified opinion
   | 'desfavorable'        // Desfavorable — adverse opinion
-  | 'abstension';         // Abstención de opinión — disclaimer
+  | 'abstension'          // Abstención de opinión — disclaimer
+  /**
+   * Sin dictamen del Revisor Fiscal (el auditor de revisoría falló): NO hay
+   * opinión formal. Nunca se deriva del score de los otros auditores
+   * (NIA 700: la opinión la forma quien audita).
+   */
+  | 'no_emitida';
+
+/**
+ * Estado de la integridad aritmética determinista del informe auditado
+ * (ecuación patrimonial, reconciliación de anclas, gate de emisión).
+ * `con_bloqueantes` impide opinión favorable y sello "CERTIFICADA".
+ */
+export type AuditIntegrityStatus = 'integra' | 'con_bloqueantes' | 'no_verificada';
+
+export interface AuditIntegrity {
+  status: AuditIntegrityStatus;
+  /** Motivos legibles (vacío si `integra`). */
+  motivos: string[];
+}
+
+/** Cobertura de los 4 dominios de auditoría (score parcial si < 4). */
+export interface AuditCoverage {
+  completed: number;
+  total: 4;
+  failedDomains: AuditDomain[];
+  /** true cuando algún auditor no completó su revisión. */
+  partial: boolean;
+}
 
 export interface AuditReport {
   /** Company info echo */
@@ -98,7 +136,7 @@ export interface AuditReport {
   auditorResults: AuditorResult[];
   /** Overall compliance score (weighted average) */
   overallScore: number;
-  /** Formal audit opinion type */
+  /** Formal audit opinion type ('no_emitida' sin dictamen del Revisor Fiscal). */
   opinionType: AuditOpinionType;
   /** Formal opinion text */
   opinionText: string;
@@ -112,6 +150,13 @@ export interface AuditReport {
   consolidatedReport: string;
   /** Timestamp */
   generatedAt: string;
+  /**
+   * Cobertura de dominios: `overallScore` es un promedio PARCIAL cuando
+   * `coverage.partial` es true (opcional por retrocompatibilidad).
+   */
+  coverage?: AuditCoverage;
+  /** Integridad aritmética determinista con la que se condicionó la opinión. */
+  integrity?: AuditIntegrity;
 }
 
 // ---------------------------------------------------------------------------

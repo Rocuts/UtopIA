@@ -22,9 +22,15 @@ import {
   type LegalRequiredActionJson,
   type RiesgoLegalJson,
 } from '../../contracts/audit-report';
-import { formatCopFromCents, parseMoneyCop } from '../../contracts/money';
+import { formatCopFromCents, parseMoneyCop, serializeMoneyCop } from '../../contracts/money';
 import type { CompanyInfo } from '../../types';
+import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import type { AuditorResult, AuditFinding, AuditProgressEvent } from '../types';
+import {
+  buildActaExpectedArithmetic,
+  deriveActaRegimeForCompany,
+  normalizeTipoSocietario,
+} from '../../prompts/governance-specialist.prompt';
 
 export async function runLegalAuditor(
   reportContent: string,
@@ -32,6 +38,7 @@ export async function runLegalAuditor(
   language: 'es' | 'en',
   onProgress?: (event: AuditProgressEvent) => void,
   defaultPeriod?: string,
+  preprocessed?: PreprocessedBalance,
 ): Promise<AuditorResult> {
   onProgress?.({
     type: 'auditor_progress',
@@ -43,23 +50,113 @@ export async function runLegalAuditor(
     agentName: 'legal-auditor',
     model: MODELS.FINANCIAL_PIPELINE,
     schema: LegalAuditReportSchema,
-    system: buildLegalAuditorPrompt(company, language),
+    system: buildLegalAuditorPrompt(company, language, preprocessed),
     userContent: `REPORTE FINANCIERO A AUDITAR:\n\n${reportContent}`,
     ...MODELS_CONFIG.legalAuditor,
   });
 
-  return toLegacyAuditorResult(json, company, defaultPeriod);
+  return toLegacyAuditorResult(json, company, defaultPeriod, preprocessed);
+}
+
+// ---------------------------------------------------------------------------
+// Overrides deterministas post-LLM (prompts-normativa-07)
+// ---------------------------------------------------------------------------
+
+const CAPITALIZACION_BENEFICIO_FISCAL =
+  'Dividendo en especie (Art. 30 E.T.): depuración de la porción no gravada (Arts. 48 y 49 E.T.) y retención según la calidad del accionista (Arts. 242, 242-1 o 245 E.T.). El Art. 36-3 E.T. fue derogado por el Art. 96 de la Ley 2277 de 2022.';
+
+/**
+ * El Dictamen 3 reproduce el MISMO régimen tri-estado y la MISMA aritmética
+ * determinista del acta que Governance (`buildActaExpectedArithmetic`). El
+ * LLM ya no calcula la reserva ni la utilidad disponible, y no puede citar el
+ * Art. 36-3 E.T. (derogado) ni el Art. 5 Ley 1258/2008 para capitalizar.
+ */
+export function applyLegalDeterministicOverrides(
+  json: LegalAuditReportJson,
+  company: CompanyInfo,
+  preprocessed?: PreprocessedBalance | null,
+): LegalAuditReportJson {
+  const regime = deriveActaRegimeForCompany(company);
+  const out: LegalAuditReportJson = { ...json };
+
+  if (json.patrimonyDistribution) {
+    const acta = buildActaExpectedArithmetic(company, preprocessed ?? undefined);
+    const reservaLegalObligatoria =
+      regime === 'indeterminado' ? null : regime === 'no_obligatoria' ? false : true;
+    let utilidadNetaCop = json.patrimonyDistribution.utilidadNetaCop;
+    let montoReserva10pctCop: string | null = null;
+    let utilidadDisponibleCop: string | null = null;
+    if (acta) {
+      utilidadNetaCop = acta.netIncomeCop;
+      montoReserva10pctCop = acta.distributionApplies ? acta.reservaLegalDelEjercicioCop : null;
+      utilidadDisponibleCop =
+        regime === 'indeterminado'
+          ? null
+          : serializeMoneyCop(parseMoneyCop(acta.saldoDistribuibleCop) - parseMoneyCop(acta.reservaLegalDelEjercicioCop));
+    }
+    out.patrimonyDistribution = {
+      ...json.patrimonyDistribution,
+      utilidadNetaCop,
+      reservaLegalObligatoria,
+      montoReserva10pctCop,
+      utilidadDisponibleCop,
+    };
+  }
+
+  if (json.capitalizacionAnalysis) {
+    const isSAS = normalizeTipoSocietario(company.entityType) === 'SAS';
+    out.capitalizacionAnalysis = {
+      ...json.capitalizacionAnalysis,
+      baseLegal: isSAS
+        ? 'Art. 29 Ley 1258/2008 (reforma estatutaria — mitad más una de las acciones presentes; inscripción en el Registro Mercantil)'
+        : 'Art. 158 C.Co. (reforma estatutaria por escritura pública inscrita en el Registro Mercantil)',
+      beneficioFiscal: CAPITALIZACION_BENEFICIO_FISCAL,
+    };
+  }
+
+  if (json.societaryObligations && (regime === 'no_obligatoria' || regime === 'indeterminado')) {
+    out.societaryObligations = json.societaryObligations.map((o) => {
+      if (!/reserva\s+legal/i.test(o.obligation)) return o;
+      if (regime === 'no_obligatoria') {
+        return {
+          ...o,
+          status: 'no_aplica' as const,
+          comment: 'SAS cuyos estatutos no exigen reserva legal (Art. 45 Ley 1258/2008; Supersociedades Oficios 220-115333/2009 y 220-069664/2017).',
+        };
+      }
+      return o.status === 'incumplido' || o.status === 'cumplido'
+        ? {
+            ...o,
+            status: 'parcial' as const,
+            comment: 'Régimen no determinable: estatutos sociales no suministrados (Art. 45 Ley 1258/2008).',
+          }
+        : o;
+    });
+  }
+
+  return out;
 }
 
 // ---------------------------------------------------------------------------
 // Adapter local: JSON strict -> AuditorResult legacy
 // ---------------------------------------------------------------------------
 
-function toLegacyAuditorResult(
-  json: LegalAuditReportJson,
+export function toLegacyLegalAuditorResult(
+  rawJson: LegalAuditReportJson,
   company: CompanyInfo,
   defaultPeriod: string | undefined,
+  preprocessed?: PreprocessedBalance | null,
 ): AuditorResult {
+  return toLegacyAuditorResult(rawJson, company, defaultPeriod, preprocessed);
+}
+
+function toLegacyAuditorResult(
+  rawJson: LegalAuditReportJson,
+  company: CompanyInfo,
+  defaultPeriod: string | undefined,
+  preprocessed?: PreprocessedBalance | null,
+): AuditorResult {
+  const json = applyLegalDeterministicOverrides(rawJson, company, preprocessed);
   const findings: AuditFinding[] = json.findings.map((f) => mapFinding(f, defaultPeriod));
   return {
     domain: 'legal',
@@ -156,6 +253,12 @@ function renderMarkdown(
     if (json.societaryObligations && json.societaryObligations.length > 0) {
       lines.push('## 2. CHECKLIST DE OBLIGACIONES SOCIETARIAS');
       lines.push('');
+      if (json.societaryObligations.length !== 14) {
+        lines.push(
+          `> ⚠ Checklist incompleto: ${json.societaryObligations.length} de 14 obligaciones exigidas por el spec v2.1.`,
+        );
+        lines.push('');
+      }
       for (let i = 0; i < json.societaryObligations.length; i++) {
         const o: SocietaryObligationJson = json.societaryObligations[i];
         const idx = String(i + 1).padStart(2, '0');
@@ -173,8 +276,19 @@ function renderMarkdown(
       lines.push('## 3. DISTRIBUCION DEL PATRIMONIO');
       lines.push('');
       lines.push(ASCII_FRAME);
-      lines.push(`  Utilidad neta del ejercicio    : ${fmtMoneyOrND(p.utilidadNetaCop)}`);
-      lines.push(`  Reserva legal obligatoria      : ${p.reservaLegalObligatoria ? 'SI (Art. 452 C.Co.)' : 'NO'}`);
+      const enPerdida = p.utilidadNetaCop !== null && isNegativeMoney(p.utilidadNetaCop);
+      lines.push(
+        `  ${enPerdida ? 'Perdida neta del ejercicio     ' : 'Utilidad neta del ejercicio    '}: ${fmtMoneyOrND(p.utilidadNetaCop)}`,
+      );
+      lines.push(
+        `  Reserva legal obligatoria      : ${
+          p.reservaLegalObligatoria === null
+            ? 'NO DETERMINABLE (estatutos no suministrados — Art. 45 Ley 1258/2008)'
+            : p.reservaLegalObligatoria
+              ? 'SI (Art. 452 C.Co.)'
+              : 'NO (estatutos no la exigen — Art. 45 Ley 1258/2008)'
+        }`,
+      );
       lines.push(`  Monto reserva 10%              : ${fmtMoneyOrND(p.montoReserva10pctCop)}`);
       lines.push(`  Utilidad disponible            : ${fmtMoneyOrND(p.utilidadDisponibleCop)}`);
       lines.push(`  Tipo de dividendo posible      : ${p.tipoDividendoPosible ?? 'N/D'}`);
@@ -289,11 +403,20 @@ function renderMarkdown(
 // Helpers de render
 // ---------------------------------------------------------------------------
 
+/** Cifra con signo (paréntesis NIIF para negativos) — auditoria-calidad-02. */
 function fmtMoneyOrND(value: string | null): string {
   if (value === null) return 'N/D';
   try {
-    return formatCopFromCents(parseMoneyCop(value), true);
+    return formatCopFromCents(parseMoneyCop(value), false);
   } catch {
     return 'N/D';
+  }
+}
+
+function isNegativeMoney(value: string): boolean {
+  try {
+    return parseMoneyCop(value) < BigInt(0);
+  } catch {
+    return false;
   }
 }
