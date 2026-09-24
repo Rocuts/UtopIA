@@ -90,12 +90,18 @@ export async function getPeriodAccountBalances(
 ): Promise<PeriodAccountBalance[]> {
   const db = getDb();
 
-  // Agregamos por cuenta todos los journal_lines del período (posteados y drafts).
-  // En MVP incluimos 'draft' también — WS5 puede optar por solo 'posted' si quiere.
+  // Saldo OFICIAL del período (auditoría contab-nomina-16): sólo asientos
+  // posteados. Los borradores no forman parte del mayor y la provisión (la de
+  // renta incluida) se POSTEA, así que no puede calcularse sobre ellos. Los
+  // reversos netean solos: el original sigue 'posted' junto a su reverso
+  // (ver double-entry/service.ts). El asiento de cierre anual (traslado a
+  // patrimonio) no es movimiento del período y se excluye.
   const result = await db.execute(
     sql`
       SELECT
         coa.code,
+        jl.cost_center_id::text AS cost_center_id,
+        jl.third_party_id::text AS third_party_id,
         COALESCE(SUM(jl.debit), 0)::text  AS total_debit,
         COALESCE(SUM(jl.credit), 0)::text AS total_credit
       FROM journal_lines jl
@@ -103,20 +109,34 @@ export async function getPeriodAccountBalances(
       JOIN chart_of_accounts coa ON coa.id = jl.account_id
       WHERE je.workspace_id = ${workspaceId}
         AND je.period_id    = ${periodId}
-        AND je.status IN ('posted', 'draft')
-      GROUP BY coa.code
+        AND je.status = 'posted'
+        AND je.source_type <> 'closing'
+        AND NOT EXISTS (
+          SELECT 1 FROM journal_entries o
+          WHERE o.id = je.reversal_of_entry_id AND o.source_type = 'closing'
+        )
+      GROUP BY coa.code, jl.cost_center_id, jl.third_party_id
       ORDER BY coa.code
     `,
   );
 
-  const rows = (
-    result as unknown as {
-      rows?: Array<{ code: string; total_debit: string; total_credit: string }>;
-    }
-  ).rows ?? (Array.isArray(result) ? result : []) as Array<{ code: string; total_debit: string; total_credit: string }>;
+  type Row = {
+    code: string;
+    cost_center_id: string | null;
+    third_party_id: string | null;
+    total_debit: string;
+    total_credit: string;
+  };
+  const rows = (result as unknown as { rows?: Row[] }).rows
+    ?? ((Array.isArray(result) ? result : []) as Row[]);
 
+  // Una fila por (cuenta, centro de costo, tercero): la base de provisiones se
+  // reparte por centro de costo y la exoneración 114-1 se evalúa por
+  // trabajador. Las sumas por cuenta (renta) no cambian.
   return rows.map((r) => ({
     code: r.code,
+    costCenterId: r.cost_center_id ?? null,
+    thirdPartyId: r.third_party_id ?? null,
     totalDebit: r.total_debit ?? '0.00',
     totalCredit: r.total_credit ?? '0.00',
   }));

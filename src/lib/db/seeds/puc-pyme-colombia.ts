@@ -152,19 +152,40 @@ export const PUC_PYME_COLOMBIA: AccountSeed[] = [
   { code: '233505', name: 'Gastos financieros',                                         type: 'PASIVO', level: 4, parentCode: '2335',  isPostable: true,  requiresThirdParty: true },
   { code: '233525', name: 'Honorarios',                                                 type: 'PASIVO', level: 4, parentCode: '2335',  isPostable: true,  requiresThirdParty: true },
   { code: '233530', name: 'Servicios tecnicos',                                         type: 'PASIVO', level: 4, parentCode: '2335',  isPostable: true,  requiresThirdParty: true },
-
-  // 24 IMPUESTOS, GRAVAMENES Y TASAS
-  { code: '24',    name: 'IMPUESTOS GRAVAMENES Y TASAS',                               type: 'PASIVO', level: 2, parentCode: '2',     isPostable: false },
-  { code: '2365',  name: 'RETENCION EN LA FUENTE',                                     type: 'PASIVO', level: 3, parentCode: '24',    isPostable: false },
+  // Auditoria contab-nomina-18: la retencion en la fuente (2365) es una
+  // cuenta del grupo 23 CUENTAS POR PAGAR, no del 24; 236510 es "Dividendos
+  // y/o participaciones" y la retencion por Honorarios es 236515.
+  { code: '2365',  name: 'RETENCION EN LA FUENTE',                                     type: 'PASIVO', level: 3, parentCode: '23',    isPostable: false },
   { code: '236505', name: 'Salarios y pagos laborales',                                  type: 'PASIVO', level: 4, parentCode: '2365',  isPostable: true },
-  { code: '236510', name: 'Honorarios',                                                  type: 'PASIVO', level: 4, parentCode: '2365',  isPostable: true },
+  { code: '236515', name: 'Honorarios',                                                  type: 'PASIVO', level: 4, parentCode: '2365',  isPostable: true },
   { code: '236525', name: 'Servicios',                                                   type: 'PASIVO', level: 4, parentCode: '2365',  isPostable: true },
   { code: '236540', name: 'Compras',                                                     type: 'PASIVO', level: 4, parentCode: '2365',  isPostable: true },
-  { code: '2404',  name: 'IMPUESTO SOBRE LAS VENTAS POR PAGAR (IVA)',                   type: 'PASIVO', level: 3, parentCode: '24',    isPostable: false },
-  { code: '240405', name: 'IVA generado (debito)',                                       type: 'PASIVO', level: 4, parentCode: '2404',  isPostable: true },
-  { code: '240410', name: 'IVA descontable (credito)',                                   type: 'PASIVO', level: 4, parentCode: '2404',  isPostable: true },
-  { code: '2408',  name: 'IMPUESTO DE INDUSTRIA Y COMERCIO',                            type: 'PASIVO', level: 3, parentCode: '24',    isPostable: false },
-  { code: '240805', name: 'Vigencia fiscal corriente',                                   type: 'PASIVO', level: 4, parentCode: '2408',  isPostable: true },
+  // ReteICA practicada (tax-engine CUENTA_ICA / regla de retencion ICA).
+  { code: '2368',  name: 'IMPUESTO DE INDUSTRIA Y COMERCIO RETENIDO',                   type: 'PASIVO', level: 3, parentCode: '23',    isPostable: false },
+  { code: '236805', name: 'Impuesto de industria y comercio retenido',                   type: 'PASIVO', level: 4, parentCode: '2368',  isPostable: true },
+  // Aportes de nomina por pagar (destino de las provisiones de seguridad
+  // social y parafiscales — seeds/provisions-config-co-2026.ts).
+  { code: '2370',  name: 'RETENCIONES Y APORTES DE NOMINA',                            type: 'PASIVO', level: 3, parentCode: '23',    isPostable: false },
+  { code: '237005', name: 'Aportes a entidades promotoras de salud EPS',                 type: 'PASIVO', level: 4, parentCode: '2370',  isPostable: true },
+  { code: '237006', name: 'Aportes a administradoras de riesgos laborales ARL',          type: 'PASIVO', level: 4, parentCode: '2370',  isPostable: true },
+  { code: '237010', name: 'Aportes al ICBF, SENA y cajas de compensacion',               type: 'PASIVO', level: 4, parentCode: '2370',  isPostable: true },
+  { code: '2380',  name: 'ACREEDORES VARIOS',                                           type: 'PASIVO', level: 3, parentCode: '23',    isPostable: false },
+  { code: '238030', name: 'Fondos de cesantias y/o pensiones',                           type: 'PASIVO', level: 4, parentCode: '2380',  isPostable: true },
+
+  // 24 IMPUESTOS, GRAVAMENES Y TASAS — Decreto 2650/1993: 2404 renta,
+  // 2408 IVA por pagar, 2412 industria y comercio. El tax-engine postea el
+  // IVA en 240805/240810 (tax-engine/constants.ts) y la provision de renta
+  // usa 240405; build-ancora / extractor fiscal leen 2408 como IVA y r16 lee
+  // 2404 como renta.
+  { code: '24',    name: 'IMPUESTOS GRAVAMENES Y TASAS',                               type: 'PASIVO', level: 2, parentCode: '2',     isPostable: false },
+  { code: '2404',  name: 'DE RENTA Y COMPLEMENTARIOS',                                  type: 'PASIVO', level: 3, parentCode: '24',    isPostable: false },
+  { code: '240405', name: 'Vigencia fiscal corriente',                                   type: 'PASIVO', level: 4, parentCode: '2404',  isPostable: true },
+  { code: '240410', name: 'Vigencias fiscales anteriores',                               type: 'PASIVO', level: 4, parentCode: '2404',  isPostable: true },
+  { code: '2408',  name: 'IMPUESTO SOBRE LAS VENTAS POR PAGAR (IVA)',                   type: 'PASIVO', level: 3, parentCode: '24',    isPostable: false },
+  { code: '240805', name: 'IVA generado',                                                type: 'PASIVO', level: 4, parentCode: '2408',  isPostable: true },
+  { code: '240810', name: 'IVA descontable',                                             type: 'PASIVO', level: 4, parentCode: '2408',  isPostable: true },
+  { code: '2412',  name: 'DE INDUSTRIA Y COMERCIO',                                     type: 'PASIVO', level: 3, parentCode: '24',    isPostable: false },
+  { code: '241205', name: 'Vigencia fiscal corriente',                                   type: 'PASIVO', level: 4, parentCode: '2412',  isPostable: true },
 
   // 25 OBLIGACIONES LABORALES
   { code: '25',    name: 'OBLIGACIONES LABORALES',                                     type: 'PASIVO', level: 2, parentCode: '2',     isPostable: false },
@@ -174,10 +195,14 @@ export const PUC_PYME_COLOMBIA: AccountSeed[] = [
   // 26 PASIVOS ESTIMADOS Y PROVISIONES
   { code: '26',    name: 'PASIVOS ESTIMADOS Y PROVISIONES',                            type: 'PASIVO', level: 2, parentCode: '2',     isPostable: false },
   { code: '2610',  name: 'PARA OBLIGACIONES LABORALES',                                type: 'PASIVO', level: 3, parentCode: '26',    isPostable: false },
-  { code: '261005', name: 'Cesantias',                                                   type: 'PASIVO', level: 4, parentCode: '2610',  isPostable: true,  requiresThirdParty: true },
-  { code: '261010', name: 'Intereses sobre cesantias',                                   type: 'PASIVO', level: 4, parentCode: '2610',  isPostable: true,  requiresThirdParty: true },
-  { code: '261015', name: 'Vacaciones',                                                  type: 'PASIVO', level: 4, parentCode: '2610',  isPostable: true,  requiresThirdParty: true },
-  { code: '261020', name: 'Prima de servicios',                                          type: 'PASIVO', level: 4, parentCode: '2610',  isPostable: true,  requiresThirdParty: true },
+  // Pasivos ESTIMADOS: la provision mensual automatica es global (no por
+  // trabajador); la consolidacion por empleado va en el grupo 25. Por eso no
+  // exigen tercero (contab-nomina-06: con tercero obligatorio el asiento de
+  // provision fallaba siempre).
+  { code: '261005', name: 'Cesantias',                                                   type: 'PASIVO', level: 4, parentCode: '2610',  isPostable: true },
+  { code: '261010', name: 'Intereses sobre cesantias',                                   type: 'PASIVO', level: 4, parentCode: '2610',  isPostable: true },
+  { code: '261015', name: 'Vacaciones',                                                  type: 'PASIVO', level: 4, parentCode: '2610',  isPostable: true },
+  { code: '261020', name: 'Prima de servicios',                                          type: 'PASIVO', level: 4, parentCode: '2610',  isPostable: true },
 
   // 28 OTROS PASIVOS / DIFERIDOS
   { code: '28',    name: 'OTROS PASIVOS',                                              type: 'PASIVO', level: 2, parentCode: '2',     isPostable: false },
@@ -229,10 +254,21 @@ export const PUC_PYME_COLOMBIA: AccountSeed[] = [
   { code: '51',    name: 'OPERACIONALES DE ADMINISTRACION',                             type: 'GASTO', level: 2, parentCode: '5',    isPostable: false },
   { code: '5105',  name: 'GASTOS DE PERSONAL',                                          type: 'GASTO', level: 3, parentCode: '51',   isPostable: false },
   { code: '510506', name: 'Sueldos',                                                     type: 'GASTO', level: 4, parentCode: '5105', isPostable: true,  requiresCostCenter: true },
+  { code: '510515', name: 'Horas extras y recargos',                                     type: 'GASTO', level: 4, parentCode: '5105', isPostable: true,  requiresCostCenter: true },
+  { code: '510518', name: 'Comisiones',                                                  type: 'GASTO', level: 4, parentCode: '5105', isPostable: true,  requiresCostCenter: true },
   { code: '510527', name: 'Auxilio de transporte',                                       type: 'GASTO', level: 4, parentCode: '5105', isPostable: true,  requiresCostCenter: true },
   { code: '510530', name: 'Cesantias',                                                   type: 'GASTO', level: 4, parentCode: '5105', isPostable: true,  requiresCostCenter: true },
+  { code: '510533', name: 'Intereses sobre cesantias',                                   type: 'GASTO', level: 4, parentCode: '5105', isPostable: true,  requiresCostCenter: true },
   { code: '510536', name: 'Prima de servicios',                                          type: 'GASTO', level: 4, parentCode: '5105', isPostable: true,  requiresCostCenter: true },
-  { code: '510568', name: 'Aportes ARL/EPS/Pension',                                     type: 'GASTO', level: 4, parentCode: '5105', isPostable: true,  requiresCostCenter: true },
+  { code: '510539', name: 'Vacaciones',                                                  type: 'GASTO', level: 4, parentCode: '5105', isPostable: true,  requiresCostCenter: true },
+  // Decreto 2650/1993: 510568 ARP/ARL, 510569 EPS, 510570 fondos de pensiones
+  // (antes una sola 510568 "Aportes ARL/EPS/Pension").
+  { code: '510568', name: 'Aportes a administradoras de riesgos laborales ARL',          type: 'GASTO', level: 4, parentCode: '5105', isPostable: true,  requiresCostCenter: true },
+  { code: '510569', name: 'Aportes a entidades promotoras de salud EPS',                 type: 'GASTO', level: 4, parentCode: '5105', isPostable: true,  requiresCostCenter: true },
+  { code: '510570', name: 'Aportes a fondos de pensiones y/o cesantias',                 type: 'GASTO', level: 4, parentCode: '5105', isPostable: true,  requiresCostCenter: true },
+  { code: '510572', name: 'Aportes cajas de compensacion familiar',                      type: 'GASTO', level: 4, parentCode: '5105', isPostable: true,  requiresCostCenter: true },
+  { code: '510575', name: 'Aportes ICBF',                                                type: 'GASTO', level: 4, parentCode: '5105', isPostable: true,  requiresCostCenter: true },
+  { code: '510578', name: 'Aportes SENA',                                                type: 'GASTO', level: 4, parentCode: '5105', isPostable: true,  requiresCostCenter: true },
   { code: '5110',  name: 'HONORARIOS',                                                   type: 'GASTO', level: 3, parentCode: '51',   isPostable: false },
   { code: '511015', name: 'Asesoria juridica',                                           type: 'GASTO', level: 4, parentCode: '5110', isPostable: true,  requiresThirdParty: true,  requiresCostCenter: true },
   { code: '511020', name: 'Asesoria contable y tributaria',                               type: 'GASTO', level: 4, parentCode: '5110', isPostable: true,  requiresThirdParty: true,  requiresCostCenter: true },
@@ -249,14 +285,19 @@ export const PUC_PYME_COLOMBIA: AccountSeed[] = [
   { code: '514520', name: 'Equipo de oficina',                                           type: 'GASTO', level: 4, parentCode: '5145', isPostable: true,  requiresCostCenter: true },
   { code: '514525', name: 'Equipo de computacion',                                       type: 'GASTO', level: 4, parentCode: '5145', isPostable: true,  requiresCostCenter: true },
   { code: '5160',  name: 'DEPRECIACIONES',                                               type: 'GASTO', level: 3, parentCode: '51',   isPostable: false },
+  // Decreto 2650/1993: 516010 Maquinaria y equipo, 516015 Equipo de oficina,
+  // 516020 Equipo de computacion y comunicacion (espejo de 1592xx).
   { code: '516005', name: 'Construcciones y edificaciones',                              type: 'GASTO', level: 4, parentCode: '5160', isPostable: true },
-  { code: '516010', name: 'Equipo de oficina',                                           type: 'GASTO', level: 4, parentCode: '5160', isPostable: true },
-  { code: '516015', name: 'Equipo de computacion y comunicacion',                         type: 'GASTO', level: 4, parentCode: '5160', isPostable: true },
+  { code: '516010', name: 'Maquinaria y equipo',                                         type: 'GASTO', level: 4, parentCode: '5160', isPostable: true },
+  { code: '516015', name: 'Equipo de oficina',                                           type: 'GASTO', level: 4, parentCode: '5160', isPostable: true },
+  { code: '516020', name: 'Equipo de computacion y comunicacion',                         type: 'GASTO', level: 4, parentCode: '5160', isPostable: true },
 
   { code: '52',    name: 'OPERACIONALES DE VENTAS',                                     type: 'GASTO', level: 2, parentCode: '5',    isPostable: false },
   { code: '5205',  name: 'GASTOS DE PERSONAL DE VENTAS',                                 type: 'GASTO', level: 3, parentCode: '52',   isPostable: false },
   { code: '520506', name: 'Sueldos vendedores',                                          type: 'GASTO', level: 4, parentCode: '5205', isPostable: true,  requiresCostCenter: true },
-  { code: '520527', name: 'Comisiones de ventas',                                        type: 'GASTO', level: 4, parentCode: '5205', isPostable: true,  requiresCostCenter: true },
+  // 5205 espeja 5105: 520518 Comisiones, 520527 Auxilio de transporte.
+  { code: '520518', name: 'Comisiones',                                                  type: 'GASTO', level: 4, parentCode: '5205', isPostable: true,  requiresCostCenter: true },
+  { code: '520527', name: 'Auxilio de transporte',                                       type: 'GASTO', level: 4, parentCode: '5205', isPostable: true,  requiresCostCenter: true },
 
   { code: '53',    name: 'NO OPERACIONALES',                                            type: 'GASTO', level: 2, parentCode: '5',    isPostable: false },
   { code: '5305',  name: 'FINANCIEROS',                                                  type: 'GASTO', level: 3, parentCode: '53',   isPostable: false },

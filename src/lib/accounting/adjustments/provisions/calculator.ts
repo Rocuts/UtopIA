@@ -1,22 +1,39 @@
 // ─── WS4 — Provisiones laborales y parafiscales (Colombia 2026) ───────────────
 //
 // Tasas estándar por provision_type (Ley 21/1982, CST, Decreto 1295/1994):
-//   prima              8.33%   (Ley 52/1975 — 15 días por semestre)
-//   cesantias          8.33%   (Art. 249 CST)
-//   intereses_cesantias 1.00%  (Ley 52/1975 art. 5 — 12% anual / 12 meses)
-//   vacaciones         4.17%   (Art. 186 CST — 15 días por año)
-//   salud              8.50%   (Ley 100/1993 — empleador)
+//   prima              8.3333% (Art. 306 CST — 30 días de salario por año)
+//   cesantias          8.3333% (Art. 249 CST)
+//   intereses_cesantias 1.00%  (Ley 52/1975: 12% anual sobre cesantías; sobre
+//                              la MISMA base de cesantías = 8,33% × 12% ≈ 1%)
+//   vacaciones         4.1667% (Art. 186 CST — 15 días por año)
+//   salud              8.50%   (Ley 100/1993 — empleador) *
 //   pension           12.00%   (Ley 100/1993 — empleador)
-//   arl                0.522%  (Decreto 1295/1994 — Clase de Riesgo I)
-//   parafiscales       9.00%   (Ley 21/1982: 4% Caja + 3% ICBF + 2% SENA)
+//   arl                0.522%  (Decreto 1772/1994 — Clase de Riesgo I)
+//   caja               4.00%   (Ley 21/1982 — nunca exonerada)
+//   sena               2.00%   (Ley 21/1982) *
+//   icbf               3.00%   (Ley 89/1988) *
+//   parafiscales       9.00%   LEGADO (caja+sena+icbf agrupados) — se omite
+//                              con `legacy_parafiscales_split`: la exoneración
+//                              del Art. 114-1 sólo cubre SENA/ICBF, no Caja.
+//
+// * Exonerables por el Art. 114-1 E.T. (auditoría contab-nomina-07): los
+//   empleadores beneficiarios (sociedades/personas jurídicas declarantes de
+//   renta; personas naturales con 2+ trabajadores) no pagan salud, SENA ni
+//   ICBF por trabajadores que devenguen, individualmente, menos de 10 SMMLV.
+//   Depende de la condición del empleador (`employerExonerated114_1`):
+//     null  → no configurada: se omite con `employer_114_1_unknown` (N/D).
+//     false → no beneficiario: se provisiona sobre toda la base.
+//     true  → sólo sobre trabajadores ≥ 10 SMMLV; exige tercero en las líneas
+//             de nómina (si falta: `worker_detail_required`).
 //
 // income_tax: ver income-tax.ts
 //
-// Algoritmo por provisión:
-//   1. Sumar el saldo del período de las cuentas en `base_account_codes`.
-//   2. provision_amount = base * rate
-//   3. Si provision_amount <= 0 → skip.
-//   4. Construir CreateEntryInput con dos líneas (gasto / pasivo).
+// Algoritmo por provisión laboral:
+//   1. Base = saldo débito neto del período de las cuentas en
+//      `base_account_codes` (prefijos), por centro de costo.
+//   2. Provisión por centro de costo = base_cc × rate. Una línea de gasto por
+//      centro de costo (las cuentas 5105xx del PUC sembrado lo exigen) y una
+//      línea de pasivo por el total.
 //
 // Nota: `base_account_codes` se compara como prefijo — un código "51" incluye
 // todas las subcuentas que empiezan por "51" (grupo Gastos de personal).
@@ -85,7 +102,15 @@ export interface PeriodAccountBalance {
   totalDebit: string;
   /** Suma créditos del período en este código. NUMERIC string. */
   totalCredit: string;
+  /** Centro de costo de las líneas agregadas (null/ausente = sin centro). */
+  costCenterId?: string | null;
+  /** Tercero (trabajador) de las líneas agregadas (null/ausente = sin tercero). */
+  thirdPartyId?: string | null;
 }
+
+/** Provisiones exonerables por el Art. 114-1 E.T. */
+const EXONERABLE_114_1 = new Set(['salud', 'sena', 'icbf']);
+const UMBRAL_114_1_SMMLV = BigInt(10);
 
 // ---------------------------------------------------------------------------
 // calculateProvisions — puro, sin escrituras a DB
@@ -112,6 +137,13 @@ export interface ProvisionsCalcInput {
    * usando la convención colombiana (INGRESO crédito - GASTO/COSTO débito).
    */
   pretaxIncome?: string | null;
+  /**
+   * Condición del empleador frente al Art. 114-1 E.T. (true beneficiario,
+   * false no beneficiario, null/ausente sin configurar).
+   */
+  employerExonerated114_1?: boolean | null;
+  /** SMMLV del año del período (NUMERIC string); null si no está disponible. */
+  smmlvCop?: string | null;
 }
 
 export function calculateProvisions(
@@ -123,17 +155,6 @@ export function calculateProvisions(
   const skipped: ProvisionsPreview['skipped'] = [];
   const proposedEntries: CreateEntryInput[] = [];
 
-  // Build a fast lookup: code → net balance (crédito - débito para pasivos/ingresos,
-  // o débito - crédito para activos/gastos). Para las bases de provisiones
-  // laborales usamos el SALDO DÉBITO de las cuentas de nómina (clase 5x).
-  const balanceMap = new Map<string, { debit: bigint; credit: bigint }>();
-  for (const b of periodBalances) {
-    balanceMap.set(b.code, {
-      debit: toCentavos(b.totalDebit),
-      credit: toCentavos(b.totalCredit),
-    });
-  }
-
   for (const cfg of configs) {
     if (!cfg.active) {
       skipped.push({ provisionType: cfg.provisionType, reason: 'inactive' });
@@ -143,6 +164,8 @@ export function calculateProvisions(
     // ── Calcular base ────────────────────────────────────────────────────────
 
     let baseCentavos = ZERO;
+    /** Base por centro de costo (clave '' = sin centro de costo). */
+    const baseByCostCenter = new Map<string, bigint>();
 
     if (cfg.provisionType === 'income_tax') {
       // Utilidad antes de impuestos: puede venir precalculada o se computa aquí.
@@ -157,7 +180,18 @@ export function calculateProvisions(
       }
       // Sobre pérdida no hay provisión de renta corriente.
       if (baseCentavos < ZERO) baseCentavos = ZERO;
+      baseByCostCenter.set('', baseCentavos);
     } else {
+      if (cfg.provisionType === 'parafiscales') {
+        // Config legado (Caja + SENA + ICBF agrupados al 9%): no se puede
+        // aplicar la exoneración 114-1 sobre SENA/ICBF sin separar la Caja.
+        skipped.push({
+          provisionType: cfg.provisionType,
+          reason: 'legacy_parafiscales_split',
+        });
+        continue;
+      }
+
       // Provisiones laborales: base = suma de saldos débito de las cuentas en base_account_codes.
       const baseCodePrefixes: string[] = Array.isArray(cfg.baseAccountCodes)
         ? cfg.baseAccountCodes
@@ -172,16 +206,72 @@ export function calculateProvisions(
         continue;
       }
 
-      for (const b of periodBalances) {
-        const matchesPrefix = baseCodePrefixes.some(
-          (prefix) => b.code === prefix || b.code.startsWith(prefix),
-        );
-        if (!matchesPrefix) continue;
-        const bal = balanceMap.get(b.code);
-        if (!bal) continue;
-        // Para cuentas de gasto (débito normal), el saldo neto es débito - crédito.
-        const netDebit = bal.debit > bal.credit ? bal.debit - bal.credit : ZERO;
-        baseCentavos += netDebit;
+      const baseRows = periodBalances
+        .filter((b) =>
+          baseCodePrefixes.some(
+            (prefix) => b.code === prefix || b.code.startsWith(prefix),
+          ),
+        )
+        .map((b) => {
+          const debit = toCentavos(b.totalDebit);
+          const credit = toCentavos(b.totalCredit);
+          // Para cuentas de gasto (débito normal), el saldo neto es débito - crédito.
+          return {
+            net: debit > credit ? debit - credit : ZERO,
+            costCenterId: b.costCenterId ?? null,
+            thirdPartyId: b.thirdPartyId ?? null,
+          };
+        })
+        .filter((r) => r.net > ZERO);
+
+      let eligibleRows = baseRows;
+      if (EXONERABLE_114_1.has(cfg.provisionType)) {
+        const employer = input.employerExonerated114_1;
+        if (employer === null || employer === undefined) {
+          skipped.push({
+            provisionType: cfg.provisionType,
+            reason: 'employer_114_1_unknown',
+          });
+          continue;
+        }
+        if (employer === true) {
+          if (!input.smmlvCop) {
+            skipped.push({
+              provisionType: cfg.provisionType,
+              reason: 'smmlv_not_available',
+            });
+            continue;
+          }
+          if (baseRows.some((r) => r.thirdPartyId === null)) {
+            skipped.push({
+              provisionType: cfg.provisionType,
+              reason: 'worker_detail_required',
+            });
+            continue;
+          }
+          const umbral = toCentavos(input.smmlvCop) * UMBRAL_114_1_SMMLV;
+          const byWorker = new Map<string, bigint>();
+          for (const r of baseRows) {
+            const k = r.thirdPartyId as string;
+            byWorker.set(k, (byWorker.get(k) ?? ZERO) + r.net);
+          }
+          eligibleRows = baseRows.filter(
+            (r) => (byWorker.get(r.thirdPartyId as string) ?? ZERO) >= umbral,
+          );
+          if (eligibleRows.length === 0) {
+            skipped.push({
+              provisionType: cfg.provisionType,
+              reason: 'exonerated_114_1',
+            });
+            continue;
+          }
+        }
+      }
+
+      for (const r of eligibleRows) {
+        const k = r.costCenterId ?? '';
+        baseByCostCenter.set(k, (baseByCostCenter.get(k) ?? ZERO) + r.net);
+        baseCentavos += r.net;
       }
     }
 
@@ -195,7 +285,13 @@ export function calculateProvisions(
 
     // ── Calcular provisión ───────────────────────────────────────────────────
 
-    const provisionCentavos = applyRate(baseCentavos, cfg.rate);
+    // Provisión por centro de costo (la suma de las partes es el total).
+    const perCostCenter: Array<{ costCenterId: string | null; amount: bigint }> = [];
+    for (const [cc, base] of baseByCostCenter) {
+      const amount = applyRate(base, cfg.rate);
+      if (amount > ZERO) perCostCenter.push({ costCenterId: cc || null, amount });
+    }
+    const provisionCentavos = perCostCenter.reduce((acc, p) => acc + p.amount, ZERO);
 
     if (provisionCentavos <= ZERO) {
       skipped.push({
@@ -217,14 +313,16 @@ export function calculateProvisions(
       liabilityAccountCode: cfg.liabilityAccountCode,
     });
 
-    // Una entry por provision_type para legibilidad en el libro mayor.
+    // Una entry por provision_type para legibilidad en el libro mayor: una
+    // línea de gasto por centro de costo y una de pasivo por el total.
     const entryLines: JournalLineInput[] = [
-      {
+      ...perCostCenter.map((p) => ({
         accountId: cfg.expenseAccountId,
-        debit: provStr,
+        costCenterId: p.costCenterId,
+        debit: fromCentavos(p.amount),
         credit: '0.00',
         description: `Provisión ${cfg.provisionType} ${period.year}-${String(period.month).padStart(2, '0')}`,
-      },
+      })),
       {
         accountId: cfg.liabilityAccountId,
         debit: '0.00',

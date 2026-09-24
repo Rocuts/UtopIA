@@ -158,6 +158,14 @@
       "tag": "0022_wp10_ledger_integrity",
       "breakpoints": true,
       "hash": "wp10-ledger-integrity-manual"
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1790208000001,
+      "tag": "0023_wp10_puc_2650_alignment",
+      "breakpoints": true,
+      "hash": "wp10-puc-2650-alignment-manual"
     }
   ]
 }
