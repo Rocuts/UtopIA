@@ -85,6 +85,17 @@ export interface ParsedTable {
   /** Encabezados de columna (primera = "Cuenta", restantes = periodos / variaciones). */
   headers: string[];
   rows: ParsedTableRow[];
+  /**
+   * Fecha de corte (ESF) o periodo cubierto (ERI/EFE/ECP) derivada de los datos
+   * — NIIF para las PYMES 3.23. Nunca supone el 31-dic sin evidencia.
+   */
+  subtitle?: string;
+  /** Moneda de presentación y grado de redondeo. */
+  currencyNote?: string;
+  /** Leyendas visibles (p. ej. comparativo no presentado en este estado). */
+  legends?: string[];
+  /** Notas estructuradas del estado (`*.notes` del JSON validado). */
+  footnotes?: string[];
 }
 
 export interface FinancialStatementsSpec {
@@ -233,6 +244,11 @@ export interface ReportMeta {
   entityType?: string;
   fiscalPeriod: string;
   comparativePeriod?: string;
+  /**
+   * Grupo NIIF declarado en el JSON validado (1 plenas, 2 PYMES, 3 micro).
+   * Decide las citas normativas de los estados; null = no declarado.
+   */
+  niifGroup?: 1 | 2 | 3 | null;
   generatedAt: string;
   language: 'es' | 'en';
   /** Si presente, modifica el CoverPage (BORRADOR amarillo, BLOQUEADO bordeaux). */

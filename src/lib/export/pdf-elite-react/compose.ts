@@ -55,12 +55,15 @@ import {
   renderSignatureBlock,
 } from '@/lib/agents/financial/fiscal-opinion/signatories';
 import {
+  formatStatementNote,
   niifJsonToBalanceTable,
   niifJsonToCashFlowTable,
   niifJsonToEquityTable,
   niifJsonToIncomeTable,
+  type StatementTableContext,
 } from './compose-statements-from-json';
 import { formatCopFromCents } from '@/lib/agents/financial/contracts/money';
+import { resolvePeriodoTipos } from '../statement-presentation';
 
 // ─── v2.2 — Scrubber de metadatos internos (correcciones #6, #11, #12) ───────
 //
@@ -181,7 +184,7 @@ export function composeEditorialReport(input: ComposeInput): EditorialReport {
   const waterfall = { items: buildWaterfall(totals) };
   const dialGauges = { gauges: buildDialGauges(totals) };
   const pillarsSpec = buildPillarsSpec(pillars ?? null);
-  const statements = buildStatements(report);
+  const statements = buildStatements(report, preprocessed);
   const breakEven = buildBreakEven(report);
   const projectedCashFlow = buildProjectedCashFlow(report);
   const notes = { blocks: buildNotes(report) };
@@ -559,12 +562,17 @@ function buildMeta(
     watermark = 'BORRADOR';
   }
 
+  // Identidad desde el JSON validado cuando existe: es la misma fuente de las
+  // columnas de los estados. Antes la portada usaba `report.company` y las
+  // columnas `json.company`, y el gate no las comparaba (reportes-export-10).
+  const jc = report.niifAnalysis?.json?.company;
   return {
-    companyName: report.company?.name ?? 'N/D',
-    nit: report.company?.nit ?? 'N/D',
-    entityType: report.company?.entityType,
-    fiscalPeriod: report.company?.fiscalPeriod ?? 'N/D',
-    comparativePeriod: report.company?.comparativePeriod,
+    companyName: jc?.name ?? report.company?.name ?? 'N/D',
+    nit: jc?.nit ?? report.company?.nit ?? 'N/D',
+    entityType: report.company?.entityType ?? jc?.entityType ?? undefined,
+    fiscalPeriod: jc?.fiscalPeriod ?? report.company?.fiscalPeriod ?? 'N/D',
+    comparativePeriod: jc ? (jc.comparativePeriod ?? undefined) : report.company?.comparativePeriod,
+    niifGroup: jc?.niifGroup ?? null,
     generatedAt: report.generatedAt ?? new Date().toISOString(),
     language,
     ...(watermark ? { watermark } : {}),
@@ -575,7 +583,7 @@ function buildMeta(
 function buildCover(report: FinancialReport, language: 'es' | 'en') {
   const title =
     language === 'en' ? 'Editorial Financial Report' : 'Informe Financiero Editorial';
-  const subtitle = report.company?.name ?? '';
+  const subtitle = report.niifAnalysis?.json?.company.name ?? report.company?.name ?? '';
   return {
     title,
     subtitle,
@@ -966,17 +974,21 @@ function formatPillarValue(kpi: PillarKpi): string {
 
 // ─── Statements ───────────────────────────────────────────────────────────────
 
-function buildStatements(report: FinancialReport) {
+function buildStatements(
+  report: FinancialReport,
+  preprocessed: PreprocessedBalance | null | undefined,
+) {
   // Fase 3.1 — prefer JSON-strict del NIIF Analyst cuando esté disponible.
   // Parser Markdown queda como fallback para reportes legacy ingestados antes
   // del refactor (e.g. reportes históricos en DB / fixtures viejos).
   const json = report.niifAnalysis?.json;
   if (json) {
+    const ctx = statementContext(json.company.fiscalPeriod, json.company.comparativePeriod, preprocessed);
     return {
-      balance: niifJsonToBalanceTable(json),
-      income: niifJsonToIncomeTable(json),
-      cashFlow: niifJsonToCashFlowTable(json),
-      equity: niifJsonToEquityTable(json),
+      balance: niifJsonToBalanceTable(json, ctx),
+      income: niifJsonToIncomeTable(json, ctx),
+      cashFlow: niifJsonToCashFlowTable(json, ctx),
+      equity: niifJsonToEquityTable(json, ctx),
     };
   }
   return {
@@ -987,6 +999,23 @@ function buildStatements(report: FinancialReport) {
   };
 }
 
+/**
+ * Tipo de periodo (año completo / corte parcial) que el preprocesador infirió
+ * del archivo, SÓLO cuando el snapshot corresponde al mismo año del JSON. Sin
+ * esa coincidencia no se afirma una fecha de corte (reportes-export-14).
+ */
+function statementContext(
+  fiscalPeriod: string,
+  comparativePeriod: string | null,
+  preprocessed: PreprocessedBalance | null | undefined,
+): StatementTableContext {
+  const pp = preprocessed as
+    | { primary?: Partial<PeriodSnapshot> | null; comparative?: Partial<PeriodSnapshot> | null }
+    | null
+    | undefined;
+  return resolvePeriodoTipos(fiscalPeriod, comparativePeriod, pp?.primary, pp?.comparative);
+}
+
 // ─── Notes ────────────────────────────────────────────────────────────────────
 
 function buildNotes(report: FinancialReport) {
@@ -994,7 +1023,7 @@ function buildNotes(report: FinancialReport) {
   const sections = parseHeadingSections(md, 2);
   // Fallback to level 3 if level 2 yielded nothing (defensive).
   const eff = sections.length > 0 ? sections : parseHeadingSections(md, 3);
-  return eff.map((s) => {
+  const blocks = eff.map((s) => {
     const body = scrubInternalMetadata(s.body);
     return {
       heading: scrubInternalMetadata(s.heading),
@@ -1002,6 +1031,22 @@ function buildNotes(report: FinancialReport) {
       citations: extractCitations(body),
     };
   });
+
+  // Notas técnicas estructuradas del JSON NIIF validado (mapeo PUC,
+  // reclasificaciones, impracticabilidades). Antes no se exportaban en ningún
+  // formato aunque son parte del contrato (reportes-export-11).
+  const technical = (report.niifAnalysis?.json?.technicalNotes ?? [])
+    .map((n) => scrubInternalMetadata(formatStatementNote(n)))
+    .filter((n) => n.length > 0);
+  if (technical.length > 0) {
+    const body = technical.map((n) => `- ${n}`).join('\n');
+    blocks.push({
+      heading: 'Notas técnicas de los estados financieros',
+      bodyMarkdown: body,
+      citations: extractCitations(body),
+    });
+  }
+  return blocks;
 }
 
 // ─── Break-Even Analysis ──────────────────────────────────────────────────────

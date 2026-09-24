@@ -10,6 +10,7 @@
 import React from 'react';
 import { Page, View, Text, Svg, Circle as SvgCircle } from '@react-pdf/renderer';
 import type { EditorialReport, KpiCell } from '../types';
+import { statementCitations } from '../../statement-presentation';
 import {
   GoldRule,
   MixedWeightHeadline,
@@ -300,11 +301,15 @@ export function KPIGridPage({ doc, pageNumber = 1 }: Props) {
         highlightOpacity={0.35}
       />
 
-      {/* Normative pills */}
+      {/* Normative pills — fuente de los indicadores: ESF y ERI según el grupo
+          NIIF (reportes-export-16). NIIF 18 no está incorporada en Colombia. */}
       <View style={{ flexDirection: 'row', gap: 6, marginTop: S3, marginBottom: S5 }}>
-        <NormativePill label="NIIF 1.10" tone="sage-on-cream" />
-        <NormativePill label="IFRS 18" tone="sage-on-cream" />
-        <NormativePill label="NIIF 7" tone="sage-on-cream" />
+        {[
+          ...statementCitations('balance', doc.meta.niifGroup),
+          ...statementCitations('income', doc.meta.niifGroup),
+        ].map((label) => (
+          <NormativePill key={label} label={label} tone="sage-on-cream" />
+        ))}
       </View>
 
       {/* ── Mega-numeral mode (1–2 KPIs) ─────────────────────────────────── */}

@@ -168,7 +168,9 @@ export function QualityMetaAuditPage({ doc }: Props) {
       <View style={{ flexDirection: 'row', gap: 6, marginTop: S3, marginBottom: S4, flexWrap: 'wrap' }}>
         <NormativePill label="ISO 25012" tone="sage-on-cream" />
         <NormativePill label="ISO 42001" tone="sage-on-cream" />
-        <NormativePill label="IFRS 18" tone="sage-on-cream" />
+        {/* NIIF 18 no está incorporada al marco técnico colombiano vigente: se
+            rotula como preparación futura, no como norma aplicable. */}
+        <NormativePill label="NIIF 18 (no vigente en Colombia)" tone="sage-on-cream" />
         <NormativePill label="IASB CF" tone="sage-on-cream" />
       </View>
 
@@ -224,7 +226,7 @@ export function QualityMetaAuditPage({ doc }: Props) {
           }}
         >
           <Text style={{ fontFamily: FONT_MONO, fontSize: 7, color: SAGE_500, letterSpacing: 1, textTransform: 'uppercase' }}>
-            IFRS 18 Readiness
+            Preparación NIIF 18 (no vigente en Colombia)
           </Text>
           <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: S2, marginTop: S1 }}>
             <Text style={{ fontFamily: FONT_DISPLAY, fontWeight: 'bold', fontSize: 28, color: FOREST_900 }}>

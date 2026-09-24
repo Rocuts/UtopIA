@@ -16,8 +16,55 @@ import type {
   NiifReportJson,
   EquityChangeRowJson,
 } from '@/lib/agents/financial/contracts/niif-report';
-import type { StatementLineJson } from '@/lib/agents/financial/contracts/base';
+import type { StatementLineJson, StatementNoteJson } from '@/lib/agents/financial/contracts/base';
+import {
+  CURRENCY_NOTE,
+  comparativeNotPresentedLegend,
+  incomeTotalLabel,
+  incomeTotalLabelVariants,
+  presentedLineCents,
+  statementDateLabel,
+  type PeriodoTipo,
+} from '../statement-presentation';
 import type { ParsedTable, ParsedTableRow } from './types';
+
+/**
+ * Contexto de presentación que NO vive en el JSON NIIF: el tipo de periodo que
+ * el preprocesador infirió del archivo (año completo o corte parcial). Sin él
+ * la fecha de corte se declara "no identificada" en vez de suponerse.
+ */
+export interface StatementTableContext {
+  primaryPeriodoTipo?: PeriodoTipo | null;
+  comparativePeriodoTipo?: PeriodoTipo | null;
+}
+
+function presentationMeta(
+  json: NiifReportJson,
+  kind: 'position' | 'period',
+  ctx: StatementTableContext | undefined,
+  notes: StatementNoteJson[] | undefined,
+): Pick<ParsedTable, 'subtitle' | 'currencyNote' | 'footnotes'> {
+  const footnotes = (notes ?? []).map(formatStatementNote).filter((n) => n.length > 0);
+  return {
+    subtitle: statementDateLabel(kind, {
+      fiscalPeriod: json.company.fiscalPeriod,
+      comparativePeriod: json.company.comparativePeriod,
+      primaryPeriodoTipo: ctx?.primaryPeriodoTipo ?? null,
+      comparativePeriodoTipo: ctx?.comparativePeriodoTipo ?? null,
+    }),
+    currencyNote: CURRENCY_NOTE,
+    ...(footnotes.length > 0 ? { footnotes } : {}),
+  };
+}
+
+/** Nota estructurada del JSON validado → línea legible "ref — cuerpo (norma)". */
+export function formatStatementNote(n: StatementNoteJson): string {
+  const body = n.body.trim();
+  if (!body) return '';
+  const ref = n.ref?.trim();
+  const norma = n.norma?.trim();
+  return `${ref ? `${ref} — ` : ''}${body}${norma ? ` (${norma})` : ''}`;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -35,14 +82,28 @@ function fmtCop(value: string, absolute: boolean): string {
 // — spec v8.1 §1 patrón "no compara" (TRANSICION).
 const NO_COMPARATIVE_PLACEHOLDER = 'n/c';
 
+/**
+ * Renglón de detalle con su signo. Antes se formateaba con `isAbsolute`, que
+ * borraba el signo de cualquier renglón negativo marcado como absoluto mientras
+ * el Excel lo imprimía negativo: el mismo informe decía cosas distintas. Ahora
+ * todo renglón se imprime firmado (paréntesis NIIF) y las correctoras en
+ * magnitud absoluta se presentan restando (`presentedLineCents`).
+ */
+function fmtLine(line: StatementLineJson, value: string): string {
+  return formatCopFromCents(
+    presentedLineCents(line.account, parseMoneyCop(value), line.isAbsolute),
+    false,
+  );
+}
+
 function lineToRow(line: StatementLineJson, hasComparative: boolean): ParsedTableRow {
   const account = line.account ? `${line.account} — ${line.label}` : line.label;
-  const primary = fmtCop(line.amountPrimary, line.isAbsolute);
+  const primary = fmtLine(line, line.amountPrimary);
   const cells: string[] = [primary];
   if (hasComparative) {
     cells.push(
       line.amountComparative !== null
-        ? fmtCop(line.amountComparative, line.isAbsolute)
+        ? fmtLine(line, line.amountComparative)
         : NO_COMPARATIVE_PLACEHOLDER,
     );
   }
@@ -59,16 +120,25 @@ function buildHeaders(json: NiifReportJson, kind: 'balance' | 'income'): string[
   return headers;
 }
 
+/**
+ * Celdas de un TOTAL — SIEMPRE con signo (paréntesis NIIF para negativos).
+ *
+ * Auditoría 2026-09 (reportes-export-01): esta función formateaba con
+ * `absolute = true`. La corrección de agosto se aplicó en `agents/renderer.ts`
+ * (fmtTotal) y en el Excel, pero no aquí: una pérdida neta, un EBIT negativo o
+ * un patrimonio negativo (causal de disolución) se imprimían positivos en el
+ * PDF mientras el Excel del mismo informe los mostraba negativos.
+ */
 function totalCells(
   primary: string,
   comparative: string | null,
   hasComparative: boolean,
 ): string[] {
-  const cells: string[] = [fmtCop(primary, true)];
+  const cells: string[] = [fmtCop(primary, false)];
   if (hasComparative) {
     cells.push(
       comparative !== null
-        ? fmtCop(comparative, true)
+        ? fmtCop(comparative, false)
         : NO_COMPARATIVE_PLACEHOLDER,
     );
   }
@@ -79,7 +149,10 @@ function totalCells(
 // Tablas
 // ---------------------------------------------------------------------------
 
-export function niifJsonToBalanceTable(json: NiifReportJson): ParsedTable {
+export function niifJsonToBalanceTable(
+  json: NiifReportJson,
+  ctx?: StatementTableContext,
+): ParsedTable {
   const b = json.balanceSheet;
   const hasComparative = json.company.comparativePeriod !== null;
   const rows: ParsedTableRow[] = [];
@@ -115,6 +188,7 @@ export function niifJsonToBalanceTable(json: NiifReportJson): ParsedTable {
     caption: 'Estado de Situación Financiera',
     headers: buildHeaders(json, 'balance'),
     rows,
+    ...presentationMeta(json, 'position', ctx, b.notes),
   };
 }
 
@@ -151,14 +225,11 @@ function buildEquationTrailer(
   // Title row cells: muestran el TOTAL ACTIVOS de cada periodo (la igualdad
   // declarada). El visual ya se acentúa en el renderer por el prefijo del
   // account (✅ / ⚠).
-  const titleCells: string[] = [fmtCop(b.totalAssetsPrimary, true)];
-  if (hasComparative) {
-    titleCells.push(
-      b.totalAssetsComparative !== null
-        ? fmtCop(b.totalAssetsComparative, true)
-        : NO_COMPARATIVE_PLACEHOLDER,
-    );
-  }
+  const titleCells: string[] = totalCells(
+    b.totalAssetsPrimary,
+    b.totalAssetsComparative,
+    hasComparative,
+  );
 
   // Diferencia (debe ser $0,00). Mantenemos signo (absolute=false) para que
   // un descuadre se vea como ($X) — la convención NIIF de paréntesis para
@@ -203,42 +274,87 @@ function buildEquationTrailer(
   ];
 }
 
-export function niifJsonToIncomeTable(json: NiifReportJson): ParsedTable {
+export function niifJsonToIncomeTable(
+  json: NiifReportJson,
+  ctx?: StatementTableContext,
+): ParsedTable {
   const p = json.incomeStatement;
   const hasComparative = json.company.comparativePeriod !== null;
   const rows: ParsedTableRow[] = p.lines.map((l) => lineToRow(l, hasComparative));
-  // Append los totales emphasized si no vinieron como líneas.
-  const accounts = new Set(rows.map((r) => r.account.toUpperCase()));
-  const pushTotal = (label: string, primary: string, comp: string | null) => {
-    if (accounts.has(label.toUpperCase())) return;
+  // Append los totales emphasized si no vinieron como líneas. Se comparan las
+  // DOS variantes del rótulo (utilidad / pérdida) para no duplicar un total que
+  // el analista ya emitió con el rótulo del signo contrario.
+  const accounts = new Set(rows.map((r) => normalizeLabel(r.account)));
+  const pushTotal = (label: string, variants: string[], primary: string, comp: string | null) => {
+    if (variants.some((v) => accounts.has(normalizeLabel(v)))) return;
     rows.push({
       account: label,
       cells: totalCells(primary, comp, hasComparative),
       emphasis: 'total',
     });
   };
-  pushTotal('UTILIDAD BRUTA', p.grossProfitPrimary, p.grossProfitComparative);
-  pushTotal('UTILIDAD OPERATIVA (EBIT)', p.operatingProfitPrimary, p.operatingProfitComparative);
-  pushTotal('UTILIDAD NETA DEL PERÍODO', p.netIncomePrimary, p.netIncomeComparative);
+  for (const [kind, primary, comp] of [
+    ['gross', p.grossProfitPrimary, p.grossProfitComparative],
+    ['operating', p.operatingProfitPrimary, p.operatingProfitComparative],
+    ['net', p.netIncomePrimary, p.netIncomeComparative],
+  ] as const) {
+    pushTotal(
+      incomeTotalLabel(kind, parseMoneyCop(primary)),
+      incomeTotalLabelVariants(kind),
+      primary,
+      comp,
+    );
+  }
+
+  // Enfoque de un único estado (NIIF para las PYMES 5.5 / NIC 1.81A): el ERI
+  // "Integral" presenta el ORI y el resultado integral total. Antes sólo se
+  // listaba hasta la utilidad neta y el ORI desaparecía (reportes-export-15).
+  const hasTotalIntegral = rows.some((r) =>
+    normalizeLabel(r.account).startsWith('RESULTADO INTEGRAL TOTAL'),
+  );
+  pushTotal('OTRO RESULTADO INTEGRAL', ['OTRO RESULTADO INTEGRAL'], p.oriPrimary, p.oriComparative);
+  if (!hasTotalIntegral) {
+    const sum = (a: string | null, b: string | null): string | null =>
+      a !== null && b !== null ? (parseMoneyCop(a) + parseMoneyCop(b)).toString(10) : null;
+    pushTotal(
+      'RESULTADO INTEGRAL TOTAL',
+      ['RESULTADO INTEGRAL TOTAL'],
+      sum(p.netIncomePrimary, p.oriPrimary) ?? p.netIncomePrimary,
+      sum(p.netIncomeComparative, p.oriComparative),
+    );
+  }
 
   return {
     caption: 'Estado de Resultados Integral',
     headers: buildHeaders(json, 'income'),
     rows,
+    ...presentationMeta(json, 'period', ctx, p.notes),
   };
 }
 
-export function niifJsonToCashFlowTable(json: NiifReportJson): ParsedTable {
+function normalizeLabel(label: string): string {
+  return label
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+}
+
+export function niifJsonToCashFlowTable(
+  json: NiifReportJson,
+  ctx?: StatementTableContext,
+): ParsedTable {
   const cf = json.cashFlow;
   const sectionLabel = {
     operating: 'ACTIVIDADES DE OPERACIÓN',
     investing: 'ACTIVIDADES DE INVERSIÓN',
     financing: 'ACTIVIDADES DE FINANCIAMIENTO',
   } as const;
-  // EFE en la plantilla editorial v8.1 se presenta single-period (la
-  // variación domina vs el saldo comparativo en flujos), por eso
-  // hasComparative=false aquí incluso si el reporte trae comparativo en
-  // Balance/P&L.
+  // El contrato NIIF no trae netFlow / cashOpening / cashClosing del periodo
+  // comparativo, así que el EFE se presenta con una sola columna. Cuando el
+  // informe declara comparativo eso se dice en una leyenda visible en lugar de
+  // descartar el comparativo en silencio (reportes-export-13).
   const rows: ParsedTableRow[] = [];
   for (const s of cf.sections) {
     rows.push({ account: sectionLabel[s.section], cells: [], emphasis: 'subtotal' });
@@ -254,20 +370,28 @@ export function niifJsonToCashFlowTable(json: NiifReportJson): ParsedTable {
     cells: [fmtCop(cf.netChange, false)],
     emphasis: 'total',
   });
-  rows.push({ account: 'Efectivo al inicio del período', cells: [fmtCop(cf.cashOpening, true)] });
+  // Saldos de efectivo con signo: un sobregiro presentado en caja no debe
+  // imprimirse positivo.
+  rows.push({ account: 'Efectivo al inicio del período', cells: [fmtCop(cf.cashOpening, false)] });
   rows.push({
     account: 'EFECTIVO AL FINAL DEL PERÍODO',
-    cells: [fmtCop(cf.cashClosing, true)],
+    cells: [fmtCop(cf.cashClosing, false)],
     emphasis: 'total',
   });
+  const legend = comparativeNotPresentedLegend(json.company.comparativePeriod);
   return {
     caption: 'Estado de Flujos de Efectivo (Método Indirecto)',
     headers: ['Concepto', json.company.fiscalPeriod],
     rows,
+    ...presentationMeta(json, 'period', ctx, undefined),
+    ...(legend ? { legends: [legend] } : {}),
   };
 }
 
-export function niifJsonToEquityTable(json: NiifReportJson): ParsedTable {
+export function niifJsonToEquityTable(
+  json: NiifReportJson,
+  ctx?: StatementTableContext,
+): ParsedTable {
   const ec = json.equityChanges;
   const headers = [
     'Movimiento',
@@ -297,9 +421,12 @@ export function niifJsonToEquityTable(json: NiifReportJson): ParsedTable {
     ];
     return bold ? { account: r.label, cells, emphasis: 'total' } : { account: r.label, cells };
   };
+  const legend = comparativeNotPresentedLegend(json.company.comparativePeriod);
   return {
     caption: 'Estado de Cambios en el Patrimonio',
     headers,
     rows: ec.rows.map(rowToRow),
+    ...presentationMeta(json, 'period', ctx, ec.notes),
+    ...(legend ? { legends: [legend] } : {}),
   };
 }

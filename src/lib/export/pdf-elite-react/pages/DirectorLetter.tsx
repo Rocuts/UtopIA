@@ -41,10 +41,11 @@ interface Props {
 }
 
 // Letter-level citations pinned per spec §3.2 (always shown on this page).
+// Sin 'IFRS 18': la NIIF 18 no está incorporada al marco técnico colombiano
+// vigente (reportes-export-16).
 const FIXED_CITATIONS = [
   { label: 'NIA 700' },
   { label: 'Ley 222/1995' },
-  { label: 'IFRS 18' },
 ];
 
 /**

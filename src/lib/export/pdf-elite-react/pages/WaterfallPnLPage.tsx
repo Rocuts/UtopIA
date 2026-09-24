@@ -6,6 +6,7 @@
 import React from 'react';
 import { Page, View, Text } from '@react-pdf/renderer';
 import type { EditorialReport } from '../types';
+import { statementCitations } from '../../statement-presentation';
 import {
   GoldRule,
   MixedWeightHeadline,
@@ -78,8 +79,9 @@ export function WaterfallPnLPage({ doc, pageNumber = 1 }: Props) {
 
       {/* Normative pills */}
       <View style={{ flexDirection: 'row', gap: 6, marginTop: S3, marginBottom: S4 }}>
-        <NormativePill label="IAS 1.81" tone="sage-on-cream" />
-        <NormativePill label="NIIF 5.36" tone="sage-on-cream" />
+        {statementCitations('income', doc.meta.niifGroup).map((label) => (
+          <NormativePill key={label} label={label} tone="sage-on-cream" />
+        ))}
       </View>
 
       {/* Two-column layout: chart (left) + commentary (right) */}
@@ -91,7 +93,6 @@ export function WaterfallPnLPage({ doc, pageNumber = 1 }: Props) {
 
         {/* Right commentary column */}
         <View style={{ width: 180, paddingTop: S4 }}>
-          <NormativePill label="NIIF 1.10" tone="sage-on-cream" />
           <NormativePill label="Art. 26 E.T." tone="sage-on-cream" />
 
           <Text
