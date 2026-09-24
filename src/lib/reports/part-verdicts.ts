@@ -348,6 +348,104 @@ function strategyVerdict(
 }
 
 // ---------------------------------------------------------------------------
+// Identidad de las Partes II y III (I5-2)
+// ---------------------------------------------------------------------------
+// El encabezado del dashboard (Parte II) y del acta (Parte III) imprimen
+// `json.company` de SU propio JSON, que escribe el modelo (o reenvía el
+// cliente). El gate de exportación sólo cruzaba `report.company` con el JSON
+// NIIF: una Parte II/III de otra empresa u otro periodo salía con el
+// encabezado ajeno. Aquí se cruza nombre, NIT y periodo de cada Parte con los
+// de los estados financieros (JSON NIIF; sin él, `report.company`) y la Parte
+// que no coincide se sella. Normalización sin falsos positivos: el nombre se
+// compara sin tildes, mayúsculas, puntuación ni espacios ("S.A.S." = "SAS") y
+// el NIT por sus dígitos, admitiendo que uno de los dos traiga el DV.
+// ---------------------------------------------------------------------------
+
+/** Identidad contra la que se cruzan las Partes II/III. */
+export interface CompanyIdentity {
+  name: string;
+  nit: string;
+  fiscalPeriod: string;
+}
+
+function companyNameKey(name: string): string {
+  return name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^0-9A-Za-z]/g, '')
+    .toUpperCase();
+}
+
+/** NIT comparable: sólo dígitos; admite que uno de los dos incluya el DV. */
+function sameNit(a: string, b: string): boolean {
+  const da = a.replace(/\D/g, '');
+  const db = b.replace(/\D/g, '');
+  if (!da || !db) return da === db;
+  if (da === db) return true;
+  const [longer, shorter] = da.length > db.length ? [da, db] : [db, da];
+  return longer.length === shorter.length + 1 && longer.startsWith(shorter);
+}
+
+/**
+ * Motivos por los que la identidad declarada por la Parte II/III (`company`
+ * de su JSON) no es la de los estados financieros (`reference`). Vacío si
+ * coincide o si falta alguno de los dos.
+ */
+export function partIdentityMotivos(
+  part: 'II' | 'III',
+  company: Partial<CompanyIdentity> | null | undefined,
+  reference: CompanyIdentity | null | undefined,
+  language: 'es' | 'en' = 'es',
+): string[] {
+  if (!company || !reference) return [];
+  const en = language === 'en';
+  const out: string[] = [];
+  if (typeof company.name === 'string' && companyNameKey(company.name) !== companyNameKey(reference.name)) {
+    out.push(
+      en
+        ? `Identity: Part ${part} names the company "${company.name}", which differs from the financial statements ("${reference.name}").`
+        : `Identidad: la Parte ${part} declara la empresa "${company.name}", distinta de la de los estados financieros ("${reference.name}").`,
+    );
+  }
+  if (typeof company.nit === 'string' && !sameNit(company.nit, reference.nit)) {
+    out.push(
+      en
+        ? `Identity: Part ${part} tax ID (${company.nit}) does not match the financial statements (${reference.nit}).`
+        : `Identidad: el NIT de la Parte ${part} (${company.nit}) no coincide con el de los estados financieros (${reference.nit}).`,
+    );
+  }
+  if (typeof company.fiscalPeriod === 'string' && company.fiscalPeriod.trim() !== reference.fiscalPeriod.trim()) {
+    out.push(
+      en
+        ? `Identity: Part ${part} period (${company.fiscalPeriod}) does not match the financial statements (${reference.fiscalPeriod}).`
+        : `Identidad: el periodo de la Parte ${part} (${company.fiscalPeriod}) no coincide con el de los estados financieros (${reference.fiscalPeriod}).`,
+    );
+  }
+  return out;
+}
+
+/** Identidad de referencia: la del JSON NIIF; sin él, la de `report.company`. */
+function referenceIdentity(niifJson: unknown, company: CompanyInfo | undefined): CompanyIdentity | null {
+  const niif = parseNiif(niifJson);
+  if (niif) return { name: niif.company.name, nit: niif.company.nit, fiscalPeriod: niif.company.fiscalPeriod };
+  if (company && typeof company.name === 'string' && typeof company.nit === 'string' && typeof company.fiscalPeriod === 'string') {
+    return { name: company.name, nit: company.nit, fiscalPeriod: company.fiscalPeriod };
+  }
+  return null;
+}
+
+/** Motivos de identidad de cada Parte con JSON válido (las demás se sellan aparte). */
+export interface ServerIdentityChecks {
+  strategy: string[];
+  governance: string[];
+}
+
+function withIdentity<T extends PartVerdict>(verdict: T, identity: readonly string[]): T {
+  if (identity.length === 0) return verdict;
+  return { ...verdict, clean: false, motivos: Array.from(new Set([...verdict.motivos, ...identity])) };
+}
+
+// ---------------------------------------------------------------------------
 // Parte I: invariantes del JSON NIIF recalculados (mismo canal que la fase)
 // ---------------------------------------------------------------------------
 
@@ -414,6 +512,8 @@ export interface ServerPartChecks {
   niif: ServerNiifIntegrity | null;
   strategy: (StrategyAnchorCheck & { json: StrategyReportJson }) | null;
   acta: ServerActaChecks | null;
+  /** Identidad de las Partes II/III contra los estados financieros (I5-2). */
+  identity: ServerIdentityChecks;
 }
 
 export function serverPartChecks(
@@ -427,11 +527,18 @@ export function serverPartChecks(
     niifJson: report.niifAnalysis.json,
     language,
   };
+  const strategy = serverStrategyCheck(report.strategicAnalysis.json, sources);
+  const reference = referenceIdentity(report.niifAnalysis.json, report.company);
+  const governanceJson = isValidGovernanceJson(report.governance.json) ? report.governance.json : null;
   return {
     sources,
     niif: serverNiifIntegrity(report.niifAnalysis.json, report.niifAnalysis.reconciliation, preprocessed),
-    strategy: serverStrategyCheck(report.strategicAnalysis.json, sources),
+    strategy,
     acta: serverActaChecks(report.governance.json, sources),
+    identity: {
+      strategy: partIdentityMotivos('II', strategy?.json.company, reference, language),
+      governance: partIdentityMotivos('III', governanceJson?.company, reference, language),
+    },
   };
 }
 
@@ -453,13 +560,21 @@ export function applyServerPartVerdicts(
 ): FinancialReport {
   const language = checks.sources.language ?? 'es';
   const seal = options.sealUnstructuredParts !== false;
+  const identity = checks.identity ?? { strategy: [], governance: [] };
+  const actaVerdict = seal
+    ? governanceVerdict(report.governance, checks.acta, language)
+    : checks.acta
+      ? actaVerdictOf(checks.acta)
+      : identity.governance.length > 0
+        ? { clean: true, motivos: [] }
+        : null;
   const governance = withServerActaVerdict(
     report.governance,
-    seal ? governanceVerdict(report.governance, checks.acta, language) : checks.acta ? actaVerdictOf(checks.acta) : null,
+    actaVerdict ? withIdentity(actaVerdict, identity.governance) : null,
   );
   const strategicAnalysis = withServerStrategyVerdict(
     report.strategicAnalysis,
-    seal || checks.strategy ? strategyVerdict(checks.strategy, language) : null,
+    seal || checks.strategy ? withIdentity(strategyVerdict(checks.strategy, language), identity.strategy) : null,
   );
   const niifAnalysis: NiifAnalysisResult = {
     ...report.niifAnalysis,

@@ -124,6 +124,26 @@ function unverifiableSeal(part: 'I' | 'II' | 'III', motivo: string, language: 'e
   ].join('\n');
 }
 
+/**
+ * Sello de identidad (I5-2): la Parte II/III declara una empresa, un NIT o un
+ * periodo distintos de los de los estados financieros.
+ */
+function identitySeal(part: 'II' | 'III', motivos: readonly string[], language: 'es' | 'en'): string {
+  const en = language === 'en';
+  return [
+    en ? `> ## PART ${part} WITH QUALIFICATIONS — IDENTITY` : `> ## PARTE ${part} CON SALVEDADES — IDENTIDAD`,
+    '>',
+    en
+      ? '> The company or the period of this section do not match those of the financial statements. ' +
+        'This section is NOT issuable as is:'
+      : '> La empresa o el periodo de esta sección no coinciden con los de los estados financieros. ' +
+        'Esta sección NO es emitible tal como está:',
+    '>',
+    ...motivos.map((m) => `> - ${m}`),
+    '',
+  ].join('\n');
+}
+
 // ---------------------------------------------------------------------------
 // Parte I
 // ---------------------------------------------------------------------------
@@ -235,8 +255,17 @@ export function renderStrategyPart(
     fullContent = `${notice}\n${fullContent}`;
   }
   const verdict = readStrategyQualifications(strategic);
-  if (verdict && !verdict.clean) {
-    const seal = buildStrategyQualificationSeal(verdict.motivos, language);
+  // La identidad (I5-2) lleva su propio sello; el de cifras sólo lista las
+  // demás salvedades (el texto de la fase, que no cruza identidad).
+  const identity = checks.identity?.strategy ?? [];
+  const figureMotivos = (verdict?.motivos ?? []).filter((m) => !identity.includes(m));
+  if (verdict && !verdict.clean && figureMotivos.length > 0) {
+    const seal = buildStrategyQualificationSeal(figureMotivos, language);
+    kpiDashboard = `${seal}\n${kpiDashboard}`;
+    fullContent = `${seal}\n${fullContent}`;
+  }
+  if (identity.length > 0) {
+    const seal = identitySeal('II', identity, language);
     kpiDashboard = `${seal}\n${kpiDashboard}`;
     fullContent = `${seal}\n${fullContent}`;
   }
@@ -317,8 +346,17 @@ export function renderGovernancePart(
   // toca como efecto): se restituye el endurecido.
   out.actaQualifications = governance.actaQualifications;
   const verdict = governance.actaQualifications;
-  if (!sealed && verdict?.clean === false) {
-    const seal = governanceGenericSeal(Array.isArray(verdict.motivos) ? verdict.motivos : [], language);
+  // La identidad (I5-2) lleva su propio sello; el genérico sólo lista las
+  // demás salvedades que ningún cruce del servidor explica.
+  const identity = checks.identity?.governance ?? [];
+  const otherMotivos = (Array.isArray(verdict?.motivos) ? verdict.motivos : []).filter((m) => !identity.includes(m));
+  if (!sealed && verdict?.clean === false && (otherMotivos.length > 0 || identity.length === 0)) {
+    const seal = governanceGenericSeal(otherMotivos, language);
+    out.shareholderMinutes = `${seal}\n${out.shareholderMinutes}`;
+    out.fullContent = `${seal}\n${out.fullContent}`;
+  }
+  if (identity.length > 0) {
+    const seal = identitySeal('III', identity, language);
     out.shareholderMinutes = `${seal}\n${out.shareholderMinutes}`;
     out.fullContent = `${seal}\n${out.fullContent}`;
   }
