@@ -295,3 +295,77 @@ describe('/api/upload — códigos repetidos (ingesta-12)', () => {
     expect(r.preprocessed!.comparative!.controlTotals.activo).toBe(800_000);
   });
 });
+
+// ---------------------------------------------------------------------------
+// P4 (a) — unidad declarada "en miles / millones" con confirmación explícita.
+// Sin `unitMultiplier` el upload devuelve la unidad detectada y el motivo
+// bloqueante; con la confirmación reexpresa en centavos exactos y `rawData`
+// lleva la directiva que leen /niif, Stage 0 y /export.
+// ---------------------------------------------------------------------------
+describe('/api/upload — unidad declarada con confirmación (P4-a)', () => {
+  const CSV_MILES = [
+    'codigo,nombre,Saldo 2025 (miles de pesos)',
+    ...BASE.map(([c, n, v]) => `${c},"${n}",${v}`),
+  ].join('\n');
+
+  async function uploadWith(
+    bytes: string,
+    filename: string,
+    unitMultiplier: string,
+  ): Promise<{ status: number; json: UploadJson & { error?: string; unit?: unknown } }> {
+    const fd = new FormData();
+    fd.append('file', new File([new Blob([bytes])], filename));
+    fd.append('context', 'test');
+    fd.append('unitMultiplier', unitMultiplier);
+    const res = await POST(new Request('http://localhost/api/upload', { method: 'POST', body: fd }));
+    return { status: res.status, json: (await res.json()) as UploadJson & { error?: string; unit?: unknown } };
+  }
+
+  it('sin confirmación: informa la unidad detectada y el balance sigue bloqueado con el motivo', async () => {
+    const r = (await upload(CSV_MILES, 'balance.csv')) as UploadJson & { unit?: unknown };
+    expect(r.unit).toEqual({
+      declared: 'miles',
+      declaredText: 'Saldo 2025 (miles de pesos)',
+      confirmed: null,
+      requiresConfirmation: true,
+    });
+    const primary = r.preprocessed!.primary as unknown as {
+      validation: { blocking: boolean; integrityReasons?: string[] };
+    };
+    expect(primary.validation.blocking).toBe(true);
+    expect(primary.validation.integrityReasons!.join(' ')).toMatch(/declara las cifras en miles de pesos/);
+    expect(r.rawData).toBe(CSV_MILES);
+  });
+
+  it('con unitMultiplier=1000: cifras × 1.000 exactas, nota visible y rawData con la directiva', async () => {
+    const { status, json } = await uploadWith(CSV_MILES, 'balance.csv', '1000');
+    expect(status).toBe(200);
+    expect(json.unit).toEqual({
+      declared: 'miles',
+      declaredText: 'Saldo 2025 (miles de pesos)',
+      confirmed: 'miles',
+      requiresConfirmation: false,
+    });
+    expect(json.rawData!.split('\n')[0]).toBe('[unidad-confirmada=miles]');
+    expect(json.preprocessed!.primary.controlTotals.activo).toBe(1_000_000_000);
+    expect(json.validationReport).toMatch(/reexpresadas de miles de pesos a pesos/);
+    // El servidor del informe re-deriva lo mismo desde rawData.
+    const reparsed = preprocessTrialBalance(parseUploadedTrialBalanceText(json.rawData!).rows);
+    expect(reparsed.primary.controlTotals.activo).toBe(1_000_000_000);
+    expect(reparsed.primary.validation.blocking).toBe(false);
+  });
+
+  it('unitMultiplier inválido o en un documento no tabular: 400 explícito', async () => {
+    expect((await uploadWith(CSV_MILES, 'balance.csv', '100')).status).toBe(400);
+    const txt = await uploadWith('Acta de asamblea', 'acta.txt', '1000');
+    expect(txt.status).toBe(400);
+    expect(txt.json.error).toMatch(/sólo aplica a balances/);
+  });
+
+  it('documento no contable: unit es null', async () => {
+    const r = (await upload('Acta de asamblea\nSe aprueba el orden del día.', 'acta.txt')) as UploadJson & {
+      unit?: unknown;
+    };
+    expect(r.unit).toBeNull();
+  });
+});

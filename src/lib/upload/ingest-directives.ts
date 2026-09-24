@@ -50,6 +50,40 @@ export function unidadDesdeMultiplicador(multiplicador: unknown): UnidadMonetari
   return null;
 }
 
+/**
+ * Lee el campo de confirmación de unidad de una solicitud (`unitMultiplier`
+ * de /api/upload y /niif): 1, 1000 o 1000000 (número o texto) o el nombre de
+ * la unidad. Ausente o vacío = sin confirmación. Cualquier otro valor es un
+ * error explícito (400), nunca se ignora.
+ */
+export function leerCampoUnidad(
+  value: unknown,
+): { ok: true; unidad: UnidadMonetaria | null } | { ok: false; error: string } {
+  if (value === undefined || value === null || value === '') return { ok: true, unidad: null };
+  if (esUnidadMonetaria(value)) return { ok: true, unidad: value };
+  const n = typeof value === 'string' && /^\d+$/.test(value.trim()) ? Number(value.trim()) : value;
+  const unidad = unidadDesdeMultiplicador(n);
+  if (unidad) return { ok: true, unidad };
+  return {
+    ok: false,
+    error: 'unitMultiplier debe ser 1 (pesos), 1000 (miles) o 1000000 (millones).',
+  };
+}
+
+/**
+ * Unidad de los importes que informa /api/upload (P4-a). `declared` es la
+ * unidad distinta de pesos que declara el archivo (encabezado, título o nota)
+ * y `declaredText` el texto donde se leyó; `confirmed` la unidad que confirmó
+ * el usuario. Con `requiresConfirmation` el balance queda bloqueado hasta que
+ * el usuario elija pesos / miles / millones.
+ */
+export interface UploadUnitInfo {
+  declared: 'miles' | 'millones' | null;
+  declaredText: string | null;
+  confirmed: UnidadMonetaria | null;
+  requiresConfirmation: boolean;
+}
+
 export function esUnidadMonetaria(value: unknown): value is UnidadMonetaria {
   return typeof value === 'string' && (UNIDADES_MONETARIAS as readonly string[]).includes(value);
 }

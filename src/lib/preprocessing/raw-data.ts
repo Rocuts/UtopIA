@@ -37,7 +37,10 @@
 // ---------------------------------------------------------------------------
 
 import {
+  escribirDirectivasIngesta,
+  esVencimiento,
   leerDirectivasIngesta,
+  motivoCodigoVencimientoInvalido,
   type UnidadMonetaria,
   type Vencimiento,
 } from '@/lib/upload/ingest-directives';
@@ -465,6 +468,13 @@ function resolveConfirmations(
   }
   const vencimientos: Record<string, Vencimiento> = { ...(lectura.vencimientos ?? {}) };
   for (const [codigo, plazo] of Object.entries(options.vencimientos ?? {})) {
+    const invalido = motivoCodigoVencimientoInvalido(codigo);
+    if (invalido || !esVencimiento(plazo)) {
+      errores.push(
+        `Excepción de vencimiento inválida en la solicitud: ${invalido ?? `${codigo} debe ser corriente o no_corriente.`}`,
+      );
+      continue;
+    }
     if (codigo in vencimientos && vencimientos[codigo] !== plazo) {
       errores.push(`La cuenta ${codigo} tiene vencimientos distintos en el balance y en la solicitud.`);
       continue;
@@ -477,6 +487,26 @@ function resolveConfirmations(
     unidadConfirmada,
     vencimientos: Object.keys(vencimientos).length > 0 ? vencimientos : null,
   };
+}
+
+/**
+ * Incorpora al texto del balance las confirmaciones que llegan como campos de
+ * la solicitud (`unitMultiplier` / `maturityOverrides` de /niif, P4): se
+ * escriben como directivas al inicio para que TODA superficie que re-deriva
+ * el balance desde `rawData` (Stage 0, agentes, /export) lea la misma
+ * confirmación. Una contradicción con las directivas que ya trae el texto, una
+ * directiva mal formada o un código que no es de activo o pasivo lanza
+ * `TrialBalanceIngestError` (422): nunca se elige una fuente en silencio. Sin
+ * opciones devuelve el texto intacto.
+ */
+export function incorporarConfirmaciones(text: string, options: ParseUploadedOptions): string {
+  const tieneVencimientos = Object.keys(options.vencimientos ?? {}).length > 0;
+  if (!options.unidadConfirmada && !tieneVencimientos) return text;
+  const confirm = resolveConfirmations(text, options);
+  return escribirDirectivasIngesta(confirm.body, {
+    unidadConfirmada: confirm.unidadConfirmada,
+    vencimientos: confirm.vencimientos,
+  });
 }
 
 /**

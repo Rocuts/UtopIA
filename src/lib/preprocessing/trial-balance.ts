@@ -1592,8 +1592,9 @@ function motivoUnidadDeclarada(d: { unidad: UnidadDeclarada; texto: string }): s
   const factor = d.unidad === 'miles' ? '1.000' : '1.000.000';
   return (
     `El archivo declara las cifras en ${d.unidad} de pesos («${d.texto}»). UtopIA lee cada ` +
-    'importe como pesos colombianos: confirme la unidad y cargue el balance con los importes ' +
-    `en pesos (× ${factor}). Las cifras no se reescalan ni se publican en silencio.`
+    'importe como pesos colombianos: confirme la unidad (pesos / miles / millones) en el ' +
+    'formulario del informe o con el parámetro `unit` del API v1, o cargue el balance con los ' +
+    `importes en pesos (× ${factor}). Sin confirmación las cifras no se reexpresan ni se publican.`
   );
 }
 
@@ -3622,6 +3623,66 @@ function decimalACentavosEscalados(normalized: string, exponente: number): bigin
   const q = digits / divisor;
   const r = digits % divisor;
   return r * BigInt(2) >= divisor ? q + BigInt(1) : q;
+}
+
+/**
+ * Texto decimal exacto de un número JS (`Number#toString` da la representación
+ * decimal más corta que vuelve al mismo `number`, la que envió el cliente en
+ * JSON), sin notación exponencial: `1.5e-7` → `0.00000015`, `1e+21` → `1` + 21
+ * ceros. Sin signo.
+ */
+function decimalDeNumero(value: number): string {
+  const text = Math.abs(value).toString();
+  const m = /^(\d+)(?:\.(\d+))?e([+-]\d+)$/i.exec(text);
+  if (!m) return text;
+  const digits = m[1] + (m[2] ?? '');
+  const pointPos = m[1].length + parseInt(m[3], 10);
+  if (pointPos <= 0) return `0.${'0'.repeat(-pointPos)}${digits}`;
+  if (pointPos >= digits.length) return digits + '0'.repeat(pointPos - digits.length);
+  return `${digits.slice(0, pointPos)}.${digits.slice(pointPos)}`;
+}
+
+/**
+ * Reexpresa a pesos las filas estructuradas del API v1 (`rows` con
+ * `unit`, P4-a): cada saldo se multiplica por 10^3 / 10^6 desde su texto
+ * decimal en centavos exactos (BigInt), igual que el parser con
+ * `unidadConfirmada`, y la primera fila lleva la nota de ingesta visible.
+ * Un saldo que tras reexpresarlo excede el rango de 2^53 centavos no se
+ * convierte: se devuelve como error de validación (nunca se publica
+ * aproximado). `'pesos'` o `null` devuelven las filas tal cual.
+ */
+export function reexpresarFilasPorUnidad(
+  rows: RawAccountRow[],
+  unidad: UnidadMonetaria | null | undefined,
+): { rows: RawAccountRow[]; errores: Array<{ index: number; period: string; message: string }> } {
+  if (!unidad || unidad === 'pesos') return { rows, errores: [] };
+  const exponente = EXPONENTE_UNIDAD[unidad];
+  const errores: Array<{ index: number; period: string; message: string }> = [];
+  const out = rows.map((row, index) => {
+    const balancesByPeriod: Record<string, number> = {};
+    for (const [period, value] of Object.entries(row.balancesByPeriod)) {
+      const cents = Number.isFinite(value) ? decimalACentavosEscalados(decimalDeNumero(value), exponente) : null;
+      if (cents === null || cents > BigInt(Number.MAX_SAFE_INTEGER)) {
+        errores.push({
+          index,
+          period,
+          message:
+            `Cuenta ${row.code}: el saldo ${value} (${unidad} de pesos) del periodo ${period} queda fuera ` +
+            'del rango de precisión monetaria soportado (más de 2^53 centavos) al reexpresarlo a pesos.',
+        });
+        balancesByPeriod[period] = value;
+        continue;
+      }
+      const pesos = Number(cents) / 100;
+      balancesByPeriod[period] = cents === BigInt(0) ? 0 : value < 0 ? -pesos : pesos;
+    }
+    return { ...row, balancesByPeriod };
+  });
+  const nota = notaUnidadConfirmada(null, unidad);
+  if (nota && out.length > 0) {
+    out[0] = { ...out[0], notasIngesta: [...(out[0].notasIngesta ?? []), { period: null, message: nota }] };
+  }
+  return { rows: out, errores };
 }
 
 function parseAmountCell(val: string | undefined | null, exponente = 0): AmountCell {
