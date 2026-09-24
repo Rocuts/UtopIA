@@ -678,13 +678,17 @@ export function foldServerEmittability(
     };
   }
   const validation = report.validation?.ok === false ? report.validation : server.validation;
-  const textBlockers = server.emittability.blockers.filter((b) => TEXT_GATE_CODES.has(b.code));
+  const received = client?.kind === 'no-emitible' ? client.blockers : [];
+  const seen = new Set(received.map((b) => `${b.code}\u0000${b.message}`));
+  const textBlockers = server.emittability.blockers.filter(
+    (b) => TEXT_GATE_CODES.has(b.code) && !seen.has(`${b.code}\u0000${b.message}`),
+  );
   if (textBlockers.length === 0) return { validation, ...(sanitized ? { emittability: sanitized } : {}) };
   return {
     validation,
     emittability: {
       kind: 'no-emitible',
-      blockers: [...(client?.kind === 'no-emitible' ? client.blockers : []), ...textBlockers],
+      blockers: [...received, ...textBlockers],
       suggestedAdjustments: client?.kind === 'no-emitible' ? client.suggestedAdjustments : [],
     },
   };

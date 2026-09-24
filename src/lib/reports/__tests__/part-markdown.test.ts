@@ -18,6 +18,7 @@ import { preprocessUploadedTrialBalanceText } from '@/lib/preprocessing/raw-data
 import type { FinancialReport } from '@/lib/agents/financial/types';
 import {
   buildServerConsolidatedReport,
+  foldServerEmittability,
   provisionalReasonOf,
   withServerPartsInConsolidated,
   withServerRenderedParts,
@@ -156,5 +157,33 @@ describe('consolidado', () => {
       report: rendered, preprocessed: pp, language: 'es', clientConsolidated: `# X ${FAKE}`,
     }).consolidatedReport;
     expect(noDraft.startsWith('# REPORTE FINANCIERO CONSOLIDADO')).toBe(true);
+  });
+});
+
+describe('foldServerEmittability (revisión I3)', () => {
+  const server = (blockers: Array<{ code: string; message: string }>) => ({
+    consolidatedReport: '',
+    validation: { ok: true, errors: [], warnings: [] },
+    emittability: { kind: blockers.length ? ('no-emitible' as const) : ('emittable' as const), blockers, suggestedAdjustments: [] },
+  });
+  const base = report();
+
+  it('sólo endurece: bloqueante de texto del servidor → no emitible; uno de balance no sustituye al recibido', () => {
+    const v10 = { code: 'V10', message: 'V10: TTD' };
+    const v5 = { code: 'V5', message: 'V5: identidad' };
+    const clean = { ...base, emittability: { kind: 'emittable' as const, blockers: [], suggestedAdjustments: [] } };
+    expect(foldServerEmittability(clean, server([v10]) as never, pp).emittability).toEqual({
+      kind: 'no-emitible', blockers: [v10], suggestedAdjustments: [],
+    });
+    expect(foldServerEmittability(clean, server([v5]) as never, pp).emittability?.kind).toBe('emittable');
+    // Un no emitible recibido se conserva y no duplica el bloqueante.
+    const blocked = { ...base, emittability: { kind: 'no-emitible' as const, blockers: [v10], suggestedAdjustments: ['x'] } };
+    expect(foldServerEmittability(blocked, server([v10]) as never, pp).emittability).toEqual(blocked.emittability);
+  });
+
+  it('una emitibilidad "emittable" no lleva bloqueantes; sin preprocesado se conservan las recibidas', () => {
+    const forged = { ...base, emittability: { kind: 'emittable' as const, blockers: [{ code: 'X', message: FAKE }], suggestedAdjustments: [FAKE] } };
+    expect(foldServerEmittability(forged, server([]) as never, pp).emittability?.blockers).toEqual([]);
+    expect(foldServerEmittability(forged, server([{ code: 'V10', message: 'V10' }]) as never, null).emittability?.kind).toBe('emittable');
   });
 });
