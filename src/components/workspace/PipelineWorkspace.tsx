@@ -1097,17 +1097,39 @@ export type NiifRunIntake = NiifReportIntake & {
 };
 
 /**
+ * Ledger confirmado acumulado de las sesiones del Doctor de Datos (I5-9). Cada
+ * error de /niif abre una sesión nueva del Doctor (`repairConvId` se reinicia:
+ * la telemetría agrupa por error), y la regeneración sustituía el ledger por
+ * los `applied` de la ÚLTIMA sesión: los ajustes que el usuario confirmó en una
+ * sesión anterior desaparecían del informe. Se acumulan los confirmados de la
+ * corrida vigente y los nuevos, sin duplicar por id (la versión más reciente
+ * del mismo ajuste gana, en su posición original). Sólo `applied`.
+ */
+export function mergeConfirmedAdjustments(
+  prior: readonly Adjustment[] | null | undefined,
+  next: readonly Adjustment[],
+): Adjustment[] {
+  const byId = new Map<string, Adjustment>();
+  for (const a of [...(prior ?? []), ...next]) {
+    if (a?.status === 'applied') byId.set(a.id, a);
+  }
+  return Array.from(byId.values());
+}
+
+/**
  * Intake de la regeneración con los ajustes confirmados en el Doctor. Los
- * ajustes pasan tal cual (con su `period`); aplicar ajustes reales sustituye al
- * override provisional, que se limpia.
+ * ajustes pasan tal cual (con su `period`) y se ACUMULAN con los que la
+ * corrida vigente ya aplicaba (`mergeConfirmedAdjustments`, I5-9); aplicar
+ * ajustes reales sustituye al override provisional, que se limpia.
  */
 export function buildRegenerationIntake(
   input: NiifReportIntake,
   applied: Adjustment[],
 ): NiifRunIntake {
+  const prior = (input as NiifRunIntake).adjustmentLedger?.adjustments;
   return {
     ...input,
-    adjustmentLedger: { adjustments: applied },
+    adjustmentLedger: { adjustments: mergeConfirmedAdjustments(prior, applied) },
     provisional: undefined,
   };
 }
@@ -4040,6 +4062,10 @@ export function PipelineWorkspace() {
                   period: pipelineInput.fiscalPeriod,
                   conversationId: repairConvId,
                 }}
+                // I5-9: la sesión nueva del Doctor arranca con los ajustes
+                // que la corrida vigente ya aplicó (el Doctor revalida sobre
+                // el mismo balance que procesó /niif y no los re-propone).
+                confirmedAdjustments={(pipelineInput as NiifRunIntake).adjustmentLedger?.adjustments}
                 onMarkProvisional={handleMarkProvisional}
                 onRegenerateWithAdjustments={handleRegenerateWithAdjustments}
                 onClose={() => {
