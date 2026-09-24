@@ -180,4 +180,125 @@ export const LEYES_REFORMAS: readonly LawReformEntry[] = [
     urlOficial:
       'https://www.secretariasenado.gov.co/senado/basedoc/ley_0043_1990.html',
   },
+  // ─── REGLAMENTOS Y NORMAS QUE NOMBRA EL MOTOR NORMATIVO (I4-escudo 3) ────
+  // El prompt del Motor Normativo (constantes, resúmenes de artículos, tarifas
+  // de retención) nombra estos decretos, la Ley 1430 de 2010 y la Resolución
+  // DIAN 139 de 2012; sin entrada, la Capa 2 los bloqueaba como NO_VERIFICADO.
+  // Cada entrada indica su fuente en src/data/tax_docs. `urlOficial` queda en
+  // null: el normograma no se consultó.
+  {
+    // decreto_2229_2023.md: lo cita el aviso del dígito de calendario del
+    // Motor Normativo (último dígito del NIT sin DV).
+    id: 'DECRETO_2229_2023',
+    cita: 'Decreto 2229 de 2023',
+    titulo: 'Calendario tributario DIAN a partir de 2024',
+    resumen:
+      'Decreto del 22-dic-2023 que sustituye la Sección 2 del Capítulo 13 del Título 1 de la Parte 6 del Libro 1 del DUR 1625/2016 para fijar los calendarios de plazos de las obligaciones administradas por la DIAN a partir del año 2024. Los vencimientos se asignan por el último dígito del NIT, sin tener en cuenta el dígito de verificación.',
+    articulosClave: ['Art. 579 E.T.', 'Art. 600 E.T.', 'Art. 800 E.T.'],
+    estado: 'VIGENTE_2026',
+    sentenciaCorte: null,
+    urlOficial: null,
+  },
+  {
+    // decreto_1625_2016.md
+    id: 'DECRETO_1625_2016',
+    cita: 'Decreto 1625 de 2016',
+    titulo: 'Decreto Único Reglamentario en materia tributaria (DUR)',
+    resumen:
+      'Decreto del 11-oct-2016 que compila los reglamentos tributarios. Fija, entre otros, las tarifas y bases mínimas de retención en la fuente (Libro 1, Parte 2, Título 4) y la autorretención especial en renta por CIIU (Art. 1.2.6.8). Lo modifican continuamente decretos posteriores (p. ej. Decreto 2231 de 2023 y Decreto 572 de 2025): cite el artículo del DUR en su texto vigente.',
+    articulosClave: ['Art. 365 E.T.', 'Art. 392 E.T.', 'Art. 401 E.T.'],
+    estado: 'VIGENTE_2026',
+    sentenciaCorte: null,
+    urlOficial: null,
+  },
+  {
+    // decreto_0572_2025.md (texto) y decreto_572_2025_autorretenciones.md (vigencia).
+    // El validador normaliza «Decreto 0572» y «Decreto 572» a esta misma cita.
+    id: 'DECRETO_572_2025',
+    cita: 'Decreto 572 de 2025',
+    titulo: 'Autorretención especial en renta y bases mínimas de retención en la fuente',
+    resumen:
+      'Decreto 0572 del 28-may-2025. Sustituye en el DUR 1625/2016 los Arts. 1.2.4.4.1 (servicios: base mínima 2 UVT), 1.2.4.6.7 a 1.2.4.6.9, el inciso 3 y el literal i) del 1.2.4.9.1 (compras y demás otros ingresos: 10 UVT), el 1.2.4.10.8 y el 1.2.6.8 (tabla de autorretención por CIIU). Rige desde el 01-jun-2025; entre el 08-may y el 30-jun-2026 rigieron de nuevo las bases anteriores (4 / 27 UVT) por suspensión provisional del Consejo de Estado, y las bases reducidas se restablecieron desde el 01-jul-2026 (auto CE 30229 del 02-jun-2026).',
+    articulosClave: ['Art. 365 E.T.', 'Art. 392 E.T.', 'Art. 401 E.T.'],
+    estado: 'VIGENTE_2026',
+    sentenciaCorte: null,
+    urlOficial: null,
+  },
+  {
+    // decreto_2231_2023.md (art. 11).
+    id: 'DECRETO_2231_2023',
+    cita: 'Decreto 2231 de 2023',
+    titulo: 'Reglamentación de los Arts. 206, 331, 336 y 383 E.T. (Ley 2277 de 2022)',
+    resumen:
+      'Decreto del 22-dic-2023 que reglamenta parcialmente los Arts. 206, 331, 336 y 383 E.T., modificados por la Ley 2277 de 2022, y modifica el DUR 1625/2016. Su Art. 11 modificó el par. 4 del Art. 1.2.4.1.17: las personas naturales con rentas de trabajo no laborales que no piden al agente retenedor aplicar costos y deducciones se retienen con la tabla del Art. 383 E.T.; si los piden, con las tarifas de los Arts. 392 y 401 E.T.',
+    articulosClave: ['Art. 383 E.T.', 'Art. 383 par. 2 E.T.', 'Art. 392 E.T.'],
+    estado: 'VIGENTE_2026',
+    sentenciaCorte: null,
+    urlOficial: null,
+  },
+  {
+    // decreto_1103_2023.md.
+    id: 'DECRETO_1103_2023',
+    cita: 'Decreto 1103 de 2023',
+    titulo: 'Reglamentación de los Arts. 242, 242-1, 245 y 246 E.T. — dividendos',
+    resumen:
+      'Decreto del 04-jul-2023 que reglamenta parcialmente los Arts. 242, 242-1, 245 y 246 E.T., modificados por los arts. 3, 12, 4 y 13 de la Ley 2277 de 2022, y ajusta en el DUR 1625/2016 el tratamiento de los dividendos y participaciones distribuidos desde el 1-ene-2023 (Arts. 1.2.1.10.4, 1.2.1.10.5 y siguientes).',
+    articulosClave: ['Art. 242 E.T.', 'Art. 242-1 E.T.', 'Art. 245 E.T.'],
+    estado: 'VIGENTE_2026',
+    sentenciaCorte: null,
+    urlOficial: null,
+  },
+  {
+    // decreto_0261_2023.md.
+    id: 'DECRETO_261_2023',
+    cita: 'Decreto 261 de 2023',
+    titulo: 'Tarifas de retención y autorretención en renta armonizadas con la Ley 2277 de 2022',
+    resumen:
+      'Decreto del 24-feb-2023 que sustituyó los Arts. 1.2.4.10.12 y 1.2.6.8 del DUR 1625/2016 para armonizar las autorretenciones con la Ley 2277 de 2022, incluida la sobretasa de los CIIU 0510, 0520 y 0610 (Art. 240 par. 3 E.T.). Esos artículos fueron sustituidos después por el Decreto 242 de 2024: no lo cite como tarifa vigente.',
+    articulosClave: ['Art. 365 E.T.', 'Art. 240 par. 3 E.T.'],
+    estado: 'MODIFICADO',
+    sentenciaCorte: null,
+    urlOficial: null,
+  },
+  {
+    // decreto_0242_2024.md; sustitución del Art. 1.2.6.8 por el art. 8 del
+    // Decreto 0572 de 2025 (decreto_0572_2025.md).
+    id: 'DECRETO_242_2024',
+    cita: 'Decreto 242 de 2024',
+    titulo: 'Tarifas de retención y autorretención en renta (sustituye las del Decreto 261 de 2023)',
+    resumen:
+      'Decreto del 29-feb-2024 que sustituyó los Arts. 1.2.4.10.12 y 1.2.6.8 del DUR 1625/2016 (tarifas de retención y autorretención del impuesto sobre la renta). El Art. 1.2.6.8 fue sustituido luego por el art. 8 del Decreto 572 de 2025: para un periodo concreto, verifique qué tabla regía.',
+    articulosClave: ['Art. 365 E.T.', 'Art. 240 par. 3 E.T.'],
+    estado: 'MODIFICADO',
+    sentenciaCorte: null,
+    urlOficial: null,
+  },
+  {
+    // ley_1430_2010.md (art. 1); derogatoria del Art. 158-3 por el art. 376 de
+    // la Ley 1819 de 2016: estatuto_tributario_completo.md.
+    id: 'LEY_1430_2010',
+    cita: 'Ley 1430 de 2010',
+    titulo: 'Normas tributarias de control y para la competitividad',
+    resumen:
+      'Ley del 29-dic-2010. Su Art. 1 adicionó el par. 3 al Art. 158-3 E.T.: desde el año gravable 2011 ningún contribuyente puede usar la deducción especial por inversión en activos fijos reales productivos (salvo contratos de estabilidad jurídica solicitados antes del 1-nov-2010). El Art. 158-3 fue después derogado por el art. 376 de la Ley 1819 de 2016. Cítela sólo como antecedente: el beneficio vigente para activos fijos es el descuento del Art. 258-1 E.T.',
+    articulosClave: ['Art. 158-3 E.T.', 'Art. 258-1 E.T.'],
+    estado: 'MODIFICADO',
+    sentenciaCorte: null,
+    urlOficial: null,
+  },
+  {
+    // ley_1607_2012.md (códigos 241 y 120 de los Arts. 437-4 y 437-5),
+    // decreto_1091_2020.md (fecha: 21-nov-2012) y decreto_1625_2016.md
+    // (CIIU Rev. 4 A.C. adoptada por la Resolución 000114 de 2020). No es una
+    // ley: se registra aquí porque el catálogo no tiene lista de resoluciones.
+    id: 'RESOLUCION_DIAN_139_2012',
+    cita: 'Resolución DIAN 000139 de 2012',
+    titulo: 'Clasificación de actividades económicas (CIIU) adoptada por la DIAN',
+    resumen:
+      'Resolución del 21-nov-2012 que adoptó la clasificación CIIU para el RUT. Los Arts. 437-4 y 437-5 E.T. remiten a sus códigos 241 (siderúrgicas) y 120 (tabacaleras) «o la que la sustituya»; el DUR 1625/2016 remite hoy a la CIIU Rev. 4 A.C. adoptada por la Resolución 000114 de 2020. Verifique el código vigente antes de aplicarlo.',
+    articulosClave: ['Art. 437-4 E.T.', 'Art. 437-5 E.T.'],
+    estado: 'MODIFICADO',
+    sentenciaCorte: null,
+    urlOficial: null,
+  },
 ] as const;

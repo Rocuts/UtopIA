@@ -99,7 +99,10 @@ const LEY_PATTERN: CitationPattern = {
 const DECRETO_PATTERN: CitationPattern = {
   kind: 'decreto',
   regex: /\bDecreto\s+(\d+)\s*(?:de\s+|del\s+|\/)\s*(\d{4})\b/gi,
-  normalize: (m) => `Decreto ${m[1]} de ${m[2]}`,
+  // Sin ceros a la izquierda: «Decreto 0572 de 2025» y «Decreto 572 de 2025»
+  // son el mismo decreto (el Diario Oficial usa ambas grafías) y deben dar
+  // la misma cita canónica (I4-escudo 3).
+  normalize: (m) => `Decreto ${String(Number(m[1]))} de ${m[2]}`,
 };
 
 /**
@@ -343,13 +346,19 @@ function findBlacklistMatch(
  *   - blacklist MEDIA                      → advertencia
  *   - en catálogo + VIGENTE_2026           → valida
  *   - en catálogo + MODIFICADO/SUSPENDIDO  → advertencia
+ *   - en catálogo + DEROGADO en una frase que afirma su derogación
+ *     (y no su vigencia)                   → advertencia (I4-escudo 3b)
  *   - en catálogo + DEROGADO/INEXEQUIBLE/NO_VERIFICADO → bloqueo
  *   - no en catálogo                       → bloqueo (NO_VERIFICADO implícito)
+ *
+ * La blacklist conserva la prioridad: una cita en la blacklist bloquea aunque
+ * la frase diga que está derogada (p. ej. Art. 158-3 E.T.).
  */
 function decideVeredicto(
   citation: ParsedCitation,
   lookup: CatalogueLookup | undefined,
   blacklistHit: BlacklistEntry | null,
+  contexto?: { afirmaDerogacion: boolean },
 ): { veredicto: 'valida' | 'advertencia' | 'bloqueo'; mensaje: string; alternativa: string | null } {
   // 1) Blacklist tiene prioridad sobre todo.
   if (blacklistHit) {
@@ -409,6 +418,18 @@ function decideVeredicto(
         alternativa: null,
       };
     case 'DEROGADO':
+      // Decisión I4-escudo 3(b): mencionar una norma derogada PARA decir que
+      // está derogada («el Art. 36-3 E.T. fue derogado…») no es citarla como
+      // vigente. Se advierte en vez de bloquear; cualquier otro uso bloquea.
+      if (contexto?.afirmaDerogacion) {
+        return {
+          veredicto: 'advertencia',
+          mensaje:
+            `Cita "${citation.normalized}" está DEROGADA y el texto la menciona como derogada ` +
+            `(no la invoca como vigente). Verificar que no se use como sustento de un beneficio.`,
+          alternativa: null,
+        };
+      }
       return {
         veredicto: 'bloqueo',
         mensaje:
@@ -446,6 +467,59 @@ function decideVeredicto(
 }
 
 // ---------------------------------------------------------------------------
+// Contexto de la cita — ¿la frase afirma que la norma está derogada?
+// ---------------------------------------------------------------------------
+//
+// Decisión del coordinador (I4-escudo 3b, Art. 36-3 E.T.): una cita catalogada
+// DEROGADA dentro de una frase que afirma su derogación pasa como advertencia;
+// citarla como vigente sigue bloqueando. El alcance es la FRASE que contiene
+// la cita (una afirmación en otra frase no la protege).
+// ---------------------------------------------------------------------------
+
+/** Abreviaturas cuyo punto no cierra la frase («Art.», «E.T.», «par.», …). */
+const ABREVIATURA_FINAL = /(?:\b(?:Arts?|par|num|lit|inc|No|Nro|núm|Dr|Sr|Sra|Ltda|pp|p|ss|cfr|vs|etc)|\bE\.T|\bS\.A(?:\.S)?|\bC\.E|\bC\.P|\bD\.O|\b[A-Z])$/i;
+
+function esFinDeFrase(text: string, i: number): boolean {
+  if (text[i] !== '.') return false;
+  const sig = text[i + 1];
+  if (sig !== undefined && !/\s/.test(sig)) return false; // «1.2.4», «E.T.»
+  return !ABREVIATURA_FINAL.test(text.slice(Math.max(0, i - 12), i));
+}
+
+const LIMITE_FRASE = /[\n;•!?]/;
+
+/** Frase (o cláusula entre «;») del texto que contiene la cita. */
+export function fraseDeLaCita(text: string, position: { start: number; end: number }): string {
+  let s = position.start;
+  while (s > 0 && !LIMITE_FRASE.test(text[s - 1]) && !esFinDeFrase(text, s - 1)) s--;
+  let e = position.end;
+  while (e < text.length && !LIMITE_FRASE.test(text[e]) && !esFinDeFrase(text, e)) e++;
+  return text.slice(s, e);
+}
+
+// `\b` de JS es ASCII: tras «ó» no hay frontera de palabra, por eso «derogó»
+// usa un lookahead en vez de `\b`.
+const AFIRMA_DEROGACION =
+  /\bderogad[oa]s?\b|\bderog[óo](?![a-záéíóúñ])|\bderogaci[óo]n\b|\brepealed\b/i;
+const NIEGA_DEROGACION =
+  /\bno\s+(?:ha\s+sido\s+|fue\s+|est[áa]\s+|se\s+encuentra\s+|qued[óo]\s+)?derogad|\bsin\s+derogar\b|\bnot\s+(?:been\s+)?repealed\b|\bnever\s+repealed\b/i;
+const AFIRMA_VIGENCIA =
+  /(?<!\bno\s)\b(?:sigue|contin[úu]a|permanece|est[áa]|es)\s+vigente\b|\b(?:remains|still|is)\s+in\s+force\b/i;
+
+/**
+ * `true` si la frase afirma la derogación de la norma y no la presenta como
+ * vigente («fue derogado», «está derogada», «derogó», «repealed»). Una
+ * negación («no fue derogado») o una afirmación de vigencia («sigue vigente»)
+ * la descartan.
+ */
+export function fraseAfirmaDerogacion(frase: string): boolean {
+  if (!AFIRMA_DEROGACION.test(frase)) return false;
+  if (NIEGA_DEROGACION.test(frase)) return false;
+  if (AFIRMA_VIGENCIA.test(frase)) return false;
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // Entrada pública
 // ---------------------------------------------------------------------------
 
@@ -472,7 +546,11 @@ export function validateCitations(
   for (const cit of citations) {
     const lookup = index.get(cit.normalized);
     const blacklistHit = findBlacklistMatch(cit.raw, catalogue.blacklist);
-    const { veredicto, mensaje, alternativa } = decideVeredicto(cit, lookup, blacklistHit);
+    const contexto =
+      lookup?.estado === 'DEROGADO'
+        ? { afirmaDerogacion: fraseAfirmaDerogacion(fraseDeLaCita(text, cit.position)) }
+        : undefined;
+    const { veredicto, mensaje, alternativa } = decideVeredicto(cit, lookup, blacklistHit, contexto);
 
     results.push({
       citation: cit,

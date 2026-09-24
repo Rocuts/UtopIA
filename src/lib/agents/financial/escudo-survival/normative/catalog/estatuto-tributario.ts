@@ -243,7 +243,7 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     cita: 'Art. 240 par. 3 E.T.',
     titulo: 'Sobretasa a la extracción de petróleo crudo y de carbón — puntos variables por percentil de precios',
     resumen:
-      'Par. 3 Art. 240: las personas jurídicas cuya actividad económica sea la extracción de hulla y carbón lignito (CIIU 0510 y 0520) o la extracción de petróleo crudo (CIIU 0610) liquidan puntos adicionales VARIABLES, determinados comparando el precio promedio del respectivo año gravable contra percentiles del precio promedio mensual de los últimos 120 meses. Escalonamiento del carbón: 0 puntos si el precio está por debajo del percentil 65; 5 puntos entre percentil 65 y 75; 10 puntos por encima del percentil 75 (tarifa total hasta 45%). Escalonamiento del petróleo crudo: 0 puntos por debajo del percentil 30; 5 puntos entre percentil 30 y 45; 10 puntos entre percentil 45 y 60; 15 puntos por encima del percentil 60 (tarifa total hasta 50%). Condición de aplicación: SOLO a contribuyentes con renta gravable igual o superior a 50.000 UVT (2026: 50.000 × $52.374 = $2.618.700.000). El precio promedio y los percentiles del año NO son un valor fijo: los certifican anualmente la UPME (carbón) y la ANH (petróleo) mediante resolución publicada a más tardar el 31 de enero, recogida en decreto reglamentario (antecedentes: Decreto 261 de 2023 y Decreto 242 de 2024). NO codificar el número de puntos del año gravable 2026 sin leer la resolución/decreto de ese año — el valor no está verificado en este catálogo y no debe alimentar una liquidación.',
+      'Par. 3 Art. 240: las personas jurídicas cuya actividad económica sea la extracción de hulla y carbón lignito (CIIU 0510 y 0520) o la extracción de petróleo crudo (CIIU 0610) liquidan puntos adicionales VARIABLES, determinados comparando el precio promedio del respectivo año gravable contra percentiles del precio promedio mensual de los últimos 120 meses. Escalonamiento del carbón: 0 puntos si el precio está por debajo del percentil 65; 5 puntos entre percentil 65 y 75; 10 puntos por encima del percentil 75 (tarifa total hasta 45%). Escalonamiento del petróleo crudo: 0 puntos por debajo del percentil 30; 5 puntos entre percentil 30 y 45; 10 puntos entre percentil 45 y 60; 15 puntos por encima del percentil 60 (tarifa total hasta 50%). Condición de aplicación: SOLO a contribuyentes con renta gravable igual o superior a 50.000 UVT (2026: 50.000 × $52.374 = $2.618.700.000). El precio promedio y los percentiles del año NO son un valor fijo: los publican anualmente la UPME (carbón) y la ANH (petróleo) mediante resolución, a más tardar el último día hábil de enero, con la información del año gravable anterior. Las autorretenciones de estos CIIU se ajustaron en línea con la sobretasa (Decreto 261 de 2023, sustituido por el Decreto 242 de 2024). NO codificar el número de puntos del año gravable 2026 sin leer la resolución de ese año — el valor no está verificado en este catálogo y no debe alimentar una liquidación.',
     textoLiteral: null,
     estado: 'VIGENTE_2026',
     modificaciones: [
@@ -265,7 +265,7 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     cita: 'Art. 240 par. 4 E.T.',
     titulo: 'Sobretasa a la generación de energía eléctrica con recursos hídricos — 3 puntos con umbral de 30.000 UVT',
     resumen:
-      'Par. 4 Art. 240: las personas jurídicas cuya actividad económica PRINCIPAL sea la generación de energía eléctrica A TRAVÉS DE RECURSOS HÍDRICOS liquidan 3 puntos adicionales (tarifa total 38%) durante los años gravables 2023, 2024, 2025 y 2026 — 2026 es el último año. Condiciones de aplicación: (a) SOLO si en el año gravable correspondiente la renta gravable es igual o superior a 30.000 UVT (2026: 30.000 × $52.374 = $1.571.220.000); (b) NO aplica a centrales cuya capacidad instalada sea igual o inferior a 1.000 kW; (c) la sobretasa no puede trasladarse al usuario final. Alcance subjetivo: la sobretasa NO cobija a las empresas de acueducto y alcantarillado. Alcance objetivo: por la exequibilidad condicionada de la Sentencia C-389 de 2023, los 3 puntos gravan ÚNICAMENTE la renta de la actividad de generación hídrica, no las demás actividades del contribuyente. El umbral de 30.000 UVT fue declarado exequible por la Sentencia C-050 de 2026.',
+      'Par. 4 Art. 240: las personas jurídicas cuya actividad económica PRINCIPAL sea la generación de energía eléctrica A TRAVÉS DE RECURSOS HÍDRICOS liquidan 3 puntos adicionales (tarifa total 38%) durante los años gravables 2023, 2024, 2025 y 2026 — 2026 es el último año. Condiciones de aplicación: (a) SOLO si en el año gravable correspondiente la renta gravable es igual o superior a 30.000 UVT (2026: 30.000 × $52.374 = $1.571.220.000); (b) NO aplica a centrales cuya capacidad instalada sea igual o inferior a 1.000 kW; (c) la sobretasa no puede trasladarse al usuario final. Alcance subjetivo: la sobretasa NO cobija a las empresas de acueducto y alcantarillado. Alcance objetivo: por la exequibilidad condicionada de la Sentencia C-389 de 2023, los 3 puntos gravan ÚNICAMENTE la renta de la actividad de generación hídrica, no las demás actividades del contribuyente. La Sentencia C-050 de 2026 declaró exequible el parágrafo frente a los cargos de libre competencia y justicia tributaria, estándose a lo resuelto en la C-389 de 2023.',
     textoLiteral: null,
     estado: 'VIGENTE_2026',
     modificaciones: [
@@ -278,6 +278,11 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
         norma: 'Sentencia C-389 de 2023 (Corte Constitucional)',
         fecha: '2023-10-04',
         cambio: 'Exequibilidad CONDICIONADA: la sobretasa solo puede aplicarse a la renta de la actividad de generación de energía eléctrica con recursos hídricos, no a otras actividades del contribuyente.',
+      },
+      {
+        norma: 'Sentencia C-050 de 2026 (Corte Constitucional)',
+        fecha: '2026-03-13',
+        cambio: 'EXEQUIBLE frente a los cargos de libre competencia económica y justicia tributaria; estarse a lo resuelto en la C-389 de 2023 (ley_2277_2022.md, jurisprudencia del par. 4).',
       },
     ],
     urlOficial:
@@ -1495,5 +1500,147 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     modificaciones: [],
     urlOficial: 'https://estatuto.co/?articulo=860',
     tags: ['devolucion', 'garantia', 'plazo', '20_dias'],
+  },
+  // ─── NORMAS QUE NOMBRA EL PROPIO MOTOR NORMATIVO (I4-escudo 3) ──────────
+  // El prompt del Motor Normativo (constantes, resúmenes, sanciones, tarifas
+  // de retención y blacklist) nombraba estos artículos, pero no estaban en el
+  // catálogo: la Capa 2 los bloqueaba como NO_VERIFICADO y una salida honesta
+  // que los repitiera quedaba en «bloqueo». Resúmenes tomados del texto
+  // compilado en src/data/tax_docs/estatuto_tributario_completo.md (y, para el
+  // Art. 235-2 en la TTD, de ley_2277_2022.md).
+  {
+    // estatuto_tributario_completo.md: ARTICULO 868 (mod. art. 50 Ley 1111/2006).
+    id: 'ART_868_ET',
+    cita: 'Art. 868 E.T.',
+    titulo: 'Unidad de Valor Tributario (UVT)',
+    resumen:
+      'Crea la UVT como medida de valor para ajustar las cifras de los impuestos y obligaciones administrados por la DIAN. Se reajusta cada año con la variación del IPC para ingresos medios certificada por el DANE, y la DIAN publica por resolución, antes del 1 de enero, la UVT del año gravable siguiente: cada año gravable tiene su propia UVT. Al convertir a pesos una cifra expresada en UVT se aplica el procedimiento de aproximaciones del propio artículo.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [
+      {
+        norma: 'Ley 1111 de 2006',
+        fecha: '2006-12-27',
+        cambio: 'Art. 50: nuevo texto que crea la UVT.',
+      },
+    ],
+    urlOficial: 'https://estatuto.co/?articulo=868',
+    tags: ['UVT', 'procedimiento', 'sancion', 'umbral', 'retenciones'],
+  },
+  {
+    // estatuto_tributario_completo.md: ARTÍCULO 634 (mod. art. 278 Ley 1819/2016).
+    id: 'ART_634_ET',
+    cita: 'Art. 634 E.T.',
+    titulo: 'Intereses moratorios',
+    resumen:
+      'Los contribuyentes, agentes retenedores y responsables que no paguen oportunamente los impuestos, anticipos y retenciones a su cargo liquidan y pagan intereses moratorios por cada día calendario de retardo. Los mayores valores determinados en una liquidación oficial o en la corrección de la declaración causan intereses desde el día siguiente al vencimiento del plazo en que debieron pagarse.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [
+      {
+        norma: 'Ley 1819 de 2016',
+        fecha: '2016-12-29',
+        cambio: 'Art. 278: nuevo texto (intereses por cada día calendario de retardo).',
+      },
+    ],
+    urlOficial: 'https://estatuto.co/?articulo=634',
+    tags: ['sancion', 'intereses', 'mora', 'retenciones', 'defensa'],
+  },
+  {
+    // estatuto_tributario_completo.md: ARTICULO 383 (inciso 1 y tabla mod. art. 42 Ley 2010/2019).
+    id: 'ART_383_ET',
+    cita: 'Art. 383 E.T.',
+    titulo: 'Tabla de retención en la fuente sobre rentas de trabajo',
+    resumen:
+      'Fija la tabla de retención en la fuente, en UVT, aplicable a los pagos gravables originados en la relación laboral o legal y reglamentaria y a las pensiones de jubilación, invalidez, vejez, sobrevivientes y riesgos laborales. Para el procedimiento 2, el impuesto en UVT que resulta de la tabla se divide por el ingreso laboral gravado convertido a UVT para obtener la tarifa (par. 1).',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [
+      {
+        norma: 'Ley 2010 de 2019',
+        fecha: '2019-12-27',
+        cambio: 'Art. 42: nuevo inciso 1 y nueva tabla de retención.',
+      },
+    ],
+    urlOficial: 'https://estatuto.co/?articulo=383',
+    tags: ['retenciones', 'renta', 'trabajo', 'tabla', 'PN'],
+  },
+  {
+    // estatuto_tributario_completo.md: ARTICULO 383, PARÁGRAFO 2o (inciso mod.
+    // art. 8 Ley 2277/2022; concordancia Decreto 2231 de 2023 art. 11).
+    id: 'ART_383_PAR2_ET',
+    cita: 'Art. 383 par. 2 E.T.',
+    titulo: 'Rentas de trabajo no laborales — misma tabla del Art. 383',
+    resumen:
+      'La retención del Art. 383 E.T. se aplica también a los pagos o abonos en cuenta por rentas de trabajo que no provienen de una relación laboral o legal y reglamentaria. Según el reglamento (DUR 1625/2016 Art. 1.2.4.1.17 par. 4, mod. por el Decreto 2231 de 2023), las personas naturales con esas rentas que no piden al agente retenedor aplicar costos y deducciones se retienen con la tabla del Art. 383 E.T.; si los piden, se aplican las tarifas de los Arts. 392 y 401 E.T.',
+    textoLiteral: null,
+    estado: 'MODIFICADO',
+    modificaciones: [
+      {
+        norma: 'Ley 2277 de 2022',
+        fecha: '2022-12-13',
+        cambio: 'Art. 8: nuevo texto del inciso del parágrafo 2 (rentas de trabajo no laborales).',
+      },
+    ],
+    urlOficial: 'https://estatuto.co/?articulo=383',
+    tags: ['retenciones', 'trabajo', 'honorarios', 'PN', 'reforma_2022'],
+  },
+  {
+    // estatuto_tributario_completo.md: ARTICULO 381 (fuente D. 2503/87 art. 29).
+    id: 'ART_381_ET',
+    cita: 'Art. 381 E.T.',
+    titulo: 'Certificados de retención por otros conceptos',
+    resumen:
+      'Para conceptos de retención distintos de la relación laboral o legal y reglamentaria, el agente retenedor expide anualmente un certificado con el año gravable y la ciudad donde consignó, la identificación del retenedor y del retenido, el monto y concepto del pago, la cuantía de la retención y la firma; a solicitud del beneficiario expide uno por cada retención. La retención del IVA está en el Art. 437-1 E.T.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=381',
+    tags: ['retenciones', 'certificados', 'procedimiento'],
+  },
+  {
+    // estatuto_tributario_completo.md: ARTÍCULO 243 (mod. art. 102 Ley 1819/2016).
+    id: 'ART_243_ET',
+    cita: 'Art. 243 E.T.',
+    titulo: 'Destinación específica de 9 puntos de la tarifa de renta de las personas jurídicas',
+    resumen:
+      'Desde el periodo gravable 2017, 9 puntos porcentuales de la tarifa del impuesto sobre la renta de las personas jurídicas se destinan al ICBF (2,2), al SENA (1,4), al Sistema de Seguridad Social en Salud (4,4), a la primera infancia (0,4) y a las instituciones de educación superior públicas (0,6). Es una regla de destinación del recaudo: no cambia la tarifa que liquida el contribuyente.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [
+      {
+        norma: 'Ley 1819 de 2016',
+        fecha: '2016-12-29',
+        cambio: 'Art. 102: nuevo texto (destinación de 9 puntos desde 2017).',
+      },
+    ],
+    urlOficial: 'https://estatuto.co/?articulo=243',
+    tags: ['renta', 'tarifa', 'PJ', 'destinacion'],
+  },
+  {
+    // estatuto_tributario_completo.md: ARTÍCULO 235-2 (mod. art. 91 Ley 2010/2019;
+    // numerales derogados por el art. 96 Ley 2277/2022). Literales a) y b) del
+    // numeral 4 y numeral 7 en la TTD: ley_2277_2022.md (par. 6 Art. 240).
+    id: 'ART_235_2_ET',
+    cita: 'Art. 235-2 E.T.',
+    titulo: 'Rentas exentas — lista taxativa de las excepciones del Art. 26',
+    resumen:
+      'Sin perjuicio de las rentas exentas de las personas naturales y de las reconocidas en convenios internacionales, enumera las únicas rentas exentas de que trata el Art. 26 E.T. La Ley 2277 de 2022 (art. 96) eliminó varios de sus numerales desde el 1-ene-2023: verifique que el numeral invocado siga en el texto. En la utilidad depurada de la TTD (Art. 240 par. 6 E.T.) sólo se restan las rentas exentas de los literales a) y b) del numeral 4 y del numeral 7 de este artículo.',
+    textoLiteral: null,
+    estado: 'MODIFICADO',
+    modificaciones: [
+      {
+        norma: 'Ley 2010 de 2019',
+        fecha: '2019-12-27',
+        cambio: 'Art. 91: nuevo texto del encabezado y de la lista de rentas exentas.',
+      },
+      {
+        norma: 'Ley 2277 de 2022',
+        fecha: '2022-12-13',
+        cambio: 'Art. 96: eliminó numerales de la lista a partir del 1-ene-2023.',
+      },
+    ],
+    urlOficial: 'https://estatuto.co/?articulo=235-2',
+    tags: ['renta', 'exentos', 'TTD', 'reforma_2022'],
   },
 ] as const;
