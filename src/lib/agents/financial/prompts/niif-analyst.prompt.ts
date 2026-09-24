@@ -41,6 +41,12 @@ import {
   type DeterministicCashFlow,
 } from '../contracts/deterministic-breakdown';
 import { formatCopFromCents } from '../contracts/money';
+import {
+  buildReportAnchors,
+  moneyCopToken,
+  type PeriodAnchors,
+  type ReportAnchors,
+} from '../contracts/anchors';
 
 /**
  * Contexto Élite consumido por el Agente 1 desde el orchestrator. Optional
@@ -312,6 +318,12 @@ interface SharedPromptContext {
    * apertura no hay variación que medir y el EFE no es calculable (NIC 7 ¶1).
    */
   deterministicCashFlow: DeterministicCashFlow | null;
+  /**
+   * Anclas del P&G (UB, EBIT, otros ingresos 42, gastos no operacionales, UAI,
+   * impuesto, UN) de ambos periodos, en centavos exactos. Enmienda spec v2.1
+   * 2026-09-24: el grupo 42 va debajo de la utilidad operacional.
+   */
+  pnlAnchors: ReportAnchors;
   // Corrección v2.4 — Saldo INICIAL de Cta.3605 (= utilidad del ejercicio del
   // periodo comparativo, que entra como utilidad acumulada en el patrimonio
   // de apertura del periodo actual). Si > $0 material, debe traviajar como
@@ -437,6 +449,11 @@ function buildSharedContext(
     ? buildDeterministicCashFlow(preprocessed.primary, preprocessed.comparative ?? undefined)
     : null;
 
+  // Cascada del P&G en centavos exactos, la misma que cruza el validador (E14/E9).
+  const pnlAnchors: ReportAnchors = preprocessed?.primary
+    ? buildReportAnchors(preprocessed.primary, preprocessed.comparative ?? undefined)
+    : { primary: null, comparative: null };
+
   // Corrección v2.4 — utilidad del ejercicio del periodo comparativo,
   // que para el periodo ACTUAL representa el saldo INICIAL de Cta.3605
   // (utilidad acumulada arrastrada en el patrimonio de apertura).
@@ -481,6 +498,7 @@ function buildSharedContext(
     efeVarInv,
     efeVarCxP,
     deterministicCashFlow,
+    pnlAnchors,
     openingUtilidadEjercicio3605,
     fmtCop,
     company,
@@ -573,12 +591,19 @@ function renderPucMappingBlock(): string {
 | 2 — Pasivo | 21xx Obl. fin. CP, 22xx Proveedores, 23xx CxP, 24xx Impuestos, 25xx Laborales | Pasivo Corriente |
 | 2 — Pasivo | 21xx Obl. fin. LP, 27xx Diferidos LP | Pasivo No Corriente |
 | 3 — Patrimonio | 31xx Capital, 32xx Superávit, 33xx Reservas, 34xx Revalorización, 36xx Resultados | Patrimonio |
-| 4 — Ingresos | 41xx Operacionales, 42xx No operacionales | Ingresos |
+| 4 — Ingresos | 41xx Operacionales (4175 devoluciones restan) | Ingresos de actividades ordinarias |
+| 4 — Ingresos | 42xx No operacionales (4210 financieros, 4245 utilidad en venta de PPE, 4250 recuperaciones…) | Otros ingresos — DEBAJO del resultado operacional |
 | 5 — Gastos | 51xx Admin., 52xx Ventas | Gastos Operacionales |
+| 5 — Gastos | 53xx No operacionales (5305 financieros…) | Otros gastos — DEBAJO del resultado operacional |
+| 5 — Gastos | 54xx Impuesto de renta y complementarios | Gasto por impuesto |
 | 6 — Costos | 61xx Costo de ventas, 62xx Compras, 63xx Producción | Costo de Ventas |
 | 7 — Costos producción | 71xx-74xx MP, MOD, CIF | Costo de Producción |
 
-Identidad de P&G: Utilidad Neta = Clase 4 (total) − Clase 6 (total) − Clase 5 (total) − Impuesto Renta.`;
+Cascada del P&G (enmienda spec v2.1 del 2026-09-24):
+- Utilidad Bruta = ingresos operacionales netos (grupo 41 − 4175) − Clase 6 − Clase 7.
+- Resultado operacional (EBIT) = Utilidad Bruta − grupo 51 − grupo 52.
+- UAI = EBIT + otros ingresos no operacionales (grupo 42) − grupo 53.
+- Utilidad Neta = UAI − grupo 54. Equivale a Clase 4 − Clase 6 − Clase 7 − (51 + 52 + 53) − 54: el grupo 54 está DENTRO de la clase 5, así que no se resta dos veces.`;
 }
 
 /**
@@ -620,6 +645,47 @@ function renderSaldoAFavorBlock(ctx: SharedPromptContext): string {
 Saldo a favor (PUC 1355/1805): $${ctx.fmtCop(ctx.saldoAFavorCents!)} COP. Presentar SEPARADO dentro de balanceSheet.assets — NUNCA neteado contra el gasto del P&L.`;
   }
   return '';
+}
+
+/**
+ * Bloque "CASCADA VINCULANTE DEL P&G" — los escalones del Estado de Resultados
+ * en centavos exactos, con el token `[MoneyCop: N]` que el modelo copia.
+ *
+ * Por qué existe (auditoría 2026-09, niif-contrato-01): el bloque TOTALES
+ * VINCULANTES no publicaba la Utilidad Bruta ni el EBIT, y el prompt definía
+ * los ingresos operacionales como toda la clase 4. El modelo tenía que
+ * derivarlos y el validador (E14/E9) los exige al centavo contra
+ * `buildPeriodAnchors`. Con la enmienda spec v2.1 del 2026-09-24 el grupo 42
+ * va DEBAJO del resultado operacional; este bloque publica esa cascada.
+ */
+function renderPnlCascadeBlock(ctx: SharedPromptContext): string {
+  const renderPeriod = (label: string, a: PeriodAnchors | null): string | null => {
+    if (!a) return null;
+    const c = a.cents;
+    if (c.utilidadBruta === undefined || c.ebit === undefined) {
+      return `=== ${label} (${a.period}) ===
+- La cascada no es derivable al centavo desde el balance de prueba de este periodo: construye la Utilidad Bruta y el EBIT con la definición del mapeo PUC (grupo 42 debajo del EBIT) y declara la limitación en incomeStatement.notes.`;
+    }
+    const line = (name: string, v: bigint | undefined, target: string): string =>
+      v === undefined ? `- ${name}: N/D` : `- ${name}: ${formatCopFromCents(v)} COP ${moneyCopToken(v)}${target}`;
+    return [
+      `=== ${label} (${a.period}) ===`,
+      line('Ingresos operacionales netos (grupo 41 − devoluciones 4175)', c.ingresosOperacionales, ''),
+      line('Utilidad Bruta', c.utilidadBruta, ` → grossProfit${label === 'Periodo actual' ? 'Primary' : 'Comparative'}`),
+      line('Resultado operacional (EBIT)', c.ebit, ` → operatingProfit${label === 'Periodo actual' ? 'Primary' : 'Comparative'}`),
+      line('(+) Otros ingresos no operacionales (grupo 42)', c.otrosIngresos, ''),
+      line('(−) Gastos no operacionales (grupo 53 y resto de clase 5 salvo 51/52/54)', c.gastosNoOperacionales, ''),
+      line('Utilidad antes de impuestos (UAI)', c.utilidadAntesImpuestos, ''),
+      line('(−) Impuesto de renta (grupo 54)', c.impuestoCausado, ''),
+      line('Utilidad Neta', c.utilidadNeta, ` → netIncome${label === 'Periodo actual' ? 'Primary' : 'Comparative'}`),
+    ].join('\n');
+  };
+  const primary = renderPeriod('Periodo actual', ctx.pnlAnchors.primary);
+  if (!primary) return '';
+  const comparative = ctx.isComparative ? renderPeriod('Periodo comparativo', ctx.pnlAnchors.comparative) : null;
+  return `## CASCADA VINCULANTE DEL P&G (enmienda spec v2.1 2026-09-24 — grupo 42 debajo del EBIT)
+Cifras exactas del preprocesador. Los subtotales del P&G copian el token [MoneyCop: N]; los renglones con código PUC deben sumar estos escalones (UB = 41 − 4175 − 6 − 7; EBIT = UB − 51 − 52; UAI = EBIT + 42 − 53; UN = UAI − 54).
+${primary}${comparative ? `\n${comparative}` : ''}`;
 }
 
 /**
@@ -887,11 +953,13 @@ ${ctx.niifDisclosures}
 
 <success_criteria>
 - Activo = Pasivo + Patrimonio, tolerancia $0 (centavo).
-- Ingresos operacionales del P&L = SUMA COMPLETA de Clase 4 (41xx + 42xx), no un solo grupo.
+- Ingresos de actividades ordinarias del P&L = grupo 41 neto de devoluciones 4175. El grupo 42 (ingresos no operacionales) se presenta en renglón(es) propio(s) DEBAJO del resultado operacional, con su código PUC. Toda la clase 4 queda presentada: 41 arriba, 42 abajo.
+- grossProfitPrimary, operatingProfitPrimary y la UAI coinciden al centavo con el bloque "CASCADA VINCULANTE DEL P&G".
 - Utilidad Neta del P&L coincide al centavo con TOTALES VINCULANTES (será el anchor para el closing_balance del ECP en Pass-2).
 - Toda cifra global (totalAssetsPrimary, totalLiabilitiesPrimary, totalEquityPrimary, netIncomePrimary) coincide al centavo con TOTALES VINCULANTES.
-- EBIT (operatingProfitPrimary) = grossProfit − Grupo 51 − Grupo 52. NO se deduce Grupo 53. Tolerancia $0.
-- UAI (utilidad antes de impuestos) = operatingProfitPrimary − Grupo 53.
+- Utilidad Bruta (grossProfitPrimary) = ingresos operacionales netos (41 − 4175) − Clase 6 − Clase 7. NO incluye el grupo 42.
+- EBIT (operatingProfitPrimary) = grossProfit − Grupo 51 − Grupo 52. NO incluye el grupo 42 ni deduce el Grupo 53. Tolerancia $0.
+- UAI (utilidad antes de impuestos) = operatingProfitPrimary + otros ingresos (Grupo 42) − Grupo 53.
 - netIncomePrimary = UAI − impuestoRenta. operatingProfitPrimary ≠ netIncomePrimary salvo cuando Grupo 53 = $0 e impuesto = $0.
 - curatorFlags refleja LITERALMENTE el bloque vinculante (sin re-cálculo).
 ${ctx.isComparative ? `- Balance y P&L presentan amountPrimary (${ctx.primaryPeriod}) Y amountComparative (${ctx.comparativePeriod}); cuando un saldo comparativo no exista, amountComparative = null y se documenta en balanceSheet.notes / incomeStatement.notes.
@@ -931,8 +999,8 @@ ${ctx.reportMode === 'COMPARATIVO_COMPLETO' ? '  balanceSheet.modeBanner = null;
   - balanceSheet.totalAssetsComparative = "Total Activo" del bloque comparativo (centavos string).
   - balanceSheet.totalLiabilitiesComparative = "Total Pasivo" del bloque comparativo.
   - balanceSheet.totalEquityComparative = "Total Patrimonio" del bloque comparativo.
-  - incomeStatement.grossProfitComparative = Utilidad Bruta del periodo comparativo (Ingresos − Costos del bloque comparativo).
-  - incomeStatement.operatingProfitComparative = EBIT del periodo comparativo (Utilidad Bruta − Gastos operacionales del bloque comparativo).
+  - incomeStatement.grossProfitComparative = Utilidad Bruta del periodo comparativo, copiada del token del bloque "CASCADA VINCULANTE DEL P&G" (ingresos operacionales netos 41 − 4175, menos costos 6/7; sin grupo 42).
+  - incomeStatement.operatingProfitComparative = EBIT del periodo comparativo, copiado del mismo bloque (Utilidad Bruta − grupos 51 y 52).
   - incomeStatement.netIncomeComparative = "Utilidad Neta (P&L)" del bloque comparativo.
   PROHIBIDO emitir null en cualquiera de los seis cuando isComparative=true (validator E9 rechaza). PROHIBIDO redondear o re-derivar; los valores son AUTORITARIOS del preprocesador. Tolerancia $0 al centavo.
 
@@ -962,7 +1030,9 @@ anomalyFlag = {
 \`\`\`
   NEVER emitir cifras de banda INVENTADAS — usar EXCLUSIVAMENTE las del header colombia-2026-context (si están presentes para el CIIU). If el header no expone banda para este CIIU then citar como \`normaRef: 'NIA 240 §A1 (banda sectorial CIIU no disponible — recomendación general)'\` y omitir benchmarkBand (null).
 
-Devoluciones 4175 (Parte 1.3 spec v2.0). TOTALES VINCULANTES expone (cuando F4 lande) \`ingresosNetos\` = |Σ 41xx crédito| − |Σ 4175xx débito|. If quieres desglosar ingresos en incomeStatement.lines (Opción B) then incluir línea separada "(-) Devoluciones en ventas (Cta 4175)" con valor absoluto y signo NEGATIVO; verificar que Ingresos brutos − Devoluciones = ingresosNetos. Else if Opción A (consolidado) then una sola línea "(+) Ingresos de actividades ordinarias (Grupo 41, neto de devoluciones)" con el monto ingresosNetos. NEVER duplicar la resta de 4175 cuando TOTALES VINCULANTES ya entrega el monto neto.
+Devoluciones 4175 (Parte 1.3 spec v2.0). TOTALES VINCULANTES expone (cuando F4 lande) \`ingresosNetos\` = |Σ 41xx crédito| − |Σ 4175xx débito|. If quieres desglosar ingresos en incomeStatement.lines (Opción B) then incluir línea separada "(-) Devoluciones en ventas (Cta 4175)" con valor absoluto y signo NEGATIVO; verificar que Ingresos brutos − Devoluciones = ingresosNetos. Else if Opción A (consolidado) then una sola línea "(+) Ingresos de actividades ordinarias (Grupo 41, neto de devoluciones)" con el monto de "Ingresos operacionales netos" del bloque CASCADA VINCULANTE DEL P&G (no el total de la clase 4: el grupo 42 va en su propio renglón debajo del EBIT). NEVER duplicar la resta de 4175 cuando el ancla ya entrega el monto neto.
+
+Signo de los renglones del P&G: con \`isAbsolute=true\` el renglón lleva la magnitud (el ingreso suma, el costo o gasto resta). Una partida contranatura (p. ej. 4250 recuperaciones con saldo débito, o un 53xx con saldo crédito) va con \`isAbsolute=false\` y el importe firmado según su efecto en el resultado (negativo si reduce la utilidad, positivo si la aumenta).
 
 Anti-duplicación Grupo 53 (CRÍTICO — Parte 1.3 spec v2.0). NEVER presentar simultáneamente el total del Grupo 53 (consolidado) Y sus subcuentas individuales (5305 Financieros, 5395 Diversos, 5310 Comisiones, etc.) como líneas independientes sumadas en \`incomeStatement.lines\`. Las subcuentas 53xx YA ESTÁN INCLUIDAS dentro del total Grupo 53; sumar ambos genera DOBLE CONTABILIZACIÓN (caso documentado: $30.262.041 de gastos no operacionales duplicados).
 
@@ -1028,6 +1098,8 @@ ${renderComparativeModeBlock(ctx)}
 ${renderImpracticabilityBlock(ctx)}
 
 ${renderPucMappingBlock()}
+
+${renderPnlCascadeBlock(ctx)}
 
 ${renderAnticipoRentaBlock(ctx)}
 
@@ -1388,7 +1460,7 @@ ${ctx.isGroup1
 
 If comparativosImpracticables=true then technicalNotes incluye la nota LITERAL de impracticabilidad: "Los estados financieros se presentan sin comparativos del periodo ${ctx.comparativePeriod ?? 'anterior'} dado que la información necesaria para reconstruirlos resultó impracticable de obtener (NIIF for SMEs §3.14, §10.21). La administración de la entidad efectuó esfuerzos razonables para obtener la información comparativa y documentó las gestiones realizadas." otherwise omitir.
 
-If actividadInferida.sectorCIIU empieza con "G" (Comercio) Y margen bruto calculado > 80% (derivable de incomeStatement vía Pass-1 anchors: (netIncomePrimary + Clase 5 + impuesto) / Clase 4) then emitir technicalNotes con la nota "verdad financiera condicionada" citando NIIF for SMEs §13.20 + NIA 705 §7 otherwise omitir.
+If actividadInferida.sectorCIIU empieza con "G" (Comercio) Y margen bruto > 80% (Utilidad Bruta / ingresos operacionales netos del bloque CASCADA VINCULANTE DEL P&G; el grupo 42 no entra en el margen bruto) then emitir technicalNotes con la nota "verdad financiera condicionada" citando NIIF for SMEs §13.20 + NIA 705 §7 otherwise omitir.
 
 If reclasifNoComp.length > 0 (Regla R4 — No-Compensación NIC 1 §32) then emitir technicalNotes con una nota DEDICADA NIIF for SMEs §2.52 + NIC 1 §32, listando cuenta_origen, saldo_invertido, cuenta_destino_pasivo, motivo_norma por cada reclasificación otherwise omitir.
 

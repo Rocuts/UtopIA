@@ -295,7 +295,7 @@ export function validateNiifReportJson(
         `E5. EBIT incorrectamente igualado a Utilidad Neta — el Grupo 53 debe deducirse DESPUÉS del EBIT. ` +
           `operatingProfitPrimary (${fmtCop(op)}) ≈ netIncomePrimary (${fmtCop(net)}); ` +
           `diferencia ${fmtCop(opMinusNet)} < tolerancia ${fmtCop(EQUALITY_TOL)} con netIncome material. ` +
-          `Revisar cascada: EBIT = grossProfit − Grupo 51 − Grupo 52; UAI = EBIT − Grupo 53; netIncome = UAI − impuesto.`,
+          `Revisar cascada: EBIT = grossProfit − Grupo 51 − Grupo 52; UAI = EBIT + otros ingresos (Grupo 42) − Grupo 53; netIncome = UAI − impuesto.`,
       );
     }
   }
@@ -753,49 +753,86 @@ export function validateNiifReportJson(
   // sostiene, libre.
   //
   // La verificación NO usa etiquetas. Usa el CÓDIGO PUC de cada renglón
-  // (Decreto 2650/1993, catálogo cerrado), que es dato estructurado:
+  // (Decreto 2650/1993, catálogo cerrado), que es dato estructurado. Cascada
+  // (enmienda spec v2.1 del 2026-09-24 — grupo 42 DEBAJO de la utilidad
+  // operacional; auditoría niif-contrato-01):
   //
-  //   Utilidad Bruta = Σ|clase 4 salvo 4175| − Σ|4175| − Σ|clase 6| − Σ|clase 7|
-  //   EBIT           = Utilidad Bruta − Σ|grupo 51| − Σ|grupo 52|
-  //   UAI            = EBIT − Σ|grupo 53| − Σ|resto de clase 5 salvo 54|
-  //   Utilidad Neta  = UAI − Σ|grupo 54|
+  //   Utilidad Bruta = ingresos 41 − devoluciones 4175 − costos (clases 6 y 7)
+  //   EBIT           = Utilidad Bruta − grupo 51 − grupo 52
+  //   UAI            = EBIT + otros ingresos (42 y demás de clase 4)
+  //                    − grupo 53 − resto de clase 5 salvo 54
+  //   Utilidad Neta  = UAI − grupo 54
   //
-  // El 4175 (Devoluciones en ventas, naturaleza débito) se RESTA aunque venga
-  // en valor absoluto: NIIF 15 §47 exige presentar el ingreso neto, y un
-  // informe que liste "Ingresos brutos" y "(-) Devoluciones" por separado es
-  // presentación legítima que no debe producir un falso positivo.
+  // Un renglón con código de un dígito "4" no permite separar 41 de 42: se
+  // toma como operacional, y si el balance tiene grupo 42 la cascada no cierra
+  // contra el ancla — el modelo debe desagregar.
   //
-  // Se toma la MAGNITUD de cada renglón (`abs`) porque el contrato permite las
-  // dos convenciones —`isAbsolute = true` imprime el gasto como positivo que
-  // resta, `false` lo trae ya firmado— y un costo es una resta en ambas.
+  // Signo de cada renglón (auditoría niif-contrato-13):
+  //   - `isAbsolute = true` → magnitud: el ingreso suma y el costo/gasto resta.
+  //   - `isAbsolute = false` → el importe viaja firmado. En la clase 4 el signo
+  //     es el del ingreso (una recuperación 4250 con saldo débito resta). En
+  //     las clases 5/6/7 el contrato admite dos lecturas estables: signo de
+  //     efecto en el resultado (gasto negativo) o signo natural (gasto
+  //     positivo, saldo crédito negativo). Se acepta la cascada si cierra bajo
+  //     UNA de las dos lecturas aplicada a todos los renglones; tomar `abs`
+  //     rechazaba un P&G correcto con una partida contranatura firmada.
+  //   - 4175 siempre resta su magnitud (NIIF 15 §47).
   //
   // Tolerancia $0. Todas las cifras son enteros de centavos que el modelo
   // compone en la misma respuesta: no existe ruta de redondeo que produzca
-  // deriva de un centavo. Medido en las 7 corridas reales con LLM archivadas
-  // en `.fase0*`: la cascada reprodujo los tres subtotales con brecha $0,00 en
-  // 7/7.
+  // deriva de un centavo.
   {
     const is = json.incomeStatement;
-    const bucket = { ingresos: ZERO, devoluciones: ZERO, costos: ZERO, g51: ZERO, g52: ZERO, g53: ZERO, g54: ZERO, otros5: ZERO };
+    type Buckets = {
+      ingresos41: bigint;
+      devoluciones: bigint;
+      otrosIngresos: bigint;
+      costos: bigint;
+      g51: bigint;
+      g52: bigint;
+      g53: bigint;
+      g54: bigint;
+      otros5: bigint;
+    };
+    // Aporte de cada renglón al resultado (+ aumenta la utilidad, − la reduce).
+    const buildBuckets = (expenseSignedIsEffect: boolean): Buckets => {
+      const b: Buckets = {
+        ingresos41: ZERO, devoluciones: ZERO, otrosIngresos: ZERO, costos: ZERO,
+        g51: ZERO, g52: ZERO, g53: ZERO, g54: ZERO, otros5: ZERO,
+      };
+      for (const line of is.lines) {
+        if (line.account === null) continue; // subtotales del propio modelo
+        const code = String(line.account).replace(/\D/g, '');
+        if (code.length === 0) continue;
+        const v = parseMoneyCop(line.amountPrimary);
+        if (code.startsWith('4')) {
+          if (code.startsWith('4175')) b.devoluciones -= abs(v);
+          else {
+            const aporte = line.isAbsolute ? abs(v) : v;
+            if (code === '4' || code.startsWith('41')) b.ingresos41 += aporte;
+            else b.otrosIngresos += aporte;
+          }
+          continue;
+        }
+        if (!/^[567]/.test(code)) continue;
+        const aporte = line.isAbsolute ? -abs(v) : expenseSignedIsEffect ? v : -v;
+        if (code.startsWith('6') || code.startsWith('7')) b.costos += aporte;
+        else if (code.startsWith('51')) b.g51 += aporte;
+        else if (code.startsWith('52')) b.g52 += aporte;
+        else if (code.startsWith('53')) b.g53 += aporte;
+        else if (code.startsWith('54')) b.g54 += aporte;
+        else b.otros5 += aporte;
+      }
+      return b;
+    };
     let codedLines = 0;
     let revenueLines = 0;
     for (const line of is.lines) {
-      if (line.account === null) continue; // subtotales del propio modelo
+      if (line.account === null) continue;
       const code = String(line.account).replace(/\D/g, '');
       if (code.length === 0) continue;
-      const magnitude = abs(parseMoneyCop(line.amountPrimary));
       codedLines++;
-      if (code.startsWith('4')) {
-        revenueLines++;
-        if (code.startsWith('4175')) bucket.devoluciones += magnitude;
-        else bucket.ingresos += magnitude;
-      } else if (code.startsWith('6') || code.startsWith('7')) {
-        bucket.costos += magnitude;
-      } else if (code.startsWith('51')) bucket.g51 += magnitude;
-      else if (code.startsWith('52')) bucket.g52 += magnitude;
-      else if (code.startsWith('53')) bucket.g53 += magnitude;
-      else if (code.startsWith('54')) bucket.g54 += magnitude;
-      else if (code.startsWith('5')) bucket.otros5 += magnitude;
+      if (code.startsWith('4')) revenueLines++;
     }
 
     const gross = parseMoneyCop(is.grossProfitPrimary);
@@ -818,24 +855,38 @@ export function validateNiifReportJson(
         );
       }
     } else {
-      const grossCalc = bucket.ingresos - bucket.devoluciones - bucket.costos;
-      const opCalc = gross - bucket.g51 - bucket.g52;
-      const uaiCalc = opProfit - bucket.g53 - bucket.otros5;
-      const netCalc = uaiCalc - bucket.g54;
+      const cascadeOf = (b: Buckets) => {
+        const grossCalc = b.ingresos41 + b.devoluciones + b.costos;
+        const opCalc = gross + b.g51 + b.g52;
+        const uaiCalc = opProfit + b.otrosIngresos + b.g53 + b.otros5;
+        const netCalc = uaiCalc + b.g54;
+        return { grossCalc, opCalc, uaiCalc, netCalc };
+      };
+      const cierra = (c: ReturnType<typeof cascadeOf>) =>
+        c.grossCalc === gross && c.opCalc === opProfit && c.netCalc === netIncome;
+      // Lectura A: gasto firmado por su efecto (negativo). Lectura B: signo
+      // natural (positivo). Sólo difieren si hay gastos con isAbsolute=false.
+      const bucketsA = buildBuckets(true);
+      const bucketsB = buildBuckets(false);
+      const cascadeA = cascadeOf(bucketsA);
+      const cascadeB = cascadeOf(bucketsB);
+      const useB = !cierra(cascadeA) && cierra(cascadeB);
+      const bucket = useB ? bucketsB : bucketsA;
+      const { grossCalc, opCalc, uaiCalc, netCalc } = useB ? cascadeB : cascadeA;
 
       const cascada: Array<[string, bigint, bigint, string]> = [
         [
           'Utilidad Bruta',
           grossCalc,
           gross,
-          'Σ ingresos (clase 4) − devoluciones (4175) − costos (clases 6 y 7)',
+          'ingresos operacionales (grupo 41) − devoluciones (4175) − costos (clases 6 y 7); el grupo 42 va debajo del EBIT',
         ],
         ['Resultado Operacional (EBIT)', opCalc, opProfit, 'Utilidad Bruta − grupo 51 − grupo 52'],
         [
           'Utilidad Neta',
           netCalc,
           netIncome,
-          'EBIT − grupo 53 − resto de clase 5 − impuesto (grupo 54)',
+          'EBIT + otros ingresos (grupo 42) − grupo 53 − resto de clase 5 − impuesto (grupo 54)',
         ],
       ];
       for (const [nombre, calculado, declarado, formula] of cascada) {
@@ -852,12 +903,13 @@ export function validateNiifReportJson(
       // Defensa Art. 647 E.T.: un gasto por impuesto que no existe en libros
       // es inexactitud sancionable con el 100% del mayor impuesto.
       if (bpt?.impuestoCausado !== undefined) {
-        const impuestoAncla = abs(parseMoneyCop(bpt.impuestoCausado));
-        if (bucket.g54 !== impuestoAncla) {
+        const impuestoAncla = parseMoneyCop(bpt.impuestoCausado);
+        const impuestoRenglones = -bucket.g54;
+        if (impuestoRenglones !== impuestoAncla) {
           errors.push(
             `E14. Impuesto de renta del periodo ${json.company.fiscalPeriod}: los renglones del ` +
-              `P&G del grupo PUC 54 suman ${fmtCop(bucket.g54)} y el preprocesador causó ` +
-              `${fmtCop(impuestoAncla)}. Brecha: ${fmtCop(bucket.g54 - impuestoAncla)}. ` +
+              `P&G del grupo PUC 54 suman ${fmtCop(impuestoRenglones)} y el preprocesador causó ` +
+              `${fmtCop(impuestoAncla)}. Brecha: ${fmtCop(impuestoRenglones - impuestoAncla)}. ` +
               `El gasto por impuesto no lo autora el analista: sale del grupo 54 del balance ` +
               `de prueba (Art. 26 y Art. 647 E.T.).`,
           );
@@ -905,9 +957,12 @@ export function validateNiifReportJson(
         netIncome + parseMoneyCop(is.oriPrimary),
       ];
       const agregados = [
-        bucket.ingresos,
-        bucket.ingresos - bucket.devoluciones,
+        bucket.ingresos41,
+        bucket.ingresos41 + bucket.devoluciones,
         bucket.devoluciones,
+        bucket.otrosIngresos,
+        bucket.ingresos41 + bucket.devoluciones + bucket.otrosIngresos,
+        bucket.ingresos41 + bucket.otrosIngresos,
         bucket.costos,
         bucket.g51,
         bucket.g52,
@@ -916,7 +971,9 @@ export function validateNiifReportJson(
         bucket.g54,
         bucket.otros5,
         bucket.g53 + bucket.otros5,
+        bucket.otrosIngresos + bucket.g53 + bucket.otros5,
         bucket.g51 + bucket.g52 + bucket.g53 + bucket.g54 + bucket.otros5,
+        bucket.g51 + bucket.g52 + bucket.g53 + bucket.otros5,
       ];
       const admisibles = new Set([ZERO, ...cierres, ...agregados].map((v) => v.toString()));
       for (const line of is.lines) {
