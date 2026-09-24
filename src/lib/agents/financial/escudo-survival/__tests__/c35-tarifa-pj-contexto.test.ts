@@ -47,6 +47,26 @@ describe('detectarTarifasPjAnteriores', () => {
   ])('marca la tarifa PJ anterior a la Ley 2277/2022: %s', (txt, esperado) => {
     expect(detectarTarifasPjAnteriores(txt)).toEqual([esperado]);
   });
+
+  // Revisión de la fase 2: la redacción más común del error no nombra el
+  // sujeto («tarifa de renta 2026: 34%»); en el Escudo es la tarifa PJ.
+  it.each([
+    ['Tarifa de renta 2026: 34%.', '34%'],
+    ['La tarifa del impuesto de renta es del 33% sobre la renta líquida.', '33%'],
+    ['Se aplicó la tarifa sobre la renta del 32 % a la base gravable.', '32 %'],
+  ])('marca la tarifa de renta sin sujeto con valor anterior: %s', (txt, esperado) => {
+    expect(detectarTarifasPjAnteriores(txt)).toEqual([esperado]);
+  });
+
+  it.each([
+    'La tarifa de renta marginal del 33% aplica a personas naturales (Art. 241 E.T.).',
+    'Para el socio, la tarifa de renta del 33% de la tabla del Art. 241 E.T.',
+    'La tarifa de renta pasó del 33% al 35% con la Ley 2277/2022.',
+    'La tarifa general anterior a la Ley 2277/2022 era del 33%.',
+    'Tarifa de renta para personas jurídicas 2026: 35%.',
+  ])('no marca personas naturales ni referencias históricas: %s', (txt) => {
+    expect(detectarTarifasPjAnteriores(txt)).toEqual([]);
+  });
 });
 
 // ── Integración: el check dentro de validateSurvivalReport ──────────────────
