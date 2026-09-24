@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
+import { adjustmentLedgerSchema, unknownAdjustmentPeriodReasons } from '@/lib/reports/adjustment-ledger';
 import { financialExportBlockers } from '@/lib/export/financial-export-validation';
 import { Readable } from 'node:stream';
 import { generateFinancialExcel } from '@/lib/export/excel-export';
@@ -37,8 +37,11 @@ import {
   type PersistedReportResolution,
 } from '@/lib/reports/persisted-report-request';
 import { rederivePreprocessedFromRows } from '@/lib/reports/preprocessed-integrity';
+import { withServerPartVerdicts } from '@/lib/reports/part-verdicts';
+import { applyRequestConfirmations } from '@/lib/reports/ingest-confirmations';
 import {
   appendPdfProvenance,
+  isProvisionalDraft,
   provenanceHeaders,
   withExcelProvenance,
   type ArtifactProvenance,
@@ -121,18 +124,7 @@ function ingestRejectedResponse(reasons: string[]): Response {
   );
 }
 
-const adjustmentSchema = z.object({
-  id: z.string().min(1).max(100),
-  accountCode: z.string().min(1).max(10),
-  accountName: z.string().min(1).max(200),
-  amount: z.number().refine((n) => Number.isFinite(n), 'amount debe ser finito'),
-  rationale: z.string().min(1).max(2_000),
-  status: z.enum(['proposed', 'applied', 'rejected']),
-  proposedAt: z.string().min(1).max(40),
-  appliedAt: z.string().min(1).max(40).optional(),
-  rejectedAt: z.string().min(1).max(40).optional(),
-});
-const adjustmentLedgerSchema = z.object({ adjustments: z.array(adjustmentSchema).max(50) }).optional();
+// Contrato único del ledger (incluye `period` del ajuste multiperiodo).
 
 type ExportSource =
   | { ok: true; preprocessed: PreprocessedBalance | undefined }
@@ -191,7 +183,11 @@ function resolveExportPreprocessed(body: Record<string, unknown>, label: string)
   if (typeof body.rawData !== 'string' || body.rawData.trim().length === 0) {
     return fromOwnRows();
   }
-  const read = readRawData(body.rawData, label);
+  // Mismas confirmaciones de ingesta que /niif (unidad, vencimientos): sin
+  // ellas un balance "en miles" se re-derivaría sin reexpresar (422 falso).
+  const confirmed = applyRequestConfirmations(body, body.rawData);
+  if (!confirmed.ok) return { ok: false, response: confirmed.response };
+  const read = readRawData(confirmed.rawData, label);
   if (read.kind === 'rejected') return { ok: false, response: ingestRejectedResponse(read.reasons) };
   if (read.kind === 'empty') {
     // Mismo respaldo que /niif: sin filas legibles en `rawData` se usa el
@@ -216,7 +212,10 @@ function resolveExportPreprocessed(body: Record<string, unknown>, label: string)
       ),
     };
   }
-  // Mismo paso que Stage 0.4 de /niif (`prepareFinancialContext`).
+  // Mismo paso que Stage 0.4 de /niif (`prepareFinancialContext`), incluido el
+  // rechazo de un ajuste confirmado con un periodo inexistente.
+  const periodErrors = unknownAdjustmentPeriodReasons(read.preprocessed, applied);
+  if (periodErrors.length > 0) return { ok: false, response: incoherentSourcesResponse(periodErrors) };
   const derived =
     applied.length === 0 ? read.preprocessed : applyAdjustments(read.preprocessed, applied).balance;
   if (claimed) {
@@ -239,8 +238,13 @@ function incoherentSourcesResponse(details: string[]): Response {
   return NextResponse.json({ error: 'Report is not exportable.', details }, { status: 422 });
 }
 
-/** Sello de las exportaciones sin referencia persistida. */
-const UNVERIFIED: ArtifactProvenance = { kind: 'unverified' };
+/**
+ * Sello de las exportaciones sin referencia persistida; aclara BORRADOR si el
+ * consolidado lleva el encabezado del override (pipeline-flujo-21).
+ */
+function unverified(report: FinancialReport | null | undefined): ArtifactProvenance {
+  return isProvisionalDraft(report) ? { kind: 'unverified', draft: true } : { kind: 'unverified' };
+}
 
 /**
  * Exportación desde la versión persistida (procedencia servidor). El gate
@@ -253,10 +257,12 @@ async function exportPersisted(
   format: 'excel' | 'pdf-elite',
 ): Promise<Response> {
   const { report, preprocessed, provenance } = persisted;
-  const blocked = rejectInvalidExport(report, preprocessed);
-  if (blocked) return blocked;
-  const stamp: ArtifactProvenance = { kind: 'verified', provenance };
   const language: 'es' | 'en' = body.language === 'en' ? 'en' : 'es';
+  const blocked = rejectInvalidExport(report, preprocessed, language);
+  if (blocked) return blocked;
+  const stamp: ArtifactProvenance = isProvisionalDraft(report)
+    ? { kind: 'verified', provenance, draft: true }
+    : { kind: 'verified', provenance };
   const headers = provenanceHeaders(stamp);
 
   if (format === 'pdf-elite') {
@@ -342,15 +348,16 @@ export async function POST(req: Request) {
       const source = resolveExportPreprocessed(body, 'export/excel');
       if (!source.ok) return source.response;
       const { preprocessed } = source;
-      const blocked = rejectInvalidExport(report, preprocessed);
-      if (blocked) return blocked;
       const excelLanguage: 'es' | 'en' = body.language === 'en' ? 'en' : 'es';
+      const blocked = rejectInvalidExport(report, preprocessed, excelLanguage);
+      if (blocked) return blocked;
+      const stamp = unverified(report);
       const buffer = await generateFinancialExcel({
-        report: withExcelProvenance(report, UNVERIFIED, excelLanguage),
+        report: withExcelProvenance(report, stamp, excelLanguage),
         preprocessed,
         language: excelLanguage,
       });
-      return createExcelResponse(buffer, report.company.name, provenanceHeaders(UNVERIFIED));
+      return createExcelResponse(buffer, report.company.name, provenanceHeaders(stamp));
     }
 
     // -----------------------------------------------------------------------
@@ -362,7 +369,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid request.', details: errors }, { status: 400 });
     }
 
-    const { rawData, company, language, instructions } = parsed.data;
+    const { company, language, instructions } = parsed.data;
+    const confirmed = applyRequestConfirmations(body, parsed.data.rawData);
+    if (!confirmed.ok) return confirmed.response;
+    const rawData = confirmed.rawData;
 
     const read = readRawData(rawData, 'export/full');
     if (read.kind === 'rejected') return ingestRejectedResponse(read.reasons);
@@ -417,15 +427,16 @@ export async function POST(req: Request) {
       throw err;
     }
 
-    const blocked = rejectInvalidExport(report, preprocessed);
+    const blocked = rejectInvalidExport(report, preprocessed, language);
     if (blocked) return blocked;
 
+    const stamp = unverified(report);
     const buffer = await generateFinancialExcel({
-      report: withExcelProvenance(report, UNVERIFIED, language),
+      report: withExcelProvenance(report, stamp, language),
       preprocessed,
       language,
     });
-    return createExcelResponse(buffer, effectiveCompany.name, provenanceHeaders(UNVERIFIED));
+    return createExcelResponse(buffer, effectiveCompany.name, provenanceHeaders(stamp));
   } catch (error) {
     console.error('[financial-report/export] Error:', error instanceof Error ? error.message : error);
     return NextResponse.json(
@@ -480,9 +491,9 @@ async function handlePdfElite(body: unknown): Promise<Response> {
     const source = resolveExportPreprocessed(b as Record<string, unknown>, 'pdf-elite/fast');
     if (!source.ok) return source.response;
     const { preprocessed } = source;
-    const blocked = rejectInvalidExport(report, preprocessed);
+    const language: 'es' | 'en' = b.language === 'en' ? 'en' : 'es';
+    const blocked = rejectInvalidExport(report, preprocessed, language);
     if (blocked) return blocked;
-    const language: 'es' | 'en' = b.language ?? 'es';
 
     let pillars = null;
     if (preprocessed?.primary) {
@@ -505,9 +516,10 @@ async function handlePdfElite(body: unknown): Promise<Response> {
       qualityReport: b.qualityReport ?? null,
       outputOptions: b.outputOptions ?? null,
     });
-    appendPdfProvenance(doc, UNVERIFIED, language);
+    const stamp = unverified(report);
+    appendPdfProvenance(doc, stamp, language);
     const stream = await renderEditorialReportToStream(doc);
-    return pdfResponse(stream, report.company.name, provenanceHeaders(UNVERIFIED));
+    return pdfResponse(stream, report.company.name, provenanceHeaders(stamp));
   }
 
   // SLOW PATH: no pre-built report — re-run the full pipeline (used by callers
@@ -518,7 +530,10 @@ async function handlePdfElite(body: unknown): Promise<Response> {
     const errors = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
     return NextResponse.json({ error: 'Invalid request.', details: errors }, { status: 400 });
   }
-  const { rawData, company, language, instructions } = parsed.data;
+  const { company, language, instructions } = parsed.data;
+  const confirmed = applyRequestConfirmations(body, parsed.data.rawData);
+  if (!confirmed.ok) return confirmed.response;
+  const rawData = confirmed.rawData;
 
   // Preprocess up front so we can reuse the snapshot for both pillars and the
   // BLOQUEADO degenerate path. El orquestador recibe el MISMO preprocesado: una
@@ -592,12 +607,13 @@ async function handlePdfElite(body: unknown): Promise<Response> {
       language,
       emittable: { ok: false, blockers: blockerReasons },
     });
-    appendPdfProvenance(doc, UNVERIFIED, language);
+    const stamp = unverified(stub);
+    appendPdfProvenance(doc, stamp, language);
     const stream = await renderEditorialReportToStream(doc);
-    return pdfResponse(stream, company.name, provenanceHeaders(UNVERIFIED));
+    return pdfResponse(stream, company.name, provenanceHeaders(stamp));
   }
 
-  const blocked = rejectInvalidExport(report, preprocessed);
+  const blocked = rejectInvalidExport(report, preprocessed, language);
   if (blocked) return blocked;
 
   // Successful path: optionally aggregate pillars (fail-soft).
@@ -619,19 +635,28 @@ async function handlePdfElite(body: unknown): Promise<Response> {
     pillars,
     language,
   });
-  appendPdfProvenance(doc, UNVERIFIED, language);
+  const stamp = unverified(report);
+  appendPdfProvenance(doc, stamp, language);
 
   const stream = await renderEditorialReportToStream(doc);
-  return pdfResponse(stream, company.name, provenanceHeaders(UNVERIFIED));
+  return pdfResponse(stream, company.name, provenanceHeaders(stamp));
 }
 
 function rejectInvalidExport(
   report: FinancialReport,
   preprocessed: PreprocessedBalance | undefined,
+  language: 'es' | 'en',
 ): Response | null {
   // Un solo gate (mismo que /html): coherencia interna, procedencia contra el
-  // preprocesado de la petición, Parte II, completitud e identidad.
-  const details = financialExportBlockers(report, preprocessed);
+  // preprocesado de la petición, Parte II, completitud e identidad. Antes, los
+  // veredictos de las Partes II y III se RECALCULAN contra ese preprocesado
+  // (aritmética y prosa del acta y de las notas, anclas y prosa de la Parte
+  // II): un `clean: true` del cliente —o de una versión persistida con reglas
+  // anteriores— no sustituye el cruce; el recálculo sólo endurece.
+  const details = financialExportBlockers(
+    withServerPartVerdicts(report, preprocessed, language),
+    preprocessed,
+  );
   return details.length > 0
     ? NextResponse.json({ error: 'Report is not exportable.', details }, { status: 422 })
     : null;

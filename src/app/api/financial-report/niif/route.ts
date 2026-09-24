@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { adjustmentLedgerSchema } from '@/lib/reports/adjustment-ledger';
 import { z } from 'zod';
 import { financialReportRequestSchema, excludedFactIdsSchema } from '@/lib/validation/schemas';
 import { getCurrentWorkspaceId } from '@/lib/db/workspace';
@@ -11,11 +12,11 @@ import {
   type PreprocessedBalance,
 } from '@/lib/preprocessing/trial-balance';
 import {
-  incorporarConfirmaciones,
   parseUploadedTrialBalanceText,
   TrialBalanceIngestError,
 } from '@/lib/preprocessing/raw-data';
-import { leerCampoUnidad, MAX_VENCIMIENTOS_DECLARADOS } from '@/lib/upload/ingest-directives';
+import { applyRequestConfirmations } from '@/lib/reports/ingest-confirmations';
+import { resolveClientPreprocessed } from '@/lib/reports/client-preprocessed';
 import {
   revivePreprocessedBalance,
   toJsonSafe,
@@ -69,38 +70,7 @@ const provisionalFlagSchema = z
   })
   .optional();
 
-const adjustmentSchema = z.object({
-  id: z.string().min(1).max(100),
-  accountCode: z.string().min(1).max(10),
-  accountName: z.string().min(1).max(200),
-  amount: z.number().refine((n) => Number.isFinite(n), 'amount debe ser finito'),
-  rationale: z.string().min(1).max(2_000),
-  status: z.enum(['proposed', 'applied', 'rejected']),
-  proposedAt: z.string().min(1).max(40),
-  appliedAt: z.string().min(1).max(40).optional(),
-  rejectedAt: z.string().min(1).max(40).optional(),
-});
-const adjustmentLedgerSchema = z
-  .object({
-    adjustments: z.array(adjustmentSchema).max(50),
-  })
-  .optional();
-
-/**
- * P4-b: excepciones de vencimiento por cuenta (`código → corriente |
- * no_corriente`). Sólo cuentas de activo (1) o pasivo (2). No viaja al LLM:
- * es entrada del usuario que el preprocesador aplica de forma determinista.
- */
-const maturityOverridesSchema = z
-  .record(
-    z.string().regex(/^[12]\d{1,19}$/, 'código PUC de activo (1) o pasivo (2), 2 a 20 dígitos'),
-    z.enum(['corriente', 'no_corriente']),
-  )
-  .refine((m) => Object.keys(m).length <= MAX_VENCIMIENTOS_DECLARADOS, {
-    message: `máximo ${MAX_VENCIMIENTOS_DECLARADOS} excepciones`,
-  })
-  .nullable()
-  .optional();
+// Contrato único del ledger (incluye `period` del ajuste multiperiodo).
 
 export async function POST(req: Request) {
   const gate = await requireAuthSession();
@@ -128,47 +98,11 @@ export async function POST(req: Request) {
     // al inicio de `rawData` (el intake ya las trae ahí): Stage 0, los agentes
     // y /export re-derivan el balance del MISMO texto. Una contradicción con
     // las directivas del texto es 422, nunca se elige una en silencio.
-    const unitField = leerCampoUnidad((body as { unitMultiplier?: unknown }).unitMultiplier);
-    if (!unitField.ok) {
-      return NextResponse.json(
-        { error: 'Invalid request format.', details: [`unitMultiplier: ${unitField.error}`] },
-        { status: 400 },
-      );
-    }
-    const maturityParsed = maturityOverridesSchema.safeParse(
-      (body as { maturityOverrides?: unknown }).maturityOverrides,
-    );
-    if (!maturityParsed.success) {
-      return NextResponse.json(
-        {
-          error: 'Invalid request format.',
-          details: maturityParsed.error.issues.map(
-            (i) => `maturityOverrides.${i.path.join('.')}: ${i.message}`,
-          ),
-        },
-        { status: 400 },
-      );
-    }
-    let rawData: string;
-    try {
-      rawData = incorporarConfirmaciones(parsed.data.rawData, {
-        ...(unitField.unidad ? { unidadConfirmada: unitField.unidad } : {}),
-        ...(maturityParsed.data ? { vencimientos: maturityParsed.data } : {}),
-      });
-    } catch (err) {
-      if (err instanceof TrialBalanceIngestError) {
-        return NextResponse.json(
-          {
-            error: 'El balance de prueba tiene inconsistencias criticas.',
-            code: 'BALANCE_VALIDATION_FAILED',
-            reasons: err.reasons,
-            suggestedAccounts: [],
-          },
-          { status: 422 },
-        );
-      }
-      throw err;
-    }
+    // /consolidate y /export aceptan los mismos campos con el mismo helper
+    // (`applyRequestConfirmations`), para quien no reenvía el texto confirmado.
+    const confirmed = applyRequestConfirmations(body, parsed.data.rawData);
+    if (!confirmed.ok) return confirmed.response;
+    const rawData = confirmed.rawData;
 
     const provisionalParsed = provisionalFlagSchema.safeParse(
       (body as { provisional?: unknown }).provisional,
@@ -248,7 +182,9 @@ export async function POST(req: Request) {
     //  2. El `preprocessed` que reenvía el cliente (el del upload) sólo se usa
     //     si `rawData` no produce filas. Se valida estructuralmente y se
     //     reviven los BigInt (cents) — un shape inválido es 400, nunca cast
-    //     ciego.
+    //     ciego — y, antes de usarlo, se RE-DERIVA desde sus propias filas
+    //     (cross-dep P1): totales de control alterados → 422. Es el del
+    //     upload, sin ajustes: Stage 0 aplica después el ledger.
     //  3. Si ninguno existe, Stage 0 (`prepareFinancialContext`) decide: un
     //     balance tabular sin filas o con hojas en conflicto → 422 con motivo.
     const bodyPreprocessed = (body as { preprocessed?: unknown }).preprocessed;
@@ -280,9 +216,16 @@ export async function POST(req: Request) {
       // objeto del cliente. Otros fallos caen al respaldo del cliente.
       if (err instanceof TrialBalanceIngestError) rawDataRejected = true;
     }
-    const preprocessed = rawDataRejected
-      ? undefined
-      : serverPreprocessed ?? clientPreprocessed;
+    let preprocessed: PreprocessedBalance | undefined;
+    if (!rawDataRejected) {
+      if (serverPreprocessed) {
+        preprocessed = serverPreprocessed;
+      } else if (clientPreprocessed) {
+        const client = resolveClientPreprocessed(bodyPreprocessed, null);
+        if (!client.ok) return client.response;
+        preprocessed = client.preprocessed;
+      }
+    }
 
     const stream =
       req.headers.get('X-Stream') === 'true' ||

@@ -7,7 +7,7 @@ import type {
   StrategicAnalysisResult,
 } from '@/lib/agents/financial/types';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
-import { revivePreprocessedBalance } from '@/lib/preprocessing/json-safe';
+import { resolveClientPreprocessed } from '@/lib/reports/client-preprocessed';
 import { createSafeSse } from '@/lib/api/sse-safe';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
 import { requireAuthSession } from '@/lib/auth/require-session';
@@ -105,19 +105,16 @@ export async function POST(req: Request) {
 
     const typedNiif = niifResult as unknown as NiifAnalysisResult;
     const typedStrategy = strategyResult as unknown as StrategicAnalysisResult;
-    // `preprocessed` viene del round-trip JSON de /niif: se valida
-    // estructuralmente y se reviven los BigInt (cents).
-    let typedPp: PreprocessedBalance | undefined;
-    if (preprocessed !== undefined && preprocessed !== null) {
-      const revived = revivePreprocessedBalance(preprocessed);
-      if (!revived) {
-        return NextResponse.json(
-          { error: 'Invalid preprocessed format.' },
-          { status: 400 },
-        );
-      }
-      typedPp = revived;
-    }
+    // `preprocessed` viene del round-trip JSON de /niif: se revive y se
+    // RE-DERIVA desde sus filas con el ledger confirmado que acompaña la
+    // petición (cross-dep P1); unos totales alterados → 422 antes de redactar
+    // el acta sobre ellos.
+    const client = resolveClientPreprocessed(
+      preprocessed,
+      (body as { adjustmentLedger?: unknown }).adjustmentLedger,
+    );
+    if (!client.ok) return client.response;
+    const typedPp: PreprocessedBalance | undefined = client.preprocessed;
 
     if (stream) {
       return runWithTelemetryContext(telemetryCtx, () =>

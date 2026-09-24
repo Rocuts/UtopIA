@@ -151,7 +151,7 @@ describe('readAppliedAdjustments', () => {
     expect(readAppliedAdjustments({ adjustments: 'x' })).toBeNull();
   });
 
-  it('conserva sólo los confirmados y descarta `period` (mismo contrato que /niif)', () => {
+  it('conserva sólo los confirmados y su `period` (mismo contrato que /niif, /consolidate y /export)', () => {
     const out = readAppliedAdjustments({
       adjustments: [
         { ...LEDGER[0], period: '2024' },
@@ -160,6 +160,13 @@ describe('readAppliedAdjustments', () => {
     });
     expect(out).toHaveLength(1);
     expect(out?.[0].id).toBe('adj-1');
-    expect(out?.[0].period).toBeUndefined();
+    // Un ajuste del comparativo se re-deriva sobre el comparativo, como en /niif.
+    expect(out?.[0].period).toBe('2024');
+    expect(readAppliedAdjustments({ adjustments: [LEDGER[0]] })?.[0].period).toBeUndefined();
+  });
+
+  it('un `period` con forma inválida invalida el ledger (400), igual que el esquema de las rutas', () => {
+    expect(readAppliedAdjustments({ adjustments: [{ ...LEDGER[0], period: 2024 }] })).toBeNull();
+    expect(readAppliedAdjustments({ adjustments: [{ ...LEDGER[0], period: '' }] })).toBeNull();
   });
 });

@@ -58,7 +58,7 @@ import {
   describeActaQualifications,
 } from './contracts/base';
 import { buildActaExpectedArithmetic } from './prompts/governance-specialist.prompt';
-import { normalizeTipoSocietarioParaGate } from './split-consolidation';
+import { normalizeTipoSocietarioParaGate, regimenTributarioParaGate } from './split-consolidation';
 import { ANCHOR_LABELS, buildPeriodAnchors, moneyCopToken } from './contracts/anchors';
 import { mesesDelPeriodo, periodosDeIgualDuracion } from '@/lib/preprocessing/periodo-meses';
 import {
@@ -107,6 +107,8 @@ import type {
   ProvisionalFlag,
 } from '@/lib/agents/repair/types';
 import { applyAdjustments, revalidate } from '@/lib/agents/repair/adjustments';
+import { unknownAdjustmentPeriodReasons } from '@/lib/reports/adjustment-ledger';
+import { leerDirectivasIngesta } from '@/lib/upload/ingest-directives';
 import { getHechosEmpresaBlock } from '@/lib/facts/report-facts';
 import { computeEbitda } from '@/lib/pillars/ebitda';
 import type { KpiNdMotivos } from '@/lib/preprocessing/trial-balance';
@@ -120,7 +122,9 @@ export interface OrchestrateFinancialOptions {
    * NO lanza si falla — el reporte se devuelve con un watermark BORRADOR y se
    * emite un `event: warning` con la lista de errores. Lo activa el repair
    * chat ("El Doctor de Datos") cuando el usuario insiste en generar el
-   * reporte a pesar del fallo.
+   * reporte a pesar del fallo. No levanta el gate de Stage 0
+   * (`prepareFinancialContext` lanza igual con un balance descuadrado); en el
+   * camino partido lo aplica /consolidate (pipeline-flujo-21).
    */
   provisional?: ProvisionalFlag;
   /**
@@ -1462,6 +1466,58 @@ function renderDeterministicCashFlowLines(
   return lines;
 }
 
+/** Factor de cada unidad confirmada hacia pesos, en texto. */
+const FACTOR_UNIDAD_TEXTO = { miles: '1.000', millones: '1.000.000' } as const;
+
+/**
+ * Unidad de las cifras y notas de ingesta (cross-dep P4). Con la unidad
+ * confirmada en miles o millones, el preprocesador reexpresa cada importe a
+ * pesos, pero los agentes también leen los DATOS CONTABLES EN BRUTO, que
+ * siguen en la unidad del archivo con sólo la directiva `[unidad-confirmada=…]`
+ * delante: sin decirlo, una nota que citara el saldo de una cuenta del texto
+ * crudo salía 1.000 veces menor. Las notas de ingesta (unidad reexpresada,
+ * vencimientos declarados, fecha de corte, supuestos de la clase 7) se citan
+ * tal cual desde las filas del preprocesado. Vacío si no hay nada que decir.
+ */
+function renderIngestaLines(preprocessed: unknown, rawData: string): string[] {
+  const pp = isPreprocessedBalance(preprocessed) ? preprocessed : undefined;
+  const lines: string[] = [];
+  const unidad = leerDirectivasIngesta(rawData ?? '').unidadConfirmada;
+  if (pp && (unidad === 'miles' || unidad === 'millones')) {
+    const factor = FACTOR_UNIDAD_TEXTO[unidad];
+    lines.push('UNIDAD DE LAS CIFRAS (confirmada por el usuario):');
+    lines.push(
+      `- Los TOTALES VINCULANTES están en PESOS colombianos: el preprocesador reexpresó cada importe ` +
+        `desde ${unidad} de pesos (× ${factor}) a centavos exactos.`,
+    );
+    lines.push(
+      `- Los DATOS CONTABLES EN BRUTO (la tabla de cuentas tras la directiva [unidad-confirmada=${unidad}]) ` +
+        `siguen en ${unidad.toUpperCase()} de pesos: el saldo de una cuenta leído allí vale × ${factor} en pesos.`,
+    );
+    lines.push(
+      '- NUNCA presentes un importe de los datos en bruto como pesos. Si citas el saldo de una cuenta, ' +
+        `entonces usa su valor en pesos (× ${factor}); de lo contrario cita la cifra vinculante.`,
+    );
+    lines.push('');
+  }
+  if (pp) {
+    const periods = new Set(pp.periods.map((p) => p.period));
+    const notas = new Set<string>();
+    for (const row of pp.rawRows ?? []) {
+      for (const nota of row.notasIngesta ?? []) {
+        if (nota.period !== null && !periods.has(nota.period)) continue;
+        notas.add(nota.period ? `[${nota.period}] ${nota.message}` : nota.message);
+      }
+    }
+    if (notas.size > 0) {
+      lines.push('NOTAS DE INGESTA (cómo se leyó el archivo; cítalas en las notas técnicas sin alterar sus cifras):');
+      for (const n of notas) lines.push(`- ${n}`);
+      lines.push('');
+    }
+  }
+  return lines;
+}
+
 /**
  * Sección "EFE Y ECP DEL PERIODO COMPARATIVO" del bloque vinculante
  * (auditoría 2026-09-24, pendiente #3 — NIIF para las PYMES 3.14). Estrategia
@@ -1516,8 +1572,11 @@ function renderComparativeStatementsLines(basis: ComparativeStatementsBasis | nu
  * Multiperiodo: si `preprocessed.periods.length >= 2`, emite una seccion por
  * periodo + tabla de variacion YoY entre primary y comparative. Si solo hay
  * 1 periodo, emite el bloque simple legacy.
+ *
+ * `rawData` (el texto que leen los agentes) aporta la unidad confirmada: con
+ * ella el bloque declara que los totales están en pesos y el bruto no.
  */
-function buildBindingTotalsBlock(preprocessed: unknown): string {
+function buildBindingTotalsBlock(preprocessed: unknown, rawData = ''): string {
   const primary = getPrimarySnapshot(preprocessed);
   const comparative = getComparativeSnapshot(preprocessed);
 
@@ -1535,6 +1594,7 @@ function buildBindingTotalsBlock(preprocessed: unknown): string {
   const lines: string[] = [];
   lines.push('TOTALES VINCULANTES (pre-calculados por 1+1 — NO los modifiques):');
   lines.push('');
+  lines.push(...renderIngestaLines(preprocessed, rawData));
   lines.push(`=== Periodo actual (${primary.period}) ===`);
   lines.push(...renderSnapshotLines(primary));
 
@@ -1769,9 +1829,14 @@ export interface FinancialPipelineContext {
 /**
  * Stage 0 compartido: ERP pull → preprocess → ajustes → gate → bindingTotals.
  *
- * Lanza `BalanceValidationError` si el balance no cuadra y `options.provisional`
- * no esta activo. Los route handlers (legacy y nuevos) capturan ese error y
- * devuelven 422.
+ * Lanza `BalanceValidationError` si el balance no cuadra (o sus hojas son
+ * incompatibles), CON o SIN `options.provisional`: el override del Doctor de
+ * Datos no levanta el gate aritmético de Stage 0 —un balance descuadrado no
+ * produce cifras vinculantes ni siquiera como borrador—; sólo marca BORRADOR
+ * el consolidado (post-render en el legacy `orchestrateFinancialReport`, en
+ * /consolidate con `consolidateSplitReport({ provisional })` en el camino
+ * partido; pipeline-flujo-21). Los route handlers (legacy y nuevos) capturan
+ * ese error y devuelven 422.
  */
 export async function prepareFinancialContext(
   request: FinancialReportRequest,
@@ -1861,6 +1926,11 @@ export async function prepareFinancialContext(
     typeof preprocessed === 'object' &&
     isPreprocessedBalance(preprocessed)
   ) {
+    // Un ajuste confirmado anclado a un periodo que no existe en el balance:
+    // `applyAdjustments` lo ignoraría con sólo un aviso en el log y el informe
+    // saldría sin él. Se detiene con motivo (422), como el resto de Stage 0.
+    const periodErrors = unknownAdjustmentPeriodReasons(preprocessed, appliedAdjustments);
+    if (periodErrors.length > 0) throw new BalanceValidationError(periodErrors, []);
     adjustmentsApplicationDetail = applyAdjustments(preprocessed, appliedAdjustments);
     preprocessed = adjustmentsApplicationDetail.balance;
     onProgress?.({
@@ -1930,7 +2000,7 @@ export async function prepareFinancialContext(
     }
   }
 
-  const bindingTotalsBlock = buildBindingTotalsBlock(preprocessed);
+  const bindingTotalsBlock = buildBindingTotalsBlock(preprocessed, effectiveRawData ?? '');
 
   // ELITE CONTEXT — lectura defensiva
   const ppLoose = preprocessed as unknown as
@@ -2076,6 +2146,7 @@ export async function prepareFinancialContext(
           niifGroup: effectiveCompany.niifGroup ?? 2,
           tipoSocietario: normalizeTipoSocietario(effectiveCompany.entityType),
           estatutosRequierenReservaLegal: getEstatutosFlag(effectiveCompany),
+          regimenTributario: regimenTributarioParaGate(effectiveCompany),
         },
         {
           comparativos_impracticables: ppForAgents?.comparativos_impracticables,
@@ -3073,6 +3144,8 @@ export async function orchestrateFinancialReport(
     niifGroup: effectiveCompany.niifGroup ?? 2,
     tipoSocietario: normalizeTipoSocietario(effectiveCompany.entityType),
     estatutosRequierenReservaLegal: getEstatutosFlag(effectiveCompany),
+    // auditoria-calidad-31: con Régimen Simple V10 (TTD) no se exige.
+    regimenTributario: regimenTributarioParaGate(effectiveCompany),
   };
 
   const primarySnapshotForGate = getPrimarySnapshot(preprocessed);

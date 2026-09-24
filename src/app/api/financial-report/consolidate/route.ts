@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { adjustmentLedgerSchema } from '@/lib/reports/adjustment-ledger';
 import { z } from 'zod';
 import {
   financialReportRequestSchema,
@@ -10,13 +11,13 @@ import {
   buildAdjustmentsAuditSection,
 } from '@/lib/agents/financial/orchestrator';
 import { consolidateSplitReport } from '@/lib/agents/financial/split-consolidation';
-import type { AdjustmentLedger } from '@/lib/agents/repair/types';
+import type { AdjustmentLedger, ProvisionalFlag } from '@/lib/agents/repair/types';
 import type { FinancialReport } from '@/lib/agents/financial/types';
 import { ancoraOrNull } from '@/lib/agents/financial/ancora/build-ancora';
 import { requireAuthSession } from '@/lib/auth/require-session';
 import { toJsonSafe } from '@/lib/preprocessing/json-safe';
-import { foldReportQualifications } from '@/lib/reports/fold-qualifications';
-import { serverActaVerdict, withServerActaVerdict } from '@/lib/reports/acta-verdict';
+import { withServerPartVerdicts } from '@/lib/reports/part-verdicts';
+import { applyRequestConfirmations } from '@/lib/reports/ingest-confirmations';
 import { parseReportParts } from '@/lib/reports/report-parts';
 import { buildFinancialReportVersion } from '@/lib/reports/financial-report-version';
 import {
@@ -58,19 +59,14 @@ export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 // Mismo contrato que /niif (schemas inline para mantener cada endpoint autónomo).
-const adjustmentSchema = z.object({
-  id: z.string().min(1).max(100),
-  accountCode: z.string().min(1).max(10),
-  accountName: z.string().min(1).max(200),
-  amount: z.number().refine((n) => Number.isFinite(n), 'amount debe ser finito'),
-  rationale: z.string().min(1).max(2_000),
-  status: z.enum(['proposed', 'applied', 'rejected']),
-  proposedAt: z.string().min(1).max(40),
-  appliedAt: z.string().min(1).max(40).optional(),
-  rejectedAt: z.string().min(1).max(40).optional(),
-});
-const adjustmentLedgerSchema = z
-  .object({ adjustments: z.array(adjustmentSchema).max(50) })
+// Contrato único del ledger (incluye `period` del ajuste multiperiodo).
+// Override del Doctor de Datos ("Continuar de todas formas"), mismo contrato
+// que /niif (pipeline-flujo-21): con `active` el consolidado sale BORRADOR.
+const provisionalFlagSchema = z
+  .object({
+    active: z.boolean(),
+    reason: z.string().min(1).max(2_000),
+  })
   .optional();
 
 // Los textos de las partes pueden omitirse cuando llegan `reportParts`: se
@@ -97,12 +93,21 @@ export async function POST(req: Request) {
   const ledger = adjustmentLedgerSchema.safeParse(
     (body as { adjustmentLedger?: unknown } | null)?.adjustmentLedger,
   );
+  const provisional = provisionalFlagSchema.safeParse(
+    (body as { provisional?: unknown } | null)?.provisional,
+  );
   const reportParts = parseReportParts((body as { reportParts?: unknown } | null)?.reportParts);
-  if (!base.success || !parts.success || !ledger.success || reportParts.kind === 'invalid') {
+  if (
+    !base.success || !parts.success || !ledger.success || !provisional.success ||
+    reportParts.kind === 'invalid'
+  ) {
     const issues = [
       ...(base.success ? [] : base.error.issues),
       ...(parts.success ? [] : parts.error.issues),
       ...(ledger.success ? [] : ledger.error.issues),
+      ...(provisional.success
+        ? []
+        : provisional.error.issues.map((i) => ({ ...i, path: ['provisional', ...i.path] }))),
     ];
     return NextResponse.json(
       {
@@ -142,7 +147,13 @@ export async function POST(req: Request) {
     );
   }
 
-  const { rawData, company, language } = base.data;
+  const { company, language } = base.data;
+  // P4 × P1: la unidad confirmada y los vencimientos declarados que /niif
+  // recibió como campos se aplican igual aquí; sin ellos la re-derivación del
+  // balance volvería a bloquear un archivo "en miles" (422 falso).
+  const confirmed = applyRequestConfirmations(body, base.data.rawData);
+  if (!confirmed.ok) return confirmed.response;
+  const rawData = confirmed.rawData;
   try {
     const ctx = await prepareFinancialContext(
       { rawData, company, language },
@@ -156,6 +167,10 @@ export async function POST(req: Request) {
       strategyContent: contents.strategyContent as string,
       governanceContent: contents.governanceContent as string,
       language,
+      // pipeline-flujo-21: el override marca BORRADOR el consolidado (y con él
+      // la versión persistida, el PDF y el sello de procedencia); no levanta
+      // ningún gate.
+      provisional: provisional.data as ProvisionalFlag | undefined,
     });
     // Traza auditable de los ajustes confirmados del Doctor de Datos: la MISMA
     // sección que el legacy agrega al consolidado (pipeline-flujo-16). Va al
@@ -172,34 +187,33 @@ export async function POST(req: Request) {
     if (!fromParts) return NextResponse.json(result);
 
     // ─── Versión persistida (procedencia servidor) ─────────────────────────
-    // El informe final lo ensambla el servidor: el acta se vuelve a cruzar
-    // contra la aritmética determinista del balance re-derivado (un veredicto
-    // omitido o reescrito por el cliente no llega a la versión: el del servidor
-    // sólo endurece el recibido); las salvedades de la Parte II y del acta se
-    // pliegan con la misma regla que la UI; el snapshot fiscal y el Âncora son
-    // los que `prepareFinancialContext` acaba de calcular desde el balance
-    // re-derivado (no los que el navegador recibió de /niif).
-    const governance = withServerActaVerdict(
-      fromParts.governance,
-      serverActaVerdict(fromParts.governance, ctx.effectiveCompany, ctx.ppForAgents),
-    );
+    // El informe final lo ensambla el servidor. Los veredictos de las Partes II
+    // y III se RECALCULAN contra el balance re-derivado con las mismas
+    // funciones que las fases (`withServerPartVerdicts`): aritmética del acta,
+    // cifras en la prosa de notas y acta (P3) y anclas + prosa de la Parte II.
+    // Un veredicto omitido o reescrito por el cliente no llega a la versión:
+    // el del servidor sólo endurece el recibido. Las salvedades se pliegan
+    // sobre la reconciliación NIIF con la misma regla que la UI; el snapshot
+    // fiscal y el Âncora son los que `prepareFinancialContext` acaba de
+    // calcular desde el balance re-derivado (no los que el navegador recibió
+    // de /niif).
     const ancora = ancoraOrNull(ctx.ancora);
-    const report: FinancialReport = {
-      company: ctx.effectiveCompany,
-      niifAnalysis: foldReportQualifications(
-        fromParts.niifAnalysis,
-        fromParts.strategicAnalysis,
-        governance,
-      ),
-      strategicAnalysis: fromParts.strategicAnalysis,
-      governance,
-      consolidatedReport: result.consolidatedReport,
-      validation: result.validation,
-      ...(result.emittability ? { emittability: result.emittability } : {}),
-      generatedAt: new Date().toISOString(),
-      ...(ctx.fiscalSnapshot ? { fiscalSnapshot: ctx.fiscalSnapshot } : {}),
-      ...(ancora ? { ancora } : {}),
-    };
+    const report: FinancialReport = withServerPartVerdicts(
+      {
+        company: ctx.effectiveCompany,
+        niifAnalysis: fromParts.niifAnalysis,
+        strategicAnalysis: fromParts.strategicAnalysis,
+        governance: fromParts.governance,
+        consolidatedReport: result.consolidatedReport,
+        validation: result.validation,
+        ...(result.emittability ? { emittability: result.emittability } : {}),
+        generatedAt: new Date().toISOString(),
+        ...(ctx.fiscalSnapshot ? { fiscalSnapshot: ctx.fiscalSnapshot } : {}),
+        ...(ancora ? { ancora } : {}),
+      },
+      ctx.ppForAgents,
+      language,
+    );
     const version = buildFinancialReportVersion({
       report,
       preprocessed: ctx.ppForAgents,

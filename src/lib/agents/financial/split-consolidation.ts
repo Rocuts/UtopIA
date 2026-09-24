@@ -84,6 +84,28 @@ export function normalizeTipoSocietarioParaGate(
   return normalizeTipoSocietarioActa(raw);
 }
 
+/**
+ * Régimen del impuesto de renta para el gate (auditoria-calidad-31): con
+ * `'simple'` V10 (TTD, par. 6 del Art. 240 E.T.) no se exige, porque el
+ * Régimen Simple "sustituye el impuesto sobre la renta" (Art. 903 E.T.).
+ * Lectura defensiva, como `estatutosRequierenReservaLegal`: el intake puede
+ * inyectarlo en la empresa; cualquier otro valor → `undefined` (V10 se evalúa
+ * como régimen ordinario).
+ *
+ * Límite vigente: ni el intake NIIF (`NiifReportIntake`) ni
+ * `companyInfoSchema` (src/lib/validation/schemas.ts) capturan el régimen, y
+ * Zod descarta la clave en /niif y /consolidate: hasta que se agregue allí,
+ * el SIMPLE sigue viendo V10 (comportamiento conservador).
+ */
+export function regimenTributarioParaGate(
+  company: unknown,
+): AuditCompanyContext['regimenTributario'] {
+  const raw = (company as { regimenTributario?: unknown } | null | undefined)?.regimenTributario;
+  if (typeof raw !== 'string') return undefined;
+  const v = raw.trim().toLowerCase();
+  return v === 'simple' || v === 'ordinario' ? v : undefined;
+}
+
 function estatutosFlag(company: CompanyInfo): boolean | undefined {
   const c = company as unknown as { estatutosRequierenReservaLegal?: unknown };
   return typeof c.estatutosRequierenReservaLegal === 'boolean'
@@ -208,6 +230,7 @@ function consolidateUnmarked(input: SplitConsolidationInput): SplitConsolidation
       niifGroup: company.niifGroup ?? 2,
       tipoSocietario: normalizeTipoSocietarioParaGate(company.entityType),
       estatutosRequierenReservaLegal: estatutosFlag(company),
+      regimenTributario: regimenTributarioParaGate(company),
     },
     {
       comparativos_impracticables: preprocessed.comparativos_impracticables,

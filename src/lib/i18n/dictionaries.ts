@@ -1782,6 +1782,10 @@ export const dict = {
       sourceMissingLine: 'Balance preprocesado: no disponible en la versión persistida',
       rawDataHashLine: 'Huella SHA-256 del balance recibido: {hash}',
       contractLine: 'Reglas aplicadas: contrato {contract} · preprocesador {preprocessor}',
+      verifiedDraftTitle: 'PROCEDENCIA VERIFICADA — BORRADOR (VALIDACIÓN PENDIENTE)',
+      unverifiedDraftTitle: 'PROCEDENCIA NO VERIFICADA — BORRADOR (VALIDACIÓN PENDIENTE)',
+      draftLine:
+        'Versión marcada BORRADOR por decisión del usuario ("Continuar de todas formas"): no es un documento definitivo y no debe firmarse en este estado.',
       uiUnverified:
         'Procedencia no verificada: este informe no tiene una versión persistida en el servidor; las descargas lo indicarán.',
       uiVerified: 'Versión persistida {reportId}',
@@ -3528,6 +3532,10 @@ export const dict = {
       sourceMissingLine: 'Preprocessed trial balance: not available in the persisted version',
       rawDataHashLine: 'Received trial balance SHA-256 fingerprint: {hash}',
       contractLine: 'Rules applied: contract {contract} · preprocessor {preprocessor}',
+      verifiedDraftTitle: 'VERIFIED PROVENANCE — DRAFT (VALIDATION PENDING)',
+      unverifiedDraftTitle: 'UNVERIFIED PROVENANCE — DRAFT (VALIDATION PENDING)',
+      draftLine:
+        'Version marked DRAFT by the user ("Continue anyway"): it is not a final document and must not be signed in this state.',
       uiUnverified:
         'Unverified provenance: this report has no persisted version on the server; downloads will say so.',
       uiVerified: 'Persisted version {reportId}',
