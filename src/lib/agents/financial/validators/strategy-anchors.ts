@@ -30,6 +30,7 @@
 
 import type { PeriodSnapshot, PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { pesosToCents } from '@/lib/preprocessing/curator-rules/sync-control-totals';
+import { computeEbitdaMargin, type EbitdaResult } from '@/lib/pillars/ebitda';
 import { buildPeriodAnchors } from '../contracts/anchors';
 import { formatCopFromCents } from '../contracts/money';
 import type { NiifReportJson } from '../contracts/niif-report';
@@ -115,11 +116,13 @@ type MoneyKey =
   | 'pasivoCorriente'
   | 'ingresos'
   | 'ingresosNetos'
+  | 'ingresosOperacionales'
   | 'utilidadBruta'
   | 'ebit'
   | 'utilidadAntesImpuestos'
   | 'utilidadNeta'
-  | 'efectivoCuenta11';
+  | 'efectivoCuenta11'
+  | 'ebitda';
 
 type MoneyAnchors = Partial<Record<MoneyKey, bigint>>;
 
@@ -139,6 +142,7 @@ function anchorsFromSnapshot(snapshot: PeriodSnapshot | null | undefined): Money
       'patrimonio',
       'ingresos',
       'ingresosNetos',
+      'ingresosOperacionales',
       'utilidadBruta',
       'ebit',
       'utilidadAntesImpuestos',
@@ -153,6 +157,16 @@ function anchorsFromSnapshot(snapshot: PeriodSnapshot | null | undefined): Money
   // Mismo redondeo al centavo que el token `[MoneyCop: N]` del bloque vinculante.
   if (typeof ct?.activoCorriente === 'number') out.activoCorriente = pesosToCents(ct.activoCorriente);
   if (typeof ct?.pasivoCorriente === 'number') out.pasivoCorriente = pesosToCents(ct.pasivoCorriente);
+  // EBITDA con la definición única (computeEbitda) que publica TOTALES
+  // VINCULANTES (W3-A, ratios-kpis-05): desde entonces es cifra anclada.
+  if (typeof ct?.ebitda === 'number' && Number.isFinite(ct.ebitda)) out.ebitda = pesosToCents(ct.ebitda);
+  return out;
+}
+
+/** Claves que el preprocesador publica N/D (valor `null` con motivo). */
+function ndMoneyKeys(snapshot: PeriodSnapshot | null | undefined): Set<MoneyKey> {
+  const out = new Set<MoneyKey>();
+  if (snapshot?.controlTotals && snapshot.controlTotals.ebitda === null) out.add('ebitda');
   return out;
 }
 
@@ -203,7 +217,10 @@ function normalizeLabel(label: string): string {
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .replace(/\([^)]*\)/g, ' ')
-    .replace(/[:.;]/g, ' ')
+    .replace(/[:.;,]/g, ' ')
+    // e2e-niif-14: "Utilidad neta 2025" es el mismo rubro que "Utilidad neta";
+    // el año del rótulo no lo saca del ancla.
+    .replace(/\b(?:19|20)\d{2}\b/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -220,8 +237,14 @@ const DASHBOARD_ANCHORS: ReadonlyArray<{ keys: MoneyKey[]; re: RegExp }> = [
   { keys: ['utilidadBruta'], re: /^(utilidad|ganancia) bruta$/ },
   { keys: ['ebit'], re: /^((utilidad|ganancia|resultado) (operacional|operativa|operativo)|ebit)$/ },
   { keys: ['utilidadAntesImpuestos'], re: /^(utilidad|ganancia|resultado) antes de impuestos?$/ },
-  { keys: ['utilidadNeta'], re: /^(utilidad|ganancia|resultado|perdida) net[ao]( del (ejercicio|periodo))?$/ },
+  {
+    keys: ['utilidadNeta'],
+    // "Utilidad neta", "Pérdida neta del periodo", "Utilidad del ejercicio",
+    // "Resultado del ejercicio" (e2e-niif-14).
+    re: /^(utilidad|ganancia|resultado|perdida) (net[ao]( del (ejercicio|periodo))?|del (ejercicio|periodo))$/,
+  },
   { keys: ['efectivoCuenta11'], re: /^(efectivo|caja)( y equivalentes( (al|de) efectivo)?)?( al cierre)?$/ },
+  { keys: ['ebitda'], re: /^ebitda( del (ejercicio|periodo))?$/ },
 ];
 
 type KpiField =
@@ -237,10 +260,14 @@ type KpiField =
   | 'rotacionActivos'
   | 'diasCartera'
   | 'diasInventario'
-  | 'diasProveedores';
+  | 'diasProveedores'
+  | 'margenEbitda';
 
 const KPI_ANCHORS: ReadonlyArray<{ field: KpiField; re: RegExp }> = [
-  { field: 'roe', re: /^roe( dinamico)?$|^rentabilidad (sobre el )?patrimonio$/ },
+  {
+    field: 'roe',
+    re: /^roe( dinamico| anualizado)?$|^(rentabilidad|retorno) (del |sobre (el )?)?patrimonio( neto)?$/,
+  },
   { field: 'roa', re: /^roa$|^rentabilidad (sobre (el |los )?)?activos?$/ },
   { field: 'razonCorriente', re: /^razon corriente$|^liquidez corriente$/ },
   { field: 'pruebaAcida', re: /^prueba acida$/ },
@@ -253,6 +280,7 @@ const KPI_ANCHORS: ReadonlyArray<{ field: KpiField; re: RegExp }> = [
   { field: 'diasCartera', re: /^dias (de )?cartera$/ },
   { field: 'diasInventario', re: /^dias (de )?inventarios?$/ },
   { field: 'diasProveedores', re: /^dias (de )?proveedores$/ },
+  { field: 'margenEbitda', re: /^margen( de)? ebitda$/ },
 ];
 
 function kpiFieldOf(name: string): KpiField | null {
@@ -263,6 +291,14 @@ function kpiFieldOf(name: string): KpiField | null {
 function kpiValue(snapshot: PeriodSnapshot | null | undefined, field: KpiField): number | null | undefined {
   const ct = snapshot?.controlTotals as unknown as Record<string, unknown> | undefined;
   if (!ct) return undefined;
+  if (field === 'margenEbitda') {
+    // Definición única (pillars/ebitda.ts): EBITDA / ingresos operacionales netos.
+    if (!('ebitda' in ct)) return undefined;
+    const ebitda = typeof ct.ebitda === 'number' ? ct.ebitda : null;
+    const ion = typeof ct.ingresosOperacionalesNetos === 'number' ? ct.ingresosOperacionalesNetos : null;
+    const m = computeEbitdaMargin({ ebitda, ingresosOperacionalesNetos: ion } as EbitdaResult);
+    return m === null ? null : m * 100;
+  }
   const v = ct[field];
   if (v === null) return null;
   return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
@@ -361,17 +397,32 @@ export function reconcileStrategyAnchors(
       ? sources.niif.company?.comparativePeriod !== null
       : undefined;
 
+  const ndPrimary = ndMoneyKeys(sources.primary);
+  const ndComparative = ndMoneyKeys(sources.comparative);
   const money = (cents: bigint) => formatCopFromCents(cents);
   const checkMoney = (
     where: string,
     emitted: string | null | undefined,
     anchors: MoneyAnchors,
     keys: MoneyKey[],
+    nd: Set<MoneyKey> = ndPrimary,
   ): void => {
     const e = moneyOrUndefined(emitted ?? undefined);
     if (e === undefined) return;
     const available = keys.map((k) => anchors[k]).filter((v): v is bigint => typeof v === 'bigint');
     if (available.length === 0) {
+      if (keys.some((k) => nd.has(k))) {
+        // El preprocesador publica N/D (p. ej. EBITDA sin base): una cifra ahí
+        // no tiene respaldo.
+        verifiedCount += 1;
+        deviations.push(
+          t(
+            `${where}: el Director de Estrategia emitió ${money(e)} pero el preprocesador lo marca N/D (sin base verificable).`,
+            `${where}: the Strategy Director emitted ${money(e)} but the preprocessor marks it N/A (no verifiable base).`,
+          ),
+        );
+        return;
+      }
       unverifiable.push(where);
       return;
     }
@@ -408,7 +459,13 @@ export function reconcileStrategyAnchors(
     if (mapping) {
       checkMoney(where, row.primary, primaryAnchors, mapping.keys);
       if (hasComparative !== false && row.comparative !== null) {
-        checkMoney(`${where} (${t('comparativo', 'comparative')})`, row.comparative, comparativeAnchors, mapping.keys);
+        checkMoney(
+          `${where} (${t('comparativo', 'comparative')})`,
+          row.comparative,
+          comparativeAnchors,
+          mapping.keys,
+          ndComparative,
+        );
       }
     } else {
       unverifiable.push(where);
@@ -591,6 +648,56 @@ export function reconcileStrategyAnchors(
       ),
     );
   }
+  // e2e-niif-14: con comparativo, las variaciones se recalculan desde las
+  // anclas de ambos cortes: "+33,3 %" para una pérdida que pasó de −$30M a
+  // −$40M (−33,3 %) salía como tendencia verificada.
+  if (hasComparative === true && trends && hasPreprocessed) {
+    const expected = deterministicTrends(sources);
+    const checkTrend = (where: string, printedRaw: string | null, candidates: Array<number | null> | undefined) => {
+      if (printedRaw === null) return;
+      if (candidates === undefined || candidates.length === 0) {
+        unverifiable.push(where);
+        return;
+      }
+      if (isNd(printedRaw)) return;
+      const printed = parsePrinted(printedRaw);
+      if (printed.length === 0) {
+        unverifiable.push(where);
+        return;
+      }
+      verifiedCount += 1;
+      const numeric = candidates.filter((c): c is number => c !== null);
+      if (numeric.length === 0) {
+        deviations.push(
+          t(
+            `${where}: el Director de Estrategia emitió ${printedRaw} pero la variación no tiene base comparable (${expected.motivo ?? 'N/D'}).`,
+            `${where}: the Strategy Director emitted ${printedRaw} but the change has no comparable base (${expected.motivo ?? 'N/A'}).`,
+          ),
+        );
+        return;
+      }
+      if (!numeric.some((c) => matchesAtPrintedPrecision(printed, c))) {
+        deviations.push(
+          t(
+            `${where}: el Director de Estrategia emitió ${printedRaw} frente a ${fmtTrendPct(numeric[0])} calculado desde el balance de ambos periodos.`,
+            `${where}: the Strategy Director emitted ${printedRaw} versus ${fmtTrendPct(numeric[0])} computed from both periods' trial balance.`,
+          ),
+        );
+      }
+    };
+    checkTrend(t('Tendencias — Ingresos', 'Trends — Revenue'), trends.yoyRevenue, expected.revenueCandidates);
+    checkTrend(t('Tendencias — EBITDA', 'Trends — EBITDA'), trends.yoyEbitda, expected.ebitda === undefined ? undefined : [expected.ebitda]);
+    checkTrend(
+      t('Tendencias — Utilidad neta', 'Trends — Net income'),
+      trends.yoyNetIncome,
+      expected.netIncome === undefined ? undefined : [expected.netIncome],
+    );
+    checkTrend(t('Tendencias — Patrimonio', 'Trends — Equity'), trends.yoyEquity, expected.equity === undefined ? undefined : [expected.equity]);
+    if (trends.marginDeltaPp !== null && !isNd(trends.marginDeltaPp)) {
+      // El margen de la variación en puntos no está definido (bruto, operativo o neto).
+      unverifiable.push(t('Tendencias — Δ margen (pp)', 'Trends — margin Δ (pp)'));
+    }
+  }
 
   // -- Sin ancla por construcción -----------------------------------------
   unverifiable.push(
@@ -602,4 +709,70 @@ export function reconcileStrategyAnchors(
   );
 
   return { deviations, unverifiable: Array.from(new Set(unverifiable)), verifiedCount };
+}
+
+// ---------------------------------------------------------------------------
+// Tendencias deterministas (e2e-niif-14 / e2e-niif-17)
+// ---------------------------------------------------------------------------
+
+/**
+ * Variaciones interanuales desde las anclas de ambos cortes, en porcentaje:
+ * (actual − comparativo) / |comparativo| × 100. `undefined` = sin fuente
+ * (no hay comparativo o no hay ancla); `null` = N/D con `motivo` (base cero, o
+ * P&G de un comparativo de saldos de apertura, que no es un ejercicio).
+ */
+export interface DeterministicTrends {
+  /** Ingresos: operacionales netos, netos y brutos (el que el modelo haya usado). */
+  revenueCandidates?: Array<number | null>;
+  /** Primer candidato de ingresos disponible (el que imprime el sistema). */
+  revenue?: number | null;
+  ebitda?: number | null;
+  netIncome?: number | null;
+  equity?: number | null;
+  motivo: string | null;
+}
+
+function yoyPct(primary: bigint | undefined, comparative: bigint | undefined): number | null | undefined {
+  if (primary === undefined || comparative === undefined) return undefined;
+  if (comparative === BigInt(0)) return null;
+  const abs = comparative < BigInt(0) ? -comparative : comparative;
+  return (Number(primary - comparative) / Number(abs)) * 100;
+}
+
+export function deterministicTrends(sources: StrategyAnchorSources): DeterministicTrends {
+  if (!sources.primary || !sources.comparative) return { motivo: null };
+  const p = anchorsFromSnapshot(sources.primary);
+  const c = anchorsFromSnapshot(sources.comparative);
+  const opening = sources.comparative.saldosDeApertura === true;
+  const OPENING_MOTIVO =
+    'el comparativo es de saldos de apertura: no hay estado de resultados de ese periodo';
+  const motivos: string[] = [];
+  const pyg = (key: MoneyKey): number | null | undefined => {
+    if (opening) return null;
+    const v = yoyPct(p[key], c[key]);
+    if (v === null) motivos.push(`base comparativa cero en ${key}`);
+    return v;
+  };
+  const revenueKeys: MoneyKey[] = ['ingresosOperacionales', 'ingresosNetos', 'ingresos'];
+  const revenueCandidates = opening
+    ? [null]
+    : revenueKeys.map((k) => yoyPct(p[k], c[k])).filter((v): v is number | null => v !== undefined);
+  if (opening) motivos.push(OPENING_MOTIVO);
+  const equity = yoyPct(p.patrimonio, c.patrimonio);
+  if (equity === null) motivos.push('patrimonio comparativo cero');
+  return {
+    revenueCandidates: revenueCandidates.length > 0 ? revenueCandidates : undefined,
+    revenue: revenueCandidates.length > 0 ? revenueCandidates[0] : undefined,
+    ebitda: pyg('ebitda'),
+    netIncome: pyg('utilidadNeta'),
+    equity,
+    motivo: motivos.length > 0 ? Array.from(new Set(motivos)).join('; ') : null,
+  };
+}
+
+/** "+20,0%" / "-33,3%" / "0,0%" — la forma en que el adaptador imprime tendencias. */
+export function fmtTrendPct(n: number): string {
+  const rounded = Math.round(n * 10) / 10;
+  if (rounded === 0) return '0,0%';
+  return `${rounded > 0 ? '+' : '-'}${Math.abs(rounded).toFixed(1).replace('.', ',')}%`;
 }

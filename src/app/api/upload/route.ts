@@ -760,7 +760,9 @@ async function processDocument(
       ingestWarnings.push(...parsed.warnings);
 
       if (parsed.rows.length > 10) {
-        const pp = preprocessTrialBalance(parsed.rows);
+        // ingesta-09 (cross-dep W3-A): las columnas de saldo inicial/anterior
+        // marcan su periodo como saldos de apertura (P&G comparativo N/D).
+        const pp = preprocessTrialBalance(parsed.rows, { openingPeriods: parsed.openingPeriods });
         if (pp.auxiliaryCount > 0) {
           preprocessed = pp;
           validationReport = ingestWarnings.length > 0

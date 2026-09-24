@@ -37,10 +37,27 @@ describe('reportes-export-11 — narrativa LLM rotulada como no auditada', () =>
     expect(doc.projectedCashFlow?.bodyMarkdown).toContain(NARRATIVE_DISCLAIMER);
   });
 
-  it('las notas técnicas del JSON validado no llevan el aviso (sí son contrato)', () => {
+  // e2e-niif-10 (re-auditoría 2026-09): el JSON valida la FORMA de las notas
+  // técnicas (Pass-3), no sus cifras: "El patrimonio … es $77.777.777,00 y el
+  // ROE fue 25,0%" salía sin aviso. Se rotulan igual que el resto de la prosa.
+  it('las notas técnicas (prosa del Pass-3, cifras sin anclar) llevan el aviso', () => {
     const doc = composeEditorialReport({ report: report(), preprocessed: null, pillars: null, language: 'es' });
     const tech = doc.notes.blocks.find((b) => b.heading === 'Notas técnicas de los estados financieros')!;
-    expect(tech.bodyMarkdown).not.toContain(NARRATIVE_DISCLAIMER);
+    expect(tech.bodyMarkdown).toContain(NARRATIVE_DISCLAIMER);
+    expect(tech.bodyMarkdown).toContain('Mapeo PUC → NIIF.');
+  });
+
+  it('las notas en prosa bajo el ESF, el ERI y el ECP llevan el aviso; sin notas no se agrega', () => {
+    const r = report();
+    const json = r.niifAnalysis.json!;
+    json.balanceSheet.notes = [{ ref: 'Nota 2', norma: null, body: 'El efectivo al cierre asciende a $9.999.999,00.' }];
+    json.incomeStatement.notes = [{ ref: 'Nota 3', norma: null, body: 'La utilidad neta fue de $44.444.444,00.' }];
+    json.equityChanges.notes = [];
+    const doc = composeEditorialReport({ report: r, preprocessed: null, pillars: null, language: 'es' });
+    expect(doc.statements.balance.footnotes?.[0]).toBe(NARRATIVE_DISCLAIMER);
+    expect(doc.statements.balance.footnotes).toContain('Nota 2 — El efectivo al cierre asciende a $9.999.999,00.');
+    expect(doc.statements.income.footnotes?.[0]).toBe(NARRATIVE_DISCLAIMER);
+    expect(doc.statements.equity.footnotes ?? []).not.toContain(NARRATIVE_DISCLAIMER);
   });
 });
 

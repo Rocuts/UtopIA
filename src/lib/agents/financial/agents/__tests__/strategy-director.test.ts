@@ -13,6 +13,7 @@ vi.mock('@/lib/agents/financial/agents/runtime', () => ({
 import { runStrategyDirector } from '../strategy-director';
 import { callFinancialAgent } from '@/lib/agents/financial/agents/runtime';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
+import { parseTrialBalanceCSV, preprocessTrialBalance } from '@/lib/preprocessing/trial-balance';
 
 const c = (pesos: number) => String(Math.round(pesos * 100));
 const M = 1_000_000;
@@ -157,5 +158,84 @@ describe('pipeline-flujo-15 — degradación visible del Director de Estrategia'
     const res = await run();
     expect(res.degraded).toBeUndefined();
     expect(res.fullContent).not.toContain('RAZONAMIENTO REDUCIDO');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// e2e-niif-17 / e2e-niif-14 — tendencias deterministas en la Parte II
+// ---------------------------------------------------------------------------
+// Con trends=null el adaptador imprimía "Sin periodo comparativo disponible"
+// en un informe "2025 vs 2024"; con trends del modelo, una tendencia "+33,3 %"
+// de una pérdida que pasó de −$30M a −$40M salía como cifra.
+
+/** Pérdida: UN −30M (2024) → −40M (2025); ingresos 100M → 80M; patrimonio 70M → 30M. */
+const LOSS_TWO = [
+  'codigo,nombre,nivel,transaccional,saldo 2024,saldo 2025',
+  '110505,Caja general,Auxiliar,1,30000000,5000000',
+  '130505,Clientes nacionales,Auxiliar,1,20000000,15000000',
+  '152410,Maquinaria,Auxiliar,1,50000000,50000000',
+  '152405,Equipo de oficina,Auxiliar,1,50000000,50000000',
+  '159205,Depreciacion acumulada equipo,Auxiliar,1,-10000000,-20000000',
+  '210505,Bancos nacionales,Auxiliar,1,40000000,45000000',
+  '220505,Proveedores nacionales,Auxiliar,1,30000000,25000000',
+  '311505,Capital suscrito y pagado,Auxiliar,1,100000000,100000000',
+  '360505,Perdida del ejercicio,Auxiliar,1,-30000000,-40000000',
+  '370505,Perdidas acumuladas,Auxiliar,1,0,-30000000',
+  '410505,Ventas,Auxiliar,1,100000000,80000000',
+  '510506,Sueldos,Auxiliar,1,40000000,30000000',
+  '516015,Depreciacion equipo,Auxiliar,1,0,10000000',
+  '530505,Intereses bancarios,Auxiliar,1,10000000,10000000',
+  '613505,Costo de ventas,Auxiliar,1,80000000,70000000',
+].join('\n');
+
+describe('e2e-niif-17 — tendencias con comparativo', () => {
+  it('trends=null con comparativo: variaciones deterministas, no "Sin periodo comparativo"', async () => {
+    queue.push(strategyJson({ trends: null }));
+    const res = await run(preprocessTrialBalance(parseTrialBalanceCSV(LOSS_TWO)));
+    expect(res.breakEvenAnalysis).not.toContain('Sin periodo comparativo disponible');
+    expect(res.breakEvenAnalysis).toContain('- Ingresos YoY: -20,0%');
+    expect(res.breakEvenAnalysis).toContain('- Utilidad Neta YoY: -33,3%');
+    // EBITDA −20M en ambos años (2025: EBIT −30M + D&A 10M).
+    expect(res.breakEvenAnalysis).toContain('- EBITDA YoY: 0,0%');
+    expect(res.breakEvenAnalysis).toContain('- Patrimonio YoY: -57,1%');
+    expect(res.breakEvenAnalysis).toMatch(/calculadas por el sistema/);
+    expect(res.json?.trends?.yoyNetIncome).toBe('-33,3%');
+  });
+
+  it('una tendencia del modelo se sustituye por la determinista y el Δ de margen no se imprime como cifra', async () => {
+    queue.push(strategyJson({
+      trends: {
+        yoyRevenue: '+20,0%', yoyEbitda: '+15,0%', yoyNetIncome: '+33,3%', yoyEquity: '+10,0%',
+        marginDeltaPp: '+5,0', qualitativeCommentary: 'Comentario del modelo.',
+      },
+    }));
+    const res = await run(preprocessTrialBalance(parseTrialBalanceCSV(LOSS_TWO)));
+    expect(res.breakEvenAnalysis).not.toContain('+33,3%');
+    expect(res.breakEvenAnalysis).toContain('- Utilidad Neta YoY: -33,3%');
+    expect(res.breakEvenAnalysis).toContain('- Δ Margen (pp): N/D');
+    expect(res.breakEvenAnalysis).toContain('Comentario del modelo.');
+  });
+
+  it('comparativo de saldos de apertura: tendencias del P&G N/D con su motivo; patrimonio sí', async () => {
+    queue.push(strategyJson({ trends: null }));
+    const pp = preprocessTrialBalance(parseTrialBalanceCSV(LOSS_TWO), { openingPeriods: ['2024'] });
+    const res = await run(pp);
+    expect(res.breakEvenAnalysis).toContain('- Utilidad Neta YoY: N/D');
+    expect(res.breakEvenAnalysis).toContain('- Patrimonio YoY: -57,1%');
+    expect(res.breakEvenAnalysis).toMatch(/N\/D: .*saldos de apertura/);
+  });
+
+  it('sin comparativo no hay tendencias aunque el modelo las escriba', async () => {
+    queue.push(strategyJson({
+      trends: {
+        yoyRevenue: '+20,0%', yoyEbitda: null, yoyNetIncome: null, yoyEquity: null,
+        marginDeltaPp: null, qualitativeCommentary: 'x',
+      },
+    }));
+    const single = LOSS_TWO.split('\n').map((l) => l.split(',').filter((_, i) => i !== 4).join(',')).join('\n');
+    const res = await run(preprocessTrialBalance(parseTrialBalanceCSV(single)));
+    expect(res.json?.trends).toBeNull();
+    expect(res.breakEvenAnalysis).toContain('_Sin periodo comparativo disponible._');
+    expect(res.breakEvenAnalysis).not.toContain('+20,0%');
   });
 });

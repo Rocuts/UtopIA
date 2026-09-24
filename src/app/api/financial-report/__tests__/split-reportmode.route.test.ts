@@ -15,6 +15,9 @@ const captured: Array<{ agentName: string; system: string }> = [];
 vi.mock('@/lib/auth/require-session', () => ({ requireAuthSession: vi.fn(async () => ({ ok: true })) }));
 vi.mock('@/lib/db/workspace', () => ({ getCurrentWorkspaceId: vi.fn(async () => null) }));
 vi.mock('@/lib/facts/report-facts', () => ({ getHechosEmpresaBlock: vi.fn(async () => '') }));
+// runStrategyPhase consulta el servicio macro (valoracion-18): sin BD ni red en
+// la prueba (su espera acotada a 5 s quedaba cerca del testTimeout de 10 s).
+vi.mock('@/lib/macro/prompt-snapshot', () => ({ getMacroSnapshotForPrompts: vi.fn(async () => null) }));
 vi.mock('@/lib/db/telemetry', async (orig) => {
   const actual = await orig<typeof import('@/lib/db/telemetry')>();
   return { ...actual, resolveOwnedReportId: vi.fn(async () => null) };

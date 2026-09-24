@@ -72,11 +72,15 @@ export function runR12(snapshot: PeriodSnapshot, prev: PeriodSnapshot | null = n
   // 1. Resultado del ejercicio. Se usa `controlTotals.utilidadNeta` (neta de
   //    devoluciones 4175), el mismo valor que R8 traslada a 3605VC.
   // -------------------------------------------------------------------------
-  const c4 = sumClass(snapshot, 4);
-  const c5 = sumClass(snapshot, 5);
-  const c6 = sumClass(snapshot, 6);
-  const c7 = sumClass(snapshot, 7);
+  // Clase 4 NETA de devoluciones 4175, con el signo real de cada cuenta
+  // (recalculo-final-05): la Σ firmada de la clase suma la 4175 como ingreso
+  // en la convención natural (550 en vez de 450) y los asientos sugeridos no
+  // cuadraban (Cr. 5905 550 − Dr. 5905 260 ≠ traslado 190).
+  const c4 = Number(centsOf(snapshot, 'ingresosNetos')) / 100;
   const utilidadTransitoria = snapshot.controlTotals.utilidadNeta;
+  // Débitos de cierre = ingresos netos − resultado: el asiento cuadra por
+  // construcción con la utilidad que certifica el preprocesador.
+  const gastosCierre = c4 - utilidadTransitoria;
 
   // -------------------------------------------------------------------------
   // 2. Saldos REALES de los grupos 36 y 37 (sin cuentas virtuales).
@@ -125,9 +129,11 @@ export function runR12(snapshot: PeriodSnapshot, prev: PeriodSnapshot | null = n
   }
   if (sinTraslado && !esCorteParcial) {
     suggestedClosingEntries.push(
-      `Cierre clase 4 (Ingresos) → Cr. 5905 (Ganancias y pérdidas) por $${formatCOP(c4)}.`,
-      `Cierre clases 5/6/7 (Gastos y costos) → Dr. 5905 por $${formatCOP(c5 + c6 + c7)}.`,
-      `Traslado de utilidad → Cr. 3605 (Utilidad del ejercicio) por $${formatCOP(utilidadTransitoria)}.`,
+      `Cierre clase 4 (Ingresos, netos de devoluciones 4175) → Cr. 5905 (Ganancias y pérdidas) por $${formatCOP(c4)}.`,
+      `Cierre clases 5/6/7 (Gastos y costos) → Dr. 5905 por $${formatCOP(gastosCierre)}.`,
+      utilidadTransitoria >= 0
+        ? `Traslado de utilidad → Dr. 5905 / Cr. 3605 (Utilidad del ejercicio) por $${formatCOP(utilidadTransitoria)}.`
+        : `Traslado de pérdida → Dr. 3610 (Pérdida del ejercicio) / Cr. 5905 por $${formatCOP(Math.abs(utilidadTransitoria))}.`,
     );
   }
 
@@ -170,8 +176,8 @@ export function runR12(snapshot: PeriodSnapshot, prev: PeriodSnapshot | null = n
       title: 'Libros NO cerrados — utilidad del ejercicio sin trasladar al patrimonio',
       description:
         `La utilidad transitoria del P&L del periodo es $${formatCOP(utilidadTransitoria)} ` +
-        `(clase 4 ${formatCOP(c4)} − clase 5 ${formatCOP(c5)} − clase 6 ${formatCOP(c6)} − ` +
-        `clase 7 ${formatCOP(c7)}), pero el grupo 36 (Resultados del ejercicio) registra ` +
+        `(ingresos netos clase 4 ${formatCOP(c4)} − gastos y costos clases 5/6/7 ` +
+        `${formatCOP(gastosCierre)}), pero el grupo 36 (Resultados del ejercicio) registra ` +
         `$${formatCOP(grupo36)}. El grupo 37 ($${formatCOP(grupo37)}) corresponde a ejercicios ` +
         `anteriores. El asiento de cierre del ejercicio NO ha sido pasado.`,
       normReference: 'Art. 50 C.Co. + Decreto 2649/1993 Art. 49 + NIC 1 párr. 32',
@@ -245,6 +251,10 @@ function detectPygAcumulado(
   prev: PeriodSnapshot | null,
 ): PygAcumuladoAudit | undefined {
   if (!prev) return undefined;
+  // Comparativo de SALDOS DE APERTURA (columna 'saldo inicial/anterior',
+  // ingesta-09): su P&G es el acumulado a esa fecha y por definición no está en
+  // el patrimonio; no es un ejercicio anterior sin cerrar (cross-dep W3-A).
+  if (prev.saldosDeApertura === true) return undefined;
   const prevUtilidadCents = centsOf(prev, 'utilidadNeta');
   const prevUtilidad = Number(prevUtilidadCents) / 100;
   if (Math.abs(prevUtilidad) <= UTILIDAD_MATERIALITY) return undefined;
@@ -302,11 +312,6 @@ function nonResultEquityCents(snap: PeriodSnapshot): bigint {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function sumClass(snapshot: PeriodSnapshot, classCode: number): number {
-  const cl = snapshot.classes.find((c) => c.code === classCode);
-  return cl?.auxiliaryTotal ?? 0;
-}
 
 function formatCOP(amount: number): string {
   const abs = Math.abs(amount);

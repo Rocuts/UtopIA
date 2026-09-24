@@ -201,7 +201,11 @@ export async function POST(req: Request) {
     try {
       const parsedRaw = parseUploadedTrialBalanceText(rawData);
       if (parsedRaw.rows.length > 0) {
-        serverPreprocessed = preprocessTrialBalance(parsedRaw.rows);
+        // ingesta-09 (cross-dep W3-A): mismo marcado de saldos de apertura que
+        // /api/upload, /api/financial-report, /export y el Stage 0.
+        serverPreprocessed = preprocessTrialBalance(parsedRaw.rows, {
+          openingPeriods: parsedRaw.openingPeriods,
+        });
       }
     } catch (err) {
       // Conflicto de ingesta (hojas/periodos incompatibles): Stage 0 lo

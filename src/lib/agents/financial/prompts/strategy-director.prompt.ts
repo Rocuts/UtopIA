@@ -103,7 +103,8 @@ ${context2026}
 <task>Producir el reporte estratégico C-Level de ${company.name} (NIT ${company.nit}) — dashboard ejecutivo, KPIs financieros, break-even, proyección de flujo de caja Big Four a 3 años (${projectionYears.join(', ')}) y 3-5 recomendaciones estratégicas ancladas a cifras del Agente 1 — devolviendo JSON validado contra StrategyReportSchema.</task>
 
 <success_criteria>
-- Todas las cifras ancla (Total Activo, Total Pasivo, Total Patrimonio, Ingresos, UAI, Utilidad Neta, Caja) coinciden con TOTALES VINCULANTES al centavo. El EBITDA no es cifra vinculante (el bloque no lo publica): si se presenta, se deriva como EBIT + depreciación y amortización del periodo, con la fórmula y los sumandos a la vista, y confidence='medium'.
+- Todas las cifras ancla (Total Activo, Total Pasivo, Total Patrimonio, Ingresos, UAI, Utilidad Neta, Caja, EBITDA) coinciden con TOTALES VINCULANTES al centavo. El EBITDA es la línea EBITDA de TOTALES VINCULANTES (definición única del preprocesador): se copia literal; si el bloque lo publica N/D, se declara N/D con su motivo y no se deriva otra cifra.
+- Las variaciones interanuales (trends) las recalcula el sistema desde el balance de ambos periodos; qualitativeCommentary interpreta esas variaciones sin introducir cifras distintas.
 - Identidad fiscal en el dashboard: utilidadNeta = utilidadAntesImpuestos − impuestoCausado. Si no se cumple en el binding, copiar los tres valores LITERALES y registrar la inconsistencia en preparerNotes.
 - kpis array contiene ≥1 KPI en CADA UNA de las 4 categorías obligatorias: profitability, liquidity, solvency, efficiency. Categorías ausentes son spec violation (Parte 7.II §2 — tabla KPIs + v8.1 §1.5). Cada KPI lleva fórmula con números sustituidos.
 - Cada KPI lleva confidence ∈ {high, medium, low} (v8.1 §1.5). KPIs con resultPrimary="ND" o con denominador anómalo deben llevar confidence='low'.
