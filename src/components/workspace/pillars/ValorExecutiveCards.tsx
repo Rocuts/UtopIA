@@ -240,7 +240,6 @@ function formatMonths(value: number): string {
   return `${Math.round(value)} meses`;
 }
 
-
 // ---------------------------------------------------------------------------
 // Color tokens (deliberadamente fuera del sistema n-XXX para diferenciar)
 // ---------------------------------------------------------------------------

@@ -236,7 +236,6 @@ function formatDays(value: number, isEs: boolean): string {
   return `${Math.round(value)} ${label}`;
 }
 
-
 // ---------------------------------------------------------------------------
 // Color tokens (deliberadamente fuera del sistema n-XXX para diferenciar)
 // ---------------------------------------------------------------------------

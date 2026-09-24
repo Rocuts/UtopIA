@@ -285,7 +285,6 @@ function formatCount(value: number): string {
   return `${Math.round(value)}`;
 }
 
-
 // ---------------------------------------------------------------------------
 // Color tokens (deliberadamente fuera del sistema n-XXX para diferenciar)
 // ---------------------------------------------------------------------------
