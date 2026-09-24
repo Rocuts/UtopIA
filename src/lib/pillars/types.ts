@@ -354,8 +354,8 @@ export interface PillarsAggregateInput {
   curator?: CuratorResult | null;
   /** Costo de oportunidad para EVA. Default 0.12 (TES Colombia + risk premium). */
   costoOportunidad?: number;
-  /** Variables macroeconómicas oficiales (BanRep/DANE). Si no vienen, los
-   *  pilares usan defaults conservadores. */
+  /** Variables macroeconómicas oficiales con procedencia por campo. Ningún
+   *  pilar las consume hoy; si se usan, un campo null es N/D (sin defaults). */
   macro?: MacroFactors | null;
   /** Eventos CapEx personalizados del usuario (compras, inversiones, deudas
    *  proyectadas). Afectan tanto FUTURO (caja proyectada) como ESCUDO
@@ -367,17 +367,38 @@ export interface PillarsAggregateInput {
 
 // ─── Macroeconomía oficial (BanRep/DANE) ───────────────────────────────────
 
+/** Fuente oficial de un indicador macro. */
+export type MacroSource = 'superfinanciera' | 'banrep' | 'dane';
+
+/**
+ * Indicador macro con procedencia (auditoría valoracion-04). `value: null` ⇒
+ * sin dato verificado (`reason`); nunca se rellena con una constante.
+ */
+export interface MacroIndicator {
+  /** Decimal para tasas (0,0624 = 6,24 %); COP por USD para la TRM. */
+  value: number | null;
+  source: MacroSource | null;
+  /** Fecha de vigencia / periodo del dato (YYYY-MM-DD o YYYY-MM). */
+  asOf: string | null;
+  /** Fecha ISO en que se consultó la fuente. */
+  fetchedAt: string | null;
+  /** true = último valor bueno de una consulta anterior (la actual falló). */
+  stale: boolean;
+  /** Motivo cuando `value` es null (o por qué es stale). */
+  reason: string | null;
+}
+
 export interface MacroFactors {
-  /** IPC anual Colombia (decimal: 0.045 = 4,5%). Fuente: DANE. */
-  ipc: number;
-  /** TRM diaria USD/COP. Fuente: BanRep. */
-  trm: number;
-  /** Tasa de intervención política BanRep (decimal: 0.0925 = 9,25%). */
-  tasaBanRep: number;
-  /** Fecha ISO 8601 de la última actualización exitosa. */
+  /** IPC anual Colombia (DANE). */
+  ipc: MacroIndicator;
+  /** TRM USD/COP (Superintendencia Financiera). */
+  trm: MacroIndicator;
+  /** Tasa de intervención de política monetaria (BanRep). */
+  tasaBanRep: MacroIndicator;
+  /** Fecha ISO de la consulta/lectura del servicio (no es la vigencia). */
   fechaActualizacion: string;
-  /** Fuente del dato (para audit trail). */
-  fuente: 'banrep' | 'dane' | 'default' | 'manual';
+  /** La procedencia es por campo (ver cada MacroIndicator). */
+  fuente: 'por-campo';
 }
 
 // ─── Monte Carlo ───────────────────────────────────────────────────────────

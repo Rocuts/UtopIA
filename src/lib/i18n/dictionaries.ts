@@ -328,6 +328,26 @@ export const dict = {
           monteCarloEmpty:
             'Sin simulación ejecutada sobre sus datos. El escenario simulado se calcula en el Centro de Mando con su balance.',
         },
+        macro: {
+          eyebrow: 'El Futuro — Macroeconomía',
+          title: 'Macroeconomía',
+          lede: 'Indicadores oficiales de Colombia con su fuente y fecha de vigencia. Sin dato verificado se muestra N/D.',
+          back: 'Volver a El Futuro',
+          trm: 'TRM (COP por USD)',
+          ipc: 'Inflación anual (IPC)',
+          tasa: 'Tasa de intervención BanRep',
+          source: 'Fuente',
+          asOf: 'Vigencia',
+          fetchedAt: 'Consultado',
+          stale: 'Último valor disponible — la consulta más reciente falló',
+          loading: 'Consultando fuentes oficiales…',
+          error: 'No fue posible consultar el servicio de indicadores.',
+          sourceSuperfinanciera: 'Superintendencia Financiera (datos.gov.co)',
+          sourceDane: 'DANE (datos.gov.co)',
+          sourceBanrep: 'Banco de la República',
+          noProjections:
+            'Esta sección no publica proyecciones ni recomendaciones: requerirían fuentes citadas y fechadas y se rotularían como escenario.',
+        },
         escudo: {
           effectiveRateLabel: 'Tasa efectiva contable (gasto 54 / UAI)',
           effectiveRateReason: 'Requiere utilidad antes de impuestos positiva.',
@@ -1884,6 +1904,26 @@ export const dict = {
           monteCarloTitle: 'Monte Carlo simulation',
           monteCarloEmpty:
             'No simulation has been run on your data. The simulated scenario is computed in the Command Center from your trial balance.',
+        },
+        macro: {
+          eyebrow: 'The Future — Macroeconomics',
+          title: 'Macroeconomics',
+          lede: 'Official Colombian indicators with their source and effective date. Without verified data we show N/A.',
+          back: 'Back to The Future',
+          trm: 'FX rate (COP per USD)',
+          ipc: 'Annual inflation (CPI)',
+          tasa: 'BanRep policy rate',
+          source: 'Source',
+          asOf: 'Effective date',
+          fetchedAt: 'Retrieved',
+          stale: 'Last available value — the latest query failed',
+          loading: 'Querying official sources…',
+          error: 'The indicators service could not be reached.',
+          sourceSuperfinanciera: 'Financial Superintendence (datos.gov.co)',
+          sourceDane: 'DANE (datos.gov.co)',
+          sourceBanrep: 'Banco de la República',
+          noProjections:
+            'This section publishes no projections or recommendations: they would require cited, dated sources and a scenario label.',
         },
         escudo: {
           effectiveRateLabel: 'Book effective tax rate (expense 54 / EBT)',

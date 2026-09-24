@@ -1,27 +1,32 @@
 /**
  * Tests unitarios — getMacroFactors service
  *
+ * valoracion-04: el servicio sustituía cada serie fallida por DEFAULTS
+ * (IPC 4,5 %, TRM 4.200, tasa 9,25 %), marcaba todo con fuente 'banrep' si
+ * llegaba la TRM o la tasa y fechaba el registro con la hora de la consulta.
+ * Las pruebas previas codificaban ese comportamiento ("1. Default fallback");
+ * se reemplazan por el contrato por campo: valor o null, fuente, fecha de
+ * vigencia, fecha de consulta y marca `stale` para el último valor bueno.
+ *
  * Escenarios:
- *   1. Default fallback: todas las APIs externas fallan → retorna defaults hardcoded.
- *   2. Cache hit: fila DB < 24h → no llama fetch externo.
- *   3. Cache miss: fila DB > 24h → llama fetch + persiste.
- *   4. Force refresh: force=true ignora cache válida → llama fetch.
- *   5. Sin fila en DB: primera vez → llama fetch y persiste.
+ *   1. Todas las series fallan → null por campo con motivo (nunca defaults).
+ *   2. TRM ok, IPC/tasa fallan → sólo la TRM con su fuente y vigencia.
+ *   3. Cache v2 fresca → no llama APIs, respeta nulls por campo.
+ *   4. Fila legada (sin procedencia por campo) → se ignora y se consulta.
+ *   5. Fallo de una serie con último valor bueno → stale con su fecha original.
+ *   6. Persistencia v2 con procedencia por campo.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// ─── Mocks de módulos ───────────────────────────────────────────────────────
-
-// Mock del cliente BanRep/DANE (se declara ANTES de importar service).
 vi.mock('@/lib/macro/banrep-client', () => ({
   fetchTRM: vi.fn(),
   fetchIPC: vi.fn(),
   fetchTasaBanRep: vi.fn(),
 }));
 
-// Mock de DB client.
-const mockInsert = vi.fn().mockReturnValue({ values: vi.fn().mockResolvedValue(undefined) });
+const mockValues = vi.fn().mockResolvedValue(undefined);
+const mockInsert = vi.fn().mockReturnValue({ values: mockValues });
 const mockSelect = vi.fn();
 
 vi.mock('@/lib/db/client', () => ({
@@ -38,125 +43,117 @@ vi.mock('@/lib/db/schema', () => ({
 import * as banrepClient from '@/lib/macro/banrep-client';
 import { getMacroFactors } from '../service';
 
-// ─── Helpers ───────────────────────────────────────────────────────────────
+const FRESH_DATE = new Date(Date.now() - 1 * 60 * 60 * 1000); // 1h
+const STALE_DATE = new Date(Date.now() - 25 * 60 * 60 * 1000); // 25h
 
-const FRESH_DATE = new Date(Date.now() - 1 * 60 * 60 * 1000); // 1h ago
-const STALE_DATE = new Date(Date.now() - 25 * 60 * 60 * 1000); // 25h ago
-
-function makeCachedRow(date: Date) {
-  return {
-    id: 1,
-    ipc: 0.05,
-    trm: 4215,
-    tasaBanRep: 0.0925,
-    fuente: 'banrep',
-    fechaActualizacion: date,
-  };
-}
-
-/** Configura el mock de DB para retornar una fila con fecha dada. */
-function mockDbWithRow(row: ReturnType<typeof makeCachedRow>) {
+function mockDbRows(rows: unknown[]) {
   mockSelect.mockReturnValue({
     from: vi.fn().mockReturnValue({
       orderBy: vi.fn().mockReturnValue({
-        limit: vi.fn().mockResolvedValue([row]),
+        limit: vi.fn().mockResolvedValue(rows),
       }),
     }),
   });
 }
 
-/** Configura el mock de DB para retornar sin filas (primera vez). */
-function mockDbEmpty() {
-  mockSelect.mockReturnValue({
-    from: vi.fn().mockReturnValue({
-      orderBy: vi.fn().mockReturnValue({
-        limit: vi.fn().mockResolvedValue([]),
-      }),
-    }),
-  });
+const NONE = { reading: null, reason: 'sin dato' };
+const trmOk = { reading: { value: 3208.66, asOf: '2026-09-23', source: 'superfinanciera' as const }, reason: null };
+
+function v2Row(date: Date, prov: Record<string, unknown>, nums = { ipc: 0.0624, trm: 3300, tasaBanRep: 0 }) {
+  return { id: 1, ...nums, fuente: JSON.stringify({ v: 2, ...prov }), fechaActualizacion: date };
 }
 
-// ─── Tests ─────────────────────────────────────────────────────────────────
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockInsert.mockReturnValue({ values: mockValues });
+});
 
-describe('getMacroFactors', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    // Por defecto insert es no-op.
-    mockInsert.mockReturnValue({
-      values: vi.fn().mockResolvedValue(undefined),
-    });
+describe('getMacroFactors — procedencia por campo, sin defaults', () => {
+  it('1. todas las series fallan → null con motivo, nunca 4,5 % / 4.200 / 9,25 %', async () => {
+    mockDbRows([]);
+    vi.mocked(banrepClient.fetchTRM).mockResolvedValue(NONE);
+    vi.mocked(banrepClient.fetchIPC).mockResolvedValue(NONE);
+    vi.mocked(banrepClient.fetchTasaBanRep).mockResolvedValue(NONE);
+
+    const r = await getMacroFactors();
+    for (const f of [r.ipc, r.trm, r.tasaBanRep]) {
+      expect(f.value).toBeNull();
+      expect(f.source).toBeNull();
+      expect(f.reason).toBeTruthy();
+    }
+    expect(mockInsert).not.toHaveBeenCalled();
   });
 
-  it('1. Default fallback — todas las APIs fallan → retorna defaults', async () => {
-    mockDbEmpty();
-    vi.mocked(banrepClient.fetchTRM).mockResolvedValue(null);
-    vi.mocked(banrepClient.fetchIPC).mockResolvedValue(null);
-    vi.mocked(banrepClient.fetchTasaBanRep).mockResolvedValue(null);
+  it('2. TRM ok e IPC/tasa fallidos → sólo la TRM, con fuente y vigencia propias', async () => {
+    mockDbRows([]);
+    vi.mocked(banrepClient.fetchTRM).mockResolvedValue(trmOk);
+    vi.mocked(banrepClient.fetchIPC).mockResolvedValue(NONE);
+    vi.mocked(banrepClient.fetchTasaBanRep).mockResolvedValue({ reading: null, reason: 'tasa de intervención: serie no configurada' });
 
-    const result = await getMacroFactors();
-
-    expect(result.ipc).toBe(0.045);
-    expect(result.trm).toBe(4200);
-    expect(result.tasaBanRep).toBe(0.0925);
-    expect(result.fuente).toBe('default');
-    expect(result.fechaActualizacion).toBeTruthy();
+    const r = await getMacroFactors();
+    expect(r.trm).toMatchObject({ value: 3208.66, source: 'superfinanciera', asOf: '2026-09-23', stale: false });
+    expect(r.trm.fetchedAt).toBeTruthy();
+    expect(r.ipc.value).toBeNull();
+    expect(r.tasaBanRep.value).toBeNull();
+    expect(r.tasaBanRep.reason).toMatch(/intervención/);
   });
 
-  it('2. Cache hit — fila < 24h → no llama APIs externas', async () => {
-    mockDbWithRow(makeCachedRow(FRESH_DATE));
-
-    const result = await getMacroFactors();
-
-    expect(result.ipc).toBe(0.05);
-    expect(result.trm).toBe(4215);
-    expect(result.fuente).toBe('banrep');
-    // NO debe haber llamado a las APIs externas.
+  it('3. cache v2 fresca → no consulta APIs y respeta los null por campo', async () => {
+    mockDbRows([
+      v2Row(FRESH_DATE, {
+        trm: { asOf: '2026-09-22', source: 'superfinanciera', fetchedAt: FRESH_DATE.toISOString() },
+        ipc: { asOf: '2026-08-01', source: 'dane', fetchedAt: FRESH_DATE.toISOString() },
+        tasaBanRep: null,
+      }),
+    ]);
+    const r = await getMacroFactors();
+    expect(r.trm.value).toBe(3300);
+    expect(r.ipc.value).toBe(0.0624);
+    expect(r.tasaBanRep.value).toBeNull(); // la columna numérica (0) no se publica
     expect(banrepClient.fetchTRM).not.toHaveBeenCalled();
-    expect(banrepClient.fetchIPC).not.toHaveBeenCalled();
-    expect(banrepClient.fetchTasaBanRep).not.toHaveBeenCalled();
   });
 
-  it('3. Cache miss — fila > 24h → llama fetch y persiste', async () => {
-    mockDbWithRow(makeCachedRow(STALE_DATE));
-    vi.mocked(banrepClient.fetchTRM).mockResolvedValue(4230.5);
-    vi.mocked(banrepClient.fetchIPC).mockResolvedValue(0.048);
-    vi.mocked(banrepClient.fetchTasaBanRep).mockResolvedValue(0.0925);
+  it('4. fila legada sin procedencia por campo (pudo traer defaults) → se ignora', async () => {
+    mockDbRows([{ id: 1, ipc: 0.045, trm: 4200, tasaBanRep: 0.0925, fuente: 'banrep', fechaActualizacion: FRESH_DATE }]);
+    vi.mocked(banrepClient.fetchTRM).mockResolvedValue(trmOk);
+    vi.mocked(banrepClient.fetchIPC).mockResolvedValue(NONE);
+    vi.mocked(banrepClient.fetchTasaBanRep).mockResolvedValue(NONE);
 
-    const result = await getMacroFactors();
-
-    expect(result.trm).toBe(4230.5);
-    expect(result.ipc).toBe(0.048);
-    expect(result.fuente).toBe('banrep');
+    const r = await getMacroFactors();
     expect(banrepClient.fetchTRM).toHaveBeenCalledOnce();
-    // insert debe haberse llamado para persistir.
-    expect(mockInsert).toHaveBeenCalled();
+    expect(r.ipc.value).toBeNull(); // no el 0,045 de la fila legada
   });
 
-  it('4. Force refresh — ignora cache válida → llama APIs', async () => {
-    mockDbWithRow(makeCachedRow(FRESH_DATE));
-    vi.mocked(banrepClient.fetchTRM).mockResolvedValue(4250);
-    vi.mocked(banrepClient.fetchIPC).mockResolvedValue(null);
-    vi.mocked(banrepClient.fetchTasaBanRep).mockResolvedValue(0.09);
+  it('5. serie fallida con último valor bueno → stale con su vigencia original', async () => {
+    mockDbRows([
+      v2Row(STALE_DATE, {
+        trm: { asOf: '2026-09-20', source: 'superfinanciera', fetchedAt: STALE_DATE.toISOString() },
+        ipc: null,
+        tasaBanRep: null,
+      }),
+    ]);
+    vi.mocked(banrepClient.fetchTRM).mockResolvedValue(NONE);
+    vi.mocked(banrepClient.fetchIPC).mockResolvedValue(NONE);
+    vi.mocked(banrepClient.fetchTasaBanRep).mockResolvedValue(NONE);
 
-    const result = await getMacroFactors({ force: true });
-
-    expect(result.trm).toBe(4250);
-    // IPC falló → usa default.
-    expect(result.ipc).toBe(0.045);
-    expect(banrepClient.fetchTRM).toHaveBeenCalledOnce();
+    const r = await getMacroFactors();
+    expect(r.trm).toMatchObject({ value: 3300, asOf: '2026-09-20', stale: true });
+    expect(r.trm.fetchedAt).toBe(STALE_DATE.toISOString());
   });
 
-  it('5. Sin fila DB (primera vez) → fetch + persist', async () => {
-    mockDbEmpty();
-    vi.mocked(banrepClient.fetchTRM).mockResolvedValue(4200);
-    vi.mocked(banrepClient.fetchIPC).mockResolvedValue(0.05);
-    vi.mocked(banrepClient.fetchTasaBanRep).mockResolvedValue(0.0925);
+  it('6. persiste v2 con procedencia por campo', async () => {
+    mockDbRows([]);
+    vi.mocked(banrepClient.fetchTRM).mockResolvedValue(trmOk);
+    vi.mocked(banrepClient.fetchIPC).mockResolvedValue(NONE);
+    vi.mocked(banrepClient.fetchTasaBanRep).mockResolvedValue(NONE);
 
-    const result = await getMacroFactors();
-
-    expect(result.trm).toBe(4200);
-    expect(result.ipc).toBe(0.05);
-    expect(result.fuente).toBe('banrep');
+    await getMacroFactors({ force: true });
     expect(mockInsert).toHaveBeenCalled();
+    const row = mockValues.mock.calls[0][0] as { fuente: string; trm: number };
+    const prov = JSON.parse(row.fuente);
+    expect(prov.v).toBe(2);
+    expect(prov.trm).toMatchObject({ asOf: '2026-09-23', source: 'superfinanciera' });
+    expect(prov.ipc).toBeNull();
+    expect(row.trm).toBe(3208.66);
   });
 });
