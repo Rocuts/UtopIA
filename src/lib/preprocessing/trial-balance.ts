@@ -1655,24 +1655,11 @@ function buildSnapshotForPeriod(
   }));
 
   // -------------------------------------------------------------------------
-  // 1. Leaf rows: aux + subcuentas huerfanas
+  // 1. Leaf rows estructurales (recalculo-07) sin códigos que no son cuentas
+  //    PUC (ingesta-11). Ver `selectLeafRows`.
   // -------------------------------------------------------------------------
-  const auxiliarRows = view.filter((r) => r.transactional || r.level === 'Auxiliar');
-  const subcuentaRows = view.filter((r) => r.level === 'Subcuenta');
-
-  const orphanSubcuentas: typeof view = [];
-  for (const sub of subcuentaRows) {
-    const hasAuxiliarDescendant = auxiliarRows.some(
-      (aux) => aux.code !== sub.code && aux.code.startsWith(sub.code),
-    );
-    if (!hasAuxiliarDescendant) orphanSubcuentas.push(sub);
-  }
-
-  const auxiliarCodes = new Set(auxiliarRows.map((r) => r.code));
-  const leafRows = [
-    ...auxiliarRows,
-    ...orphanSubcuentas.filter((r) => !auxiliarCodes.has(r.code)),
-  ];
+  const leafSelection = selectLeafRows(view, period);
+  const leafRows = leafSelection.leafRows;
 
   const classRows = view.filter((r) => r.level === 'Clase');
 
@@ -1811,7 +1798,10 @@ function buildSnapshotForPeriod(
   // y `equityBreakdown.utilidadEjercicio` (ambos sincronizados por R8).
   // -------------------------------------------------------------------------
   const adjustments: string[] = [];
-  const integrityReasons = collectParseIssueReasons(allRows, period);
+  const integrityReasons = [
+    ...leafSelection.reasons,
+    ...collectParseIssueReasons(allRows, period),
+  ];
   const validationReasons: string[] = [...integrityReasons];
   // The current input contract uses JS numbers. BigInt after rounding cannot
   // recover cents already lost by parsing or by an unsafe aggregate.
@@ -2808,6 +2798,113 @@ function normalizeLevel(level: string): string {
   if (l.includes('auxiliar') || l.includes('aux') || l.includes('detalle')) return 'Auxiliar';
   if (l.includes('cuenta') || l === 'account') return 'Cuenta';
   return level;
+}
+
+// ---------------------------------------------------------------------------
+// Selección de hojas (recalculo-07) y códigos que no son cuentas (ingesta-11)
+// ---------------------------------------------------------------------------
+// Hoja = fila cuyo código no es prefijo de ningún otro código del archivo,
+// cualquiera que sea el nivel declarado. Antes sólo eran hoja las filas
+// Auxiliar/transaccionales y las Subcuenta sin auxiliares: un balance
+// exportado a nivel Cuenta (4 dígitos) quedaba en $0 y una cuenta sin
+// descendientes en un archivo mixto se omitía; una fila marcada transaccional
+// con subcuentas se sumaba dos veces.
+//
+// Identificaciones de tercero en la columna código (cédula 79123456, NIT
+// 1020304050) no son cuentas: sin cuenta padre en el archivo y con un grupo
+// que no existe en el PUC (x0, 0x, 63-69, 75-79) se excluyen de los totales y
+// bloquean. En un archivo jerárquico, un código largo sin ninguna cuenta padre
+// también bloquea (se conserva: puede ser una cuenta sin mayor exportado).
+// ---------------------------------------------------------------------------
+
+interface LeafCandidate {
+  code: string;
+  name: string;
+  level: string;
+  transactional: boolean;
+  balance: number;
+}
+
+const MAX_LISTED_CODES = 10;
+/** Fracción mínima de códigos largos con cuenta padre para tratar el archivo como jerárquico. */
+const HIERARCHICAL_MIN_SHARE = 0.8;
+const HIERARCHICAL_MIN_LONG_CODES = 5;
+
+function isImplausiblePucGroup(code: string): boolean {
+  const cls = code[0];
+  const grp = code[1];
+  if (cls === '0' || grp === '0') return true;
+  if (cls === '6' && grp >= '3') return true;
+  if (cls === '7' && grp >= '5') return true;
+  return false;
+}
+
+function listCodes(rows: LeafCandidate[]): string {
+  const shown = rows
+    .slice(0, MAX_LISTED_CODES)
+    .map((r) => `${r.code} ${r.name} ($${formatCOP(r.balance)})`)
+    .join(', ');
+  return rows.length > MAX_LISTED_CODES ? `${shown} y ${rows.length - MAX_LISTED_CODES} más` : shown;
+}
+
+function selectLeafRows<T extends LeafCandidate>(
+  view: T[],
+  period: string,
+): { leafRows: T[]; reasons: string[] } {
+  const codeSet = new Set(view.map((r) => r.code));
+  const hasAncestor = (code: string): boolean => {
+    for (let k = code.length - 1; k >= 4; k--) {
+      if (codeSet.has(code.slice(0, k))) return true;
+    }
+    return false;
+  };
+
+  const notAccounts = view.filter(
+    (r) => r.code.length >= 8 && !hasAncestor(r.code) && isImplausiblePucGroup(r.code),
+  );
+  const excluded = new Set<T>(notAccounts);
+  const accounts = view.filter((r) => !excluded.has(r));
+
+  const prefixes = new Set<string>();
+  for (const r of accounts) {
+    for (let k = 1; k < r.code.length; k++) prefixes.add(r.code.slice(0, k));
+  }
+  const structural = accounts.filter((r) => !prefixes.has(r.code));
+
+  // Código repetido con niveles distintos (fila de mayor + fila auxiliar con
+  // el mismo código): se suman sólo las auxiliares/transaccionales, como antes.
+  const isAux = (r: T) => r.transactional || r.level === 'Auxiliar';
+  const codesWithAux = new Set(structural.filter(isAux).map((r) => r.code));
+  const leafRows = structural.filter((r) => isAux(r) || !codesWithAux.has(r.code));
+
+  const reasons: string[] = [];
+  const flaggedNotAccounts = notAccounts.filter((r) => r.balance !== 0);
+  if (flaggedNotAccounts.length > 0) {
+    reasons.push(
+      `[${period}] Códigos que no corresponden a un grupo PUC ni tienen cuenta padre en el archivo ` +
+        `(posible NIT o cédula de tercero en la columna código): ${listCodes(flaggedNotAccounts)}. ` +
+        'Se excluyeron de los totales; revise el archivo.',
+    );
+  }
+
+  const longCodes = accounts.filter((r) => r.code.length >= 8);
+  const uniqueLong = new Set(longCodes.map((r) => r.code));
+  const withAncestor = [...uniqueLong].filter(hasAncestor).length;
+  if (
+    uniqueLong.size >= HIERARCHICAL_MIN_LONG_CODES &&
+    withAncestor / uniqueLong.size >= HIERARCHICAL_MIN_SHARE
+  ) {
+    const orphans = longCodes.filter((r) => !hasAncestor(r.code) && r.balance !== 0);
+    if (orphans.length > 0) {
+      reasons.push(
+        `[${period}] Códigos sin cuenta padre en un archivo jerárquico (posible identificación de ` +
+          `tercero o cuenta sin mayor exportado): ${listCodes(orphans)}. Se sumaron como auxiliares; ` +
+          'confirme que son cuentas del catálogo.',
+      );
+    }
+  }
+
+  return { leafRows, reasons };
 }
 
 /** Máximo de valores ilegibles citados uno a uno por periodo. */
