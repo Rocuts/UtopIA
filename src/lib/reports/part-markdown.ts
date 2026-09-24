@@ -19,6 +19,7 @@ import {
   strategyDegradationNotice,
 } from '@/lib/agents/financial/agents/strategy-director';
 import {
+  actaArithmeticSeal,
   governanceDegradationNotice,
   renderGovernanceResult,
 } from '@/lib/agents/financial/agents/governance-specialist';
@@ -256,38 +257,6 @@ export function renderStrategyPart(
 // ---------------------------------------------------------------------------
 // Parte III
 // ---------------------------------------------------------------------------
-
-/** Sello aritmético del acta: mismo texto que `runGovernancePhase`. */
-function actaArithmeticSeal(motivos: readonly string[], anchored: boolean, language: 'es' | 'en'): string {
-  const es = language === 'es';
-  if (anchored) {
-    return [
-      es ? '> ## ACTA CON SALVEDADES — INTEGRIDAD ARITMÉTICA' : '> ## MINUTES WITH QUALIFICATIONS — ARITHMETIC INTEGRITY',
-      '>',
-      es
-        ? '> Las cifras del acta no coinciden con la aritmética determinista sobre la ' +
-          'utilidad del ejercicio. Este documento NO es firmable ni inscribible tal como está:'
-        : '> The minutes figures do not match the deterministic arithmetic over the ' +
-          'period result. This document is NOT signable as issued:',
-      '>',
-      ...motivos.map((m) => `> - ${m}`),
-      '',
-    ].join('\n');
-  }
-  return [
-    es ? '> ## ACTA CON SALVEDADES — CIFRAS SIN VERIFICAR' : '> ## MINUTES WITH QUALIFICATIONS — UNVERIFIED FIGURES',
-    '>',
-    es
-      ? '> El acta propone cifras de destinación que no pudieron contrastarse con una ' +
-        'aritmética determinista sobre la utilidad del ejercicio. Este documento NO es firmable ' +
-        'ni inscribible tal como está:'
-      : '> The minutes propose allocation figures that could not be checked against ' +
-        'deterministic arithmetic over the period result. This document is NOT signable as issued:',
-    '>',
-    ...motivos.map((m) => `> - ${m}`),
-    '',
-  ].join('\n');
-}
 
 /** Sello de la Parte III cuando su veredicto no es limpio y ningún cruce del servidor lo explica. */
 function governanceGenericSeal(motivos: readonly string[], language: 'es' | 'en'): string {

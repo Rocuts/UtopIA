@@ -9,7 +9,7 @@ import { buildNiifAncora, ancoraOrNull } from './ancora/build-ancora';
 import type { NiifAncora } from './ancora/types';
 import { buildFiscalSnapshot } from './escudo-survival/fiscal-anchor/snapshot';
 import { runStrategyDirector } from './agents/strategy-director';
-import { runGovernanceSpecialist } from './agents/governance-specialist';
+import { actaArithmeticSeal, runGovernanceSpecialist } from './agents/governance-specialist';
 import {
   extractCompanyMetadata,
   preprocessTrialBalance,
@@ -67,6 +67,8 @@ import {
 } from './agents/reconcile-anchors';
 import { toNiifAnalysisResult } from './agents/renderer';
 import {
+  buildStrategyQualificationSeal,
+  buildStrategyVerificationNote,
   reconcileStrategyAnchors,
   strategyAnchorSources,
   type QualifiedStrategicAnalysisResult,
@@ -2715,38 +2717,14 @@ function qualifyStrategyResult(
       type: 'warning',
       warnings: qualifications.motivos.map((m) => `[Estrategia — anclas] ${m}`),
     });
-    const seal = [
-      es
-        ? '> ## ANÁLISIS ESTRATÉGICO CON SALVEDADES — CIFRAS SIN RESPALDO'
-        : '> ## STRATEGIC ANALYSIS WITH QUALIFICATIONS — UNSUPPORTED FIGURES',
-      '>',
-      es
-        ? '> Cifras de la Parte II no coinciden con el balance preprocesado. Esta sección NO es emitible tal como está:'
-        : '> Part II figures do not match the preprocessed trial balance. This section is NOT issuable as is:',
-      '>',
-      ...qualifications.motivos.map((m) => `> - ${m}`),
-      '',
-    ].join('\n');
+    // Mismo texto que el re-render del servidor (part-markdown.ts, I5-7).
+    const seal = buildStrategyQualificationSeal(qualifications.motivos, language);
     strategy.kpiDashboard = `${seal}\n${strategy.kpiDashboard}`;
     strategy.fullContent = `${seal}\n${strategy.fullContent}`;
   }
 
   if (qualifications.noVerificables.length > 0) {
-    const MAX = 12;
-    const shown = qualifications.noVerificables.slice(0, MAX);
-    const rest = qualifications.noVerificables.length - shown.length;
-    const note = [
-      '',
-      es ? '### Verificación determinista de la Parte II' : '### Deterministic verification of Part II',
-      es
-        ? `- Cifras cruzadas contra el balance preprocesado: ${verifiedCount}.`
-        : `- Figures cross-checked against the preprocessed trial balance: ${verifiedCount}.`,
-      (es
-        ? '- No verificables contra anclas deterministas (estimaciones del modelo, no cifras del balance): '
-        : '- Not verifiable against deterministic anchors (model estimates, not trial-balance figures): ') +
-        shown.join('; ') +
-        (rest > 0 ? (es ? `; y ${rest} más.` : `; and ${rest} more.`) : '.'),
-    ].join('\n');
+    const note = buildStrategyVerificationNote(verifiedCount, qualifications.noVerificables, language);
     strategy.fullContent = `${strategy.fullContent}\n${note}`;
   }
 
@@ -2845,20 +2823,8 @@ export async function runGovernancePhase(
       // El sello va en el cuerpo del acta además de en el flag: un evento SSE
       // `warning` muere en el navegador sin handler (verificado por la auditoría
       // integral), así que la señal tiene que viajar en el texto que se lee.
-      const seal = [
-        language === 'es'
-          ? '> ## ACTA CON SALVEDADES — INTEGRIDAD ARITMÉTICA'
-          : '> ## MINUTES WITH QUALIFICATIONS — ARITHMETIC INTEGRITY',
-        '>',
-        language === 'es'
-          ? '> Las cifras del acta no coinciden con la aritmética determinista sobre la ' +
-            'utilidad del ejercicio. Este documento NO es firmable ni inscribible tal como está:'
-          : '> The minutes figures do not match the deterministic arithmetic over the ' +
-            'period result. This document is NOT signable as issued:',
-        '>',
-        ...motivos.map((m) => `> - ${m}`),
-        '',
-      ].join('\n');
+      // Mismo texto que el re-render del servidor (part-markdown.ts, I5-7).
+      const seal = actaArithmeticSeal(motivos, true, language);
       governance.shareholderMinutes = `${seal}\n${governance.shareholderMinutes}`;
       governance.fullContent = `${seal}\n${governance.fullContent}`;
     } else {
@@ -2879,21 +2845,7 @@ export async function runGovernancePhase(
         warnings: motivos.map((m) => `[Acta — sin ancla] ${m}`),
       });
       governance.actaQualifications = { clean: false, motivos };
-      const seal = [
-        language === 'es'
-          ? '> ## ACTA CON SALVEDADES — CIFRAS SIN VERIFICAR'
-          : '> ## MINUTES WITH QUALIFICATIONS — UNVERIFIED FIGURES',
-        '>',
-        language === 'es'
-          ? '> El acta propone cifras de destinación que no pudieron contrastarse con una ' +
-            'aritmética determinista sobre la utilidad del ejercicio. Este documento NO es firmable ' +
-            'ni inscribible tal como está:'
-          : '> The minutes propose allocation figures that could not be checked against ' +
-            'deterministic arithmetic over the period result. This document is NOT signable as issued:',
-        '>',
-        ...motivos.map((m) => `> - ${m}`),
-        '',
-      ].join('\n');
+      const seal = actaArithmeticSeal(motivos, false, language);
       governance.shareholderMinutes = `${seal}\n${governance.shareholderMinutes}`;
       governance.fullContent = `${seal}\n${governance.fullContent}`;
     }

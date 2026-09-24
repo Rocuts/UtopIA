@@ -162,6 +162,43 @@ export async function runGovernanceSpecialist(
 // en lugar de aceptar el que reenvía el navegador.
 // ---------------------------------------------------------------------------
 
+/**
+ * Sello aritmético del acta (I5-7): lo antepone `runGovernancePhase` cuando la
+ * destinación no coincide con la aritmética determinista (`anchored`) o no
+ * pudo contrastarse con ella (sin preprocesado), y el re-render del servidor
+ * (`renderGovernancePart`, part-markdown.ts) con la MISMA función.
+ */
+export function actaArithmeticSeal(motivos: readonly string[], anchored: boolean, language: 'es' | 'en'): string {
+  const es = language === 'es';
+  if (anchored) {
+    return [
+      es ? '> ## ACTA CON SALVEDADES — INTEGRIDAD ARITMÉTICA' : '> ## MINUTES WITH QUALIFICATIONS — ARITHMETIC INTEGRITY',
+      '>',
+      es
+        ? '> Las cifras del acta no coinciden con la aritmética determinista sobre la ' +
+          'utilidad del ejercicio. Este documento NO es firmable ni inscribible tal como está:'
+        : '> The minutes figures do not match the deterministic arithmetic over the ' +
+          'period result. This document is NOT signable as issued:',
+      '>',
+      ...motivos.map((m) => `> - ${m}`),
+      '',
+    ].join('\n');
+  }
+  return [
+    es ? '> ## ACTA CON SALVEDADES — CIFRAS SIN VERIFICAR' : '> ## MINUTES WITH QUALIFICATIONS — UNVERIFIED FIGURES',
+    '>',
+    es
+      ? '> El acta propone cifras de destinación que no pudieron contrastarse con una ' +
+        'aritmética determinista sobre la utilidad del ejercicio. Este documento NO es firmable ' +
+        'ni inscribible tal como está:'
+      : '> The minutes propose allocation figures that could not be checked against ' +
+        'deterministic arithmetic over the period result. This document is NOT signable as issued:',
+    '>',
+    ...motivos.map((m) => `> - ${m}`),
+    '',
+  ].join('\n');
+}
+
 /** Aviso de sección degradada de la Parte III (mismo texto en la fase y en el servidor). */
 export function governanceDegradationNotice(language: 'es' | 'en'): string {
   return buildDegradationNotice(
