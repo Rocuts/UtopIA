@@ -5,7 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import { runNiifAnalyst } from './agents/niif-analyst';
-import { buildNiifAncora } from './ancora/build-ancora';
+import { buildNiifAncora, ancoraOrNull } from './ancora/build-ancora';
 import type { NiifAncora } from './ancora/types';
 import { buildFiscalSnapshot } from './escudo-survival/fiscal-anchor/snapshot';
 import { runStrategyDirector } from './agents/strategy-director';
@@ -1279,9 +1279,11 @@ export interface FinancialPipelineContext {
    * CCV Fiscal F01..F10 + checks + nitDigito) calculadas desde el
    * PreprocessedBalance. Disponible para los Agentes 2 (Strategy), 3
    * (Governance) y el pipeline Escudo como fuente de verdad numérica que
-   * NO depende del LLM. Siempre presente: cuando Stage 0 no produjo
-   * `preprocessed`, `buildNiifAncora` devuelve un Âncora "empty" con todos
-   * los campos a "0" sentinel.
+   * NO depende del LLM. Siempre presente en el contexto: cuando Stage 0 no
+   * produjo `preprocessed`, `buildNiifAncora` devuelve un Âncora sentinela
+   * (todos los campos a "0") MARCADO como tal (`isSentinelAncora`). Ese
+   * sentinela es interno: `runNiifPhase` lo emite como `null` y ninguna
+   * superficie debe leer sus ceros como cifras del cliente.
    */
   ancora: NiifAncora;
   /**
@@ -1633,7 +1635,11 @@ export async function runNiifPhase(
   options: OrchestrateFinancialOptions = {},
 ): Promise<{
   niif: NiifAnalysisResult;
-  ancora: NiifAncora;
+  /**
+   * Âncora determinista, o `null` cuando no hay preprocesado que lo respalde
+   * (pipeline-flujo-01): el sentinela de ceros nunca sale de este proceso.
+   */
+  ancora: NiifAncora | null;
   fiscalSnapshot: FiscalSnapshot | undefined;
   context: FinancialPipelineContext;
 }> {
@@ -1836,7 +1842,10 @@ export async function runNiifPhase(
 
   return {
     niif,
-    ancora: context.ancora,
+    // Sin preprocesado `context.ancora` es el sentinela de ceros de
+    // `buildNiifAncora`: emitirlo convertía "no hay dato" en un balance de $0
+    // con Score NIIF 80/100 en las cuatro áreas. Se emite `null` (N/D).
+    ancora: ancoraOrNull(context.ancora),
     fiscalSnapshot: context.fiscalSnapshot,
     context,
   };
