@@ -17,7 +17,7 @@
 //     citarla como vigente sigue bloqueando.
 // ---------------------------------------------------------------------------
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -243,5 +243,50 @@ describe('NT-03 — resoluciones de la UVT catalogadas con fuente del corpus', (
     const et = readFileSync(join(process.cwd(), 'src/data/tax_docs/estatuto_tributario_completo.md'), 'utf8');
     expect(et).toMatch(/Para el año 2026 : Resolución DIAN 238 de 2025/);
     expect(et).toMatch(/Para el año 2025 : Resolución DIAN 193 de 2024/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Re-auditoría 2026-09-24 (NT-12): «Sentencia C-079 de 2026» no tiene fuente
+// en el corpus (decreto_1474_2025_emergencia.md dice «C-XXX de 2026» e
+// inexequibilidad del 15-abr-2026), pero se renderizaba en todos los módulos
+// y la Capa 2 la daba por válida.
+// ---------------------------------------------------------------------------
+describe('NT-12 — jurisprudencia sólo con fuente en src/data/tax_docs', () => {
+  const corpusDir = join(process.cwd(), 'src/data/tax_docs');
+  const d1474 = readFileSync(join(corpusDir, 'decreto_1474_2025_emergencia.md'), 'utf8');
+
+  it('el corpus no trae el número de la sentencia del Decreto 1474 y fecha la inexequibilidad el 15-abr-2026', () => {
+    expect(d1474).not.toMatch(/C-079/);
+    expect(d1474).toMatch(/Sentencia Corte Constitucional C-XXX de 2026/);
+    expect(d1474).toMatch(/El \*\*15 de abril de 2026\*\*, la Corte Constitucional declaró la \*\*inexequibilidad\*\*/);
+  });
+
+  it.each(USE_CASES.flatMap((u) => (['es', 'en'] as const).map((l) => [u ?? 'sin caso', l, u] as const)))(
+    'encabezado (%s, %s): no afirma el número C-079 y fecha la inexequibilidad como el corpus',
+    (_n, language, useCase) => {
+      const h = buildFiscalAgentHeader({ language, useCase });
+      expect(h).not.toMatch(/C-079/);
+      expect(h).toMatch(/Decreto 1474 de 2025 declarado INEXEQUIBLE por la Corte Constitucional el 15-abr-2026/);
+    },
+  );
+
+  it('la Capa 2 no da por válida una cita sin fuente («Sentencia C-079 de 2026»)', () => {
+    expect(MOTOR_NORMATIVO_CATALOG.jurisprudencia.some((j) => j.cita === 'Sentencia C-079 de 2026')).toBe(false);
+    expect(veredicto('La Sentencia C-079 de 2026 declaró inexequible el Decreto 1474.', 'Sentencia C-079 de 2026')).toBe('bloqueo');
+  });
+
+  it('cada sentencia de la Corte Constitucional catalogada tiene rastro en el corpus', () => {
+    const corpus = readdirSync(corpusDir)
+      .filter((f) => f.endsWith('.md'))
+      .map((f) => readFileSync(join(corpusDir, f), 'utf8'))
+      .join('\n');
+    for (const j of MOTOR_NORMATIVO_CATALOG.jurisprudencia.filter((x) => x.tribunal === 'Corte Constitucional')) {
+      const m = /^Sentencia (C|T|SU)-0*(\d+) de (\d{4})$/.exec(j.cita);
+      expect(m, j.cita).not.toBeNull();
+      const [, pre, num, anio] = m!;
+      const re = new RegExp(`${pre}-\\s*0*${num}(?:-${anio.slice(2)}\\b|\\s+de\\s+${anio})`);
+      expect(re.test(corpus), j.cita).toBe(true);
+    }
   });
 });

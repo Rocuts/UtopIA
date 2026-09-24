@@ -15,7 +15,9 @@ export const LEYES_REFORMAS: readonly LawReformEntry[] = [
   // constitucionalidad de fondo puede seguir en curso. Antes de citarlas en un
   // dictamen firmado, verificar el estado del expediente en corteconstitucional.gov.co.
   // Antecedente que obliga a esa cautela: el Decreto 1474 de 2025 fue declarado
-  // INEXEQUIBLE (Sentencia C-079 de 2026) con orden de devolución de lo recaudado.
+  // INEXEQUIBLE por la Corte Constitucional el 15-abr-2026, con orden de
+  // devolución de lo recaudado (decreto_1474_2025_emergencia.md; el corpus no
+  // trae el número de la sentencia).
   {
     id: 'DECRETO_173_2026',
     cita: 'Decreto 173 de 2026',

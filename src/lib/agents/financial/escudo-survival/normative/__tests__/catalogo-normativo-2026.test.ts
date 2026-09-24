@@ -337,7 +337,8 @@ describe('Arts. 437-4 y 437-5 E.T. — chatarra y tabaco, no "compras a no respo
 //         lit. e): "...con excepción de las loterías y de los juegos de suerte y
 //         azar operados exclusivamente por internet".
 // Vigencia: el Decreto 1474 de 2025 (que gravó esos juegos con IVA) fue declarado
-//           INEXEQUIBLE por la Sentencia C-079 de 2026.
+//           INEXEQUIBLE por la Corte Constitucional el 15-abr-2026
+//           (decreto_1474_2025_emergencia.md).
 // ---------------------------------------------------------------------------
 describe('Art. 420 E.T. — exclusión de loterías y juegos operados por internet', () => {
   it('registra la excepción del literal e) en el resumen que va al prompt', () => {

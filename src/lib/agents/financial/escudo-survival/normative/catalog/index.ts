@@ -65,7 +65,9 @@ const BLACKLIST: readonly BlacklistEntry[] = [
       'emergencia\\s+econom[ií]ca\\s+2025',
     ],
     razon:
-      'Decreto 1474 de 2025 declarado INEXEQUIBLE por Sentencia C-079 de 2026 (Corte Constitucional). Las medidas tributarias del decreto (sobretasa 50%, restricción regalías) NO están vigentes en 2026.',
+      // NT-12: el corpus (decreto_1474_2025_emergencia.md) fecha la
+      // inexequibilidad el 15-abr-2026 y no trae el número de la sentencia.
+      'Decreto 1474 de 2025 declarado INEXEQUIBLE por la Corte Constitucional el 15-abr-2026 (el número de la sentencia no consta en el corpus: no lo cites). Las medidas tributarias del decreto (sobretasa 50%, restricción regalías) NO están vigentes en 2026.',
     alternativaCorrecta:
       'Tarifas vigentes: Art. 240 E.T. tarifa general 35%; par. 2 sobretasa financiera 40% y hidroeléctricas 38%.',
     severidad: 'CRITICA',
