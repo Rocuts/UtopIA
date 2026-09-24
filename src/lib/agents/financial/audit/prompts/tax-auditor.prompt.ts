@@ -15,6 +15,20 @@ import { EXCEPCIONES_TTD_PAR6 } from '../../tax-planning/prompts/tax-optimizer.p
 /** Sanción mínima 2026 (10 UVT aproximado por el Art. 868 E.T.) — fuente única. */
 const MIN_SANCTION_COP = `$${new Intl.NumberFormat('es-CO').format(MIN_SANCTION)}`;
 
+export type RegimenRentaAuditoria = 'ordinario' | 'simple' | null;
+
+/**
+ * Régimen de renta del intake, leído de forma defensiva (como
+ * `regimenTributarioParaGate`): cualquier valor distinto de 'simple' u
+ * 'ordinario' es «sin dato» y se audita como régimen ordinario.
+ */
+export function regimenRentaDeEmpresa(company: unknown): RegimenRentaAuditoria {
+  const raw = (company as { regimenTributario?: unknown } | null | undefined)?.regimenTributario;
+  if (typeof raw !== 'string') return null;
+  const v = raw.trim().toLowerCase();
+  return v === 'simple' || v === 'ordinario' ? v : null;
+}
+
 export function buildTaxAuditorPrompt(company: CompanyInfo, language: 'es' | 'en'): string {
   const guardrail = buildAntiHallucinationGuardrail(language);
   const context2026 = buildColombia2026Context(language);
@@ -27,6 +41,15 @@ export function buildTaxAuditorPrompt(company: CompanyInfo, language: 'es' | 'en
   const taxpayerType = company.entityType?.toUpperCase().includes('NATURAL')
     ? 'Persona Natural'
     : 'Persona Juridica';
+
+  // Régimen de renta del intake (re-auditoría 2026-09-24, NT-02).
+  const regimen = regimenRentaDeEmpresa(company);
+  const regimenLabel =
+    regimen === 'simple'
+      ? 'SIMPLE — Regimen Simple de Tributacion (Arts. 903-916 E.T.)'
+      : regimen === 'ordinario'
+        ? 'Ordinario (Art. 240 E.T.)'
+        : 'No informado (se audita como regimen ordinario)';
 
   return `${guardrail}
 
@@ -67,6 +90,7 @@ Producir un reporte JSON con score 0-100, resumen ejecutivo, hallazgos tributari
 - If la provision de renta del periodo varia >50% vs comparativo sin justificacion, Then hallazgo alto "Justificar variacion atipica de provision (Art. 772-1 E.T.)"; Otherwise no comentar.
 - If el preprocesador reporto reclasificaciones por no-compensacion (§2.52 NIIF PYMES) y el reporte sigue mostrando saldos netos, Then hallazgo alto "Reclasificar a saldos brutos — §2.52 + NIC 32 par. 42"; Otherwise omite.
 - If una clasificacion contable parece divergir de la posicion DIAN (ej. IVA exento vs gravado, costos procedentes), Then EXAMINA si aplica Art. 647 E.T. (diferencia de criterio razonable y demostrable). If aplica, indica en recommendation "Documentar la interpretacion razonable del derecho aplicable (Art. 647 E.T.): excluye la inexactitud en la declaracion solo si los hechos y cifras declarados son completos y verdaderos"; Otherwise no menciones Art. 647. NEVER afirmes que el Art. 647 "anula" la sancion.
+- If <empresa_auditada> declara Regimen de renta SIMPLE, Then tmtAnalysis.status="no_aplica" (Art. 903 E.T.: el impuesto unificado sustituye el impuesto sobre la renta) y no presentes el impuesto teorico a la tarifa del Art. 240 E.T. como impuesto de la entidad (el sistema deja esa cascada en N/D); Otherwise aplica las reglas de renta ordinaria.
 - If la entidad esta en regimen SIMPLE y aparecen retenciones de renta en cabeza propia, Then hallazgo alto bajo Arts. 903-916 E.T.; Otherwise solo informativo.
 - If el reporte tiene ICA pero no identifica el municipio o la actividad gravada, Then hallazgo medio "Sustento de ICA insuficiente"; Otherwise no comentar.
 - If no hay datos suficientes para auditar un impuesto (ej. ausencia de detalle de IVA descontable), Then finding informativo "Informacion insuficiente"; no inventes cifras.
@@ -87,6 +111,7 @@ Producir un reporte JSON con score 0-100, resumen ejecutivo, hallazgos tributari
 - Razon Social: ${company.name}
 - NIT: ${company.nit}
 - Tipo de Contribuyente: ${taxpayerType}
+- Regimen de renta (intake): ${regimenLabel}
 - Periodo Auditado: ${company.fiscalPeriod}
 ${company.comparativePeriod ? `- Periodo Comparativo: ${company.comparativePeriod}` : ''}
 </empresa_auditada>
