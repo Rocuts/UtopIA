@@ -42,8 +42,13 @@ import { scoresCitadosEnProsa, validateRiskScoreL3 } from '../validators/risk-sc
 import type { Modulo3RiskScore, Modulo5DefensaDian, Modulo6Devoluciones } from '../validators/types';
 
 // UAI = 1.240M − 760M − 158M = 322M → F02 = 112,7M; F03 = 150M → F04 = −37,3M.
+// 111005 Bancos cuadra la ecuación con el resultado del ejercicio sin trasladar
+// (A = P + K + resultado: 752.000.000 = 310.000.000 + 150.000.000 + 292.000.000).
+// Sin ella el balance estaba descuadrado y el Escudo lo bloquea como /niif
+// (I4-escudo 2). No cambia la UAI, F02, F03 ni F04.
 const CSV = `codigo,nombre,nivel,transaccional,Saldo 2025
 110505,Caja general,Auxiliar,1,18000000
+111005,Bancos nacionales,Auxiliar,1,584000000
 135515,Retencion en la fuente,Auxiliar,1,150000000
 220505,Proveedores nacionales,Auxiliar,1,310000000
 310505,Capital suscrito y pagado,Auxiliar,1,150000000

@@ -21,7 +21,7 @@
 import { UVT_2026_COP } from '@/lib/accounting/tax-engine/constants';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { buildFiscalAnchor } from '../fiscal-anchor';
-import { exigirIntegridadBalance, leerBalanceEscudo } from '../lib/balance-ingesta';
+import { exigirBalanceUtilizable, leerBalanceEscudo } from '../lib/balance-ingesta';
 import type { FiscalAnchorBlock } from '../fiscal-anchor/types';
 import { runCcvFiscalAgent } from './agents/ccv-fiscal.agent';
 import { runConciliacionAgent } from './agents/conciliacion.agent';
@@ -168,13 +168,14 @@ export async function orchestrateFiscalAgent(
   callbacks?.onProgress?.({ stage: 'preprocessing', status: 'started' });
   // Misma lectura que /upload y /niif (P4 cross-dep): directivas de ingesta
   // (unidad confirmada, vencimientos), bloques por hoja del XLSX y bloqueo con
-  // motivo (`EscudoBalanceBloqueadoError`) si no hay filas o la lectura tiene
-  // motivos de integridad, como una unidad declarada sin confirmar. Un
-  // preprocesado recibido del llamador pasa por el mismo bloqueo.
+  // motivo (`EscudoBalanceBloqueadoError`) si no hay filas o si /niif lo
+  // rechazaría (integridad de la lectura, CUR-R8/R5/R12, ecuación descuadrada
+  // que el Bridge no explica — I4-escudo 2). Un preprocesado recibido del
+  // llamador pasa por el mismo bloqueo.
   let preprocessed: PreprocessedBalance;
   try {
     if (inp.preprocessed) {
-      exigirIntegridadBalance(inp.preprocessed, language);
+      exigirBalanceUtilizable(inp.preprocessed, language);
       preprocessed = inp.preprocessed;
     } else {
       preprocessed = leerBalanceEscudo(inp.rawData, { language, sinFilas: 'bloquear' });

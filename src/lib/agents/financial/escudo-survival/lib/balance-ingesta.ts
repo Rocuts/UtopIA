@@ -14,12 +14,14 @@
 //     (recalculo-final-03) y /niif responde 422.
 //
 // Ahora se usa el MISMO helper que /upload, /niif y el Stage 0 del orquestador
-// (`preprocessUploadedTrialBalanceText`) y el mismo criterio de bloqueo que
-// /niif para la integridad de la lectura: un motivo de `integrityReasons`
-// (unidad sin confirmar, importes ilegibles, columnas ambiguas, importes fuera
-// de rango) detiene el módulo con el motivo, nunca se publica una cifra fiscal
-// sobre esa lectura. Las hojas incompatibles (`TrialBalanceIngestError`) y un
-// texto tabular sin filas legibles también se detienen con motivo.
+// (`preprocessUploadedTrialBalanceText`) y el MISMO gate que /niif
+// (`motivosBloqueoBalance`, I4-escudo 2): integridad de la lectura (unidad sin
+// confirmar, importes ilegibles, columnas ambiguas, fuera de rango), bloqueos
+// del curator posteriores a R8 (CUR-R8, CUR-R5, CUR-R12) y ecuación
+// descuadrada que el Bridge de Cuadratura no explica detienen el módulo con el
+// motivo; nunca se publica una cifra fiscal sobre ese balance. Las hojas
+// incompatibles (`TrialBalanceIngestError`) y un texto tabular sin filas
+// legibles también se detienen con motivo.
 // ---------------------------------------------------------------------------
 
 import { preprocessUploadedTrialBalanceText } from '@/lib/preprocessing/raw-data';
@@ -106,26 +108,68 @@ const MOTIVO_SIN_FILAS: Record<'es' | 'en', string> = {
 };
 
 /**
- * Motivos de integridad de la lectura en todos los periodos (deduplicados).
- * Es el subconjunto persistente que /niif nunca levanta: ningún ajuste ni
- * cierre virtual cambia lo que se leyó del archivo.
+ * Motivos por los que el balance NO sirve de base para cifras fiscales, con la
+ * MISMA política que el gate de /niif (Stage 0.5 de `prepareFinancialContext`,
+ * `deriveValidation` en orchestrator.ts), periodo por periodo (I4-escudo 2):
+ *
+ *   - motivos persistentes, que ningún cierre virtual levanta: integridad de
+ *     la lectura (`integrityReasons`: unidad sin confirmar, importes
+ *     ilegibles, columnas ambiguas, fuera de rango) y bloqueos del curator
+ *     posteriores a R8 (`curatorBlockingReasons`: CUR-R8 residual no
+ *     explicado, CUR-R5 desglose ≠ clase 3, CUR-R12 P&G posiblemente
+ *     acumulado);
+ *   - el bloqueo pre-R8 del snapshot (ecuación descuadrada), salvo cuando el
+ *     Bridge de Cuadratura aplica: la ecuación post-R8 cuadra, R8 actuó y su
+ *     ajuste es inmaterial (≤ 1 % del activo, mínimo $1.000.000). Entonces
+ *     las razones pre-R8 son informativas y sólo bloquean las persistentes.
+ *
+ * Cada motivo lleva el prefijo del periodo, como el 422 de /niif. Lista vacía
+ * ⇒ /niif aceptaría el balance. El Escudo no aplica ajustes del Doctor de
+ * Datos (no recibe `adjustmentLedger`), así que no hay re-validación
+ * post-ajustes que replicar. La prueba `politica-bloqueo-niif.test.ts` compara
+ * esta función con el gate real de /niif sobre balances honestos y bloqueados.
  */
-export function motivosIntegridadBalance(preprocessed: PreprocessedBalance): string[] {
-  const motivos = new Set<string>();
+export function motivosBloqueoBalance(preprocessed: PreprocessedBalance): string[] {
+  const textos = (arr: unknown): string[] =>
+    Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string') : [];
+  let bloquea = false;
+  const motivos: string[] = [];
   for (const snap of preprocessed.periods ?? []) {
-    for (const r of snap.validation?.integrityReasons ?? []) {
-      if (typeof r === 'string' && r.trim()) motivos.add(r);
+    const v = snap.validation;
+    if (!v) continue;
+    const tag = `[${snap.period}] `;
+    const persistentes = [
+      ...new Set([...textos(v.integrityReasons), ...textos(v.curatorBlockingReasons)]),
+    ];
+    const razones = textos(v.reasons);
+    const todas = [...razones, ...persistentes.filter((r) => !razones.includes(r))];
+
+    const vca = snap.virtualCloseAdjustment;
+    const umbralMaterial = Math.max(Math.abs(snap.controlTotals?.activo ?? 0) * 0.01, 1_000_000);
+    const bridge =
+      snap.summary?.equationBalanced === true &&
+      vca !== undefined &&
+      Math.abs(vca.centsAdjustment ?? 0) <= umbralMaterial;
+
+    if ((v.blocking && !bridge) || persistentes.length > 0) bloquea = true;
+    if (bridge && v.blocking) {
+      for (const r of todas) if (persistentes.includes(r)) motivos.push(`${tag}${r}`);
+    } else {
+      for (const r of todas) motivos.push(`${tag}${r}`);
     }
   }
-  return [...motivos];
+  return bloquea ? motivos : [];
 }
 
-/** Lanza `EscudoBalanceBloqueadoError` si la lectura del balance tiene motivos de integridad. */
-export function exigirIntegridadBalance(
+/**
+ * Lanza `EscudoBalanceBloqueadoError` si /niif rechazaría el balance
+ * (`motivosBloqueoBalance`): el Escudo no publica cifras fiscales sobre él.
+ */
+export function exigirBalanceUtilizable(
   preprocessed: PreprocessedBalance,
   language: 'es' | 'en' = 'es',
 ): void {
-  const motivos = motivosIntegridadBalance(preprocessed);
+  const motivos = motivosBloqueoBalance(preprocessed);
   if (motivos.length > 0) throw new EscudoBalanceBloqueadoError(motivos, language);
 }
 
@@ -145,7 +189,8 @@ export interface LeerBalanceEscudoOptions {
  * Lee y preprocesa el `rawData` del Escudo con la regla común de ingesta.
  * Devuelve el balance preprocesado o lanza `EscudoBalanceBloqueadoError` con
  * los motivos (hojas incompatibles, confirmaciones inválidas, texto tabular
- * sin filas, integridad de la lectura).
+ * sin filas y los mismos motivos del gate de /niif: integridad de la lectura,
+ * CUR-R8/R5/R12 y ecuación descuadrada que el Bridge no explica).
  */
 export function leerBalanceEscudo(
   rawData: string,
@@ -163,6 +208,6 @@ export function leerBalanceEscudo(
     }
     return preprocessTrialBalance([]);
   }
-  exigirIntegridadBalance(leido.preprocessed, language);
+  exigirBalanceUtilizable(leido.preprocessed, language);
   return leido.preprocessed;
 }
