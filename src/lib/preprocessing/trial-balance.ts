@@ -27,6 +27,7 @@
 // Types
 // ---------------------------------------------------------------------------
 
+import { computeEbitda } from '@/lib/pillars/ebitda';
 import { runCurator } from './balance-curator';
 import { normalizeSignConvention, type SignConventionDetection } from './sign-convention';
 import type {
@@ -320,6 +321,36 @@ export interface ControlTotals {
   // según contrato (no centavos). `null` cuando el denominador es 0/anómalo
   // para que el renderer pinte 'ND' explícitamente, NUNCA un fallback silencioso.
   // -----------------------------------------------------------------------
+  /**
+   * Supuesto de presentación (niif-preproceso-21): la clasificación corriente /
+   * no corriente es por grupo PUC, sin información de vencimientos. El bloque
+   * vinculante y las notas deben revelarlo mientras no haya overrides.
+   */
+  clasificacionSupuesta?: string;
+  /**
+   * Cartera comercial neta = 1305 + 1310 − |1399| (niif-preproceso-25). `null`
+   * si el balance no trae cuentas de clientes 1305/1310.
+   */
+  clientesNetos?: number | null;
+  /**
+   * Meses de resultados que cubre el periodo (ratios-kpis-18): 12 para una
+   * etiqueta AAAA (cierre anual, convención del parser), MM para AAAA-MM
+   * (P&G acumulado desde el 1 de enero), 3·n para AAAA-Qn y la duración de un
+   * rango de meses completos. `null` si la etiqueta no la determina.
+   */
+  mesesPeriodo?: number | null;
+  /** Días del periodo sobre base 365 (= 365 × meses / 12); `null` si no hay meses. */
+  diasPeriodo?: number | null;
+  /** Base (365 días), periodo y anualización aplicados a los KPIs de flujo / saldo. */
+  kpiBaseNota?: string;
+  /** Capital de trabajo = activoCorriente − pasivoCorriente. */
+  capitalTrabajo?: number;
+  /**
+   * EBITDA con la definición ÚNICA de `src/lib/pillars/ebitda.ts`
+   * (`computeEbitda`: EBIT + D&A 5160/5165/5260/5265/7360/7365). `null` sin
+   * desglose del grupo 41 (motivo en `kpiNdMotivos.ebitda`).
+   */
+  ebitda?: number | null;
   /** Razón corriente = activoCorriente / pasivoCorriente. */
   razonCorriente?: number | null;
   /** Prueba ácida = (activoCorriente − inventarios14) / pasivoCorriente. */
@@ -330,22 +361,30 @@ export interface ControlTotals {
   apalancamientoFinanciero?: number | null;
   /** Cobertura de intereses = ebit / |gastoFinanciero5305|. null si sin gasto financiero. */
   coberturaIntereses?: number | null;
-  /** Margen operativo = ebit / ingresosNetos × 100 (porcentaje). */
+  /** Margen bruto = utilidadBruta / ingresosOperacionalesNetos × 100 (porcentaje). */
+  margenBruto?: number | null;
+  /** Margen operativo = ebit / ingresosOperacionalesNetos × 100 (porcentaje). */
   margenOperativo?: number | null;
   /** Margen neto = utilidadNeta / ingresosNetos × 100 (porcentaje). */
   margenNeto?: number | null;
-  /** ROE = utilidadNeta / patrimonioPromedio × 100 (porcentaje). */
+  /** ROE = utilidadNeta anualizada / patrimonioPromedio × 100 (porcentaje). */
   roe?: number | null;
-  /** ROA = utilidadNeta / activoPromedio × 100 (porcentaje). */
+  /** ROA = utilidadNeta anualizada / activoPromedio × 100 (porcentaje). */
   roa?: number | null;
-  /** Rotación de activos = ingresosNetos / activoPromedio. */
+  /** Rotación de activos = ingresosOperacionalesNetos anualizados / activoPromedio. */
   rotacionActivos?: number | null;
-  /** Días de cartera = (deudoresCuenta13 / ingresosNetos) × 365. null si ingresos = 0. */
+  /**
+   * Días de cartera = clientesNetos / ingresosOperacionalesNetos anualizados × 365.
+   * null (con motivo) sin clientes 1305/1310, sin ingresos operacionales o sin
+   * duración del periodo.
+   */
   diasCartera?: number | null;
-  /** Días de inventario = (inventarios14 / (costoVentas6 + costoProduccion7)) × 365. null si costos anómalos. */
+  /** Días de inventario = inventarios14 / (costos 6 + 7 anualizados) × 365. null si costos anómalos. */
   diasInventario?: number | null;
-  /** Días de proveedores = (proveedores22 / (costoVentas6 + costoProduccion7)) × 365. null si costos anómalos. */
+  /** Días de proveedores = proveedores22 / (costos 6 + 7 anualizados) × 365. null si costos anómalos. */
   diasProveedores?: number | null;
+  /** Ciclo de conversión del efectivo = días cartera + días inventario − días proveedores. */
+  cicloConversionEfectivo?: number | null;
   /**
    * Motivo de los KPIs publicados como N/D por base no interpretable (p. ej.
    * ROE con patrimonio promedio ≤ 0). Los renderizadores y el bloque
@@ -665,6 +704,19 @@ const ACTIVO_CORRIENTE_GROUPS = new Set(['11', '12', '13', '14']);
 const ACTIVO_NO_CORRIENTE_GROUPS = new Set(['15', '16', '17', '18', '19']);
 const PASIVO_CORRIENTE_GROUPS = new Set(['21', '22', '23', '24', '25', '26']);
 const PASIVO_NO_CORRIENTE_GROUPS = new Set(['27', '28', '29']);
+
+/**
+ * Supuesto de clasificación corriente / no corriente (niif-preproceso-21). La
+ * clasificación sigue siendo por grupo PUC (las excepciones a 4 dígitos y los
+ * overrides de vencimiento requieren decisión de negocio); aquí sólo se
+ * DECLARA el supuesto para que el informe lo revele.
+ */
+export const CLASIFICACION_CORRIENTE_SUPUESTA =
+  'Clasificación corriente / no corriente por grupo PUC (activo corriente 11-14, no corriente ' +
+  '15-19; pasivo corriente 21-26, no corriente 27-29), sin información de vencimientos del ' +
+  'balance de prueba: es un supuesto no verificado (NIC 1 párr. 66-76 / NIIF para las PYMES ' +
+  '4.5-4.8). Partidas con vencimiento distinto al del grupo (p. ej. obligaciones de largo ' +
+  'plazo en el grupo 21 o inversiones de corto plazo en el 12) pueden quedar mal clasificadas.';
 
 // ---------------------------------------------------------------------------
 // Subcuentas importantes
@@ -1483,38 +1535,18 @@ export function preprocessTrialBalance(
       prev !== null ? (ct.activo + prev.controlTotals.activo) / 2 : ct.activo;
     ct.patrimonioPromedio = patrimonioPromedio;
     ct.activoPromedio = activoPromedio;
-    const recomputed = computeDerivedKpis({
-      activoCorriente: ct.activoCorriente,
-      pasivoCorriente: ct.pasivoCorriente,
-      inventarios14: ct.inventarios14 ?? 0,
-      pasivo: ct.pasivo,
-      activo: ct.activo,
-      patrimonio: ct.patrimonio,
-      ebit: ct.ebit ?? 0,
-      gastoFinanciero5305: ct.gastoFinanciero5305 ?? 0,
-      ingresosNetos: ct.ingresosNetos ?? Math.abs(ct.ingresos),
-      utilidadNeta: ct.utilidadNeta,
-      patrimonioPromedio,
-      activoPromedio,
-      deudoresCuenta13: ct.deudoresCuenta13,
-      costoVentas6: ct.costoVentas6 ?? 0,
-      costoProduccion7: ct.costoProduccion7 ?? 0,
-      proveedores22: ct.proveedores22 ?? 0,
-    });
-    ct.razonCorriente = recomputed.razonCorriente;
-    ct.pruebaAcida = recomputed.pruebaAcida;
-    ct.endeudamientoTotal = recomputed.endeudamientoTotal;
-    ct.apalancamientoFinanciero = recomputed.apalancamientoFinanciero;
-    ct.coberturaIntereses = recomputed.coberturaIntereses;
-    ct.margenOperativo = recomputed.margenOperativo;
-    ct.margenNeto = recomputed.margenNeto;
-    ct.roe = recomputed.roe;
-    ct.roa = recomputed.roa;
-    ct.rotacionActivos = recomputed.rotacionActivos;
-    ct.diasCartera = recomputed.diasCartera;
-    ct.diasInventario = recomputed.diasInventario;
-    ct.diasProveedores = recomputed.diasProveedores;
-    ct.kpiNdMotivos = recomputed.kpiNdMotivos;
+    Object.assign(
+      ct,
+      computeDerivedKpis(kpiInputsFromTotals(ct, snap.period, patrimonioPromedio, activoPromedio)),
+    );
+    // EBITDA con la definición ÚNICA de `pillars/ebitda.ts` (ratios-kpis-05 /
+    // ratios-kpis-24): EBIT + D&A sobre las hojas del snapshot, sin las
+    // cuentas virtuales del curator. Sin grupo 41 es N/D con motivo.
+    const ebitda = computeEbitda(snap);
+    ct.ebitda = ebitda.ebitda;
+    if (ebitda.ebitda === null && ebitda.reason) {
+      ct.kpiNdMotivos = { ...ct.kpiNdMotivos, ebitda: `N/D — ${ebitda.reason}` };
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -2031,6 +2063,18 @@ function buildSnapshotForPeriod(
   // (cuando hay comparative) patchea estos campos con el verdadero promedio.
   const patrimonioPromedio = totalEquity;
   const activoPromedio = totalAssets;
+  // Cartera comercial neta (niif-preproceso-25): clientes 1305 + cuentas
+  // corrientes comerciales 1310 − deterioro 1399 (contra-activo; se resta su
+  // magnitud en cualquier convención). Sin 1305/1310 no hay cartera comercial.
+  const clientesLeaves = leafRows.filter(
+    (r) => r.code.startsWith('1305') || r.code.startsWith('1310'),
+  );
+  const clientesNetos =
+    clientesLeaves.length === 0
+      ? null
+      : sumLeavesPrecise(clientesLeaves) -
+        Math.abs(sumLeavesPrecise(leafRows.filter((r) => r.code.startsWith('1399'))));
+  const mesesPeriodo = mesesDelPeriodo(period);
   const kpis = computeDerivedKpis({
     activoCorriente,
     pasivoCorriente,
@@ -2041,13 +2085,17 @@ function buildSnapshotForPeriod(
     ebit,
     gastoFinanciero5305,
     ingresosNetos,
+    ingresosOperacionalesNetos,
+    utilidadBruta: utilidadBrutaForEbit,
     utilidadNeta: netIncome,
     patrimonioPromedio,
     activoPromedio,
-    deudoresCuenta13,
+    clientesNetos,
     costoVentas6,
     costoProduccion7,
     proveedores22,
+    mesesPeriodo,
+    periodo: period,
   });
 
   const cents: ControlTotalsCents = {
@@ -2114,6 +2162,9 @@ function buildSnapshotForPeriod(
     gastoFinanciero5305,
     patrimonioPromedio,
     activoPromedio,
+    clientesNetos,
+    mesesPeriodo,
+    clasificacionSupuesta: CLASIFICACION_CORRIENTE_SUPUESTA,
     ...kpis,
   };
 
@@ -2629,14 +2680,23 @@ interface DerivedKpiInputs {
   patrimonio: number;
   ebit: number;
   gastoFinanciero5305: number;
+  /** Ingresos netos totales de la clase 4 (base del margen neto). */
   ingresosNetos: number;
+  /** Grupo 41 − 4175: base de márgenes bruto/operativo, rotación y días de cartera. */
+  ingresosOperacionalesNetos: number;
+  utilidadBruta: number;
   utilidadNeta: number;
   patrimonioPromedio: number;
   activoPromedio: number;
-  deudoresCuenta13: number;
+  /** 1305 + 1310 − |1399|; `null` sin cuentas de clientes. */
+  clientesNetos: number | null;
   costoVentas6: number;
   costoProduccion7: number;
   proveedores22: number;
+  /** Meses de resultados del periodo (`mesesDelPeriodo`); `null` si no se derivan. */
+  mesesPeriodo: number | null;
+  /** Etiqueta del periodo, para la nota de base y los motivos. */
+  periodo: string;
 }
 
 interface DerivedKpis {
@@ -2645,6 +2705,7 @@ interface DerivedKpis {
   endeudamientoTotal: number | null;
   apalancamientoFinanciero: number | null;
   coberturaIntereses: number | null;
+  margenBruto: number | null;
   margenOperativo: number | null;
   margenNeto: number | null;
   roe: number | null;
@@ -2653,38 +2714,149 @@ interface DerivedKpis {
   diasCartera: number | null;
   diasInventario: number | null;
   diasProveedores: number | null;
+  cicloConversionEfectivo: number | null;
+  capitalTrabajo: number;
+  diasPeriodo: number | null;
+  kpiBaseNota: string;
   /** Motivo por KPI cuando el valor es `null` por una base no interpretable. */
   kpiNdMotivos: KpiNdMotivos;
 }
 
+/** KPIs que pueden publicarse N/D con motivo. */
+export type KpiNdKey =
+  | 'roe'
+  | 'roa'
+  | 'apalancamientoFinanciero'
+  | 'rotacionActivos'
+  | 'margenBruto'
+  | 'margenOperativo'
+  | 'diasCartera'
+  | 'diasInventario'
+  | 'diasProveedores'
+  | 'cicloConversionEfectivo'
+  | 'ebitda';
+
 /** Motivo legible (es) de un KPI publicado como N/D. */
-export type KpiNdMotivos = Partial<Record<'roe' | 'apalancamientoFinanciero', string>>;
+export type KpiNdMotivos = Partial<Record<KpiNdKey, string>>;
 
 const MOTIVO_PATRIMONIO_PROMEDIO_NO_POSITIVO =
   'N/D — patrimonio promedio ≤ 0 (patrimonio negativo o nulo): el ROE no es interpretable';
 const MOTIVO_PATRIMONIO_NO_POSITIVO =
   'N/D — patrimonio ≤ 0 (insolvencia técnica): el apalancamiento no es interpretable';
+const MOTIVO_INGRESOS_OPERACIONALES_NO_POSITIVOS =
+  'N/D — ingresos operacionales netos (grupo 41 − devoluciones 4175) ≤ 0: sin base para el indicador';
+const MOTIVO_SIN_CLIENTES =
+  'N/D — el balance no trae cuentas de clientes (1305 / 1310): sin cartera comercial para los días de cartera';
+const MOTIVO_COSTOS_ANOMALOS =
+  'N/D — base de costos insuficiente (clases 6 + 7 < 1 % de los ingresos): ciclo operativo no confiable';
+const MOTIVO_CICLO_INCOMPLETO =
+  'N/D — el ciclo de conversión requiere días de cartera, inventario y proveedores calculables';
+
+function motivoPeriodoNoAnualizado(periodo: string): string {
+  return (
+    `N/D — periodo parcial no anualizado: la etiqueta "${periodo}" no permite derivar los ` +
+    'meses del periodo y el indicador compara un flujo del periodo con un saldo (base 365 días)'
+  );
+}
+
+/**
+ * Meses de resultados que cubre un periodo, derivados de su etiqueta
+ * (ratios-kpis-18). `null` cuando la etiqueta no determina la duración.
+ *   - "AAAA"                    → 12 (cierre anual: convención del parser,
+ *                                 que ordena "AAAA" como el cierre AAAA-12).
+ *   - "AAAA-MM"                 → MM (P&G acumulado desde el 1 de enero).
+ *   - "AAAA-Qn"                 → 3·n (acumulado al cierre del trimestre).
+ *   - "AAAA-MM-DD..AAAA-MM-DD"  → meses completos del rango (1..12).
+ *   - etiqueta de año completo ("ene-dic 2025", "cierre 2025") → 12.
+ */
+export function mesesDelPeriodo(periodLabel: string | null | undefined): number | null {
+  if (!periodLabel) return null;
+  const s = String(periodLabel).trim();
+  if (/^20\d{2}$/.test(s)) return 12;
+  let m = s.match(/^20\d{2}-(0[1-9]|1[0-2])$/);
+  if (m) return parseInt(m[1], 10);
+  m = s.match(/^20\d{2}-Q([1-4])$/i);
+  if (m) return parseInt(m[1], 10) * 3;
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})\.\.(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) {
+    const [y1, mo1, d1, y2, mo2, d2] = m.slice(1).map((x) => parseInt(x, 10));
+    const ultimoDia = new Date(Date.UTC(y2, mo2, 0)).getUTCDate();
+    if (d1 !== 1 || d2 !== ultimoDia) return null;
+    const meses = (y2 - y1) * 12 + (mo2 - mo1) + 1;
+    return meses >= 1 && meses <= 12 ? meses : null;
+  }
+  return inferPeriodoTipo(s) === 'cerrado' ? 12 : null;
+}
+
+/** Entradas de `computeDerivedKpis` desde un `controlTotals` ya construido. */
+function kpiInputsFromTotals(
+  ct: ControlTotals,
+  periodo: string,
+  patrimonioPromedio: number,
+  activoPromedio: number,
+): DerivedKpiInputs {
+  const ingresosNetos = ct.ingresosNetos ?? Math.abs(ct.ingresos);
+  return {
+    activoCorriente: ct.activoCorriente,
+    pasivoCorriente: ct.pasivoCorriente,
+    inventarios14: ct.inventarios14 ?? 0,
+    pasivo: ct.pasivo,
+    activo: ct.activo,
+    patrimonio: ct.patrimonio,
+    ebit: ct.ebit ?? 0,
+    gastoFinanciero5305: ct.gastoFinanciero5305 ?? 0,
+    ingresosNetos,
+    ingresosOperacionalesNetos: ct.ingresosOperacionalesNetos ?? ingresosNetos,
+    utilidadBruta: ct.utilidadBruta ?? 0,
+    utilidadNeta: ct.utilidadNeta,
+    patrimonioPromedio,
+    activoPromedio,
+    clientesNetos: ct.clientesNetos ?? null,
+    costoVentas6: ct.costoVentas6 ?? 0,
+    costoProduccion7: ct.costoProduccion7 ?? 0,
+    proveedores22: ct.proveedores22 ?? 0,
+    mesesPeriodo: ct.mesesPeriodo === undefined ? mesesDelPeriodo(periodo) : ct.mesesPeriodo,
+    periodo,
+  };
+}
 
 function computeDerivedKpis(inputs: DerivedKpiInputs): DerivedKpis {
   const safeDiv = (num: number, den: number): number | null => {
     if (!Number.isFinite(num) || !Number.isFinite(den) || den === 0) return null;
     return num / den;
   };
+  const pct = (r: number | null): number | null => (r === null ? null : r * 100);
 
   // Auditoría 2026-09 (ratios-kpis-07): con patrimonio negativo el ROE y el
   // apalancamiento cambian de signo y dejan de medir lo que dicen — una
   // pérdida sobre patrimonio promedio negativo publicaba ROE +451 % como KPI
   // VINCULANTE. Sin base interpretable, el KPI es N/D con motivo.
   const kpiNdMotivos: KpiNdMotivos = {};
+  const nd = (key: KpiNdKey, motivo: string): null => {
+    kpiNdMotivos[key] = motivo;
+    return null;
+  };
   const patrimonioPromedioNoPositivo = !(inputs.patrimonioPromedio > 0);
   const patrimonioNoPositivo = !(inputs.patrimonio > 0);
-  if (patrimonioPromedioNoPositivo) kpiNdMotivos.roe = MOTIVO_PATRIMONIO_PROMEDIO_NO_POSITIVO;
-  if (patrimonioNoPositivo) kpiNdMotivos.apalancamientoFinanciero = MOTIVO_PATRIMONIO_NO_POSITIVO;
 
+  // Auditoría 2026-09 (niif-preproceso-24, enmienda spec v2.1): los márgenes
+  // bruto/operativo, la rotación y los días de cartera se miden sobre los
+  // ingresos OPERACIONALES netos (41 − 4175); el grupo 42 queda debajo de la
+  // utilidad operacional. El margen neto conserva los ingresos netos totales.
   const ingresosBase = Math.abs(inputs.ingresosNetos);
+  const ingresosOp = inputs.ingresosOperacionalesNetos;
+  const ingresosOpValidos = Number.isFinite(ingresosOp) && ingresosOp > 0;
+
+  // Auditoría 2026-09 (ratios-kpis-18, niif-preproceso-25): los KPIs que
+  // comparan un flujo del periodo con un saldo se anualizan × 12/meses sobre
+  // base 365 días. Sin meses derivables el KPI es N/D con motivo: un corte a
+  // junio publicaba ROE y días de cartera de medio año como anuales.
+  const meses = inputs.mesesPeriodo;
+  const factorAnual = meses !== null && meses > 0 ? 12 / meses : null;
+  const motivoPeriodo = motivoPeriodoNoAnualizado(inputs.periodo);
+
   const costoTotalForRotation = inputs.costoVentas6 + inputs.costoProduccion7;
-  const rotationAnomalyFloor =
-    Math.max(ingresosBase * KPI_ANOMALY_TOL_PCT, 0);
+  const rotationAnomalyFloor = Math.max(ingresosBase * KPI_ANOMALY_TOL_PCT, 0);
   // Why: rotación de inventario/proveedores con costos < 1% de ingresos da
   // resultados absurdos (días >> 1000) que el LLM cita literalmente y rompe
   // el reporte. Marcamos ND para forzar al especialista a investigar antes
@@ -2692,52 +2864,94 @@ function computeDerivedKpis(inputs: DerivedKpiInputs): DerivedKpis {
   const costsAnomalous =
     Math.abs(costoTotalForRotation) < rotationAnomalyFloor || costoTotalForRotation === 0;
 
+  const apalancamientoFinanciero = patrimonioNoPositivo
+    ? nd('apalancamientoFinanciero', MOTIVO_PATRIMONIO_NO_POSITIVO)
+    : safeDiv(inputs.pasivo, inputs.patrimonio);
+
+  const margenBruto = ingresosOpValidos
+    ? pct(safeDiv(inputs.utilidadBruta, ingresosOp))
+    : nd('margenBruto', MOTIVO_INGRESOS_OPERACIONALES_NO_POSITIVOS);
+  const margenOperativo = ingresosOpValidos
+    ? pct(safeDiv(inputs.ebit, ingresosOp))
+    : nd('margenOperativo', MOTIVO_INGRESOS_OPERACIONALES_NO_POSITIVOS);
+
+  const roe = patrimonioPromedioNoPositivo
+    ? nd('roe', MOTIVO_PATRIMONIO_PROMEDIO_NO_POSITIVO)
+    : factorAnual === null
+      ? nd('roe', motivoPeriodo)
+      : pct(safeDiv(inputs.utilidadNeta * factorAnual, inputs.patrimonioPromedio));
+  const roa =
+    factorAnual === null
+      ? nd('roa', motivoPeriodo)
+      : pct(safeDiv(inputs.utilidadNeta * factorAnual, inputs.activoPromedio));
+  const rotacionActivos =
+    factorAnual === null
+      ? nd('rotacionActivos', motivoPeriodo)
+      : !ingresosOpValidos
+        ? nd('rotacionActivos', MOTIVO_INGRESOS_OPERACIONALES_NO_POSITIVOS)
+        : safeDiv(ingresosOp * factorAnual, inputs.activoPromedio);
+
+  const diasCartera =
+    factorAnual === null
+      ? nd('diasCartera', motivoPeriodo)
+      : !ingresosOpValidos
+        ? nd('diasCartera', MOTIVO_INGRESOS_OPERACIONALES_NO_POSITIVOS)
+        : inputs.clientesNetos === null
+          ? nd('diasCartera', MOTIVO_SIN_CLIENTES)
+          : (inputs.clientesNetos / (ingresosOp * factorAnual)) * 365;
+  const diasSobreCostos = (
+    key: 'diasInventario' | 'diasProveedores',
+    saldo: number,
+  ): number | null =>
+    factorAnual === null
+      ? nd(key, motivoPeriodo)
+      : costsAnomalous
+        ? nd(key, MOTIVO_COSTOS_ANOMALOS)
+        : (saldo / (costoTotalForRotation * factorAnual)) * 365;
+  const diasInventario = diasSobreCostos('diasInventario', inputs.inventarios14);
+  const diasProveedores = diasSobreCostos('diasProveedores', inputs.proveedores22);
+  const cicloConversionEfectivo =
+    diasCartera === null || diasInventario === null || diasProveedores === null
+      ? nd('cicloConversionEfectivo', MOTIVO_CICLO_INCOMPLETO)
+      : diasCartera + diasInventario - diasProveedores;
+
+  const kpiBaseNota =
+    meses === null
+      ? `Base 365 días. Periodo "${inputs.periodo}" sin duración determinable: ROE, ROA, ` +
+        'rotación de activos y días de cartera/inventario/proveedores se publican N/D ' +
+        '(periodo parcial no anualizado).'
+      : meses === 12
+        ? `Base 365 días. Periodo ${inputs.periodo}: 12 meses (cierre anual); ROE, ROA, ` +
+          'rotación de activos y días de cartera/inventario/proveedores sin anualizar.'
+        : `Base 365 días. Periodo ${inputs.periodo}: P&G de ${meses} meses; ROE, ROA, ` +
+          `rotación de activos y días de cartera/inventario/proveedores anualizados × 12/${meses}.`;
+
   return {
     razonCorriente: safeDiv(inputs.activoCorriente, inputs.pasivoCorriente),
     pruebaAcida: safeDiv(
       inputs.activoCorriente - inputs.inventarios14,
       inputs.pasivoCorriente,
     ),
-    endeudamientoTotal: (() => {
-      const r = safeDiv(inputs.pasivo, inputs.activo);
-      return r === null ? null : r * 100;
-    })(),
-    apalancamientoFinanciero: patrimonioNoPositivo
-      ? null
-      : safeDiv(inputs.pasivo, inputs.patrimonio),
+    endeudamientoTotal: pct(safeDiv(inputs.pasivo, inputs.activo)),
+    apalancamientoFinanciero,
     coberturaIntereses: (() => {
       const den = Math.abs(inputs.gastoFinanciero5305);
       if (den === 0) return null;
       return inputs.ebit / den;
     })(),
-    margenOperativo: (() => {
-      const r = safeDiv(inputs.ebit, ingresosBase);
-      return r === null ? null : r * 100;
-    })(),
-    margenNeto: (() => {
-      const r = safeDiv(inputs.utilidadNeta, ingresosBase);
-      return r === null ? null : r * 100;
-    })(),
-    roe: (() => {
-      if (patrimonioPromedioNoPositivo) return null;
-      const r = safeDiv(inputs.utilidadNeta, inputs.patrimonioPromedio);
-      return r === null ? null : r * 100;
-    })(),
-    roa: (() => {
-      const r = safeDiv(inputs.utilidadNeta, inputs.activoPromedio);
-      return r === null ? null : r * 100;
-    })(),
-    rotacionActivos: safeDiv(ingresosBase, inputs.activoPromedio),
-    diasCartera: (() => {
-      if (ingresosBase === 0) return null;
-      return (inputs.deudoresCuenta13 / ingresosBase) * 365;
-    })(),
-    diasInventario: costsAnomalous
-      ? null
-      : (inputs.inventarios14 / costoTotalForRotation) * 365,
-    diasProveedores: costsAnomalous
-      ? null
-      : (inputs.proveedores22 / costoTotalForRotation) * 365,
+    margenBruto,
+    margenOperativo,
+    margenNeto: pct(safeDiv(inputs.utilidadNeta, ingresosBase)),
+    roe,
+    roa,
+    rotacionActivos,
+    diasCartera,
+    diasInventario,
+    diasProveedores,
+    cicloConversionEfectivo,
+    capitalTrabajo: inputs.activoCorriente - inputs.pasivoCorriente,
+    diasPeriodo: meses === null ? null : Math.round((365 * meses) / 12),
+    kpiBaseNota,
     kpiNdMotivos,
   };
 }
