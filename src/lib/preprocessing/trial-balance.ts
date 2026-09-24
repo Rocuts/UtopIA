@@ -1154,12 +1154,17 @@ export function parseTrialBalanceCSVWithMeta(
 
   const rows: RawAccountRow[] = [];
   const numericPeriods = new Set<string>();
+  const lineasSinCuenta: string[] = [];
 
   for (let i = layout.lineIndex + 1; i < lines.length; i++) {
     const cols = parseLine(lines[i], separator);
     const rawCode = (cols[codeIdx] || '').trim().replace(/['"]/g, '');
     const code = rawCode.replace(/[.\-\s]/g, '');
-    if (!code || !/^\d/.test(code)) continue;
+    if (!code || !/^\d/.test(code)) {
+      // Títulos y notas al pie también pueden declarar la unidad.
+      lineasSinCuenta.push(lines[i]);
+      continue;
+    }
 
     let level = inferLevel(code);
     if (levelIdx !== -1) {
@@ -1248,6 +1253,13 @@ export function parseTrialBalanceCSVWithMeta(
     period: null,
     message,
   }));
+  // Unidad declarada distinta de pesos (recalculo-final-03): motivo de
+  // integridad de todo el archivo hasta que se confirme la unidad.
+  const unidad = detectUnidadDeclarada(
+    [...lines.slice(0, layout.lineIndex), ...lineasSinCuenta],
+    rawHeaders,
+  );
+  if (unidad) fileIssues.push({ period: null, message: motivoUnidadDeclarada(unidad) });
   for (const row of rows) {
     for (const issue of row.parseIssues ?? []) {
       if (issue.period !== null && !numericPeriods.has(issue.period)) issue.period = null;
@@ -1276,6 +1288,71 @@ export function parseTrialBalanceCSVWithMeta(
   }
   const normalized = normalizeSignConvention(rows);
   return { rows: normalized.rows, ...meta, signConvention: normalized.detection };
+}
+
+// ---------------------------------------------------------------------------
+// Unidad monetaria declarada (recalculo-final-03, re-auditoría 2026-09-24)
+// ---------------------------------------------------------------------------
+// Un encabezado "Saldo 2025 (miles de pesos)" o un título "Cifras expresadas en
+// miles de pesos colombianos" dicen que cada importe vale × 1.000. El parser
+// lee pesos: publicar esas cifras tal cual es presentar el balance 1.000 veces
+// más pequeño (y las bases en UVT, los umbrales y la materialidad con él). No
+// se reescala en silencio: se bloquea con un motivo que pide confirmar la
+// unidad y cargar los importes en pesos.
+// ---------------------------------------------------------------------------
+type UnidadDeclarada = 'miles' | 'millones';
+
+/** Frases de unidad en títulos, notas o encabezados (texto normalizado). */
+const UNIDAD_EN_TEXTO: RegExp[] = [
+  /\b(?:en|expresad[oa]s?\s+en|cifras\s+en|valores\s+en)\s+(miles|millones)\b/,
+  /\b(miles|millones)\s+de\s+(?:pesos|cop\b|\$)/,
+  /\(\s*(miles|millones)\s*\)/,
+  /\bin\s+(thousands|millions)\b/,
+  /\b(thousands|millions)\s+of\s+(?:pesos|cop)\b/,
+];
+/** En una celda de encabezado basta la palabra ("Saldo miles 2025") o "(000)". */
+const UNIDAD_EN_ENCABEZADO = /\b(miles|millones|thousands|millions)\b|\(\s*\$?\s*000\s*\)/;
+
+function unidadDeCoincidencia(match: string): UnidadDeclarada {
+  return /mill/.test(match) ? 'millones' : 'miles';
+}
+
+/**
+ * Unidad distinta de pesos declarada en los encabezados, en el preámbulo o en
+ * las filas que no son cuentas (títulos, notas al pie). `null` si no hay.
+ */
+function detectUnidadDeclarada(
+  textos: string[],
+  encabezados: string[],
+): { unidad: UnidadDeclarada; texto: string } | null {
+  const limpiar = (t: string) =>
+    t
+      .replace(/[,;\t]+/g, ' ')
+      .replace(/["']/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 120);
+  for (const h of encabezados) {
+    const m = normalizeHeaderText(h).match(UNIDAD_EN_ENCABEZADO);
+    if (m) return { unidad: unidadDeCoincidencia(m[0]), texto: limpiar(h) };
+  }
+  for (const t of textos) {
+    const norm = normalizeHeaderText(t);
+    for (const re of UNIDAD_EN_TEXTO) {
+      const m = norm.match(re);
+      if (m) return { unidad: unidadDeCoincidencia(m[0]), texto: limpiar(t) };
+    }
+  }
+  return null;
+}
+
+function motivoUnidadDeclarada(d: { unidad: UnidadDeclarada; texto: string }): string {
+  const factor = d.unidad === 'miles' ? '1.000' : '1.000.000';
+  return (
+    `El archivo declara las cifras en ${d.unidad} de pesos («${d.texto}»). UtopIA lee cada ` +
+    'importe como pesos colombianos: confirme la unidad y cargue el balance con los importes ' +
+    `en pesos (× ${factor}). Las cifras no se reescalan ni se publican en silencio.`
+  );
 }
 
 /** Periodo explícito del encabezado: `saldo [2025-06]` o un año reconocible. */
