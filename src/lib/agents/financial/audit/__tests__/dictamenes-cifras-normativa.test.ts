@@ -113,10 +113,16 @@ describe('Dictamen 2 — TTD y posición de renta (prompts-normativa-03 / audito
     expect(pos.posicionFiscalNetaCop).toBe('-25000000');
   });
 
-  it('una 1805 cuyo nombre es fiscal sí suma a la posición', () => {
+  // Regla única de crédito de renta (re-auditoría NM-06): la 1805 suma sólo
+  // con nombre de RENTA; un nombre genérico de impuesto («Impuesto corriente
+  // activo», «Anticipo ICA») no identifica el tributo y no netea la renta.
+  it('una 1805 cuyo nombre es de renta sí suma a la posición; un nombre genérico de impuesto no', () => {
     const pp = preprocessed();
-    pp.primary.classes[0].accounts.push({ code: '180510', name: 'Impuesto corriente activo', level: 'aux', balance: 80_000, isLeaf: true });
-    expect(computeRentaPosition(pp.primary).posicionFiscalNetaCop).toBe('-17000000');
+    pp.primary.classes[0].accounts.push({ code: '180510', name: 'Anticipo de impuesto de renta', level: 'aux', balance: 80_000, isLeaf: true });
+    pp.primary.classes[0].accounts.push({ code: '180520', name: 'Impuesto corriente activo', level: 'aux', balance: 30_000, isLeaf: true });
+    const pos = computeRentaPosition(pp.primary);
+    expect(pos.saldo1805FiscalCop).toBe('8000000');
+    expect(pos.posicionFiscalNetaCop).toBe('-17000000');
   });
 
   it('el adapter reemplaza la posición del LLM por la determinista; sin preprocesador queda N/D', () => {
