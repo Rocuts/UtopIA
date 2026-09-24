@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
+import fs from 'node:fs';
+import path from 'node:path';
+
 import { runR12 } from '../curator-rules/r12-closing-detector';
+import { parseTrialBalanceCSV, preprocessTrialBalance } from '../trial-balance';
 import type { PeriodSnapshot } from '../trial-balance';
 
 function buildSnapshotForR12(opts: {
@@ -201,5 +205,78 @@ describe('R12 — Detector de cierre de libros', () => {
       periodoTipo: 'cerrado',
     });
     expect(runR12(snap).audit.librosNoCerrados).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// recalculo-final-05 — asientos de cierre sugeridos que cuadran con 4175
+// ---------------------------------------------------------------------------
+// Con 4175 en la convención natural (saldo positivo, como el ingreso) la Σ
+// firmada de la clase 4 valía 550M y R12 sugería 'Cr. 5905 por $550.000.000',
+// 'Dr. 5905 por $260.000.000' y 'traslado por $190.000.000' (550 − 260 ≠ 190).
+// ---------------------------------------------------------------------------
+describe('R12 — asientos de cierre con devoluciones 4175 (recalculo-final-05)', () => {
+  const fixture = (name: string) =>
+    fs
+      .readFileSync(path.join(process.cwd(), 'src/lib/preprocessing/__fixtures__/devoluciones-4175', name), 'utf8')
+      .split('\n')
+      .filter((l) => !l.startsWith('360505')) // libros abiertos: sin traslado a 3605
+      .join('\n');
+
+  it.each(['natural.csv', 'algebraica.csv'])('%s: Cr. 5905 450M, Dr. 5905 260M, traslado 190M', (name) => {
+    const pp = preprocessTrialBalance(parseTrialBalanceCSV(fixture(name)));
+    expect(pp.primary.controlTotals.utilidadNeta).toBe(190_000_000);
+    const entries = pp.primary.closingDetectorAudit?.suggestedClosingEntries ?? [];
+    expect(entries).toEqual([
+      expect.stringMatching(/Cr\. 5905 .* por \$450\.000\.000\.$/),
+      expect.stringMatching(/Dr\. 5905 por \$260\.000\.000\.$/),
+      expect.stringMatching(/Cr\. 3605 .* por \$190\.000\.000\.$/),
+    ]);
+    const hallazgo = (pp.primary.curator?.findings ?? []).find((f) => f.code === 'CUR-R12');
+    expect(hallazgo?.description).toContain('ingresos netos clase 4 450.000.000');
+    expect(hallazgo?.description).toContain('clases 5/6/7 260.000.000');
+  });
+
+  it('con pérdida el traslado es un débito a 3610 por el valor absoluto', () => {
+    const snap = buildSnapshotForR12({
+      ingresos: 100_000_000, gastos: 150_000_000, costos: 0, produccion: 0,
+      grupo36: 0, grupo37: 0, periodoTipo: 'cerrado',
+    });
+    expect(runR12(snap).audit.suggestedClosingEntries).toEqual([
+      expect.stringMatching(/Cr\. 5905 .* por \$100\.000\.000\.$/),
+      expect.stringMatching(/Dr\. 5905 por \$150\.000\.000\.$/),
+      expect.stringMatching(/Dr\. 3610 .* por \$50\.000\.000\.$/),
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Cross-dep W3-A (ingesta-09 / recalculo-03): un comparativo de SALDOS DE
+// APERTURA trae el P&G acumulado a esa fecha, que por definición no está en el
+// patrimonio: no es un "periodo anterior sin cerrar".
+// ---------------------------------------------------------------------------
+describe('R12 — P&G acumulado y comparativo de saldos de apertura', () => {
+  // Misma forma que el caso acumulado de recalculo-03 (2024 sin cerrar).
+  const CSV = [
+    'codigo,nombre,Saldo 2024,Saldo 2025',
+    '110505,Caja,1000000000,1500000000',
+    '220505,Proveedores,400000000,500000000',
+    '310505,Capital,100000000,100000000',
+    '413505,Ventas,800000000,1500000000',
+    '513505,Gastos,300000000,600000000',
+  ].join('\n');
+
+  it('control: con comparativo de cierre sí se marca P&G acumulado', () => {
+    const pp = preprocessTrialBalance(parseTrialBalanceCSV(CSV));
+    expect(pp.primary.closingDetectorAudit?.pygAcumulado).toBeDefined();
+  });
+
+  it('con el comparativo marcado como saldos de apertura no se marca ni se bloquea', () => {
+    const pp = preprocessTrialBalance(parseTrialBalanceCSV(CSV), { openingPeriods: ['2024'] });
+    expect(pp.comparative?.saldosDeApertura).toBe(true);
+    expect(pp.primary.closingDetectorAudit?.pygAcumulado).toBeUndefined();
+    expect(
+      (pp.primary.validation.curatorBlockingReasons ?? []).some((r) => r.startsWith('[CUR-R12]')),
+    ).toBe(false);
   });
 });
