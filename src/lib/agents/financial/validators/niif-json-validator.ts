@@ -36,7 +36,7 @@
 //       contables internas). Defensa Art. 647 E.T.: la salida ficticia
 //       distorsiona el flujo informado a la DIAN sin sustento documental.
 //  E21. Cada renglón con código PUC del ESF y del ERI == Σ de las hojas del
-//       balance de prueba que su código agrupa, renglón a renglón (un código
+//       balance de prueba que su código agrupa, renglón a renglón (un grupo
 //       por renglón; un código repetido sólo en las porciones corriente / no
 //       corriente de un grupo partido por plazo; re-auditoría 2 e2e-niif2-01)
 //  E27. Subtotales corriente / no corriente del ESF == controlTotals
@@ -1703,14 +1703,33 @@ function termSubtotalErrors(
     expected[leaf.term] += leaf.cents;
   }
   const out: string[] = [];
-  for (const line of lines) {
+  for (const [i, line] of lines.entries()) {
     if (line.account !== null && line.account.trim() !== '') continue;
     const kind = balanceTermOfLabel(section, line.label);
     if (!kind) continue;
     const raw = periodCell(line, period);
+    if (kind.header && (raw === null || parseMoneyCop(raw) === ZERO)) {
+      // Encabezado sin monto ("Pasivo no corriente", nivel de sección o
+      // subgrupo) cuyo bloque no cierra un subtotal de plazo: la suma de sus
+      // renglones es la cifra de ese plazo que lee el cliente, y un grupo
+      // ubicado bajo el encabezado equivocado salía limpio porque no había
+      // subtotal que contrastar (revisión F-contrato). Con subtotal al pie, lo
+      // contrasta el subtotal.
+      const block = line.level <= 1 ? headerBlockSum(section, lines, i, period) : null;
+      if (block === null || block === expected[kind.term]) continue;
+      const [noun, key] = TERM_CONTROL_TOTAL[section][kind.term];
+      out.push(
+        `E27. Estado de Situación Financiera — ${nombre} (${etiqueta}): los renglones bajo el encabezado ` +
+          `"${line.label}" suman ${fmtCop(block)} y el ${noun} del balance de prueba ` +
+          `(controlTotals.${key}: la cifra de los KPIs de liquidez, el gate y X03) es ` +
+          `${fmtCop(expected[kind.term])}. Brecha: ${fmtCop(block - expected[kind.term])}. La clasificación ` +
+          `corriente / no corriente del ESF es la del preprocesador, con los vencimientos declarados ` +
+          `(NIIF para las PYMES 4.4).`,
+      );
+      continue;
+    }
     if (raw === null) continue;
     const v = parseMoneyCop(raw);
-    if (kind.header && v === ZERO) continue;
     const e = expected[kind.term];
     if (v === e) continue;
     const [noun, key] = TERM_CONTROL_TOTAL[section][kind.term];
@@ -1722,6 +1741,35 @@ function termSubtotalErrors(
     );
   }
   return out;
+}
+
+/**
+ * Σ con signo de los renglones con código bajo un encabezado de plazo sin
+ * monto, hasta el siguiente encabezado de plazo o el fin de la sección.
+ * `null` cuando el bloque lo cierra un subtotal de plazo (ese subtotal ya se
+ * contrasta) o alguna celda del bloque es `null` (E15c: no es $0).
+ */
+function headerBlockSum(
+  section: 'assets' | 'liabilities',
+  lines: readonly BalanceLine[],
+  headerIndex: number,
+  period: StatementPeriod,
+): bigint | null {
+  let sum = ZERO;
+  for (let j = headerIndex + 1; j < lines.length; j++) {
+    const l = lines[j];
+    if (l.account !== null && l.account.trim() !== '') {
+      const v = signedLineAmount(l as StatementLineWithColumns, period);
+      if (v === null) return null;
+      sum += v;
+      continue;
+    }
+    const kind = balanceTermOfLabel(section, l.label);
+    if (!kind) continue;
+    if (!kind.header) return null;
+    break;
+  }
+  return sum;
 }
 
 /** Un subtotal de plazo del ESF que no coincide con la partición del preprocesador (E27). */
@@ -1825,7 +1873,9 @@ function uncodedBalanceRowErrors(
 // suma intacta. Ahora cada renglón con código se ancla SOLO a la suma de las
 // hojas que su código agrupa (cada hoja va al código listado MÁS específico:
 // "15" bruto + "1592" depreciación cuadran por separado; un sub-renglón de
-// detalle, p. ej. 510506, es su hoja). Un renglón con varios códigos es error;
+// detalle, p. ej. 510506, es su hoja). Un renglón con códigos de grupos
+// distintos es error (una cuenta con subcuentas suyas, "41 − 4175", se ancla a
+// la cuenta que las contiene);
 // un código repetido sólo se admite en las dos porciones corriente / no
 // corriente de un grupo que el balance de prueba parte por plazo (vencimiento
 // declarado, virtual de R1 por su origen), con los importes de la proyección
@@ -1843,7 +1893,19 @@ function mostSpecificKey(code: string, keys: readonly string[]): string | null {
   return best;
 }
 
-/** Renglones con UN código de la clase, agrupados por código; los de varios códigos, aparte. */
+/**
+ * Código con que se ancla un renglón: el único que declara o, si declara una
+ * cuenta junto con subcuentas suyas ("41 − 4175" ingresos netos de
+ * devoluciones, "15 − 1592" PPE neta), el de la cuenta que las contiene: es un
+ * solo grupo y su ancla es la suma de todas sus hojas (revisión F-contrato).
+ * `null` si declara códigos de grupos distintos ("13 15", "41 61").
+ */
+function anchorCodeOf(codes: readonly string[]): string | null {
+  const root = codes.reduce((a, b) => (b.length < a.length ? b : a));
+  return codes.every((c) => c.startsWith(root)) ? root : null;
+}
+
+/** Renglones con UN código de la clase, agrupados por código; los de varios grupos, aparte. */
 function codedRows<L extends { account: string | null }>(
   lines: readonly L[],
   acceptCode: (code: string) => boolean,
@@ -1854,9 +1916,13 @@ function codedRows<L extends { account: string | null }>(
   lines.forEach((line, index) => {
     if (line.account === null || line.account.trim() === '') return;
     const codes = (line.account.match(/\d+/g) ?? []).filter(acceptCode);
-    if (codes.length === 0) uncoded.push(index);
-    else if (codes.length > 1) multi.push({ index, codes });
-    else byKey.set(codes[0], [...(byKey.get(codes[0]) ?? []), index]);
+    if (codes.length === 0) {
+      uncoded.push(index);
+      return;
+    }
+    const key = anchorCodeOf(codes);
+    if (key === null) multi.push({ index, codes });
+    else byKey.set(key, [...(byKey.get(key) ?? []), index]);
   });
   return { byKey, multi, uncoded };
 }
@@ -1915,6 +1981,48 @@ export function balanceRowTerms(
 }
 
 const TERM_NAME: Record<BalanceTerm, string> = { current: 'corriente', nonCurrent: 'no corriente' };
+
+const NON_CURRENT_ROW_LABEL_RE = /\bno\s+corrientes?\b|\blargo\s+plazo\b|\bnon-?\s?current\b|\blong[-\s]term\b/g;
+const CURRENT_ROW_LABEL_RE = /\bcorrientes?\b|\bcorto\s+plazo\b|\bcurrent\b|\bshort[-\s]term\b/;
+
+/**
+ * Plazo que nombra el rótulo de un renglón con código ("… de largo plazo",
+ * "— porción corriente", "non-current portion"); `null` si no nombra ninguno
+ * o nombra los dos.
+ */
+function termNamedByRowLabel(label: string): BalanceTerm | null {
+  const t = label.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const rest = t.replace(NON_CURRENT_ROW_LABEL_RE, ' ');
+  const nonCurrent = rest !== t;
+  const current = CURRENT_ROW_LABEL_RE.test(rest);
+  if (nonCurrent === current) return null;
+  return nonCurrent ? 'nonCurrent' : 'current';
+}
+
+/**
+ * Plazo de cada una de las dos porciones de un grupo partido (revisión
+ * F-contrato). El del bloque en que el modelo las presenta; si sólo uno es
+ * determinable, el otro renglón es la otra porción (van una en cada bloque);
+ * sin bloques, el que nombran los rótulos cuando nombran plazos distintos.
+ * Así "Obligaciones financieras de largo plazo" o un renglón bajo el
+ * encabezado "Pasivo no corriente" no imprimen el importe de la porción
+ * corriente con el de la otra intercambiado. `[null, null]` = no determinable
+ * (se contrastan como multiconjunto).
+ */
+function splitRowTerms(
+  blockTerms: ReadonlyArray<BalanceTerm | null>,
+  labels: readonly string[],
+): [BalanceTerm | null, BalanceTerm | null] {
+  const other = (x: BalanceTerm): BalanceTerm => (x === 'current' ? 'nonCurrent' : 'current');
+  let [t0, t1] = [blockTerms[0], blockTerms[1]];
+  if (t0 === null && t1 === null) {
+    const [l0, l1] = [termNamedByRowLabel(labels[0]), termNamedByRowLabel(labels[1])];
+    if (l0 !== l1) [t0, t1] = [l0, l1];
+  }
+  if (t0 === null && t1 !== null) t0 = other(t1);
+  else if (t1 === null && t0 !== null) t1 = other(t0);
+  return [t0, t1];
+}
 
 /**
  * E21 del ESF: cada renglón con código contra las hojas de su clase.
@@ -1991,7 +2099,7 @@ function balanceLineAnchorErrors(
       if (structural) out.push(repeatedCodeMessage(estado, etiqueta, key, idx.map(rotulo)));
       continue;
     }
-    const t = idx.map((i) => rowTerms[i]);
+    const t = splitRowTerms(idx.map((i) => rowTerms[i]), idx.map((i) => lines[i].label));
     if (t[0] !== null && t[0] === t[1]) {
       if (structural) {
         out.push(

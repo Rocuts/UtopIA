@@ -32,6 +32,7 @@ import { financialExportBlockers } from '@/lib/export/financial-export-validatio
 import { runNiifAnalyst } from '../agents/niif-analyst';
 import { toNiifAnalysisResult } from '../agents/renderer';
 import { buildNiifValidatorOptions, runNiifPhase } from '../orchestrator';
+import { realignEsfTermsFromSnapshot } from '../agents/reconcile-anchors';
 import { validateNiifReportJson } from '../validators/niif-json-validator';
 import type { NiifReportJson } from '../contracts/niif-report';
 import type { CompanyInfo } from '../types';
@@ -82,6 +83,28 @@ describe('E21 — un renglón con varios códigos es error (renglón puente)', (
     });
     expect(e).toHaveLength(1);
     expect(e[0]).toMatch(/periodo 2025.*varios códigos PUC \(13, 15\)/);
+  });
+
+  it('una cuenta con subcuentas suyas ("41 − 4175", "15 − 1592") es UN grupo: se ancla a la cuenta que las contiene', () => {
+    // Revisión F-contrato: el prompt describe los ingresos como "grupo 41 −
+    // devoluciones 4175"; ese renglón no une grupos y no es error.
+    const honesto = e21((j) => {
+      esf(j, 'assets', '15').account = '15 − 1592';
+      eri(j, '41').account = '41 − 4175';
+    });
+    expect(honesto).toEqual([]);
+    // Con el importe desplazado sigue anclado: la brecha se publica.
+    const movido = e21((j) => {
+      const l15 = esf(j, 'assets', '15');
+      l15.account = '15 − 1592';
+      l15.amountPrimary = add(l15.amountPrimary, X);
+    });
+    expect(movido.some((m) => /"15 − 1592 — [^"]*" imprime \$81\.000\.000,00/.test(m))).toBe(true);
+    // Códigos de grupos distintos, aunque uno sea más largo, siguen siendo un puente.
+    const puente = e21((j) => {
+      j.balanceSheet.assets.push(linea('13 1524', 'Reclasificaciones', '0', '0'));
+    });
+    expect(puente.some((m) => /varios códigos PUC \(13, 1524\)/.test(m))).toBe(true);
   });
 
   it('N1c: el traslado en la columna comparativa 2024 bajo el puente', () => {
@@ -325,10 +348,99 @@ describe('E21 — grupos partidos por plazo (sin falsos positivos)', () => {
     expect(validateNiifReportJson(j, opts).errors.some((m) => /^E21\..*código 21 aparece en 2 renglones del mismo bloque/.test(m))).toBe(true);
   });
 
+  // Revisión F-contrato: con un solo bloque determinable (encabezado sin
+  // subtotal) o sin bloques, las porciones se contrastaban como multiconjunto
+  // y el importe de la porción corriente podía imprimirse bajo el encabezado
+  // "Pasivo no corriente" o con el rótulo "de largo plazo".
+  it('un solo bloque determinable fija el plazo del otro renglón: porciones intercambiadas son E21', () => {
+    const j = esfPartido(p);
+    j.balanceSheet.liabilities = [
+      det('21', 'Obligaciones financieras', 5, 40),
+      det('22', 'Proveedores', 25, 30),
+      det('28', 'Otros pasivos — anticipo reclasificado (Nota R1)', 5, null),
+      linea(null, 'Pasivo no corriente', '0', null, { level: 1 }),
+      det('21', 'Obligaciones financieras', 45, 0),
+      det('28', 'Depósitos recibidos', 3, 0),
+    ];
+    const e = validateNiifReportJson(j, opts).errors.filter((m) => m.startsWith('E21.'));
+    expect(e).toHaveLength(1);
+    expect(e[0]).toMatch(/grupo 21 se presenta partido por plazo y sus renglones imprimen \$5\.000\.000,00 \(corriente\) y \$45\.000\.000,00 \(no corriente\)/);
+    // Las mismas porciones en su orden honesto no disparan E21.
+    j.balanceSheet.liabilities[0] = det('21', 'Obligaciones financieras', 45, 40);
+    j.balanceSheet.liabilities[4] = det('21', 'Obligaciones financieras', 5, 0);
+    expect(errs(j)).toEqual([]);
+  });
+
+  it('sin bloques, el plazo que nombran los rótulos: "corto plazo" con la porción no corriente es E21', () => {
+    const j = esfPartido(p);
+    j.balanceSheet.liabilities = [
+      det('21', 'Obligaciones financieras de corto plazo', 5, 40),
+      det('21', 'Obligaciones financieras de largo plazo', 45, 0),
+      det('22', 'Proveedores', 25, 30),
+      det('28', 'Otros pasivos — anticipo reclasificado (Nota R1)', 5, null),
+      det('28', 'Depósitos recibidos', 3, 0),
+    ];
+    const e = validateNiifReportJson(j, opts).errors.filter((m) => m.startsWith('E21.'));
+    expect(e).toHaveLength(1);
+    expect(e[0]).toMatch(/grupo 21 se presenta partido por plazo/);
+    // Rótulos sin plazo (o con el mismo): no determinable, multiconjunto.
+    j.balanceSheet.liabilities[0] = det('21', 'Obligaciones financieras', 5, 40);
+    j.balanceSheet.liabilities[1] = det('21', 'Obligaciones financieras', 45, 0);
+    expect(validateNiifReportJson(j, opts).errors.filter((m) => m.startsWith('E21.'))).toEqual([]);
+  });
+
   it('un tercer renglón del grupo partido es error E21', () => {
     const j = esfPartido(p);
     j.balanceSheet.liabilities.splice(5, 0, det('21', 'Obligaciones con socios', 0, 0));
     expect(validateNiifReportJson(j, opts).errors.some((m) => /^E21\..*código 21 aparece en 3 renglones/.test(m))).toBe(true);
+  });
+});
+
+// Revisión F-contrato: E27 sólo contrastaba subtotales de plazo (y
+// encabezados con monto). Un ESF con encabezados "Pasivo corriente" / "Pasivo
+// no corriente" sin monto y sin subtotal al pie imprimía proveedores (22)
+// bajo "Pasivo no corriente" sin ningún error: ni E21 (el importe del renglón
+// es el de su grupo) ni E27 (no había subtotal que contrastar).
+describe('E27 — encabezado de plazo sin subtotal al pie', () => {
+  const p = ppPartido();
+  const opts = buildNiifValidatorOptions(p);
+  const e27 = (j: J) => validateNiifReportJson(j, opts).errors.filter((m) => m.startsWith('E27.'));
+  const conEncabezados = (bajoNoCorriente: J['balanceSheet']['liabilities']) => {
+    const j = esfPartido(p);
+    j.balanceSheet.liabilities = [
+      linea(null, 'Pasivo corriente', '0', null, { level: 1 }),
+      det('21', 'Obligaciones financieras', 45, 40),
+      det('28', 'Otros pasivos — anticipo reclasificado (Nota R1)', 5, null),
+      linea(null, 'Pasivo no corriente', '0', null, { level: 1 }),
+      ...bajoNoCorriente,
+    ];
+    return j;
+  };
+
+  it('proveedores (corriente) bajo "Pasivo no corriente" es E27 en los dos bloques', () => {
+    const j = conEncabezados([
+      det('22', 'Proveedores', 25, 30),
+      det('21', 'Obligaciones financieras', 5, 0),
+      det('28', 'Depósitos recibidos', 3, 0),
+    ]);
+    const e = e27(j).filter((m) => m.includes('periodo 2025'));
+    expect(e).toHaveLength(2);
+    expect(e[0]).toMatch(/bajo el encabezado "Pasivo corriente" suman \$50\.000\.000,00 .* es \$75\.000\.000,00/);
+    expect(e[1]).toMatch(/bajo el encabezado "Pasivo no corriente" suman \$33\.000\.000,00 .* es \$8\.000\.000,00/);
+    // El analista sustituye la sección por la proyección determinista (I5-niif 2).
+    const r = realignEsfTermsFromSnapshot(j, p.primary, null);
+    expect(r.replaced).toEqual(['Pasivo']);
+    expect(r.unresolved).toEqual([]);
+  });
+
+  it('el mismo ESF con cada grupo bajo su encabezado no dispara E27 (ni con subtotal al pie)', () => {
+    const honesto = conEncabezados([det('21', 'Obligaciones financieras', 5, 0), det('28', 'Depósitos recibidos', 3, 0)]);
+    honesto.balanceSheet.liabilities.splice(3, 0, det('22', 'Proveedores', 25, 30));
+    expect(e27(honesto)).toEqual([]);
+    const conSubtotal = clonar(honesto);
+    conSubtotal.balanceSheet.liabilities.splice(4, 0, sub('Total pasivo corriente', 75, 70));
+    conSubtotal.balanceSheet.liabilities.push(sub('Total pasivo no corriente', 8, 0));
+    expect(e27(conSubtotal)).toEqual([]);
   });
 });
 
