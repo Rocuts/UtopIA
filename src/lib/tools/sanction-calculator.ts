@@ -30,9 +30,10 @@
  * IMPORTANTE — tasa de interés:
  * El Art. 635 E.T. exige aplicar la "tasa de usura menos 2 puntos porcentuales"
  * vigente para el MES de la mora (certificada mensualmente por la
- * Superintendencia Financiera de Colombia). El valor por defecto es solo un
- * fallback y el resultado queda marcado con `tasaPorDefectoUsada: true`;
- * en producción el caller DEBE pasar la tasa vigente del período.
+ * Superintendencia Financiera de Colombia). Sin `annualRate` se usa la del mes
+ * de liquidación (hora de Colombia) si está en TASA_USURA_CERTIFICADA —marcada
+ * con `tasaPorDefectoUsada: true`—; si el mes no está registrado los intereses
+ * son N/D (SanctionInputError con el motivo).
  */
 
 const UVT_2026 = 52_374;
@@ -95,20 +96,55 @@ const TOPE_EXTEMPORANEIDAD_POST_EMPLAZAMIENTO = aproximarValorAbsolutoUvt(
 ); // $261.870.000
 
 /**
- * Fallback de la tasa de interés moratorio. NO es "la tasa legal del período":
- * el Art. 635 E.T. (mod. Art. 279 Ley 1819/2016) exige la tasa de usura
- * certificada por la Superfinanciera para el MES de la mora, menos 2 puntos
- * porcentuales, y segmentar cuando la mora cruza varios meses.
+ * Tasa de usura certificada por la Superintendencia Financiera (E.A., %) por
+ * MES, con su fuente. Art. 635 E.T. (mod. Art. 279 Ley 1819/2016): el interés
+ * de mora tributario es la tasa de usura vigente MENOS 2 puntos porcentuales,
+ * y cambia cada mes.
  *
- * Valor verificado: 27,66% E.A. para AGOSTO DE 2026 = usura 29,66% − 2 pp
- * (Superintendencia Financiera, Resolución 1139 del 31-jul-2026).
- * Vigencia: mensual. Para cualquier otro mes este número es incorrecto, por lo
- * que el resultado se marca con `tasaPorDefectoUsada: true` y la explicación
- * advierte que la cifra no es liquidable sin confirmar la tasa del período.
+ * Sólo se registran meses con fuente verificada. Fase 2 de la auditoría
+ * 2026-09-24 (tributario-calc-18): antes un único fallback de AGOSTO de 2026
+ * se aplicaba en cualquier mes; ahora un mes sin tasa registrada da N/D (la
+ * calculadora no produce cifra y pide `annualRate`). Para añadir un mes, citar
+ * la resolución de la Superfinanciera que certifica la usura.
  */
-const DEFAULT_ANNUAL_RATE_EA = 27.66;
-const DEFAULT_ANNUAL_RATE_VIGENCIA =
-  'agosto de 2026 (usura 29,66% − 2 pp; Res. Superfinanciera 1139 del 31-jul-2026)';
+export const TASA_USURA_CERTIFICADA: Readonly<Record<string, { usuraEA: number; fuente: string }>> = {
+  '2026-08': { usuraEA: 29.66, fuente: 'Res. Superfinanciera 1139 del 31-jul-2026' },
+};
+
+/** Puntos porcentuales que el Art. 635 E.T. resta a la tasa de usura. */
+const PUNTOS_MENOS_USURA = 2;
+
+export interface TasaMoratoriaMes {
+  mes: string;
+  /** Tasa de interés moratorio E.A. (%) = usura − 2 pp. */
+  tasaEA: number;
+  usuraEA: number;
+  fuente: string;
+}
+
+/** Tasa de mora del mes `YYYY-MM` (usura certificada − 2 pp) o `null` si no está registrada. */
+export function tasaMoratoriaDelMes(mes: string): TasaMoratoriaMes | null {
+  const t = TASA_USURA_CERTIFICADA[mes];
+  if (!t) return null;
+  return {
+    mes,
+    usuraEA: t.usuraEA,
+    tasaEA: Math.round((t.usuraEA - PUNTOS_MENOS_USURA) * 100) / 100,
+    fuente: t.fuente,
+  };
+}
+
+/** Mes calendario `YYYY-MM` en hora de Colombia (America/Bogota), no la del servidor. */
+export function mesColombia(fecha: Date): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Bogota',
+    year: 'numeric',
+    month: '2-digit',
+  }).formatToParts(fecha);
+  const y = parts.find((p) => p.type === 'year')?.value ?? '';
+  const m = parts.find((p) => p.type === 'month')?.value ?? '';
+  return `${y}-${m}`;
+}
 
 /** Tipos de sanción soportados. Fuente única para los contratos de entrada. */
 export const SANCTION_TYPES = [
@@ -810,14 +846,31 @@ function calcInexactitud(params: SanctionCalculation): SanctionResult {
  * mes y aplicar la tasa de cada período; esta función asume una única tasa
  * para simplificar. El caller es responsable de pasar la tasa vigente.
  */
-function calcInteresesMoratorios(params: SanctionCalculation): SanctionResult {
+function calcInteresesMoratorios(params: SanctionCalculation, hoy: Date): SanctionResult {
   const { principal = 0, days = 30 } = params;
 
-  // El fallback NO es la tasa legal del período: se marca para que ni el LLM
-  // ni la UI lo presenten como cifra liquidable ante la DIAN.
+  // Sin tasa del caller se usa la del MES de liquidación (hora de Colombia) si
+  // está registrada con su fuente; si no, N/D: no se reutiliza la de otro mes
+  // (tributario-calc-18). La tasa por defecto se marca para que ni el LLM ni la
+  // UI la presenten como la tasa de cada mes de la mora.
   const tasaPorDefectoUsada =
     params.annualRate === undefined || params.annualRate === null;
-  const annualRate = tasaPorDefectoUsada ? DEFAULT_ANNUAL_RATE_EA : params.annualRate!;
+  let tasaMes: TasaMoratoriaMes | null = null;
+  if (tasaPorDefectoUsada) {
+    const mes = mesColombia(hoy);
+    tasaMes = tasaMoratoriaDelMes(mes);
+    if (!tasaMes) {
+      throw new SanctionInputError(
+        `Intereses moratorios N/D: no hay tasa de usura certificada registrada para ${mes}. ` +
+          'Indique annualRate = tasa de usura certificada por la Superfinanciera para el mes de la mora ' +
+          'menos 2 puntos porcentuales (Art. 635 E.T.); si la mora cruza varios meses, liquide cada mes con su tasa.',
+      );
+    }
+  }
+  const annualRate = tasaMes ? tasaMes.tasaEA : params.annualRate!;
+  const vigencia = tasaMes
+    ? `${tasaMes.mes} (usura ${String(tasaMes.usuraEA).replace('.', ',')}% − 2 pp; ${tasaMes.fuente})`
+    : 'n/a';
 
   const iEA = annualRate / 100;
   // Interés simple diario: iEA × d / 365 (sin capitalización — Art. 635 E.T.)
@@ -831,8 +884,8 @@ function calcInteresesMoratorios(params: SanctionCalculation): SanctionResult {
     `${formatCOP(principal)} × ${annualRate}% × ${days} / 365 = ${formatCOP(amount)}`;
 
   const avisoFallback = tasaPorDefectoUsada
-    ? ` ADVERTENCIA — VALOR NO LIQUIDABLE: no se suministró la tasa del período. Se usó el ` +
-      `fallback de ${DEFAULT_ANNUAL_RATE_EA}% E.A., correspondiente a ${DEFAULT_ANNUAL_RATE_VIGENCIA}. ` +
+    ? ` ADVERTENCIA — VALOR NO LIQUIDABLE: no se suministró la tasa del período. Se usó la ` +
+      `tasa de ${annualRate}% E.A. del mes de liquidación, ${vigencia}. ` +
       `La tasa cambia cada mes; si la mora corresponde a otro mes o cruza varios meses, esta cifra ` +
       `NO puede llevarse a la declaración: reliquide con la tasa certificada por la Superfinanciera ` +
       `para cada mes de la mora, menos 2 puntos porcentuales (Art. 635 E.T.).`
@@ -859,7 +912,7 @@ function calcInteresesMoratorios(params: SanctionCalculation): SanctionResult {
     // para el período del usuario y no debe alimentar una decisión de pago.
     recommendations.unshift(
       `NO use esta cifra para pagar ni para declarar sin antes confirmar la tasa del período: ` +
-        `se calculó con el fallback de ${DEFAULT_ANNUAL_RATE_EA}% E.A. (${DEFAULT_ANNUAL_RATE_VIGENCIA}), ` +
+        `se calculó con la tasa de ${annualRate}% E.A. de ${vigencia}, ` +
         `no con la tasa certificada de los meses en que efectivamente ocurrió la mora.`,
     );
   }
@@ -876,7 +929,9 @@ function calcInteresesMoratorios(params: SanctionCalculation): SanctionResult {
       principal,
       annualRate,
       tasaPorDefectoUsada,
-      tasaFallbackVigencia: tasaPorDefectoUsada ? DEFAULT_ANNUAL_RATE_VIGENCIA : 'n/a',
+      tasaFallbackVigencia: vigencia,
+      tasaMes: tasaMes ? tasaMes.mes : 'n/a',
+      tasaFuente: tasaMes ? tasaMes.fuente : 'n/a',
       dailyRatePct: Number(dailyRate.toFixed(6)),
       days,
       simpleFactorPct: Number((factor * 100).toFixed(4)),
@@ -898,7 +953,10 @@ function sinNulos(params: SanctionCalculationInput): SanctionCalculation {
  * Main entry point — routes to the appropriate calculator based on type.
  * Acepta `null` en cualquier campo opcional (se trata como ausente).
  */
-export function calculateSanction(input: SanctionCalculationInput): SanctionResult {
+export function calculateSanction(
+  input: SanctionCalculationInput,
+  opts: { hoy?: Date } = {},
+): SanctionResult {
   const params = sinNulos(input);
   switch (params.type) {
     case 'extemporaneidad':
@@ -910,7 +968,7 @@ export function calculateSanction(input: SanctionCalculationInput): SanctionResu
     case 'inexactitud':
       return calcInexactitud(params);
     case 'intereses_moratorios':
-      return calcInteresesMoratorios(params);
+      return calcInteresesMoratorios(params, opts.hoy ?? new Date());
     default:
       throw new SanctionInputError(
         `Tipo de sancion no reconocido: "${(params as unknown as Record<string, unknown>).type}". ` +

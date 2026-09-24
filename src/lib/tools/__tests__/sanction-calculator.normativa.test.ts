@@ -200,23 +200,28 @@ describe('Art. 644 E.T. nums. 1 y 2 — el hito 10% -> 20% es el EMPLAZAMIENTO P
   });
 });
 
+// Fase 2 (tributario-calc-18): la tasa por defecto es la del MES de liquidación
+// (tabla mensual con fuente). Agosto de 2026 es el mes registrado; en otro mes
+// sin tasa los intereses son N/D (ver sanction-tasa-mora-mes.test.ts).
+const AGOSTO_2026 = { hoy: new Date('2026-08-20T15:00:00Z') };
+
 describe('Art. 635 E.T. — tasa de interes moratorio por defecto', () => {
-  it('el fallback es 27,66% E.A. (usura 29,66% - 2 pp, Res. SFC 1139 del 31-jul-2026), no 25,44%', () => {
+  it('en agosto de 2026 la tasa es 27,66% E.A. (usura 29,66% - 2 pp, Res. SFC 1139 del 31-jul-2026), no 25,44%', () => {
     const r = calculateSanction({
       type: 'intereses_moratorios',
       principal: 100_000_000,
       days: 365,
-    });
+    }, AGOSTO_2026);
     expect(r.details.annualRate).toBe(27.66);
     expect(r.details.annualRate).not.toBe(25.44);
   });
 
-  it('marca el uso del fallback y bloquea que la cifra alimente una decision de pago', () => {
+  it('marca el uso de la tasa por defecto y bloquea que la cifra alimente una decision de pago', () => {
     const r = calculateSanction({
       type: 'intereses_moratorios',
       principal: 100_000_000,
       days: 365,
-    });
+    }, AGOSTO_2026);
     expect(r.details.tasaPorDefectoUsada).toBe(true);
     expect(r.explanation).toContain('NO LIQUIDABLE');
     expect(r.recommendations[0]).toMatch(/NO use esta cifra/i);

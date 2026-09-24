@@ -84,8 +84,9 @@ export const SANCTION_FIELD_DESCRIPTIONS: Record<SanctionInputField, string> = {
   principal: 'Capital (COP) sobre el que corren los intereses. Para intereses_moratorios.',
   annualRate:
     'Tasa efectiva anual (%): tasa de usura certificada por la Superfinanciera para el mes de la mora ' +
-    'MENOS 2 puntos porcentuales (Art. 635 E.T.). Si se omite, la tool usa un fallback de un mes ' +
-    'específico y marca la cifra como NO liquidable.',
+    'MENOS 2 puntos porcentuales (Art. 635 E.T.). Si se omite, la tool usa la tasa certificada ' +
+    'registrada para el mes de liquidación (hora de Colombia) y marca la cifra como NO liquidable; si ese ' +
+    'mes no tiene tasa registrada, devuelve error N/D y hay que pedir la tasa.',
   days: 'Días de mora. Para intereses_moratorios.',
 };
 
