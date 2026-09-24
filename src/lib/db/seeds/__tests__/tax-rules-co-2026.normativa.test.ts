@@ -10,6 +10,7 @@ import {
   RETIRED_RULE_CODES,
   UVT_VALUES,
 } from '../tax-rules-co-2026';
+import { PUC_PYME_COLOMBIA } from '../puc-pyme-colombia';
 import type { TaxRuleTriggers } from '@/lib/accounting/tax-engine/types';
 import { TAX_TREATMENT } from '@/lib/accounting/tax-engine/types';
 
@@ -385,5 +386,35 @@ describe('UVT', () => {
     // El seed citaba "Resolución DIAN 000187" para ambos años.
     expect(UVT_VALUES.find((u) => u.year === 2026)!.decreeRef).toMatch(/000238/);
     expect(UVT_VALUES.find((u) => u.year === 2025)!.decreeRef).toMatch(/000193/);
+  });
+});
+
+// Integración W3-B (auditoría 2026-09): las reglas de honorarios contabilizaban
+// la retención en 236525 «Servicios». En el PUC (Decreto 2650/1993) y en el
+// PUC sembrado la retención por honorarios es 236515 «Honorarios».
+describe('Cuentas de las reglas — existen en el PUC sembrado con el significado esperado', () => {
+  const puc = new Map(PUC_PYME_COLOMBIA.map((a) => [a.code, a]));
+
+  it('toda taxAccountCode del seed (salvo exento/excluido, sin línea) existe y es postable', () => {
+    const faltan = BUILT_IN_RULES.filter(
+      (r) => r.taxAccountCode !== null && !puc.get(r.taxAccountCode)?.isPostable,
+    ).map((r) => `${r.code} → ${r.taxAccountCode}`);
+    expect(faltan).toEqual([]);
+  });
+
+  it('la retención de honorarios (RTF_HONO_*) va a 236515 «Honorarios», no a 236525 «Servicios»', () => {
+    for (const code of ['RTF_HONO_11', 'RTF_HONO_10']) {
+      expect(rule(code).taxAccountCode, code).toBe('236515');
+      expect(puc.get(rule(code).taxAccountCode ?? '')?.name).toBe('Honorarios');
+    }
+  });
+
+  it('servicios sigue en 236525 y compras en 236540', () => {
+    for (const r of BUILT_IN_RULES.filter((x) => x.code.startsWith('RTF_SVC_'))) {
+      expect(r.taxAccountCode, r.code).toBe('236525');
+    }
+    for (const r of BUILT_IN_RULES.filter((x) => x.code.startsWith('RTF_COMPRAS_'))) {
+      expect(r.taxAccountCode, r.code).toBe('236540');
+    }
   });
 });

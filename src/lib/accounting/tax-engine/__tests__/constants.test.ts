@@ -8,7 +8,14 @@ import {
   uvtToCopByYear,
   RTF_THRESHOLD_UVT,
   RTF_HONORARIOS_THRESHOLD_UVT,
+  CUENTA_CXP_PROVEEDORES,
+  CUENTA_ICA,
+  CUENTA_IVA_DESCONTABLE,
+  CUENTA_IVA_GENERADO,
+  CUENTA_RETEFUENTE,
+  CUENTA_RETEFUENTE_HONORARIOS,
 } from '../constants';
+import { PUC_PYME_COLOMBIA } from '@/lib/db/seeds/puc-pyme-colombia';
 
 describe('Constantes UVT', () => {
   it('UVT_2026_COP === 52374 (Resolución DIAN 000238/2025)', () => {
@@ -69,5 +76,37 @@ describe('uvtToCopByYear', () => {
   it('fracción de UVT se redondea correctamente (Math.round)', () => {
     // 1.5 UVT × 52374 = 78561 (exacto)
     expect(uvtToCopByYear(1.5, 2026)).toBe(78_561);
+  });
+});
+
+// Integración W3-B (auditoría 2026-09): CUENTA_CXP_PROVEEDORES apuntaba a
+// 220500, que no existe en el PUC sembrado (220505 «Proveedores nacionales»), y
+// no había cuenta de retención por honorarios (236515).
+describe('Cuentas PUC del tax-engine — existen en el PUC sembrado', () => {
+  const puc = new Map(PUC_PYME_COLOMBIA.map((a) => [a.code, a]));
+
+  it('CxP proveedores = 220505 «Proveedores nacionales» (postable)', () => {
+    expect(CUENTA_CXP_PROVEEDORES).toBe('220505');
+    expect(puc.get(CUENTA_CXP_PROVEEDORES)?.isPostable).toBe(true);
+  });
+
+  it('retención por honorarios = 236515 y por servicios = 236525', () => {
+    expect(CUENTA_RETEFUENTE_HONORARIOS).toBe('236515');
+    expect(puc.get(CUENTA_RETEFUENTE_HONORARIOS)?.name).toBe('Honorarios');
+    expect(CUENTA_RETEFUENTE).toBe('236525');
+    expect(puc.get(CUENTA_RETEFUENTE)?.name).toBe('Servicios');
+  });
+
+  it('IVA, ICA, retenciones y CxP del tax-engine existen y son postables', () => {
+    for (const code of [
+      CUENTA_IVA_GENERADO,
+      CUENTA_IVA_DESCONTABLE,
+      CUENTA_RETEFUENTE,
+      CUENTA_RETEFUENTE_HONORARIOS,
+      CUENTA_ICA,
+      CUENTA_CXP_PROVEEDORES,
+    ]) {
+      expect(puc.get(code)?.isPostable, code).toBe(true);
+    }
   });
 });
