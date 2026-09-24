@@ -175,9 +175,10 @@ export interface EscudoExecutiveCardsAudit {
   inversionesTemporales12: number;
   /** Total Clase 5+6+7 — gastos + costos del periodo. */
   totalEgresosPeriodo: number;
-  /** Promedio mensual de egresos (totalEgresosPeriodo / 12 si anual,
-   *  o promedio de los últimos N meses si multi-período). */
-  promedioEgresosMensuales: number;
+  /** Promedio mensual de egresos = totalEgresosPeriodo / meses cubiertos
+   *  (`shared-metrics.mesesCubiertos`, misma base que el preprocesador).
+   *  `null` si la duración del periodo no es derivable (NM-01). */
+  promedioEgresosMensuales: number | null;
   /** Activo corriente de controlTotals (misma base que computeDerivedKpis). */
   activoCorriente: number;
   /** Pasivo corriente de controlTotals. */
@@ -286,10 +287,15 @@ export interface FuturoExecutiveCardsAudit {
   /** Capacidad de inversión (shared-metrics.capacidadInversion): null sin base
    *  fiscal verificada. */
   capacidadInversion: number | null;
-  /** Reserva 60 días de gastos en COP. */
-  reserva60Dias: number;
-  /** Caja proyectada al final del horizonte (escenario base). */
-  cajaProyectada36mBase: number;
+  /** Reserva 60 días de gastos en COP. `null` sin meses derivables (NM-01). */
+  reserva60Dias: number | null;
+  /** Caja proyectada al final del horizonte (escenario base). `null` sin
+   *  meses derivables: no hay flujo mensual que proyectar. */
+  cajaProyectada36mBase: number | null;
+  /** Meses de resultados del periodo (`shared-metrics.mesesCubiertos`, misma
+   *  regla que el preprocesador). `null` ⇒ proyecciones N/D. Opcional para
+   *  audits construidos antes de la auditoría 2026-09-24. */
+  mesesBase?: number | null;
 }
 
 export interface FuturoExecutiveCards {

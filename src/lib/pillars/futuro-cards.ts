@@ -20,7 +20,8 @@ import {
   FISCAL_ND_REASON_ES,
   capacidadInversion,
   ingresosNetosPeriodo,
-  monthsCovered,
+  mesesCubiertos,
+  motivoSinMeses,
   periodsComparable,
 } from './shared-metrics';
 import type {
@@ -101,41 +102,47 @@ function buildFuturoAudit(
 ): FuturoExecutiveCardsAudit {
   const ct = snapshot.controlTotals;
 
-  const meses = monthsCovered(snapshot);
-  const ingresoMes = ingresosNetosPeriodo(ct) / meses;
-  const egresoMes = ct.gastos / meses;
+  // Meses cubiertos con la regla del preprocesador (NM-01): sin duración
+  // derivable no hay flujo mensual ni proyección (N/D, no 12 meses supuestos).
+  const meses = mesesCubiertos(snapshot);
 
   // CAGR — n = 1 (current vs comparative). Sólo entre periodos de IGUAL
   // duración (año vs año, o mismo mes acumulado): comparar un acumulado a
-  // agosto con un año completo no es un crecimiento (ratios-kpis-03).
+  // agosto (o un 'AAAA-Qn') con un año completo no es un crecimiento
+  // (ratios-kpis-03, NM-01).
   const comparable = comparative ? periodsComparable(snapshot, comparative) : false;
   const ingresosAnteriores =
     comparative && comparable ? ingresosNetosPeriodo(comparative.controlTotals) : null;
   const cagrIngresos = computeCagr(ingresosNetosPeriodo(ct), ingresosAnteriores, 1);
   const periodosCagr = comparative && comparable ? 2 : null;
 
+  const proyectar = (factor: number): RunwayProjection | null =>
+    meses === null
+      ? null
+      : projectRunway(
+          ct.efectivoCuenta11,
+          ingresosNetosPeriodo(ct) / meses,
+          ct.gastos / meses,
+          factor,
+        );
+
   // Punto de quiebre — escenario conservador
-  const conservadorProj = projectRunway(
-    ct.efectivoCuenta11,
-    ingresoMes,
-    egresoMes,
-    SCENARIO_CONSERVATIVE_FACTOR,
-  );
+  const conservadorProj = proyectar(SCENARIO_CONSERVATIVE_FACTOR);
   const mesesAlQuiebreConservador =
-    conservadorProj.monthsToZero <= HORIZON_MONTHS
+    conservadorProj !== null && conservadorProj.monthsToZero <= HORIZON_MONTHS
       ? conservadorProj.monthsToZero
       : null;
 
   // Escenario base (factor 1.0)
-  const baseProj = projectRunway(ct.efectivoCuenta11, ingresoMes, egresoMes, 1.0);
+  const baseProj = proyectar(1.0);
   const mesesAlQuiebreBase =
-    baseProj.monthsToZero <= HORIZON_MONTHS ? baseProj.monthsToZero : null;
+    baseProj !== null && baseProj.monthsToZero <= HORIZON_MONTHS ? baseProj.monthsToZero : null;
 
   // La provisión tributaria y la capacidad de inversión son N/D
   // (ratios-kpis-10/19); la utilidad neta se expone tal cual para
   // single-source-validator (sin reconstruirla desde UN × (1 + CAGR)).
   const provisionTributariaFutura: number | null = null;
-  const reserva60Dias = (ct.gastos / ((meses * 365) / 12)) * 60;
+  const reserva60Dias = meses === null ? null : (ct.gastos / ((meses * 365) / 12)) * 60;
   const capacidad = capacidadInversion(snapshot).value;
 
   return {
@@ -150,7 +157,8 @@ function buildFuturoAudit(
     provisionTributariaFutura,
     capacidadInversion: capacidad,
     reserva60Dias,
-    cajaProyectada36mBase: baseProj.cashAtMonth36,
+    cajaProyectada36mBase: baseProj === null ? null : baseProj.cashAtMonth36,
+    mesesBase: meses,
   };
 }
 
@@ -228,7 +236,11 @@ export function computeFuturoExecutiveCards(
   };
 
   // ─── 2. Punto de Quiebre ─────────────────────────────────────────────────
-  const prevMesesQuiebre = prevAudit?.mesesAlQuiebreConservador ?? null;
+  // Sin meses derivables no hay proyección: N/D con motivo y estado neutro
+  // (un `null` aquí NO significa "sin riesgo en 36 meses").
+  const sinMeses = audit.mesesBase === null ? motivoSinMeses(snapshot) : null;
+  const prevMesesQuiebre =
+    prevAudit?.mesesBase != null ? prevAudit.mesesAlQuiebreConservador : null;
   const punto_quiebre: ExecutiveCard = {
     key: 'punto_quiebre',
     labelEs: 'Punto de Quiebre de Caja',
@@ -236,11 +248,15 @@ export function computeFuturoExecutiveCards(
     value: audit.mesesAlQuiebreConservador,
     unit: 'months',
     color: 'orange',
-    status: puntoQuiebreStatus(audit.mesesAlQuiebreConservador),
-    deltaVsComparative: safeDelta(audit.mesesAlQuiebreConservador, prevMesesQuiebre),
+    status: sinMeses ? 'watch' : puntoQuiebreStatus(audit.mesesAlQuiebreConservador),
+    deltaVsComparative: sinMeses
+      ? null
+      : safeDelta(audit.mesesAlQuiebreConservador, prevMesesQuiebre),
     descriptionEs:
+      sinMeses?.es ??
       'Mes proyectado donde el efectivo (PUC 11) cruza 0 bajo escenario conservador (−15% ingresos). Si <6 meses → reaccionar urgente.',
     descriptionEn:
+      sinMeses?.en ??
       'Projected month where cash (PUC 11) crosses 0 under conservative scenario (−15% revenue). If <6 months → urgent action needed.',
     formulaEs: 'Caja proyectada 36 meses con factor 0.85 sobre ingresos mensuales',
     formulaEn: '36-month projected cash with 0.85 factor on monthly revenue',

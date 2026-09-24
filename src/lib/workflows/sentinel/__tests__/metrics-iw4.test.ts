@@ -11,6 +11,7 @@ vi.mock('@/lib/notifications/sentinel-insight', () => ({ sendInsightAlert: vi.fn
 import { deriveSentinelMetrics } from '../orchestrator';
 import { aggregatePillars } from '@/lib/pillars/service';
 import { makePnlSnapshot } from '@/lib/pillars/__tests__/_fixtures';
+import { parseTrialBalanceCSV, preprocessTrialBalance } from '@/lib/preprocessing/trial-balance';
 
 describe('Sentinel — métricas derivadas', () => {
   it('margen bruto sobre ingresos operacionales netos, no sobre la Σ de la clase 4', () => {
@@ -20,10 +21,34 @@ describe('Sentinel — métricas derivadas', () => {
     expect(m.margenBruto).toBeCloseTo((1_920 - 1_200) / 1_920, 10);
   });
 
-  it('días de inventario con los días que cubre el periodo (acumulado YYYY-MM)', () => {
+  // W4-C (NM-11): antes esta prueba fijaba el cálculo propio de Sentinel con
+  // SÓLO la clase 6 sobre un snapshot armado a mano. La definición única es el
+  // KPI del preprocesador (inventario / costos 6 + 7 anualizados × 365).
+  it('días de inventario = KPI del preprocesador (costos 6 + 7, acumulado YYYY-MM anualizado)', () => {
+    const pp = preprocessTrialBalance(
+      parseTrialBalanceCSV(
+        [
+          'codigo,nombre,nivel,transaccional,Saldo [2026-06]',
+          '110505,Caja,Auxiliar,1,100000000',
+          '143505,Mercancias,Auxiliar,1,200000000',
+          '310505,Capital,Auxiliar,1,300000000',
+          '413505,Ventas,Auxiliar,1,2000000000',
+          '613505,Costo de ventas,Auxiliar,1,1100000000',
+          '720505,Mano de obra directa,Auxiliar,1,100000000',
+          '510506,Sueldos,Auxiliar,1,500000000',
+        ].join('\n'),
+      ),
+    );
+    const snap = pp.primary;
+    const m = deriveSentinelMetrics(snap, aggregatePillars({ snapshot: snap }));
+    // Inventario 200M; costos 6 + 7 de 6 meses = 1.200M ⇒ 200M / (1.200M × 2) × 365.
+    expect(snap.controlTotals.diasInventario).toBeCloseTo((200 / 2_400) * 365, 6);
+    expect(m.diasInventario).toBeCloseTo(snap.controlTotals.diasInventario!, 12);
+  });
+
+  it('snapshot sin el KPI del preprocesador ⇒ días de inventario N/D (sin recálculo propio)', () => {
     const snap = makePnlSnapshot('2026-06');
     const m = deriveSentinelMetrics(snap, aggregatePillars({ snapshot: snap }));
-    // Inventario 200M; costo clase 6 de 6 meses = 1.100M ⇒ 1.100M / 182,5 días.
-    expect(m.diasInventario).toBeCloseTo(200_000_000 / (1_100_000_000 / 182.5), 6);
+    expect(m.diasInventario).toBeNull();
   });
 });

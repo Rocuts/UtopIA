@@ -30,6 +30,7 @@
 import { esCreditoRenta } from '@/lib/accounting/renta-credit';
 import { computeEbitda } from '@/lib/pillars/ebitda';
 import { runCurator } from './balance-curator';
+import { inferPeriodoTipo, mesesDelPeriodo } from './periodo-meses';
 import { normalizeSignConvention, type SignConventionDetection } from './sign-convention';
 import type {
   CashFlowStatement,
@@ -795,54 +796,12 @@ export function detectYearFromString(value: string | undefined | null): string |
 }
 
 // ---------------------------------------------------------------------------
-// Wave 2.F4 — inferencia del tipo de período (Parte 2.1 VERIFICACIÓN 4).
+// Wave 2.F4 — inferencia del tipo de período (Parte 2.1 VERIFICACIÓN 4) y
+// meses cubiertos por el periodo: viven en `./periodo-meses` (módulo puro,
+// sin dependencias) para que pilares, Sentinel, PDF y Âncora usen la MISMA
+// función que anualiza los KPIs del preprocesador (normativa-metricas NM-01).
 // ---------------------------------------------------------------------------
-// El parser actual sólo guarda el año en `period` ("2024"). Sin embargo, una
-// cadena más rica del header (por ejemplo "Saldo Final 2024-12" o "Ene-Dic
-// 2024") es comúnmente accesible vía `forcePeriod` u opciones del CSV. La
-// función inspecciona la cadena `period` (post-resolución del parser) y
-// devuelve:
-//   - 'cerrado'      cuando hay evidencia de año completo (mes 12 / "Dic" /
-//                    "Ene-Dic" / "Enero-Diciembre" / "Jan-Dec").
-//   - 'parcial'      cuando hay un mes específico distinto a 12 / un rango
-//                    incompleto (e.g. "2024-06", "Ene-Jun 2024").
-//   - 'indeterminado' cuando sólo se reconoce el año (caso más común hoy).
-// La inferencia NUNCA falla — si el patrón es ambiguo, devuelve
-// 'indeterminado' (fallback seguro: R8 emite la nota EXPLICATIVA suave).
-// ---------------------------------------------------------------------------
-const MONTH_NUMERIC_REGEX = /\b(20\d{2})[-_/](\d{1,2})\b/;
-const FULL_YEAR_HINT_REGEX =
-  /\b(ene[-_/\s]*(?:a[-_/\s]*)?dic|enero[-_/\s]*(?:a[-_/\s]*)?diciembre|jan[-_/\s]*(?:to[-_/\s]*)?dec|january[-_/\s]*(?:to[-_/\s]*)?december|cierre|fin\s+de\s+año|full\s*year)\b/i;
-const PARTIAL_MONTH_HINT_REGEX =
-  /\b(ene(?:ro)?|feb(?:rero)?|mar(?:zo)?|abr(?:il)?|may(?:o)?|jun(?:io)?|jul(?:io)?|ago(?:sto)?|sep(?:tiembre)?|oct(?:ubre)?|nov(?:iembre)?|jan(?:uary)?|feb(?:ruary)?|march|april|june|july|august|september|october|november)\b/i;
-
-export function inferPeriodoTipo(
-  periodLabel: string | null | undefined,
-): 'cerrado' | 'parcial' | 'indeterminado' {
-  if (!periodLabel) return 'indeterminado';
-  const s = String(periodLabel).trim();
-  if (s.length === 0) return 'indeterminado';
-
-  // Patrón numérico "YYYY-MM" — chequea el mes específico.
-  const num = s.match(MONTH_NUMERIC_REGEX);
-  if (num) {
-    const month = parseInt(num[2], 10);
-    if (!Number.isNaN(month) && month >= 1 && month <= 12) {
-      return month === 12 ? 'cerrado' : 'parcial';
-    }
-  }
-
-  // Patrones textuales de año completo (mayor prioridad que match parcial).
-  if (FULL_YEAR_HINT_REGEX.test(s)) return 'cerrado';
-
-  // Mes textual aislado → parcial (e.g. "Junio 2024", "Saldo Ago-2024").
-  if (PARTIAL_MONTH_HINT_REGEX.test(s) && !/dic|dec/i.test(s)) {
-    return 'parcial';
-  }
-
-  // Solo el año detectado, sin contexto de mes → indeterminado.
-  return 'indeterminado';
-}
+export { inferPeriodoTipo, mesesDelPeriodo };
 
 // ---------------------------------------------------------------------------
 // Normalización de encabezados (ingesta-07, ingesta-08)
@@ -1195,12 +1154,17 @@ export function parseTrialBalanceCSVWithMeta(
 
   const rows: RawAccountRow[] = [];
   const numericPeriods = new Set<string>();
+  const lineasSinCuenta: string[] = [];
 
   for (let i = layout.lineIndex + 1; i < lines.length; i++) {
     const cols = parseLine(lines[i], separator);
     const rawCode = (cols[codeIdx] || '').trim().replace(/['"]/g, '');
     const code = rawCode.replace(/[.\-\s]/g, '');
-    if (!code || !/^\d/.test(code)) continue;
+    if (!code || !/^\d/.test(code)) {
+      // Títulos y notas al pie también pueden declarar la unidad.
+      lineasSinCuenta.push(lines[i]);
+      continue;
+    }
 
     let level = inferLevel(code);
     if (levelIdx !== -1) {
@@ -1289,6 +1253,13 @@ export function parseTrialBalanceCSVWithMeta(
     period: null,
     message,
   }));
+  // Unidad declarada distinta de pesos (recalculo-final-03): motivo de
+  // integridad de todo el archivo hasta que se confirme la unidad.
+  const unidad = detectUnidadDeclarada(
+    [...lines.slice(0, layout.lineIndex), ...lineasSinCuenta],
+    rawHeaders,
+  );
+  if (unidad) fileIssues.push({ period: null, message: motivoUnidadDeclarada(unidad) });
   for (const row of rows) {
     for (const issue of row.parseIssues ?? []) {
       if (issue.period !== null && !numericPeriods.has(issue.period)) issue.period = null;
@@ -1317,6 +1288,71 @@ export function parseTrialBalanceCSVWithMeta(
   }
   const normalized = normalizeSignConvention(rows);
   return { rows: normalized.rows, ...meta, signConvention: normalized.detection };
+}
+
+// ---------------------------------------------------------------------------
+// Unidad monetaria declarada (recalculo-final-03, re-auditoría 2026-09-24)
+// ---------------------------------------------------------------------------
+// Un encabezado "Saldo 2025 (miles de pesos)" o un título "Cifras expresadas en
+// miles de pesos colombianos" dicen que cada importe vale × 1.000. El parser
+// lee pesos: publicar esas cifras tal cual es presentar el balance 1.000 veces
+// más pequeño (y las bases en UVT, los umbrales y la materialidad con él). No
+// se reescala en silencio: se bloquea con un motivo que pide confirmar la
+// unidad y cargar los importes en pesos.
+// ---------------------------------------------------------------------------
+type UnidadDeclarada = 'miles' | 'millones';
+
+/** Frases de unidad en títulos, notas o encabezados (texto normalizado). */
+const UNIDAD_EN_TEXTO: RegExp[] = [
+  /\b(?:en|expresad[oa]s?\s+en|cifras\s+en|valores\s+en)\s+(miles|millones)\b/,
+  /\b(miles|millones)\s+de\s+(?:pesos|cop\b|\$)/,
+  /\(\s*(miles|millones)\s*\)/,
+  /\bin\s+(thousands|millions)\b/,
+  /\b(thousands|millions)\s+of\s+(?:pesos|cop)\b/,
+];
+/** En una celda de encabezado basta la palabra ("Saldo miles 2025") o "(000)". */
+const UNIDAD_EN_ENCABEZADO = /\b(miles|millones|thousands|millions)\b|\(\s*\$?\s*000\s*\)/;
+
+function unidadDeCoincidencia(match: string): UnidadDeclarada {
+  return /mill/.test(match) ? 'millones' : 'miles';
+}
+
+/**
+ * Unidad distinta de pesos declarada en los encabezados, en el preámbulo o en
+ * las filas que no son cuentas (títulos, notas al pie). `null` si no hay.
+ */
+function detectUnidadDeclarada(
+  textos: string[],
+  encabezados: string[],
+): { unidad: UnidadDeclarada; texto: string } | null {
+  const limpiar = (t: string) =>
+    t
+      .replace(/[,;\t]+/g, ' ')
+      .replace(/["']/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 120);
+  for (const h of encabezados) {
+    const m = normalizeHeaderText(h).match(UNIDAD_EN_ENCABEZADO);
+    if (m) return { unidad: unidadDeCoincidencia(m[0]), texto: limpiar(h) };
+  }
+  for (const t of textos) {
+    const norm = normalizeHeaderText(t);
+    for (const re of UNIDAD_EN_TEXTO) {
+      const m = norm.match(re);
+      if (m) return { unidad: unidadDeCoincidencia(m[0]), texto: limpiar(t) };
+    }
+  }
+  return null;
+}
+
+function motivoUnidadDeclarada(d: { unidad: UnidadDeclarada; texto: string }): string {
+  const factor = d.unidad === 'miles' ? '1.000' : '1.000.000';
+  return (
+    `El archivo declara las cifras en ${d.unidad} de pesos («${d.texto}»). UtopIA lee cada ` +
+    'importe como pesos colombianos: confirme la unidad y cargue el balance con los importes ' +
+    `en pesos (× ${factor}). Las cifras no se reescalan ni se publican en silencio.`
+  );
 }
 
 /** Periodo explícito del encabezado: `saldo [2025-06]` o un año reconocible. */
@@ -1913,19 +1949,22 @@ function buildSnapshotForPeriod(
     ...leafSelection.reasons,
     ...collectParseIssueReasons(allRows, period),
   ];
-  const validationReasons: string[] = [...integrityReasons];
   // The current input contract uses JS numbers. BigInt after rounding cannot
   // recover cents already lost by parsing or by an unsafe aggregate.
+  // recalculo-final-04: es un motivo de INTEGRIDAD de los datos leídos (ningún
+  // cierre virtual lo resuelve): va a `integrityReasons` para que el Bridge de
+  // Cuadratura no lo degrade y el API v1 no publique 'balanced'.
   const monetaryValues = [
     ...leafRows.map(row => row.balance), totalAssets, totalLiabilities,
     totalEquityRaw, totalRevenue, totalExpenses, totalCosts, totalProduction, netIncome,
   ];
   if (monetaryValues.some(value => !Number.isSafeInteger(Math.round(value * 100)))) {
-    validationReasons.push(
+    integrityReasons.push(
       `[${period}] Importe fuera del rango de precisión monetaria soportado. ` +
       'Se requiere ingestión decimal exacta antes de emitir el informe.',
     );
   }
+  const validationReasons: string[] = [...integrityReasons];
   const suggestedAccounts: string[] = [];
   const totalEquity = totalEquityRaw;
 
@@ -2177,18 +2216,15 @@ function buildSnapshotForPeriod(
     Math.abs(liquidezGap) > LIQUIDEZ_TOL;
 
   if (hasLiquidezRisk) {
-    validationReasons.push(
-      `[${period}] Riesgo de liquidez: Activo Corriente ($${formatCOP(controlTotals.activoCorriente)}) ` +
-        `< Pasivo Corriente ($${formatCOP(controlTotals.pasivoCorriente)}). ` +
-        `Brecha: $${formatCOP(Math.abs(liquidezGap))}.`,
-    );
-    suggestedAccounts.push(
-      '11 — Efectivo y equivalentes (revisar saldos depurados)',
-      '13 — Deudores comerciales (revisar rotacion de cartera)',
-      '21 — Obligaciones financieras CP (revisar refinanciacion)',
-      '23 — Cuentas por pagar (revisar plazos con proveedores)',
-      '24 — Impuestos por pagar (DIAN — revisar calendario y acuerdos de pago)',
-      '25 — Obligaciones laborales (revisar exigibilidad inmediata)',
+    // recalculo-final-07: AC < PC es un HALLAZGO financiero del cliente, no un
+    // error de los datos. Antes era motivo bloqueante: un ESF cuadrado sin P&G
+    // (R8 no actúa, el Bridge no degrada) recibía 422, y el mismo caso con P&G
+    // pasaba como informativo. Ahora el trato es igual con o sin P&G: ajuste
+    // informativo + discrepancia "Riesgo de Liquidez" para el análisis.
+    adjustments.push(
+      `[${period}] Riesgo de liquidez (hallazgo informativo, no bloqueante): Activo Corriente ` +
+        `($${formatCOP(controlTotals.activoCorriente)}) < Pasivo Corriente ` +
+        `($${formatCOP(controlTotals.pasivoCorriente)}). Brecha: $${formatCOP(Math.abs(liquidezGap))}.`,
     );
     discrepancies.push({
       location: `Riesgo de Liquidez (Big Four) [${period}]`,
@@ -2760,34 +2796,6 @@ function motivoPeriodoNoAnualizado(periodo: string): string {
   );
 }
 
-/**
- * Meses de resultados que cubre un periodo, derivados de su etiqueta
- * (ratios-kpis-18). `null` cuando la etiqueta no determina la duración.
- *   - "AAAA"                    → 12 (cierre anual: convención del parser,
- *                                 que ordena "AAAA" como el cierre AAAA-12).
- *   - "AAAA-MM"                 → MM (P&G acumulado desde el 1 de enero).
- *   - "AAAA-Qn"                 → 3·n (acumulado al cierre del trimestre).
- *   - "AAAA-MM-DD..AAAA-MM-DD"  → meses completos del rango (1..12).
- *   - etiqueta de año completo ("ene-dic 2025", "cierre 2025") → 12.
- */
-export function mesesDelPeriodo(periodLabel: string | null | undefined): number | null {
-  if (!periodLabel) return null;
-  const s = String(periodLabel).trim();
-  if (/^20\d{2}$/.test(s)) return 12;
-  let m = s.match(/^20\d{2}-(0[1-9]|1[0-2])$/);
-  if (m) return parseInt(m[1], 10);
-  m = s.match(/^20\d{2}-Q([1-4])$/i);
-  if (m) return parseInt(m[1], 10) * 3;
-  m = s.match(/^(\d{4})-(\d{2})-(\d{2})\.\.(\d{4})-(\d{2})-(\d{2})$/);
-  if (m) {
-    const [y1, mo1, d1, y2, mo2, d2] = m.slice(1).map((x) => parseInt(x, 10));
-    const ultimoDia = new Date(Date.UTC(y2, mo2, 0)).getUTCDate();
-    if (d1 !== 1 || d2 !== ultimoDia) return null;
-    const meses = (y2 - y1) * 12 + (mo2 - mo1) + 1;
-    return meses >= 1 && meses <= 12 ? meses : null;
-  }
-  return inferPeriodoTipo(s) === 'cerrado' ? 12 : null;
-}
 
 /** Hoja mínima (código + saldo del periodo) para los helpers de agregación. */
 interface HojaSaldo {

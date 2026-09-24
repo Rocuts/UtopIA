@@ -10,7 +10,7 @@ import 'server-only';
 
 import { getDb } from '@/lib/db/client';
 import { aggregatePillars } from '@/lib/pillars/service';
-import { daysCovered, margenBruto as computeMargenBruto } from '@/lib/pillars/shared-metrics';
+import { margenBruto as computeMargenBruto } from '@/lib/pillars/shared-metrics';
 import type { PillarsResult } from '@/lib/pillars/types';
 import type { PeriodSnapshot, PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { sendInsightAlert } from '@/lib/notifications/sentinel-insight';
@@ -68,8 +68,10 @@ async function loadSentinelData(
  * Métricas de los disparadores (puro). Margen bruto sobre ingresos
  * operacionales netos (41 − 4175) con la utilidad bruta del preprocesador —
  * nunca la Σ de la clase 4, que suma devoluciones y el grupo 42
- * (ratios-kpis-04). Los días de inventario usan los días que cubre el periodo
- * (un acumulado a agosto no son 365 días de costo).
+ * (ratios-kpis-04). Los días de inventario son el KPI del preprocesador
+ * (`controlTotals.diasInventario`: inventario 14 / costos de las clases 6 + 7
+ * anualizados con los meses del periodo × 365, N/D con motivo): Sentinel no
+ * recalcula con sólo la clase 6 ni con 365 días supuestos (NM-11, NM-01).
  */
 export function deriveSentinelMetrics(
   snapshot: PeriodSnapshot,
@@ -94,10 +96,10 @@ export function deriveSentinelMetrics(
   // Margen bruto: misma definición que el pilar Verdad (shared-metrics).
   const margenBruto = computeMargenBruto(snapshot);
 
-  const costosClase6 = snapshot.classes.find((c) => c.code === 6)?.auxiliaryTotal ?? 0;
-  const inventario = snapshot.classes.find((c) => c.code === 1)?.accounts.filter((a) => a.code.startsWith('14')).reduce((s, a) => s + a.balance, 0) ?? 0;
-  const costoDiario = costosClase6 / daysCovered(snapshot);
-  const diasInventario = costoDiario > 0 ? inventario / costoDiario : null;
+  const diasInventario =
+    typeof ct.diasInventario === 'number' && Number.isFinite(ct.diasInventario)
+      ? ct.diasInventario
+      : null;
 
   return {
     equationGapPct,

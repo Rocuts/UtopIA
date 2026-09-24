@@ -24,7 +24,7 @@
 
 import type { PreprocessedBalance, PUCClass } from '@/lib/preprocessing/trial-balance';
 
-import { ingresosNetosPeriodo, monthsCovered } from './shared-metrics';
+import { ingresosNetosPeriodo, mesesCubiertos } from './shared-metrics';
 
 // ─── Tipos públicos ─────────────────────────────────────────────────────────
 
@@ -119,7 +119,9 @@ function sumFixedExpenses(claseGastos: PUCClass | undefined): number {
  * Construye la serie `FuturoBarSeries[]` (12 meses proyectados) a partir del
  * balance preprocesado y opciones interactivas del usuario.
  *
- * Siempre retorna exactamente 12 puntos.
+ * Retorna exactamente 12 puntos, o `[]` cuando la duración del periodo no es
+ * derivable (rango incompleto, saldo de apertura): sin flujo mensual no hay
+ * proyección que dibujar (NM-01).
  *
  * Fórmula por escenario (mes m):
  *   ingresoMesEscenario = ingresoMes × factor (base/conservador/agresivo)
@@ -137,9 +139,10 @@ export function buildFuturoBarSeries(
   const claseGastos = balance.primary.classes.find((c) => c.code === 5);
 
   // Flujos mensuales = ingresos netos (4175) y egresos del periodo divididos
-  // por los MESES CUBIERTOS por el snapshot (YYYY-MM ⇒ acumulado del año), no
-  // por 12 fijo (ratios-kpis-03).
-  const meses = monthsCovered(balance.primary);
+  // por los MESES CUBIERTOS por el snapshot (misma regla del preprocesador:
+  // 'AAAA-MM', 'AAAA-Qn', rangos), no por 12 fijo (ratios-kpis-03, NM-01).
+  const meses = mesesCubiertos(balance.primary);
+  if (meses === null) return [];
   const cajaInicial = ct.efectivoCuenta11;
   const ingresoMes = ingresosNetosPeriodo(ct) / meses;
   const egresoMes = ct.gastos / meses;

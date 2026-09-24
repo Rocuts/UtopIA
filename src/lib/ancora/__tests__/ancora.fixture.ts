@@ -35,6 +35,7 @@ export function makeAncora(overrides?: Partial<NiifAncora>): NiifAncora {
       X02: '20000000000',
       X03: '40000000000', // activo corriente 400.000.000
       X04: '60000000000', // activo no corriente 600.000.000
+      X05: '50000000000', // ingresos operacionales netos 500.000.000 (sin grupo 42)
     },
     ccvFiscal: {
       F01: '5000000000', // 50.000.000

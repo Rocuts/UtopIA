@@ -3,11 +3,14 @@
 // ---------------------------------------------------------------------------
 // Una sola definición por indicador (auditoría ratios-kpis-15/19/10/03):
 //
-//   - Base del periodo: un snapshot con etiqueta `YYYY-MM` viene del libro
-//     mayor con resultados ACUMULADOS del año hasta ese mes (ver
-//     src/lib/cache/preprocessed-balance.ts) ⇒ cubre MM meses. Cualquier otra
-//     etiqueta (año del CSV/ERP) se trata como anual (12 meses). Las
-//     anualizaciones /12 y /365 usan esta base, no un año supuesto.
+//   - Base del periodo: la MISMA función que anualiza los KPIs del
+//     preprocesador (`mesesDelPeriodo`, vía `controlTotals.mesesPeriodo`):
+//     'AAAA' = 12, 'AAAA-MM' = MM (acumulado del año, ver
+//     src/lib/cache/preprocessed-balance.ts), 'AAAA-Qn' = 3·n, rangos de
+//     meses completos. Sin duración derivable (rango incompleto, etiqueta
+//     ambigua) o en un saldo de apertura ⇒ `null` y todo indicador que
+//     divida un flujo por meses/días es N/D con motivo, nunca 12 meses
+//     supuestos (normativa-metricas NM-01).
 //   - Razón corriente y prueba ácida: activo/pasivo corriente de controlTotals
 //     (misma fórmula que computeDerivedKpis). Sin pasivo corriente ⇒ null, sin
 //     centinela 999.
@@ -21,32 +24,79 @@
 //     publica cifra (decisión del coordinador de la auditoría 2026-09).
 // ---------------------------------------------------------------------------
 
+import { mesesDelPeriodo } from '@/lib/preprocessing/periodo-meses';
 import type { ControlTotals, PeriodSnapshot } from '@/lib/preprocessing/trial-balance';
 
 import { computeEbitda } from './ebitda';
 import type { ForensicSummary } from './types';
 
-/** Meses cubiertos por los flujos de resultados del snapshot. */
-export function monthsCovered(snapshot: Pick<PeriodSnapshot, 'period'>): number {
-  const m = /^(\d{4})-(\d{2})$/.exec(snapshot.period ?? '');
-  if (m) {
-    const month = parseInt(m[2], 10);
-    if (month >= 1 && month <= 12) return month;
+/** Lo mínimo de un snapshot para saber cuántos meses de resultados cubre. */
+export type PeriodoRef = Pick<PeriodSnapshot, 'period'> & {
+  controlTotals?: Pick<ControlTotals, 'mesesPeriodo'>;
+  saldosDeApertura?: boolean;
+};
+
+/**
+ * Meses de resultados que cubre el snapshot — fuente única (NM-01). Prefiere
+ * `controlTotals.mesesPeriodo` (lo que usó el preprocesador para anualizar
+ * ROE, ROA y días); sin él, la misma `mesesDelPeriodo` sobre la etiqueta.
+ * `null` sin duración derivable o en un saldo de apertura (sin P&G del
+ * periodo, ingesta-09).
+ */
+export function mesesCubiertos(snapshot: PeriodoRef): number | null {
+  if (snapshot.saldosDeApertura === true) return null;
+  const declarado = snapshot.controlTotals?.mesesPeriodo;
+  if (declarado !== undefined) {
+    return typeof declarado === 'number' && declarado > 0 ? declarado : null;
   }
-  return 12;
+  return mesesDelPeriodo(snapshot.period);
 }
 
-/** Días cubiertos (base 365 días / 12 meses). */
-export function daysCovered(snapshot: Pick<PeriodSnapshot, 'period'>): number {
-  return (monthsCovered(snapshot) * 365) / 12;
+/** Días cubiertos (base 365 días / 12 meses); `null` sin meses derivables. */
+export function diasCubiertos(snapshot: PeriodoRef): number | null {
+  const meses = mesesCubiertos(snapshot);
+  return meses === null ? null : (meses * 365) / 12;
 }
 
-/** true si dos snapshots cubren periodos de igual duración (comparables). */
-export function periodsComparable(
-  a: Pick<PeriodSnapshot, 'period'>,
-  b: Pick<PeriodSnapshot, 'period'>,
-): boolean {
-  return monthsCovered(a) === monthsCovered(b);
+/** Motivo (es/en) de un indicador N/D porque el periodo no tiene meses derivables. */
+export function motivoSinMeses(snapshot: PeriodoRef): { es: string; en: string } {
+  if (snapshot.saldosDeApertura === true) {
+    return {
+      es:
+        'N/D — el periodo proviene de una columna de saldo inicial/anterior: no hay P&G del ' +
+        'periodo para medir flujos.',
+      en: 'N/A — the period comes from an opening/prior balance column: no period P&L to measure flows.',
+    };
+  }
+  return {
+    es:
+      `N/D — periodo parcial no anualizado: la etiqueta "${snapshot.period}" no permite derivar ` +
+      'los meses del periodo (base 365 días).',
+    en:
+      `N/A — partial period not annualized: the label "${snapshot.period}" does not determine ` +
+      'the months covered (365-day basis).',
+  };
+}
+
+/**
+ * @deprecated Usa `mesesCubiertos` y trata `null` como N/D. Sólo queda para
+ * consumidores fuera de los pilares que todavía esperan un número (Centro de
+ * Mando, `src/app/workspace/comando/page.tsx`); con la misma regla del
+ * preprocesador para 'AAAA-Qn' y rangos, y 12 sólo cuando la duración no es
+ * derivable.
+ */
+export function monthsCovered(snapshot: PeriodoRef): number {
+  return mesesCubiertos(snapshot) ?? 12;
+}
+
+/**
+ * `true` si dos snapshots cubren periodos de igual duración (comparables).
+ * Sin duración derivable en cualquiera de los dos ⇒ `false` (no comparable).
+ */
+export function periodsComparable(a: PeriodoRef, b: PeriodoRef): boolean {
+  const ma = mesesCubiertos(a);
+  const mb = mesesCubiertos(b);
+  return ma !== null && mb !== null && ma === mb;
 }
 
 /**
@@ -122,7 +172,11 @@ export interface DiasAutonomia {
  */
 export function diasAutonomia(snapshot: PeriodSnapshot, ajusteCaja = 0): DiasAutonomia {
   const ct = snapshot.controlTotals;
-  const dias = daysCovered(snapshot);
+  const dias = diasCubiertos(snapshot);
+  if (dias === null) {
+    const motivo = motivoSinMeses(snapshot);
+    return { value: null, egresoDiario: null, reasonEs: motivo.es, reasonEn: motivo.en };
+  }
   if (!(ct.gastos > 0)) {
     return {
       value: null,

@@ -25,11 +25,18 @@
 //    score se expresa sobre los 60 puntos medidos (pipeline-flujo-01).
 //  - Âncora sentinela persistido (todas las cifras NIIF "0") ⇒ vista vacía; sin
 //    comparativo, las cifras "previas" y la variación de caja son N/D.
+//  - Definiciones canónicas del preprocesador (NM-12 / recalculo-final-06):
+//    margen operacional = EBIT (A09) / ingresos operacionales netos (X05,
+//    41 − 4175; el grupo 42 va debajo de la utilidad operacional); cartera =
+//    clientes netos (A17 = 1305 + 1310 − |1399|); crecimiento de ingresos sólo
+//    entre periodos de igual duración (`periodosDeIgualDuracion`, la misma
+//    regla de meses del preprocesador y del CAGR del pilar Futuro).
 // ---------------------------------------------------------------------------
 
 import type { NiifAncora } from '@/lib/agents/financial/ancora/types';
 import type { FiscalSnapshot } from '@/lib/agents/financial/types';
 import { parseMoneyCop } from '@/lib/agents/financial/contracts/money';
+import { periodosDeIgualDuracion } from '@/lib/preprocessing/periodo-meses';
 import type { AncoraView } from './ancora-view';
 
 /** Múltiplo EV/EBIT operacional — PYME servicios CO 2026 (rango 4–8×). */
@@ -116,7 +123,7 @@ export function deriveAncoraView(
   // (pipeline-flujo-01): el sentinela de `buildNiifAncora` sin preprocesado
   // lleva TODAS las cifras NIIF en "0". Hoy los productores emiten `null`,
   // pero un Âncora viejo guardado seguiría pintando $0 y un score inventado.
-  if (Object.values(c).every((v) => centsToPesos(v) === 0)) return emptyView(company);
+  if (Object.values(c).every((v) => v == null || centsToPesos(v) === 0)) return emptyView(company);
 
   // Sin periodo comparativo, build-ancora rellena los campos "previos" con
   // "0" y A19 = efectivo − 0: no son cifras del cliente ⇒ N/D.
@@ -147,6 +154,8 @@ export function deriveAncoraView(
   const gananciaBruta = centsToPesos(c.X01);
   const activoCorriente = centsToPesos(c.X03);
   const activoNoCorriente = centsToPesos(c.X04);
+  // X05 no existe en Âncoras persistidos antes de 2026-09-24 ⇒ null (N/D).
+  const ingresosOperacionales = centsToPesos(c.X05);
 
   // ── Fiscal: preferir snapshot.anchor (canónico Escudo); fallback ccvFiscal ──
   const fa = fiscalSnapshot?.anchor;
@@ -166,8 +175,14 @@ export function deriveAncoraView(
   };
 
   // ── Derivados honestos ──────────────────────────────────────────────────────
+  // Crecimiento sólo entre periodos de igual duración: un corte a junio contra
+  // un año completo no es un crecimiento (NM-12, misma regla que el CAGR).
+  const periodosComparables = periodosDeIgualDuracion(
+    ancora.periodos.actual,
+    ancora.periodos.comparativo,
+  );
   const crecimientoIngresosPct =
-    ingresosPrev != null && ingresosPrev > 0 && ingresos != null
+    periodosComparables && ingresosPrev != null && ingresosPrev > 0 && ingresos != null
       ? round2(((ingresos - ingresosPrev) / ingresosPrev) * 100)
       : null;
 
@@ -177,8 +192,8 @@ export function deriveAncoraView(
       : null;
 
   const margenOperacionalPct =
-    ingresos != null && ingresos > 0 && ebitOperacional != null
-      ? round2((ebitOperacional / ingresos) * 100)
+    ingresosOperacionales != null && ingresosOperacionales > 0 && ebitOperacional != null
+      ? round2((ebitOperacional / ingresosOperacionales) * 100)
       : null;
 
   const deRatio =

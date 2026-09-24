@@ -15,7 +15,8 @@ import type { NiifAncora } from './types';
  * Formatea centavos string a pesos colombianos con 2 decimales.
  * Ej. "150000000" → "$1.500.000,00". Negativos → "-$X,XX".
  */
-function fmtCop(cents: string): string {
+function fmtCop(cents: string | null): string {
+  if (cents === null) return 'N/D';
   const big = BigInt(cents);
   const negative = big < BigInt(0);
   const abs = negative ? -big : big;
@@ -62,13 +63,14 @@ export function renderNiifAncoraBlock(ancora: NiifAncora): string {
     `A14 (Efectivo ${periodoComp})               = ${fmtCop(a.A14)}`,
     `A15 (Pasivo Corriente ${periodoActual})     = ${fmtCop(a.A15)}`,
     `A16 (Inventarios ${periodoActual})          = ${fmtCop(a.A16)}`,
-    `A17 (Cartera ${periodoActual})              = ${fmtCop(a.A17)}`,
+    `A17 (Cartera comercial neta ${periodoActual}) = ${fmtCop(a.A17)}`,
     `A18 (Proveedores ${periodoActual})          = ${fmtCop(a.A18)}`,
     `A19 (Flujo de Caja ${periodoActual})        = ${fmtCop(a.A19)}`,
     `X01 (Ganancia Bruta ${periodoActual})       = ${fmtCop(a.X01)}`,
     `X02 (Ganancia Bruta ${periodoComp})         = ${fmtCop(a.X02)}`,
     `X03 (Activo Corriente ${periodoActual})     = ${fmtCop(a.X03)}`,
     `X04 (Activo No Corriente ${periodoActual})  = ${fmtCop(a.X04)}`,
+    `X05 (Ingresos operacionales netos ${periodoActual}) = ${fmtCop(a.X05)}`,
     '─────────────────────────────────────────────────',
     '',
     '## CCV Fiscal (cifras vinculantes tributarias)',

@@ -9,7 +9,10 @@
 //   - Egresos = egresos contables del periodo repartidos por mes, fijos; no se
 //     modelan impuestos, capital de trabajo ni estacionalidad.
 //   - Base mensual = ingresos NETOS (4175) y egresos del periodo divididos por
-//     los meses cubiertos del snapshot (shared-metrics.monthsCovered).
+//     los meses cubiertos del snapshot (shared-metrics.monthsCovered: la regla
+//     del preprocesador para 'AAAA-MM', 'AAAA-Qn' y rangos). El contrato
+//     público exige un resultado; el Centro de Mando debe omitir la
+//     simulación cuando `mesesCubiertos(snapshot) === null` (NM-01).
 //   - "ROI" = utilidad simulada a 12 meses / PPE neto (cuentas 15xx de la
 //     clase 1, netas de 1592/1597-1599). Sin PPE ⇒ N/D (ratios-kpis-21: antes
 //     buscaba una "clase 15" inexistente y caía al activo no corriente).
