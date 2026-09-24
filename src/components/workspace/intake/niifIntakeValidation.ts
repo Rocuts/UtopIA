@@ -72,3 +72,36 @@ export function isReviewStepValid(
 ): boolean {
   return collectMissingRequired(values, resolvedRawData).length === 0;
 }
+
+/**
+ * Año fiscal del balance subido (`preprocessed.primary.period` de /api/upload):
+ * `2024`, `2025-06` o `Saldo Dic 2023` → el año de 4 dígitos. `undefined` si el
+ * rótulo no trae un año reconocible (nunca se inventa).
+ */
+export function fiscalPeriodFromPreprocessed(preprocessed: unknown): string | undefined {
+  if (!preprocessed || typeof preprocessed !== 'object') return undefined;
+  const primary = (preprocessed as { primary?: { period?: unknown } | null }).primary;
+  const period = primary?.period;
+  if (typeof period !== 'string') return undefined;
+  return /(?:^|\D)(\d{4})(?:\D|$)/.exec(period)?.[1];
+}
+
+/**
+ * Periodo fiscal del intake tras la extracción (pipeline-flujo-17).
+ *
+ * POR QUÉ: el valor por defecto (año actual − 1) ocupaba el campo y el prefill
+ * sólo rellenaba campos vacíos, de modo que el periodo del balance nunca lo
+ * corregía y el servidor sellaba el informe por periodo incoherente. Gana el
+ * periodo extraído del balance salvo que el usuario haya editado el campo; un
+ * campo vacío siempre se rellena.
+ */
+export function resolveExtractedFiscalPeriod(args: {
+  current: string | null | undefined;
+  extracted: string | null | undefined;
+  userEdited: boolean;
+}): string {
+  const current = args.current ?? '';
+  if (!args.extracted) return current;
+  if (!current.trim()) return args.extracted;
+  return args.userEdited ? current : args.extracted;
+}

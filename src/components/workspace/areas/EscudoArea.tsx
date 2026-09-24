@@ -211,7 +211,22 @@ export function EscudoArea({
       : `${effectiveRate.toFixed(1).replace('.', language === 'es' ? ',' : '.')}%`;
   const periodLabel =
     fiscalAnchor?.fuente?.periodo || (view.hasData ? view.meta.periodoActual : '') || null;
-  const riskLabel = riskScore ? NIVEL_LABEL[riskScore.nivel][language] : ds.notAvailable;
+  // Score sin base gravable (F01 = $0) ⇒ «No determinable», nunca «BAJO»
+  // (tributario-modulos-05).
+  const scoreNotDeterminable = riskScore ? scoreNoPublicable(riskScore) : null;
+  const riskLabel = riskScore
+    ? scoreNotDeterminable
+      ? ds.escudo.riskNotDeterminable
+      : NIVEL_LABEL[riskScore.nivel][language]
+    : ds.notAvailable;
+  const notDeterminableCopy = {
+    label: ds.escudo.riskNotDeterminable,
+    // El motivo del calculador viene en español; en inglés se usa el del diccionario.
+    reason:
+      language === 'es' && scoreNotDeterminable?.motivo
+        ? scoreNotDeterminable.motivo
+        : ds.escudo.riskNotDeterminableReason,
+  };
 
   // Sin anchor ni prop no hay vencimientos reales que contar — nunca inventarlos.
   const deadlines = useMemo<EscudoDeadline[]>(() => {
@@ -395,8 +410,16 @@ export function EscudoArea({
         <motion.div {...fadeItem(3)} className="mb-10 flex flex-col gap-5">
           {riskScore && (
             <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] gap-5 items-stretch">
-              <GaugeDIAN score={riskScore.score} language={language} />
-              <RiskScoreKpiRow riskScore={riskScore} language={language} />
+              <GaugeDIAN
+                score={riskScore.score}
+                language={language}
+                notDeterminable={scoreNotDeterminable ? notDeterminableCopy : null}
+              />
+              <RiskScoreKpiRow
+                riskScore={riskScore}
+                language={language}
+                notDeterminable={scoreNotDeterminable ? notDeterminableCopy : null}
+              />
             </div>
           )}
           {alertas && alertas.length > 0 && (
@@ -574,17 +597,37 @@ const NIVEL_LABEL: Record<RiskNivel, { es: string; en: string }> = {
   critico: { es: 'ALTO', en: 'HIGH' },
 };
 
+/**
+ * El calculador (`computeRiskScore`) marca `publicable: false` cuando F01 = $0:
+ * los seis factores son razones sobre la base gravable y el 0/100 resultante
+ * no es "riesgo bajo". El `FiscalRiskScore` público aún no declara el campo
+ * (llega por JSON), de ahí la lectura estructural.
+ */
+function scoreNoPublicable(riskScore: FiscalRiskScore): { motivo: string | null } | null {
+  const meta = riskScore as { publicable?: unknown; noPublicableMotivo?: unknown };
+  if (meta.publicable !== false) return null;
+  return { motivo: typeof meta.noPublicableMotivo === 'string' ? meta.noPublicableMotivo : null };
+}
+
+interface NotDeterminableCopy {
+  label: string;
+  reason: string;
+}
+
 interface RiskScoreKpiRowProps {
   riskScore: FiscalRiskScore;
   language: 'es' | 'en';
+  /** Presente cuando el score no es publicable: se muestra en lugar de la cifra. */
+  notDeterminable?: NotDeterminableCopy | null;
 }
 
-function RiskScoreKpiRow({ riskScore, language }: RiskScoreKpiRowProps) {
+function RiskScoreKpiRow({ riskScore, language, notDeterminable }: RiskScoreKpiRowProps) {
   const { score, nivel, factores } = riskScore;
   const levelLabel = NIVEL_LABEL[nivel][language];
   const colorClass = NIVEL_COLOR[nivel];
   const bgClass = NIVEL_BG[nivel];
-  const topFactores = factores.slice(0, 3);
+  // Sin score publicable los puntos por factor tampoco significan nada.
+  const topFactores = notDeterminable ? [] : factores.slice(0, 3);
 
   return (
     <div
@@ -605,24 +648,33 @@ function RiskScoreKpiRow({ riskScore, language }: RiskScoreKpiRowProps) {
             <p className="uppercase tracking-eyebrow text-xs font-medium text-n-500">
               {language === 'es' ? 'Score de Riesgo DIAN' : 'DIAN Risk Score'}
             </p>
-            <div className="flex items-baseline gap-2 mt-0.5">
-              <span
-                className={cn('font-serif-elite text-3xl font-normal leading-none num', colorClass)}
-                aria-label={`${score} de 100`}
-              >
-                {score}
-              </span>
-              <span className="text-sm text-n-500">/100</span>
-              <span
-                className={cn(
-                  'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold uppercase tracking-label border',
-                  bgClass,
-                  colorClass,
-                )}
-              >
-                {levelLabel}
-              </span>
-            </div>
+            {notDeterminable ? (
+              <div className="mt-0.5" role="status">
+                <span className="font-serif-elite text-2xl font-normal leading-none text-n-1000">
+                  {notDeterminable.label}
+                </span>
+                <p className="mt-1 text-xs text-n-700 max-w-md">{notDeterminable.reason}</p>
+              </div>
+            ) : (
+              <div className="flex items-baseline gap-2 mt-0.5">
+                <span
+                  className={cn('font-serif-elite text-3xl font-normal leading-none num', colorClass)}
+                  aria-label={language === 'es' ? `${score} de 100` : `${score} of 100`}
+                >
+                  {score}
+                </span>
+                <span className="text-sm text-n-500">/100</span>
+                <span
+                  className={cn(
+                    'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold uppercase tracking-label border',
+                    bgClass,
+                    colorClass,
+                  )}
+                >
+                  {levelLabel}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -654,9 +706,38 @@ function RiskScoreKpiRow({ riskScore, language }: RiskScoreKpiRowProps) {
 interface GaugeDIANProps {
   score: number;
   language: 'es' | 'en';
+  /** Presente cuando el score no es publicable: sin arco, cifra ni nivel. */
+  notDeterminable?: NotDeterminableCopy | null;
 }
 
-function GaugeDIAN({ score, language }: GaugeDIANProps) {
+function GaugeDIAN({ score, language, notDeterminable }: GaugeDIANProps) {
+  const title = language === 'es' ? 'Score de Riesgo DIAN' : 'DIAN Risk Score';
+  if (notDeterminable) {
+    return (
+      <div
+        role="img"
+        aria-label={`${title} — ${notDeterminable.label}`}
+        className="relative flex flex-col items-center justify-center gap-1 p-6 rounded-xl glass-elite-elevated min-w-[200px]"
+        style={{ boxShadow: 'inset 0 0 0 1px rgb(168 56 56 / 0.32)' }}
+      >
+        <span className="uppercase tracking-eyebrow text-xs font-medium text-n-500 text-center">
+          {title}
+        </span>
+        <svg viewBox="0 0 140 80" width="150" height="86" aria-hidden="true">
+          <path
+            d="M 14 72 A 56 56 0 0 1 126 72"
+            fill="none"
+            className="stroke-n-300"
+            strokeWidth="10"
+            strokeLinecap="round"
+          />
+        </svg>
+        <span className="font-serif-elite text-xl font-normal leading-none -mt-2 text-n-1000 text-center">
+          {notDeterminable.label}
+        </span>
+      </div>
+    );
+  }
   const safe = Math.max(0, Math.min(100, Math.round(score)));
   // Color por nivel de riesgo (rol → token). currentColor pinta arco + número.
   const colorClass =

@@ -67,7 +67,11 @@ import type {
 import type { QualityAssessment as BackendQualityAssessment } from '@/lib/agents/financial/quality/types';
 import type { ReportIterationTurn } from './types';
 import { consumeSSE, fetchSSEWithRetry } from '@/lib/sse/consume';
-import { recallUploadedPreprocessed } from '@/lib/upload/preprocessed-handoff';
+import {
+  recallUploadedPreprocessed,
+  MAX_FORWARDED_PREPROCESSED_CHARS,
+} from '@/lib/upload/preprocessed-handoff';
+import { dict } from '@/lib/i18n/dictionaries';
 import { resolveReportExportBlock, reportExportBlockCopy } from './report-export-gate';
 import {
   CLIENT_REPORT_MODEL_ID,
@@ -87,31 +91,34 @@ import {
  *
  * Formato: "CONTEXTO FISCAL AUTOMÁTICO — {empresa} · {periodo}\nF01-F10 + score + alertas"
  */
-function buildFiscalContextBlock(
+export function buildFiscalContextBlock(
   snap: FiscalSnapshot,
   company: CompanyInfo,
   language: 'es' | 'en',
 ): string {
   const { anchor, riskScore, period } = snap;
-  const label = language === 'es'
-    ? `CONTEXTO FISCAL AUTOMÁTICO — ${company.name} · ${period}`
-    : `AUTOMATIC TAX CONTEXT — ${company.name} · ${period}`;
+  // Rótulos desde el diccionario (es/en). F04 = F02 − F03 es una posición de
+  // referencia contable, no una liquidación: rotularla "Neto a Pagar/Saldo a
+  // Favor" le decía al asistente que era un valor a pagar o a devolver
+  // (tributario-modulos-02).
+  const lbl = dict[language].elite.areas.escudo.autowire.contextBlock;
+  const label = `${lbl.header} — ${company.name} · ${period}`;
 
   const fmtPct = (n: number) => `${n.toFixed(1)}%`;
 
   const lines: string[] = [
     label,
     '─'.repeat(60),
-    `F01 UAI Contable: ${formatCopFromCents(BigInt(anchor.f01))}`,
-    `F02 Impuesto Referencia (35%): ${formatCopFromCents(BigInt(anchor.f02))}`,
-    `F03 Retenciones Acumuladas: ${formatCopFromCents(BigInt(anchor.f03))}`,
-    `F04 Neto a Pagar/Saldo a Favor: ${formatCopFromCents(BigInt(anchor.f04))}`,
-    `F05 Provisión IVA: ${formatCopFromCents(BigInt(anchor.f05))}`,
-    `F06 Retefuente por Declarar: ${formatCopFromCents(BigInt(anchor.f06))}`,
-    `F07 ICA Retenido: ${formatCopFromCents(BigInt(anchor.f07))}`,
-    `F08 Total Pasivos Fiscales: ${formatCopFromCents(BigInt(anchor.f08))}`,
-    `F09 Carga sobre Utilidad Neta: ${fmtPct(anchor.f09)}`,
-    `F10 Cobertura de Retenciones: ${fmtPct(anchor.f10)}`,
+    `${lbl.f01}: ${formatCopFromCents(BigInt(anchor.f01))}`,
+    `${lbl.f02}: ${formatCopFromCents(BigInt(anchor.f02))}`,
+    `${lbl.f03}: ${formatCopFromCents(BigInt(anchor.f03))}`,
+    `${lbl.f04}: ${formatCopFromCents(BigInt(anchor.f04))}`,
+    `${lbl.f05}: ${formatCopFromCents(BigInt(anchor.f05))}`,
+    `${lbl.f06}: ${formatCopFromCents(BigInt(anchor.f06))}`,
+    `${lbl.f07}: ${formatCopFromCents(BigInt(anchor.f07))}`,
+    `${lbl.f08}: ${formatCopFromCents(BigInt(anchor.f08))}`,
+    `${lbl.f09}: ${fmtPct(anchor.f09)}`,
+    `${lbl.f10}: ${fmtPct(anchor.f10)}`,
     '─'.repeat(60),
   ];
 
@@ -134,7 +141,7 @@ function buildFiscalContextBlock(
   }
 
   if (anchor.alertas.length > 0) {
-    lines.push(language === 'es' ? 'Alertas:' : 'Alerts:');
+    lines.push(`${lbl.alertasLabel}:`);
     for (const alerta of anchor.alertas) {
       lines.push(`  · [${alerta.severidad.toUpperCase()}] ${alerta.codigo}: ${alerta.mensaje}`);
     }
@@ -614,6 +621,204 @@ function readReportMode(niifJson: unknown): 'LINEA_BASE' | 'TRANSICION' | 'COMPA
   return 'LINEA_BASE';
 }
 
+// ─── Fuentes del informe para las superficies de salida ─────────────────────
+// Auditoría 2026-09-24 (IW5a). /export, /html, /financial-audit y
+// /financial-quality cruzan el informe contra el MISMO balance que usó /niif.
+// Si el cliente no lo envía, /export re-deriva el balance del `rawData`
+// ORIGINAL (sin los ajustes del Doctor de Datos) y rechaza el informe con 422
+// por fuentes incoherentes; la auditoría y la meta-auditoría quedan "no
+// verificadas".
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Campos de fuente para POST /api/financial-report/export (pipeline-flujo-07).
+ * El preprocesado de /niif ya trae los ajustes aplicados y el servidor lo
+ * prefiere; sin él, el ledger permite re-derivarlo con los mismos ajustes.
+ */
+export function exportSourceFields(
+  preprocessed: unknown,
+  adjustmentLedger: AdjustmentLedger | null | undefined,
+): { preprocessed?: unknown; adjustmentLedger?: AdjustmentLedger } {
+  if (preprocessed !== null && preprocessed !== undefined) return { preprocessed };
+  if (adjustmentLedger?.adjustments?.some((a) => a.status === 'applied')) {
+    return { adjustmentLedger };
+  }
+  return {};
+}
+
+const MONTH_TOKENS: Array<[RegExp, number]> = [
+  [/^(ene|enero|jan|january)$/, 1],
+  [/^(feb|febrero|february)$/, 2],
+  [/^(mar|marzo|march)$/, 3],
+  [/^(abr|abril|apr|april)$/, 4],
+  [/^(may|mayo)$/, 5],
+  [/^(jun|junio|june)$/, 6],
+  [/^(jul|julio|july)$/, 7],
+  [/^(ago|agosto|aug|august)$/, 8],
+  [/^(sep|sept|septiembre|setiembre|september)$/, 9],
+  [/^(oct|octubre|october)$/, 10],
+  [/^(nov|noviembre|november)$/, 11],
+  [/^(dic|diciembre|dec|december)$/, 12],
+];
+
+function lastMonthInLabel(label: string): number | null {
+  const numeric = /\b(\d{4})[-_/](\d{1,2})\b/.exec(label);
+  if (numeric) {
+    const m = Number(numeric[2]);
+    if (m >= 1 && m <= 12) return m;
+  }
+  let found: number | null = null;
+  for (const word of label.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z]+/)) {
+    for (const [rx, month] of MONTH_TOKENS) {
+      if (rx.test(word)) found = month;
+    }
+  }
+  return found;
+}
+
+/**
+ * Periodo del HTML (pipeline-flujo-17 d): año, inicio y cierre desde el
+ * periodo del balance preprocesado, no `AAAA-01-01 / AAAA-12-31` fijos. Un
+ * corte parcial (`2025-06`, `Ene-Jun 2025`) cierra el último día de su mes; un
+ * rótulo con sólo el año se toma como ejercicio completo (mismo supuesto que el
+ * resto del pipeline). Sin preprocesado se usa el año de respaldo.
+ */
+export function derivePeriodBounds(
+  preprocessed: unknown,
+  fallbackYear: string | null | undefined,
+): { periodYear: string; periodStart: string; periodEnd: string } {
+  const primary =
+    preprocessed && typeof preprocessed === 'object'
+      ? ((preprocessed as Record<string, unknown>).primary as Record<string, unknown> | undefined)
+      : undefined;
+  const label = typeof primary?.period === 'string' ? primary.period : '';
+  const yearOf = (s: string | null | undefined) => /(?:^|\D)(\d{4})(?:\D|$)/.exec(s ?? '')?.[1] ?? null;
+  const year = yearOf(label) ?? yearOf(fallbackYear) ?? '';
+  const month = label && yearOf(label) ? lastMonthInLabel(label) ?? 12 : 12;
+  const lastDay = year ? new Date(Date.UTC(Number(year), month, 0)).getUTCDate() : 31;
+  const mm = String(month).padStart(2, '0');
+  return {
+    periodYear: year,
+    periodStart: `${year}-01-01`,
+    periodEnd: `${year}-${mm}-${String(lastDay).padStart(2, '0')}`,
+  };
+}
+
+/**
+ * Pliega las salvedades de la Parte II (`strategyQualifications`,
+ * pipeline-flujo-05) y del acta (`actaQualifications`) sobre la reconciliación
+ * del NIIF: es el canal que apaga los botones de descarga (`downloadsBlocked`
+ * lee `niifAnalysis.reconciliation.clean`). El servidor ya rechaza ambos
+ * flags en /export; sin esto el botón seguía habilitado y el usuario recibía
+ * un 422 en lugar del motivo.
+ */
+export function foldReportQualifications(
+  niifResult: NiifAnalysisResult,
+  strategyResult: StrategicAnalysisResult,
+  governanceResult: GovernanceResult,
+): NiifAnalysisResult {
+  const strategyQualified =
+    (strategyResult as { strategyQualifications?: { clean?: unknown } | null })
+      .strategyQualifications?.clean === false;
+  const actaQualified = governanceResult.actaQualifications?.clean === false;
+  if (!strategyQualified && !actaQualified) return niifResult;
+  return {
+    ...niifResult,
+    reconciliation: {
+      deviations: niifResult.reconciliation?.deviations ?? [],
+      lineGaps: niifResult.reconciliation?.lineGaps ?? [],
+      repairAttempted: niifResult.reconciliation?.repairAttempted ?? false,
+      clean: false,
+    },
+  };
+}
+
+/**
+ * Cuerpo de /api/financial-quality (auditoria-calidad-11): con el preprocesado
+ * la meta-auditoría verifica periodos y ecuación; sin él los declara no
+ * verificados.
+ */
+export function buildQualityRequestBody(args: {
+  report: BackendFinancialReport;
+  auditReport: BackendAuditReport | null;
+  language: 'es' | 'en';
+  preprocessed: unknown;
+}): Record<string, unknown> {
+  return {
+    report: args.report,
+    auditReport: args.auditReport,
+    language: args.language,
+    ...(args.preprocessed !== null && args.preprocessed !== undefined
+      ? { preprocessed: args.preprocessed }
+      : {}),
+  };
+}
+
+// ─── Preprocesado para reanudar tras una recarga (pipeline-flujo-03) ────────
+// /strategy y /governance cruzan sus cifras contra el preprocesado; sin él el
+// acta con cifras de destinación se sella "CON SALVEDADES — CIFRAS SIN
+// VERIFICAR". El checkpoint de localStorage sólo guarda `bindingTotals`
+// (el preprocesado pesa demasiado y compartiría cuota con el reporte), así que
+// lo guardamos en sessionStorage: sobrevive a la recarga del mismo tab, con el
+// mismo tope que el handoff del upload. Si no cabe o el storage falla, se
+// reanuda sin él y el servidor sella el acta (comportamiento conservador).
+const PREPROCESSED_RESUME_KEY = 'utopia_pipeline_niif_preprocessed';
+
+function sessionStorageOrNull(): Storage | null {
+  try {
+    return typeof window !== 'undefined' ? window.sessionStorage : null;
+  } catch {
+    return null;
+  }
+}
+
+export function persistPreprocessedForResume(
+  conversationId: string,
+  preprocessed: unknown,
+  storage: Storage | null = sessionStorageOrNull(),
+): boolean {
+  if (!storage || !conversationId || preprocessed === null || preprocessed === undefined) {
+    return false;
+  }
+  try {
+    const serialized = JSON.stringify({ conversationId, preprocessed });
+    if (serialized.length > MAX_FORWARDED_PREPROCESSED_CHARS) {
+      storage.removeItem(PREPROCESSED_RESUME_KEY);
+      return false;
+    }
+    storage.setItem(PREPROCESSED_RESUME_KEY, serialized);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function recallPreprocessedForResume(
+  conversationId: string,
+  storage: Storage | null = sessionStorageOrNull(),
+): unknown {
+  if (!storage || !conversationId) return null;
+  try {
+    const raw = storage.getItem(PREPROCESSED_RESUME_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { conversationId?: unknown; preprocessed?: unknown };
+    if (parsed?.conversationId !== conversationId) return null;
+    return parsed.preprocessed ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearPreprocessedForResume(
+  storage: Storage | null = sessionStorageOrNull(),
+): void {
+  try {
+    storage?.removeItem(PREPROCESSED_RESUME_KEY);
+  } catch {
+    // best-effort
+  }
+}
+
 // Ensamblaje del consolidado. El Markdown lo construye el módulo compartido
 // `buildConsolidatedReportMarkdown` (mismo texto que arma el servidor). Los
 // gates post-render (`validateConsolidatedReport` + `auditReportEmittable`
@@ -733,16 +938,17 @@ function emptyGovernance(): GovernanceResult {
 }
 
 // ---------------------------------------------------------------------------
-// Audit en paralelo — helper de fire-and-await
+// Auditoría Parte IV — helper
 // ---------------------------------------------------------------------------
-// Mayo 2026: optimización del pipeline. Antes el audit corría DESPUÉS de
-// Governance, sumando ~45s al critical path. Ahora se dispara en paralelo
-// con la cadena Strategy→Governance: el audit recibe `consolidatedReport`
-// con el contenido del Pass NIIF y placeholders vacíos para strategic /
-// governance. Los 4 auditores (que ya corren con Promise.allSettled) tienen
-// suficiente contexto para los hallazgos NIIF/contables y tributarios; los
-// hallazgos legales/de revisoría tendrán menos material pero el reporte se
-// entrega más rápido.
+// Auditoría 2026-09-24 (auditoria-calidad-07). En mayo de 2026 la auditoría se
+// disparaba en paralelo con Estrategia→Gobierno sobre un informe sólo NIIF
+// (Partes II/III vacías) y sin preprocesado: el Dictamen 3 no veía el acta,
+// el Dictamen 2 no veía el análisis de Estrategia y el contexto determinista
+// del preprocesador nunca llegaba. La spec v2.1 Parte IV exige los dictámenes
+// "después de generar las Partes I, II y III". Ahora el helper recibe el
+// informe completo (con reconciliación / validación / emitibilidad, que el
+// servidor lee del cuerpo crudo y sólo pueden degradar la opinión) y el
+// preprocesado de /niif; el caller lo invoca tras Gobierno.
 //
 // La función devuelve `{ ok, value, error }` para que el caller la
 // pueda awaitear sin try/catch envolvente — el flujo del pipeline ya
@@ -759,31 +965,27 @@ type ParallelAuditOutcome =
   | { ok: true; value: BackendAuditReport | null }
   | { ok: false; error: string };
 
-async function runAuditInBackground(args: {
-  niifResult: NiifAnalysisResult;
-  company: CompanyInfo;
+export async function runAuditInBackground(args: {
+  /** Informe completo (Partes I-III) ya consolidado y validado. */
+  report: BackendFinancialReport;
+  /** `context.preprocessed` de /niif; `null` si no está disponible. */
+  preprocessed: unknown;
   language: 'es' | 'en';
   signal: AbortSignal;
   callbacks: ParallelAuditCallbacks;
 }): Promise<ParallelAuditOutcome> {
-  // Early-payload: niif-only consolidated; strategic + governance vacíos.
-  // El schema audit-request (financialAuditRequestSchema) requiere ambos
-  // como string — `''` pasa la validación; los auditors leen `consolidatedReport`.
-  const earlyReport: BackendFinancialReport = {
-    company: args.company,
-    niifAnalysis: args.niifResult,
-    strategicAnalysis: emptyStrategy(),
-    governance: emptyGovernance(),
-    consolidatedReport: args.niifResult.fullContent,
-    generatedAt: new Date().toISOString(),
-  };
-
   let res: Response;
   try {
     res = await fetchSSEWithRetry('/api/financial-audit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Stream': 'true' },
-      body: JSON.stringify({ report: earlyReport, language: args.language }),
+      body: JSON.stringify({
+        report: args.report,
+        language: args.language,
+        ...(args.preprocessed !== null && args.preprocessed !== undefined
+          ? { preprocessed: args.preprocessed }
+          : {}),
+      }),
       signal: args.signal,
     });
   } catch (err) {
@@ -1124,6 +1326,14 @@ interface ReportViewerProps {
    * Si null/undefined → el PDF incluye TODO (default histórico).
    */
   outputOptions?: NiifReportIntake['outputOptions'] | null;
+  /**
+   * `context.preprocessed` de /niif (ya con los ajustes del Doctor de Datos).
+   * /export compone las superficies deterministas con ESTE balance y cruza el
+   * informe contra sus anclas (pipeline-flujo-07).
+   */
+  preprocessed?: unknown;
+  /** Ledger de ajustes del intake: respaldo cuando no hay `preprocessed`. */
+  adjustmentLedger?: AdjustmentLedger | null;
   onReset?: () => void;
   onPatchReport?: (newConsolidatedMarkdown: string) => void;
   onTurnsChange?: (turns: ReportIterationTurn[]) => void;
@@ -1163,6 +1373,8 @@ function ReportViewer({
   auditReport,
   qualityReport,
   outputOptions,
+  preprocessed,
+  adjustmentLedger,
   onReset,
   onPatchReport,
   onTurnsChange,
@@ -1226,7 +1438,11 @@ function ReportViewer({
       const res = await fetch('/api/financial-report/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ report, rawData }),
+        body: JSON.stringify({
+          report,
+          rawData,
+          ...exportSourceFields(preprocessed, adjustmentLedger),
+        }),
       });
       if (!res.ok) {
         const errBody = await res.text().catch(() => '');
@@ -1257,7 +1473,7 @@ function ReportViewer({
     } finally {
       setIsExportingExcel(false);
     }
-  }, [report, rawData, isExportingExcel, language, downloadsBlocked]);
+  }, [report, rawData, preprocessed, adjustmentLedger, isExportingExcel, language, downloadsBlocked]);
 
   // ─── Exportar PDF ────────────────────────────────────────────────────────
   // POST /api/financial-report/export con { report, rawData, company,
@@ -1295,6 +1511,8 @@ function ReportViewer({
           // incluye todo (default). Si presente, EditorialReportDoc gatea
           // cada página según el flag correspondiente.
           outputOptions: outputOptions ?? null,
+          // Mismo balance (ajustado) que usó /niif — pipeline-flujo-07.
+          ...exportSourceFields(preprocessed, adjustmentLedger),
           format: 'pdf-elite',
         }),
       });
@@ -1326,7 +1544,7 @@ function ReportViewer({
     } finally {
       setIsExportingPdf(false);
     }
-  }, [report, rawData, company, language, auditReport, qualityReport, outputOptions, isExportingPdf, downloadsBlocked]);
+  }, [report, rawData, company, language, auditReport, qualityReport, outputOptions, preprocessed, adjustmentLedger, isExportingPdf, downloadsBlocked]);
 
   // ─── Copiar Markdown ─────────────────────────────────────────────────────
   // Preferimos navigator.clipboard; fallback a textarea + execCommand.
@@ -1865,16 +2083,21 @@ export function PipelineWorkspace() {
         mode: 'complete',
         completedStages: missing.length === 0 ? [1, 2, 3] : [1],
       }));
+      // `preprocessed` no cabe en localStorage; si sobrevivió en
+      // sessionStorage (recarga del mismo tab) lo recuperamos: /governance lo
+      // necesita para verificar el acta (sin él la sella, pipeline-flujo-03) y
+      // /export y /html para cruzar contra el mismo balance que usó /niif.
+      const storedPreprocessed = recallPreprocessedForResume(lastCompletedReport.conversationId);
+      if (storedPreprocessed) setCachedPreprocessed(storedPreprocessed);
       // Reconstruimos el checkpoint NIIF para poder reanudar la sub-fase
       // faltante. `bindingTotals` es obligatorio en /strategy y /governance y
-      // es lo único que persistimos aparte del reporte (`preprocessed` es
-      // opcional en ambos schemas y pesa demasiado para localStorage).
+      // es lo único que persistimos en localStorage aparte del reporte.
       const stored = loadNiifCheckpoint(lastCompletedReport.conversationId);
       if (missing.length > 0 && stored) {
         checkpointRef.current = {
           niifResult: lastCompletedReport.report.niifAnalysis,
           bindingTotals: stored.bindingTotals,
-          preprocessed: null,
+          preprocessed: storedPreprocessed ?? null,
           company: lastCompletedReport.company,
           rawData: lastCompletedReport.rawData,
           conversationId: lastCompletedReport.conversationId,
@@ -2197,6 +2420,8 @@ export function PipelineWorkspace() {
           bindingTotals: niifContext.bindingTotals,
           savedAt: new Date().toISOString(),
         });
+        // Best-effort: sessionStorage con tope de tamaño (pipeline-flujo-03).
+        persistPreprocessedForResume(nextConvId, niifContext.preprocessed);
       }
 
       if (start === 'niif') {
@@ -2254,67 +2479,6 @@ export function PipelineWorkspace() {
         })();
         // Inyectar contexto fiscal al asistente (best-effort — canal pendingChatContext).
         setPendingChatContext(buildFiscalContextBlock(_snap, _company, runLanguage));
-      }
-
-      // ─── Audit en paralelo (DISPARADO ahora, AWAITEADO tras Governance) ─
-      // Wave Mayo 2026 — optimización critical path. El audit usa el endpoint
-      // /api/financial-audit que ya corre los 4 auditores en Promise.allSettled
-      // internamente; lo único que cambia aquí es CUÁNDO se dispara: antes era
-      // post-Governance secuencial (~45s al critical path), ahora arranca en
-      // paralelo con Strategy→Governance y se awaitea justo antes de Quality.
-      // Trade-off: el audit recibe sólo el contenido NIIF; los hallazgos
-      // legales/governance tendrán menos material. Si la calidad no alcanza
-      // se puede mover este disparo a post-Strategy (mediano), o post-Governance
-      // (status quo).
-      // En una reanudación sólo re-corremos la auditoría si el intake la pedía
-      // y no tenemos ya un resultado: repetirla gratis quemaría LLM de más.
-      const auditEnabled =
-        (intake?.outputOptions.auditPipeline ?? false) &&
-        (start === 'niif' || auditReportRef.current === null);
-      let auditPromise: Promise<ParallelAuditOutcome> = Promise.resolve({
-        ok: true,
-        value: null,
-      });
-      if (auditEnabled) {
-        setPipelineState((prev) => ({ ...prev, mode: 'auditing' }));
-        auditPromise = runAuditInBackground({
-          niifResult,
-          company: niifContext.company,
-          language: runLanguage,
-          signal: controller.signal,
-          callbacks: {
-            onAuditorStarted: (domain) => {
-              setPipelineState((prev) => ({
-                ...prev,
-                auditorsStarted: prev.auditorsStarted.includes(domain)
-                  ? prev.auditorsStarted
-                  : [...prev.auditorsStarted, domain],
-              }));
-            },
-            onAuditorComplete: (domain) => {
-              setPipelineState((prev) => ({
-                ...prev,
-                auditorsComplete: prev.auditorsComplete.includes(domain)
-                  ? prev.auditorsComplete
-                  : [...prev.auditorsComplete, domain],
-              }));
-            },
-            onAllAuditorsComplete: () => {
-              setPipelineState((prev) => ({
-                ...prev,
-                auditorsComplete: ['niif', 'tributario', 'legal', 'revisoria'],
-              }));
-            },
-            onFindings: (counts) => {
-              setPipelineState((prev) => ({ ...prev, auditFindings: counts }));
-            },
-          },
-        });
-        // Suprime unhandled-rejection si Strategy/Governance abortan el pipeline
-        // antes de que awaitemos abajo. `runAuditInBackground` ya transforma
-        // errores en `{ ok: false, error }`, así que .catch() es defensa en
-        // profundidad sobre AbortError.
-        auditPromise.catch(() => undefined);
       }
 
       // ─── Sub-fase 1.2: Director de Estrategia ──────────────────────────
@@ -2396,22 +2560,13 @@ export function PipelineWorkspace() {
       // parcial con los resultados reales y reconstruimos el consolidatedReport
       // canónico (concatenación de los 3 fullContent — mismo formato que el
       // orchestrator legacy en `buildConsolidatedReport`).
-      // Las salvedades del acta se pliegan sobre la reconciliación del NIIF: es
-      // el canal que apaga los botones de descarga (`downloadsBlocked`
-      // lee `niifAnalysis.reconciliation.clean`). Sin esto, un acta con la reserva
-      // legal mal calculada seguiría siendo descargable en Excel, PDF y HTML pese
-      // a llevar el sello impreso en el cuerpo.
-      if (governanceResult.actaQualifications?.clean === false) {
-        niifResult = {
-          ...niifResult,
-          reconciliation: {
-            deviations: niifResult.reconciliation?.deviations ?? [],
-            lineGaps: niifResult.reconciliation?.lineGaps ?? [],
-            repairAttempted: niifResult.reconciliation?.repairAttempted ?? false,
-            clean: false,
-          },
-        };
-      }
+      // Las salvedades del acta y de la Parte II se pliegan sobre la
+      // reconciliación del NIIF: es el canal que apaga los botones de descarga
+      // (`downloadsBlocked` lee `niifAnalysis.reconciliation.clean`). Sin esto,
+      // un acta con la reserva legal mal calculada o una Parte II con cifras sin
+      // ancla seguirían siendo descargables en Excel, PDF y HTML pese a llevar
+      // el sello impreso en el cuerpo.
+      niifResult = foldReportQualifications(niifResult, strategyResult, governanceResult);
 
       const fullConsolidated = buildClientConsolidatedReport(
         niifContext.company,
@@ -2485,13 +2640,57 @@ export function PipelineWorkspace() {
         phase3Error: undefined,
       }));
 
-      // ─── Phase 2: Audit (DISPARADO antes — solo awaiteamos el resultado) ──
-      // Wave Mayo 2026 — el audit ya está corriendo en paralelo desde antes
-      // de Strategy (kickoff arriba). Aquí sólo cosechamos el resultado.
+      // ─── Phase 2: Auditoría Parte IV (tras Partes I-III) ───────────────
+      // auditoria-calidad-07: los 4 dictámenes corren sobre el informe
+      // completo (con el acta y el análisis de Estrategia) y con el
+      // preprocesado de /niif. La spec v2.1 Parte IV los ubica después de
+      // las Partes I, II y III; el paralelismo previo (sólo NIIF) ahorraba
+      // ~45 s a costa de dictámenes sin el material que evalúan.
+      // En una reanudación sólo re-corremos la auditoría si el intake la pedía
+      // y no tenemos ya un resultado: repetirla gratis quemaría LLM de más.
       // Fallos NO destruyen el reporte: se registran como `phase2Error`.
+      const auditEnabled =
+        (intake?.outputOptions.auditPipeline ?? false) &&
+        (start === 'niif' || auditReportRef.current === null);
       let phase2Report: BackendAuditReport | null = null;
       if (auditEnabled) {
-        const outcome = await auditPromise;
+        setPipelineState((prev) => ({ ...prev, mode: 'auditing' }));
+        const outcome = await runAuditInBackground({
+          report: phase1Report,
+          preprocessed: niifContext.preprocessed,
+          language: runLanguage,
+          signal: controller.signal,
+          callbacks: {
+            onAuditorStarted: (domain) => {
+              setPipelineState((prev) => ({
+                ...prev,
+                auditorsStarted: prev.auditorsStarted.includes(domain)
+                  ? prev.auditorsStarted
+                  : [...prev.auditorsStarted, domain],
+              }));
+            },
+            onAuditorComplete: (domain) => {
+              setPipelineState((prev) => ({
+                ...prev,
+                auditorsComplete: prev.auditorsComplete.includes(domain)
+                  ? prev.auditorsComplete
+                  : [...prev.auditorsComplete, domain],
+              }));
+            },
+            onAllAuditorsComplete: () => {
+              setPipelineState((prev) => ({
+                ...prev,
+                auditorsComplete: ['niif', 'tributario', 'legal', 'revisoria'],
+              }));
+            },
+            onFindings: (counts) => {
+              setPipelineState((prev) => ({ ...prev, auditFindings: counts }));
+            },
+          },
+        });
+        // Abortada por un reintento / "Nuevo Reporte": la corrida vieja no
+        // debe seguir escribiendo estado.
+        if (controller.signal.aborted) return;
         if (outcome.ok) {
           phase2Report = outcome.value;
           if (phase2Report) {
@@ -2522,11 +2721,17 @@ export function PipelineWorkspace() {
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                report: phase1Report,
-                auditReport: phase2Report,
-                language: runLanguage,
-              }),
+              // auditoria-calidad-11: con el preprocesado la meta-auditoría
+              // verifica periodos y ecuación en lugar de declararlos no
+              // verificados.
+              body: JSON.stringify(
+                buildQualityRequestBody({
+                  report: phase1Report,
+                  auditReport: phase2Report,
+                  language: runLanguage,
+                  preprocessed: niifContext.preprocessed,
+                }),
+              ),
               signal: controller.signal,
             },
             { retries: 2, backoffMs: [1000, 3000] },
@@ -2671,6 +2876,7 @@ export function PipelineWorkspace() {
     setShowHtmlViewer(false);
     setIsGeneratingHtml(false);
     setCachedPreprocessed(null);
+    clearPreprocessedForResume();
     runtimeRun.startedInput = null;
     setPipelineInput(null);
     setPipelineState((prev) => ({
@@ -2876,12 +3082,23 @@ export function PipelineWorkspace() {
       const alertsCounts = countAlertsBySeverity(strategyJson, auditReport);
       const auxiliariesProcessed = readAuxiliariesProcessed(cachedPreprocessed);
       const sectorCIIU = readSectorCIIU(cachedPreprocessed);
-      const fiscalPeriod = backendReport.company.fiscalPeriod || pipelineInput?.fiscalPeriod || '';
-      // Fiscal period es YYYY (validado por `FiscalYear` Zod). Derivamos los
-      // límites canónicos del año fiscal — si en el futuro el intake exige
-      // cortes parciales, esto pasaría a leer `preprocessed.primary.periodoTipo`.
-      const periodStart = `${fiscalPeriod}-01-01`;
-      const periodEnd = `${fiscalPeriod}-12-31`;
+      // pipeline-flujo-17 (d): año, inicio y cierre salen del periodo del
+      // balance preprocesado (un corte a junio cierra el 30 de junio), no de
+      // `AAAA-01-01 / AAAA-12-31` fijos. Respaldo: el periodo del JSON NIIF
+      // (alineado al balance en /niif) y, por último, el del intake.
+      const niifJsonPeriod = (niifJson as { company?: { fiscalPeriod?: unknown } }).company
+        ?.fiscalPeriod;
+      const {
+        periodYear: fiscalPeriod,
+        periodStart,
+        periodEnd,
+      } = derivePeriodBounds(
+        cachedPreprocessed,
+        (typeof niifJsonPeriod === 'string' ? niifJsonPeriod : '') ||
+          backendReport.company.fiscalPeriod ||
+          pipelineInput?.fiscalPeriod ||
+          '',
+      );
       const generatedAt = new Date().toISOString();
       // `extractedAt` ideal = momento de upload del balance. No lo tenemos en
       // el estado actual del workspace; usamos `generatedAt` como fallback.
@@ -2960,6 +3177,9 @@ export function PipelineWorkspace() {
         company: backendReport.company,
         metadata,
         language,
+        // pipeline-flujo-10: /html cruza el JSON NIIF contra las anclas del
+        // mismo balance que usó /niif antes de pagar el Editor Jefe.
+        preprocessed: cachedPreprocessed,
         ...(excludedFactIds.length ? { excludedFactIds } : {}),
       };
 
@@ -3034,6 +3254,12 @@ export function PipelineWorkspace() {
   // no exportar un PDF con páginas que el usuario había destildado.
   const effectiveOutputOptions =
     pipelineInput?.outputOptions ?? pendingRun?.input.outputOptions ?? null;
+  // Ledger del Doctor de Datos de la corrida vigente: respaldo de /export
+  // cuando no hay `preprocessed` en memoria (pipeline-flujo-07).
+  const effectiveAdjustmentLedger =
+    ((pipelineInput ?? pendingRun?.input ?? null) as
+      | (NiifReportIntake & { adjustmentLedger?: AdjustmentLedger })
+      | null)?.adjustmentLedger ?? null;
 
   if (isComplete && report) {
     const hasWarnings = Boolean(pipelineState.phase2Error || pipelineState.phase3Error);
@@ -3197,6 +3423,8 @@ export function PipelineWorkspace() {
             auditReport={auditReport}
             qualityReport={qualityReport}
             outputOptions={effectiveOutputOptions}
+            preprocessed={cachedPreprocessed}
+            adjustmentLedger={effectiveAdjustmentLedger}
             onReset={handleReset}
             onPatchReport={handlePatchReport}
             onTurnsChange={handleTurnsChange}

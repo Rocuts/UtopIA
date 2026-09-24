@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import type { CompanyMetadata } from '@/types/platform';
 import { uploadDocument } from '@/lib/upload/blob-client';
 import { rememberUploadedPreprocessed } from '@/lib/upload/preprocessed-handoff';
-import { pickNiifRawDataFromUpload } from './niifIntakeValidation';
+import { fiscalPeriodFromPreprocessed, pickNiifRawDataFromUpload } from './niifIntakeValidation';
 
 export type FieldConfidence = 'high' | 'medium' | 'none';
 
@@ -144,9 +144,12 @@ export function useDocumentExtraction() {
       rememberUploadedPreprocessed(rawText, data.preprocessed);
       const { fields, confidence } = extractCompanyFromText(rawText);
 
-      // Extract fiscal period from text
+      // Periodo fiscal (pipeline-flujo-17): primero el del balance preprocesado
+      // por /api/upload — es el que el servidor compara contra el intake y, si
+      // difieren, sella el informe —; si no trae un año, el rótulo del texto.
       const yearMatch = rawText.match(/(?:periodo|ano|year|vigencia)[:\s]*(\d{4})/i);
-      const fiscalPeriod = yearMatch ? yearMatch[1] : undefined;
+      const fiscalPeriod =
+        fiscalPeriodFromPreprocessed(data.preprocessed) ?? (yearMatch ? yearMatch[1] : undefined);
       if (fiscalPeriod) confidence.fiscalPeriod = 'high';
 
       // Detect NIIF group from text
