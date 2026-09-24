@@ -141,9 +141,12 @@ describe('cifrado de filas (vault AES-256-GCM)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// niif-preproceso-07 — status/equation_delta ANTES del Cierre Virtual (R8).
-// R8 absorbe cualquier residual en 3710VC; el recurso público debe reportar
-// la cuadratura del archivo de origen y exponer lo absorbido.
+// niif-preproceso-07 — status/equation_delta del archivo de origen.
+// El recurso público reporta la cuadratura del archivo: lo que no explica el
+// traslado del resultado ni la reclasificación de un grupo 36 anterior.
+// Auditoría 2026-09 (niif-preproceso-06): R8 ya no absorbe ese residual en
+// 3710VC — `virtual_close_adjustment` vale 0 y el residual queda en
+// `equation_delta` y en el patrimonio publicado (A − P − K ≠ 0).
 // ---------------------------------------------------------------------------
 describe('summarize — cuadratura del archivo de origen (pre-R8)', () => {
   const aux = (code: string, name: string, balance: number) => ({
@@ -160,7 +163,7 @@ describe('summarize — cuadratura del archivo de origen (pre-R8)', () => {
     return summarize(preprocessTrialBalance(built.rows, { defaultPeriod: '2025' }));
   }
 
-  it('descuadre de $150M con P&G: unbalanced, delta pre-R8 y monto absorbido expuesto', () => {
+  it('descuadre de $150M con P&G: unbalanced, delta exacto y nada absorbido en 3710VC', () => {
     // A 350M − P 100M − K 50M − utilidad 50M = 150M de descuadre en origen.
     const s = summaryOf([
       aux('11050501', 'Caja', 350_000_000),
@@ -171,7 +174,16 @@ describe('summarize — cuadratura del archivo de origen (pre-R8)', () => {
     ]);
     expect(s.status).toBe('unbalanced');
     expect(s.control_totals.equation_delta.amount).toBe('15000000000');
-    expect(s.control_totals.virtual_close_adjustment.amount).toBe('15000000000');
+    // R8 sólo traslada la utilidad (3605VC = 50M): el patrimonio publicado es
+    // 100M y A − P − K = 150M sigue visible; nada se absorbe en 3710VC.
+    expect(s.control_totals.virtual_close_adjustment.amount).toBe('0');
+    expect(s.control_totals.reclassified_from_3605.amount).toBe('0');
+    expect(s.control_totals.patrimonio.amount).toBe('10000000000');
+    expect(
+      BigInt(s.control_totals.activo.amount) -
+        BigInt(s.control_totals.pasivo.amount) -
+        BigInt(s.control_totals.patrimonio.amount),
+    ).toBe(BigInt(s.control_totals.equation_delta.amount));
   });
 
   it('libros abiertos que sí cuadran (A = P + K + utilidad): balanced sin tapón', () => {
@@ -200,6 +212,25 @@ describe('summarize — cuadratura del archivo de origen (pre-R8)', () => {
     expect(s.status).toBe('balanced');
     expect(s.control_totals.equation_delta.amount).toBe('0');
     expect(s.control_totals.reclassified_from_3605.amount).toBe('3000000000');
+    expect(s.control_totals.virtual_close_adjustment.amount).toBe('0');
+    // K publicado = capital 100M + 3710VC 30M + 3605VC 50M.
+    expect(s.control_totals.patrimonio.amount).toBe('18000000000');
+  });
+
+  it('3605 anterior reclasificado + descuadre real: el delta es sólo el descuadre (no resta la reclasificación)', () => {
+    // A 290M = P 100M + K (capital 100M + 3605 viejo 30M) + utilidad 50M + 10M sin explicar.
+    const s = summaryOf([
+      aux('11050501', 'Caja', 290_000_000),
+      aux('21050501', 'Obligaciones', 100_000_000),
+      aux('31050501', 'Capital', 100_000_000),
+      aux('36050501', 'Utilidad del ejercicio', 30_000_000),
+      aux('41350501', 'Ventas', 100_000_000),
+      aux('51050501', 'Gastos', 50_000_000),
+    ]);
+    expect(s.status).toBe('unbalanced');
+    expect(s.control_totals.equation_delta.amount).toBe('1000000000');
+    expect(s.control_totals.reclassified_from_3605.amount).toBe('3000000000');
+    expect(s.control_totals.virtual_close_adjustment.amount).toBe('0');
   });
 });
 

@@ -134,37 +134,55 @@ export interface TrialBalanceSummary {
     patrimonio: Money;
     ingresos_netos: Money;
     /**
-     * Descuadre del ARCHIVO DE ORIGEN, antes de los ajustes virtuales del
-     * curador: A − P − (K sin 3605) − resultado del ejercicio. `patrimonio`
-     * ya incluye esos ajustes (3605VC/3710VC), así que A − P − K publicado
-     * puede valer 0 aunque el archivo no cuadre.
+     * Descuadre del ARCHIVO DE ORIGEN que no explica el traslado del resultado
+     * del ejercicio (3605VC) ni la reclasificación de un grupo 36 anterior
+     * (3710VC). Desde la auditoría 2026-09 el curador no lo absorbe: ≠ 0 ⇒
+     * `status: 'unbalanced'`.
      */
     equation_delta: Money;
-    /** Monto que el Cierre Virtual (R8) absorbió en la cuenta virtual 3710VC. */
+    /**
+     * Histórico: monto que el Cierre Virtual (R8) absorbía en 3710VC. Desde la
+     * auditoría 2026-09 R8 no absorbe residuales y vale 0; se conserva por
+     * compatibilidad del contrato (el residual está en `equation_delta`).
+     */
     virtual_close_adjustment: Money;
-    /** Parte del monto anterior que es un 3605 de ejercicio anterior reclasificado. */
+    /** Resultado de un ejercicio anterior (grupo 36) reclasificado a 3710VC; no es descuadre. */
     reclassified_from_3605: Money;
-    /** Brecha que R5 absorbió al anclar el patrimonio al desglose del ECP. */
+    /** Histórico: brecha que R5 absorbía al anclar el patrimonio al ECP (hoy 0). */
     equity_anchor_adjustment: Money;
   };
   findings: { discrepancies: number; curator: number };
 }
 
+/** String canónica de centavos exactos (`-?\d+\.\d{2}`) → centavos. */
+function canonicalToCents(raw: string): bigint | null {
+  const m = /^(-?)(\d+)\.(\d{2})$/.exec(raw);
+  if (!m) return null;
+  const cents = BigInt(m[2]) * BigInt(CENTS_PER_PESO) + BigInt(m[3]);
+  return m[1] === '-' ? -cents : cents;
+}
+
 /**
  * Descuadre del archivo de origen en centavos (niif-preproceso-07).
  *
- * R8 (Cierre Virtual) reemplaza 3605 por la utilidad dinámica y absorbe el
- * residual `A − P − K` en 3710VC, de modo que la ecuación post-curator cuadra
- * siempre que haya P&G. Ese residual, menos el 3605 de un ejercicio anterior
- * que R8 reclasifica (no es descuadre), es la cuadratura real del archivo.
+ * R8 (Cierre Virtual) traslada el resultado de las clases 4-7 a 3605VC y, si
+ * el grupo 36 traía un resultado anterior, lo reclasifica a 3710VC; ninguna de
+ * las dos cosas es descuadre. Desde la auditoría 2026-09 (niif-preproceso-06)
+ * R8 NO absorbe el residual `A − P − K` que queda después: lo publica exacto
+ * en `unexplainedResidualRaw` (y en pesos en `residualGapBeforeCents`, que ya
+ * excluye la reclasificación). Ese residual es la cuadratura real del archivo.
  * Sin P&G R8 no actúa y `summary.equationBalance` conserva la ecuación del
- * archivo (R5 sólo muta `controlTotals.patrimonio`).
+ * archivo (R5 ya no muta el patrimonio).
  */
 function sourceEquationDeltaCents(pre: PreprocessedBalance): bigint {
   const primary = pre.primary;
   const vca = primary.virtualCloseAdjustment;
   if (vca) {
-    return pesosToCents(vca.residualGapBeforeCents) - pesosToCents(vca.reclassifiedAmount);
+    const exact =
+      typeof vca.unexplainedResidualRaw === 'string'
+        ? canonicalToCents(vca.unexplainedResidualRaw)
+        : null;
+    return exact ?? pesosToCents(vca.residualGapBeforeCents);
   }
   return pesosToCents(primary.summary.equationBalance);
 }
