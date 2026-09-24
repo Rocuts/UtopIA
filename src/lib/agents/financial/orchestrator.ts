@@ -34,10 +34,10 @@ import {
 } from './validators/niif-json-validator';
 import { moneyCopEquals, parseMoneyCop, formatCopFromCents } from './contracts/money';
 import {
+  buildDeterministicCashFlow,
   checkCashFlowInvariants,
   formatCashFlowViolations,
 } from './contracts/deterministic-breakdown';
-import { hasDividendEvidenceAccounts } from '@/lib/preprocessing/curator-rules/dividend-evidence';
 import {
   reconcileActaArithmetic,
   describeActaQualifications,
@@ -991,104 +991,15 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
     );
   }
 
-  // --- Seccion C0 — EFE Indirecto Pre-calculado (Curator R2) ---
-  // Bug 3 fix (2026-05-08): el cashFlowIndirecto que produce R2 se inyecta
-  // EXPLICITAMENTE al bloque vinculante para que el Agente 1 NIIF cite los
-  // valores literalmente en el Estado de Flujos de Efectivo, en lugar de
-  // omitir las líneas de capital de trabajo. Si R2 corrió en single-period
-  // mode (sin comparativo), el sub-bloque incluye un warning explícito.
-  const cfi = snap.cashFlowIndirecto;
-  if (cfi) {
-    lines.push('');
-    lines.push('## EFE INDIRECTO PRECALCULADO (Curator R2 — NIC 7)');
-    const isSinglePeriod = cfi.comparativePeriod === '(sin_comparativo)';
-    if (isSinglePeriod) {
-      lines.push(
-        `- MODO PARCIAL — sin balance comparativo: las variaciones asumen ` +
-          `saldo inicial = $0. NO es un EFE oficial NIIF. Pendiente: cargar ` +
-          `balance del año anterior. Severity: medio.`,
-      );
-    } else {
-      lines.push(
-        `- Variación calculada entre periodos ${cfi.comparativePeriod} → ${cfi.period}.`,
-      );
-    }
-    lines.push('### Actividades de Operación');
-    lines.push(`  - Utilidad neta: ${fmtCop(cfi.operating.utilidadNeta)}`);
-    lines.push(
-      `  - (+) Depreciación / Amortización: ${fmtCop(cfi.operating.depreciacionAmortizacion)}`,
-    );
-    lines.push(
-      `  - (+/-) Variación Cuentas por Cobrar (ΔCxC): ${fmtCop(cfi.operating.varCuentasPorCobrar)}`,
-    );
-    lines.push(
-      `  - (+/-) Variación Inventarios (ΔInv): ${fmtCop(cfi.operating.varInventarios)}`,
-    );
-    lines.push(
-      `  - (+/-) Variación Proveedores (ΔProv): ${fmtCop(cfi.operating.varProveedores)}`,
-    );
-    lines.push(
-      `  - (+/-) Variación Cuentas por Pagar (ΔCxP): ${fmtCop(cfi.operating.varCuentasPorPagar)}`,
-    );
-    lines.push(
-      `  - (+/-) Variación Impuestos por Pagar (ΔImp): ${fmtCop(cfi.operating.varImpuestosPorPagar)}`,
-    );
-    lines.push(
-      `  - (+/-) Variación Obligaciones Laborales (ΔLab): ${fmtCop(cfi.operating.varObligacionesLaborales)}`,
-    );
-    lines.push(
-      `  - = Flujo neto Actividades de Operación: ${fmtCop(cfi.operating.total)}`,
-    );
-    lines.push('### Actividades de Inversión');
-    lines.push(`  - Variación PPE bruto: ${fmtCop(cfi.investing.varPPE)}`);
-    lines.push(`  - Otros: ${fmtCop(cfi.investing.otros)}`);
-    lines.push(
-      `  - = Flujo neto Actividades de Inversión: ${fmtCop(cfi.investing.total)}`,
-    );
-    lines.push('### Actividades de Financiación');
-    lines.push(
-      `  - Variación Obligaciones Financieras: ${fmtCop(cfi.financing.varObligacionesFinancieras)}`,
-    );
-    lines.push(
-      `  - Variación Capital + Reservas: ${fmtCop(cfi.financing.varCapitalReservas)}`,
-    );
-    // Dividendos: SÓLO con evidencia real en el balance.
-    //
-    // `dividendosEstimados` de R2 es un tapa-huecos —
-    // `Math.min(0, deltaUtilAcum - utilidadNeta)`— y sobre este mismo balance
-    // fabricó -$1.570.997.737,30 (2,09× la facturación del año, 64,9% del flujo
-    // operativo) a partir de las cuentas VIRTUALES 3605VC/3710VC que inyecta R8.
-    // La cuenta 2360 no existe en el balance. Marcarlo VINCULANTE hizo que el
-    // modelo lo imprimiera obediente en la Nota 6 del informe entregado, con
-    // cita normativa de respaldo y la tabla de financiación vacía. NIC 7 ¶43
-    // prohíbe presentar como flujo una partida que no lo es.
-    if (hasDividendEvidenceAccounts(snap)) {
-      lines.push(
-        `  - Dividendos estimados: ${fmtCop(cfi.financing.dividendosEstimados)}`,
-      );
-    } else {
-      lines.push(
-        `  - Dividendos: NO hay evidencia en el balance (sin movimiento en PUC 2360 ` +
-          `ni en el grupo 35). NO presentes dividendos en el EFE, ni "estimados" ni ` +
-          `de ninguna otra clase, ni los menciones en las notas (NIC 7 ¶43).`,
-      );
-    }
-    lines.push(
-      `  - = Flujo neto Actividades de Financiación: ${fmtCop(cfi.financing.total)}`,
-    );
-    lines.push(`### Cierre`);
-    lines.push(`  - Variación neta de efectivo: ${fmtCop(cfi.netChangeInCash)}`);
-    lines.push(
-      `  - Variación observada en PUC 11: ${fmtCop(cfi.observedChangeInCash)}`,
-    );
-    lines.push(`  - Brecha de reconciliación: ${fmtCop(cfi.reconciliationGap)}`);
-    lines.push(`  - Reconciliado: ${cfi.reconciled ? 'sí' : 'no'}`);
-    lines.push(
-      `- AUTORIDAD: estos valores son VINCULANTES para el Estado de Flujos ` +
-        `de Efectivo del Agente 1 NIIF. Cita las líneas de capital de trabajo ` +
-        `LITERALMENTE — NO omitas ΔInventario ni ΔProveedores aunque sean $0.`,
-    );
-  }
+  // --- Seccion C0 — EFE del curator R2: NO se publica ---
+  // recalculo-11: este bloque imprimía el EFE de R2 con "AUTORIDAD: estos
+  // valores son VINCULANTES" mientras el prompt del Analista NIIF declaraba
+  // que el EFE determinista lo reemplaza. R2 arranca de la utilidad acumulada
+  // y, en el balance real de la auditoría, dejaba una brecha de
+  // $1.559.097.749,11 que el determinista no tiene; Estrategia y Gobierno sólo
+  // veían este bloque. La única fuente vinculante del EFE es ahora la sección
+  // "EFE DETERMINISTA" que `buildBindingTotalsBlock` emite con los dos
+  // periodos (`renderDeterministicCashFlowLines`).
 
   // --- Seccion C — Cierre de Flujo de Efectivo aplicado (Curator R6) ---
   if (
@@ -1106,6 +1017,10 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
       `- Linea de absorcion a reportar: literal "Variaciones en Capital de Trabajo ` +
         `(ajuste de cierre)" en Actividades de Operacion, monto ` +
         `${fmtCop(snap.cashFlowClosureAdjustment)} (con su signo original).`,
+    );
+    lines.push(
+      `- Si este bloque vinculante trae la sección "EFE DETERMINISTA" con cifras, ` +
+        `ese EFE ya cierra contra PUC 11 y la línea de absorción anterior NO se reporta.`,
     );
     if (totals && typeof totals.efectivoCuenta11 === 'number') {
       lines.push(
@@ -1163,6 +1078,60 @@ function pctYoY(current: number | undefined, base: number | undefined): string {
 function absDelta(current: number | undefined, base: number | undefined): string {
   if (typeof current !== 'number' || typeof base !== 'number') return 'ND';
   return fmtCop(current - base);
+}
+
+/**
+ * Sección "EFE DETERMINISTA" del bloque vinculante: el mismo EFE
+ * (`buildDeterministicCashFlow`) que el Analista NIIF recibe renglón a renglón
+ * como "EFE VINCULANTE" y que el gate V3 evalúa. Es la única fuente de cifras
+ * de flujo de efectivo que ven Estrategia y Gobierno (recalculo-11).
+ */
+function renderDeterministicCashFlowLines(
+  primary: PeriodSnapshot,
+  comparative: PeriodSnapshot | null,
+): string[] {
+  const lines: string[] = [''];
+  const efe = comparative ? buildDeterministicCashFlow(primary, comparative) : null;
+  if (!efe) {
+    lines.push('## EFE DETERMINISTA (NIC 7) — no es calculable');
+    lines.push(
+      '- Sin periodo comparativo no hay saldo de apertura contra el cual medir variaciones ' +
+        '(NIC 7 ¶1): el EFE por método indirecto no es calculable. NO presentes cifras de flujo ' +
+        'de efectivo por actividades ni dividendos estimados; la única cifra defendible es el ' +
+        'saldo de efectivo al cierre (PUC 11).',
+    );
+    return lines;
+  }
+
+  const sectionLabel: Record<string, string> = {
+    operating: 'Actividades de Operación',
+    investing: 'Actividades de Inversión',
+    financing: 'Actividades de Financiación',
+  };
+  const money = (cents: bigint) => `${formatCopFromCents(cents)} COP ${moneyCopToken(cents)}`;
+
+  lines.push(
+    `## EFE DETERMINISTA (NIC 7 — única fuente vinculante del EFE, ${efe.comparativePeriod} → ${efe.primaryPeriod})`,
+  );
+  lines.push(
+    '- Calculado desde el balance de prueba por método indirecto; es el mismo EFE que el ' +
+      'Analista NIIF recibe renglón a renglón. Ninguna otra cifra de flujo de efectivo es vinculante.',
+  );
+  for (const section of efe.sections) {
+    lines.push(`- Flujo neto ${sectionLabel[section.section]}: ${money(section.netFlowCents)}`);
+  }
+  lines.push(`- Variación neta de efectivo: ${money(efe.netChangeCents)}`);
+  lines.push(`- Variación observada en PUC 11: ${money(efe.observedChangeCents)}`);
+  lines.push(`- Brecha de reconciliación: ${money(efe.reconciliationGapCents)}`);
+  lines.push(`- Reconciliado: ${efe.reconciled ? 'sí' : 'no'}`);
+  lines.push(
+    efe.dividendEvidence.found
+      ? `- Distribución a socios con evidencia en el balance (${efe.dividendEvidence.accounts.join(', ')}): ` +
+          `${money(efe.dividendEvidence.cashFlowCents)} ya incluida en financiación.`
+      : '- Dividendos: NO hay evidencia en el balance (sin movimiento en PUC 2360 ni en el grupo 35). ' +
+          'NO presentes dividendos en el EFE, ni "estimados" ni de ninguna otra clase (NIC 7 ¶43).',
+  );
+  return lines;
 }
 
 /**
@@ -1234,6 +1203,8 @@ function buildBindingTotalsBlock(preprocessed: unknown): string {
       'NOTA: solo hay un periodo en el balance — modo single-period. Declara "Sin periodo comparativo disponible" en cada estado financiero.',
     );
   }
+
+  lines.push(...renderDeterministicCashFlowLines(primary, comparative));
 
   lines.push('');
   lines.push(
