@@ -303,10 +303,30 @@ function buildTemplatesForDigit(
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
-function daysBetween(from: Date, to: Date): number {
-  // Diferencia en días naturales redondeada (UTC-day-floor para evitar DST).
-  const a = Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate());
-  const b = Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate());
+/**
+ * Fecha civil de un instante en hora de Colombia (America/Bogota), como
+ * `anioColombia` del motor. Re-auditoría 2026-09-24 (NT-11): con el día UTC,
+ * a las 20:00 COT del día del vencimiento el calendario ya estaba en el día
+ * siguiente y saltaba al mes siguiente («pendiente», 29 días), y el 31-dic a
+ * las 20:00 COT armaba el calendario del año siguiente.
+ */
+export function fechaCivilColombia(fecha: Date): { year: number; month: number; day: number } {
+  const partes = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Bogota',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(fecha);
+  const valor = (t: Intl.DateTimeFormatPartTypes) => Number(partes.find((p) => p.type === t)?.value);
+  return { year: valor('year'), month: valor('month'), day: valor('day') };
+}
+
+/** Días naturales entre el día civil de `hoy` en Colombia y una fecha ISO. */
+function daysBetween(hoy: Date, isoTarget: string): number {
+  const { year, month, day } = fechaCivilColombia(hoy);
+  const a = Date.UTC(year, month - 1, day);
+  const [ty, tm, td] = isoTarget.split('-').map(Number);
+  const b = Date.UTC(ty, tm - 1, td);
   return Math.round((b - a) / MS_PER_DAY);
 }
 
@@ -329,8 +349,7 @@ function pickNextOrProject(
   baseYear: number,
 ): PickedDate {
   for (const iso of candidates) {
-    const target = new Date(`${iso}T00:00:00Z`);
-    const dr = daysBetween(hoy, target);
+    const dr = daysBetween(hoy, iso);
     if (dr >= 0) {
       return { iso, diasRestantes: dr, projectedNextYear: false };
     }
@@ -343,13 +362,13 @@ function pickNextOrProject(
     // Sin fechas configuradas (año sin calendario verificado). Devolvemos hoy
     // marcado como proyección para que el estado salga `verificar` y nunca
     // como una fecha cierta.
-    const todayIso = isoDate(hoy.getUTCFullYear(), hoy.getUTCMonth() + 1, hoy.getUTCDate());
+    const c = fechaCivilColombia(hoy);
+    const todayIso = isoDate(c.year, c.month, c.day);
     return { iso: todayIso, diasRestantes: 0, projectedNextYear: true };
   }
   const [, mm, dd] = first.split('-');
   const projectedIso = `${baseYear + 1}-${mm}-${dd}`;
-  const target = new Date(`${projectedIso}T00:00:00Z`);
-  const dr = daysBetween(hoy, target);
+  const dr = daysBetween(hoy, projectedIso);
   return { iso: projectedIso, diasRestantes: dr, projectedNextYear: true };
 }
 
@@ -424,7 +443,8 @@ export function buildCalendarioDian(input: BuildCalendarioDianInput): Calendario
   // `periodo` es el AÑO GRAVABLE del balance (p. ej. "2025"); los vencimientos
   // que hay que anunciar son los del año CALENDARIO en curso. Usar el año
   // gravable como año de vencimientos generaba todo el calendario en el pasado.
-  const year = hoy.getUTCFullYear();
+  // Año civil en hora de Colombia (NT-11), no el UTC.
+  const year = fechaCivilColombia(hoy).year;
 
   const templates = buildTemplatesForDigit(ultimoDigito, year);
 
