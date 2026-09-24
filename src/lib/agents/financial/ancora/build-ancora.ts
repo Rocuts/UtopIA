@@ -28,7 +28,7 @@ import {
 // también `cents` como BigInt al centavo (cuando el preprocesador lo populó).
 // Preferir `cents` siempre que exista; fallback a Math.round del number.
 // ---------------------------------------------------------------------------
-function toCentsString(pesos: number | undefined): string {
+function toCentsString(pesos: number | null | undefined): string {
   if (typeof pesos !== 'number' || !Number.isFinite(pesos)) return '0';
   // Math.round evita "1234.999999" → "123499" cuando el float está cerca pero
   // no exacto. Tolerancia centavo: aceptable porque controlTotals.cents es la
@@ -99,11 +99,38 @@ function buildCcvNiif(actual: PeriodSnapshot, comparativo: PeriodSnapshot | null
   const ebitA = typeof ctA.ebit === 'number' ? ctA.ebit : 0;
   const ebitC = typeof ctC?.ebit === 'number' ? ctC.ebit : 0;
 
-  // Ganancia Bruta = Ingresos − (CostoVentas + CostoProduccion).
-  const costoTotalA = (ctA.costoVentas6 ?? 0) + (ctA.costoProduccion7 ?? 0);
-  const costoTotalC = (ctC?.costoVentas6 ?? 0) + (ctC?.costoProduccion7 ?? 0);
-  const gananciaBrutaA = ingresosA - costoTotalA;
-  const gananciaBrutaC = ingresosC - costoTotalC;
+  // Ganancia Bruta = ancla UB del preprocesador: ingresos OPERACIONALES netos
+  // (41 − 4175) − costos 6 + 7. El grupo 42 no entra (decisión §7, NM-12 /
+  // recalculo-final-06: antes se partía de los ingresos netos con el 42).
+  const gananciaBruta = (ct: typeof ctA | undefined): number => {
+    if (!ct) return 0;
+    if (typeof ct.utilidadBruta === 'number' && Number.isFinite(ct.utilidadBruta)) {
+      return ct.utilidadBruta;
+    }
+    const ingresosOp =
+      typeof ct.ingresosOperacionalesNetos === 'number'
+        ? ct.ingresosOperacionalesNetos
+        : typeof ct.ingresosNetos === 'number'
+          ? ct.ingresosNetos
+          : ct.ingresos;
+    return ingresosOp - ((ct.costoVentas6 ?? 0) + (ct.costoProduccion7 ?? 0));
+  };
+  const gananciaBrutaA = gananciaBruta(ctA);
+  const gananciaBrutaC = gananciaBruta(ctC);
+
+  // Ingresos operacionales netos (base del margen operacional). `null` sin el
+  // ancla del preprocesador: el margen queda N/D, nunca sobre ingresos con 42.
+  const ingresosOperacionalesA =
+    typeof ctA.ingresosOperacionalesNetos === 'number' &&
+    Number.isFinite(ctA.ingresosOperacionalesNetos)
+      ? toCentsString(ctA.ingresosOperacionalesNetos)
+      : null;
+
+  // Cartera comercial neta (1305 + 1310 − |1399|), no el grupo 13 completo.
+  const carteraA =
+    typeof ctA.clientesNetos === 'number' && Number.isFinite(ctA.clientesNetos)
+      ? toCentsString(ctA.clientesNetos)
+      : null;
 
   return {
     A01: toCentsString(ctA.activo),
@@ -122,13 +149,14 @@ function buildCcvNiif(actual: PeriodSnapshot, comparativo: PeriodSnapshot | null
     A14: toCentsString(ctC?.efectivoCuenta11),
     A15: toCentsString(ctA.pasivoCorriente),
     A16: toCentsString(ctA.inventarios14 ?? 0),
-    A17: toCentsString(ctA.deudoresCuenta13),
+    A17: carteraA,
     A18: toCentsString(ctA.proveedores22 ?? 0),
     A19: toCentsString(ctA.efectivoCuenta11 - (ctC?.efectivoCuenta11 ?? 0)),
     X01: toCentsString(gananciaBrutaA),
     X02: toCentsString(gananciaBrutaC),
     X03: toCentsString(ctA.activoCorriente),
     X04: toCentsString(ctA.activoNoCorriente),
+    X05: ingresosOperacionalesA,
   };
 }
 
@@ -357,7 +385,7 @@ function makeEmptyAncora(company: CompanyInfo | undefined): NiifAncora {
       A01: zero, A02: zero, A03: zero, A04: zero, A05: zero, A06: zero,
       A07: zero, A08: zero, A09: zero, A10: zero, A11: zero, A12: zero,
       A13: zero, A14: zero, A15: zero, A16: zero, A17: zero, A18: zero,
-      A19: zero, X01: zero, X02: zero, X03: zero, X04: zero,
+      A19: zero, X01: zero, X02: zero, X03: zero, X04: zero, X05: zero,
     },
     ccvFiscal: {
       F01: zero, F02: zero, F03: zero, F04: zero, F05: zero,
