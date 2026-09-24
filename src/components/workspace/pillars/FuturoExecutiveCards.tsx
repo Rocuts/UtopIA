@@ -141,7 +141,9 @@ function ExecutiveCardTile({ card, language, density }: TileProps) {
             /* Punto de Quiebre: sin riesgo */
             <span className="text-emerald-600 dark:text-emerald-400">{noRiskLabel}</span>
           ) : card.value === null ? (
-            <span className="text-n-500">—</span>
+            <span className="text-n-600" title={isEs ? 'No disponible: ver motivo en la descripción' : 'Not available: see reason in the description'}>
+              {isEs ? 'N/D' : 'N/A'}
+            </span>
           ) : (
             <span
               className={

@@ -2,9 +2,9 @@
 // Tests del motor de tarjetas ejecutivas del Pilar VALOR
 // ---------------------------------------------------------------------------
 // Cubre 8 escenarios:
-//   1. EBITDA con segregación completa (5410 + 5305 + 5160 + 5165).
-//   2. EBITDA fallback sin segregación (clase 5 sin 5410/5305).
-//   3. WAOO = EBITDA / ingresos, status healthy ≥15%.
+//   1. EBITDA = utilidad operacional (41 − 51 − 52) + D&A (ratios-kpis-05).
+//   2. Sin grupo 41 → EBITDA N/D.
+//   3. WAOO = EBITDA / ingresos operacionales netos, status healthy ≥15%.
 //   4. Ratio (gastos+costos)/ingresos, lower-better thresholds.
 //   5. FCF con EFE indirecto disponible.
 //   6. FCF null cuando no hay EFE (sin cashFlowIndirecto).
@@ -143,23 +143,28 @@ function makeCashFlow(operatingTotal: number, varPPE: number): CashFlowStatement
 // ---------------------------------------------------------------------------
 
 describe('computeValorExecutiveCards', () => {
-  it('EBITDA con segregación completa (5410 + 5305 + 5160 + 5165)', () => {
-    // utilidadNeta = 200M (ya incluye efecto de impuesto e intereses del P&L)
-    // impuesto5410 = 70M, intereses5305 = 30M → utilidadOperacional = 300M
-    // dep5160 = 40M, amort5165 = 10M → EBITDA = 350M
+  // ratios-kpis-05: estos casos codificaban EBITDA = utilidad neta + 5410 +
+  // 5305 + 5160 + 5165. El impuesto de renta vive en 5405 (grupo 54), así que
+  // nunca se sumaba de vuelta, y 5260/5265 se omitían. La definición única
+  // (./ebitda.ts) parte de la utilidad OPERACIONAL: 41 − 4175 − clases 6/7 −
+  // grupos 51/52, más D&A (5160/5165/5260/5265/7360/7365).
+  it('EBITDA = utilidad operacional (41 − 51 − 52) + D&A; 53 y 54 no intervienen', () => {
+    // 41 = 1.200M; 51 = 750M + dep 40M; 52 = amort 10M → EBIT = 400M
+    // D&A = 50M → EBITDA = 450M (intereses 5305 y renta 5405 quedan debajo)
     const snap = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({
         ingresos: 1_200_000_000,
         gastos: 900_000_000,
-        utilidadNeta: 200_000_000,
+        utilidadNeta: 300_000_000,
       }),
       classes: [
+        makeClass(4, [{ code: '413505', name: 'Ventas', balance: 1_200_000_000 }]),
         makeClass(5, [
           { code: '5305001', name: 'Intereses financieros', balance: 30_000_000 },
-          { code: '5410001', name: 'Impuesto de renta', balance: 70_000_000 },
+          { code: '5405001', name: 'Impuesto de renta', balance: 70_000_000 },
           { code: '5160001', name: 'Depreciación activos', balance: 40_000_000 },
-          { code: '5165001', name: 'Amortización intangibles', balance: 10_000_000 },
+          { code: '5265001', name: 'Amortización intangibles', balance: 10_000_000 },
           { code: '5195001', name: 'Otros gastos', balance: 750_000_000 },
         ]),
       ],
@@ -167,18 +172,13 @@ describe('computeValorExecutiveCards', () => {
 
     const cards = computeValorExecutiveCards({ snapshot: snap });
 
-    // utilidadOperacional = 200M + 70M + 30M = 300M
-    expect(cards.audit.utilidadOperacional).toBeCloseTo(300_000_000, 0);
-    // EBITDA = 300M + 40M + 10M = 350M
-    expect(cards.ebitda.value).toBeCloseTo(350_000_000, 0);
-    expect(cards.audit.depreciaciones).toBeCloseTo(40_000_000, 0);
-    expect(cards.audit.amortizaciones).toBeCloseTo(10_000_000, 0);
+    expect(cards.audit.utilidadOperacional).toBe(400_000_000);
+    expect(cards.ebitda.value).toBe(450_000_000);
+    expect(cards.audit.depreciaciones).toBe(40_000_000);
+    expect(cards.audit.amortizaciones).toBe(10_000_000);
   });
 
-  it('EBITDA fallback cuando no hay segregación 5410/5305 → utilidadNeta + dep + amort', () => {
-    // Sin cuentas 5410 ni 5305 → impuesto=0, intereses=0
-    // utilidadOperacional = utilidadNeta = 150M
-    // EBITDA = 150M + 20M (dep) + 5M (amort) = 175M
+  it('sin desglose del grupo 41 → EBITDA N/D (no se aproxima desde la utilidad neta)', () => {
     const snap = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({
@@ -197,37 +197,44 @@ describe('computeValorExecutiveCards', () => {
 
     const cards = computeValorExecutiveCards({ snapshot: snap });
 
-    expect(cards.audit.utilidadOperacional).toBeCloseTo(150_000_000, 0);
-    expect(cards.ebitda.value).toBeCloseTo(175_000_000, 0);
-    expect(cards.ebitda.status).toBe('healthy'); // 175/800 ≈ 21.9% > 15%
+    expect(cards.audit.utilidadOperacional).toBeNull();
+    expect(cards.ebitda.value).toBeNull();
+    expect(cards.waoo.value).toBeNull();
+    expect(cards.ebitda.descriptionEs).toMatch(/^N\/D/);
   });
 
-  it('WAOO = EBITDA / ingresos × 100; status: healthy ≥15%, watch ≥8%', () => {
-    // EBITDA = 150M + 0 dep/amort = 150M, ingresos = 1.000M → WAOO = 15% → healthy
+  it('WAOO = EBITDA / ingresos operacionales netos; status: healthy ≥15%, watch ≥8%', () => {
+    // EBITDA = 1.000 − 850 = 150M sobre ingresos operacionales 1.000M → 15 % healthy
     const snap = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({
         ingresos: 1_000_000_000,
-        gastos: 800_000_000,
+        gastos: 850_000_000,
         utilidadNeta: 150_000_000,
       }),
-      classes: [makeClass(5, [{ code: '5195001', name: 'Gastos', balance: 800_000_000 }])],
+      classes: [
+        makeClass(4, [{ code: '413505', name: 'Ventas', balance: 1_000_000_000 }]),
+        makeClass(5, [{ code: '5195001', name: 'Gastos', balance: 850_000_000 }]),
+      ],
     });
 
     const cards = computeValorExecutiveCards({ snapshot: snap });
 
-    expect(cards.waoo.value).toBeCloseTo(0.15, 4); // 150M / 1000M = 0.15
+    expect(cards.waoo.value).toBeCloseTo(0.15, 4);
     expect(cards.waoo.status).toBe('healthy');
 
-    // Escenario watch: EBITDA = 80M / ingresos 1.000M = 8% → watch
+    // watch: EBITDA 80M / 1.000M = 8 %
     const snap2 = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({
         ingresos: 1_000_000_000,
-        gastos: 900_000_000,
+        gastos: 920_000_000,
         utilidadNeta: 80_000_000,
       }),
-      classes: [makeClass(5, [{ code: '5195001', name: 'Gastos', balance: 900_000_000 }])],
+      classes: [
+        makeClass(4, [{ code: '413505', name: 'Ventas', balance: 1_000_000_000 }]),
+        makeClass(5, [{ code: '5195001', name: 'Gastos', balance: 920_000_000 }]),
+      ],
     });
     const cards2 = computeValorExecutiveCards({ snapshot: snap2 });
     expect(cards2.waoo.status).toBe('watch');
@@ -328,8 +335,8 @@ describe('computeValorExecutiveCards', () => {
     expect(cards.audit.totalIngresos).toBe(0);
   });
 
-  it('Edge: utilidadNeta negativa (pérdida real) → EBITDA puede ser negativo', () => {
-    // Pérdida neta = -300M, sin segregación ni dep/amort → EBITDA = -300M
+  it('Edge: pérdida operacional → EBITDA negativo y critical', () => {
+    // 41 = 1.000M, 51 = 1.300M, sin D&A → EBITDA = −300M
     const snap = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({
@@ -337,14 +344,17 @@ describe('computeValorExecutiveCards', () => {
         gastos: 1_300_000_000,
         utilidadNeta: -300_000_000,
       }),
-      classes: [makeClass(5, [{ code: '5195001', name: 'Gastos', balance: 1_300_000_000 }])],
+      classes: [
+        makeClass(4, [{ code: '413505', name: 'Ventas', balance: 1_000_000_000 }]),
+        makeClass(5, [{ code: '5195001', name: 'Gastos', balance: 1_300_000_000 }]),
+      ],
     });
 
     const cards = computeValorExecutiveCards({ snapshot: snap });
 
-    expect(cards.ebitda.value).toBeCloseTo(-300_000_000, 0);
-    expect(cards.ebitda.status).toBe('critical'); // EBITDA < 0
-    expect(cards.audit.utilidadNeta).toBeCloseTo(-300_000_000, 0);
+    expect(cards.ebitda.value).toBe(-300_000_000);
+    expect(cards.ebitda.status).toBe('critical');
+    expect(cards.audit.utilidadNeta).toBe(-300_000_000);
   });
 
   it('Audit expone utilidadNeta directamente (FIX B1)', () => {

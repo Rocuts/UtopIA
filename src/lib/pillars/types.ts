@@ -129,11 +129,12 @@ export interface ValorExecutiveCardsAudit {
    *  Expuesto explícitamente para que `single-source-validator` compare
    *  directamente sin re-derivar desde utilidadOperacional (FIX audit B1). */
   utilidadNeta: number;
-  /** Utilidad operacional NIIF: utilidadNeta + impuesto5410 + intereses5305. */
-  utilidadOperacional: number;
-  /** Suma cuentas Clase 5 con prefijo 5160 (Depreciaciones). */
+  /** Utilidad operacional (EBIT) de `computeEbitda`: 41 − 4175 − clases 6/7 −
+   *  grupos 51/52. `null` sin desglose del grupo 41. */
+  utilidadOperacional: number | null;
+  /** Depreciaciones del periodo (5160 + 5260 + 7360). */
   depreciaciones: number;
-  /** Suma cuentas Clase 5 con prefijo 5165 (Amortizaciones). */
+  /** Amortizaciones del periodo (5165 + 5265 + 7365). */
   amortizaciones: number;
   /** Total Clase 5 (Gastos Operacionales). */
   totalGastos: number;

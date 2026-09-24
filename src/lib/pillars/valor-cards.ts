@@ -7,14 +7,14 @@
 // ejecutivo, mientras Margen/ROE/EVA quedan abajo como detalle NIIF.
 //
 // Tarjetas (con código de color del contrato visual):
-//   1. EBITDA          — azul    — Utilidad Operativa + Depreciaciones (5160) + Amortizaciones (5165)
-//   2. WAOO / Margen   — naranja — EBITDA / Ingresos (×100)
+//   1. EBITDA          — azul    — definición única de ./ebitda.ts (EBIT operacional + D&A)
+//   2. WAOO / Margen   — naranja — EBITDA / Ingresos operacionales netos (×100)
 //   3. Ratio           — morada  — (Gastos C5 + Costos C6) / Ingresos C4
 //   4. Free Cash Flow  — verde   — Operating Cash Flow − CapEx (varPPE) del EFE indirecto NIC 7
 //
 // Fuente única de la verdad:
 //   - controlTotals (post-Curator R8 ya garantiza utilidadNeta sincronizada con P&L).
-//   - classes[5].accounts (granularidad para D&A 5160/5165).
+//   - classes[4..7].accounts vía computeEbitda (grupo 41, 51/52, D&A).
 //   - snapshot.cashFlowIndirecto (post-Curator R2 — sólo si hay periodo comparativo).
 //
 // Las tarjetas son determinísticas (no LLM) y se ejecutan en cada cálculo de
@@ -22,8 +22,7 @@
 // comparativo), `value: null` y la UI muestra "—" en lugar de un número falso.
 // ---------------------------------------------------------------------------
 
-import type { PUCClass } from '@/lib/preprocessing/trial-balance';
-
+import { computeEbitda, computeEbitdaMargin } from './ebitda';
 import { scoreToStatus } from './health-score';
 import type {
   ExecutiveCard,
@@ -37,25 +36,6 @@ import type {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Suma saldos de cuentas en una clase cuyo código empiece con `prefix`.
- *  Ignora cuentas virtuales del Curator (sufijo VC, ZZ, prefijo 2810ZZ-). */
-function sumClassByPrefix(cl: PUCClass | undefined, prefix: string): number {
-  if (!cl) return 0;
-  return cl.accounts
-    .filter((a) => a.code.startsWith(prefix))
-    .filter((a) => !isVirtualCuratorAccount(a.code))
-    .reduce((s, a) => s + a.balance, 0);
-}
-
-function isVirtualCuratorAccount(code: string): boolean {
-  return (
-    code.endsWith('VC') ||
-    code.endsWith('ZZ') ||
-    code.startsWith('2810ZZ-') ||
-    code.startsWith('3710ZZ')
-  );
-}
-
 /** Formato seguro de delta entre dos valores (null-safe). */
 function safeDelta(curr: number | null, prev: number | null): number | null {
   if (curr === null || prev === null) return null;
@@ -67,8 +47,8 @@ function safeDelta(curr: number | null, prev: number | null): number | null {
 // ---------------------------------------------------------------------------
 
 /** EBITDA absoluto: status según EBITDA / ingresos (margen). */
-function ebitdaStatus(ebitda: number, ingresos: number): PillarStatus {
-  if (ingresos <= 0) return 'watch';
+function ebitdaStatus(ebitda: number | null, ingresos: number | null): PillarStatus {
+  if (ebitda === null || ingresos === null || ingresos <= 0) return 'watch';
   const margin = ebitda / ingresos;
   if (margin >= 0.15) return 'healthy';
   if (margin >= 0.08) return 'watch';
@@ -118,27 +98,19 @@ export function computeValorExecutiveCards(
   const totalIngresos = ct.ingresos;
   const totalGastos = claseGastos?.auxiliaryTotal ?? 0;
   const totalCostos = claseCostos?.auxiliaryTotal ?? 0;
-  // FIX (audit B1): construir utilidad operacional desde gasto del P&L del
-  // periodo, NO desde el saldo de pasivo cuenta 24 (que acumula periodos).
-  // EBITDA = utilidadNeta + Impuesto del periodo (5410+5415) + Intereses
-  // financieros (5305) + Depreciaciones (5160) + Amortizaciones (5165).
-  // Si el balance no segrega impuesto/intereses en clase 5, fallback
-  // conservador: usar utilidadNeta como proxy de EBIT (subestima EBITDA).
-  const impuestoPeriodo =
-    sumClassByPrefix(claseGastos, '5410') + sumClassByPrefix(claseGastos, '5415');
-  const interesesFinancieros = sumClassByPrefix(claseGastos, '5305');
-  const utilidadOperacional = ct.utilidadNeta + impuestoPeriodo + interesesFinancieros;
-  const depreciaciones = sumClassByPrefix(claseGastos, '5160');
-  const amortizaciones = sumClassByPrefix(claseGastos, '5165');
 
-  // ─── EBITDA ──────────────────────────────────────────────────────────────
-  // EBITDA = Utilidad Operativa + Depreciaciones + Amortizaciones.
-  // Las cuentas 5160/5165 son saldos NATURALES débito (positivos en gastos);
-  // las sumamos directamente porque ya están registradas como gasto operativo.
-  const ebitda = utilidadOperacional + depreciaciones + amortizaciones;
+  // ─── EBITDA (definición única — ver ./ebitda.ts, ratios-kpis-05) ─────────
+  // EBIT operacional (41 − 4175 − 6 − 7 − 51 − 52) + D&A (5160/5165/5260/
+  // 5265/7360/7365). Sin grupo 41 → null con motivo; nunca se reconstruye
+  // desde la utilidad neta ni desde el saldo del pasivo 24.
+  const ebitdaRes = computeEbitda(snapshot);
+  const ebitda = ebitdaRes.ebitda;
+  const utilidadOperacional = ebitdaRes.utilidadOperacional;
+  const depreciaciones = ebitdaRes.depreciaciones;
+  const amortizaciones = ebitdaRes.amortizaciones;
 
-  // ─── WAOO / Margen EBITDA ────────────────────────────────────────────────
-  const waoo = totalIngresos > 0 ? ebitda / totalIngresos : null;
+  // ─── WAOO / Margen EBITDA — sobre ingresos operacionales netos ──────────
+  const waoo = computeEbitdaMargin(ebitdaRes);
 
   // ─── Ratio (Gastos + Costos) / Ingresos ──────────────────────────────────
   const ratio =
@@ -160,13 +132,9 @@ export function computeValorExecutiveCards(
 
   // ─── Deltas vs comparativo (mismo cálculo sobre snapshot anterior) ──────
   const prevAudit = comparative ? buildAudit(comparative) : null;
-  const prevEbitda = prevAudit
-    ? prevAudit.utilidadOperacional + prevAudit.depreciaciones + prevAudit.amortizaciones
-    : null;
-  const prevWaoo =
-    prevAudit && prevAudit.totalIngresos > 0 && prevEbitda !== null
-      ? prevEbitda / prevAudit.totalIngresos
-      : null;
+  const prevEbitdaRes = comparative ? computeEbitda(comparative) : null;
+  const prevEbitda = prevEbitdaRes?.ebitda ?? null;
+  const prevWaoo = prevEbitdaRes ? computeEbitdaMargin(prevEbitdaRes) : null;
   const prevRatio =
     prevAudit && prevAudit.totalIngresos > 0
       ? (prevAudit.totalGastos + prevAudit.totalCostos) / prevAudit.totalIngresos
@@ -185,12 +153,20 @@ export function computeValorExecutiveCards(
       value: ebitda,
       unit: 'cop',
       color: 'blue',
-      status: ebitdaStatus(ebitda, totalIngresos),
+      status: ebitdaStatus(ebitda, ebitdaRes.ingresosOperacionalesNetos),
       deltaVsComparative: safeDelta(ebitda, prevEbitda),
-      descriptionEs: 'Generación de caja operativa antes de intereses, impuestos, depreciación y amortización.',
-      descriptionEn: 'Operating cash generation before interest, taxes, depreciation and amortization.',
-      formulaEs: 'Utilidad Operativa + Depreciaciones (PUC 5160) + Amortizaciones (PUC 5165)',
-      formulaEn: 'Operating Profit + Depreciation (PUC 5160) + Amortization (PUC 5165)',
+      descriptionEs:
+        ebitda === null
+          ? `N/D — ${ebitdaRes.reason ?? 'sin base verificable'}`
+          : 'Utilidad operacional antes de depreciaciones y amortizaciones (no incluye grupos 42, 53 ni 54).',
+      descriptionEn:
+        ebitda === null
+          ? 'N/A — no breakdown of operating revenue (PUC group 41) to isolate operating profit.'
+          : 'Operating profit before depreciation and amortization (excludes PUC groups 42, 53 and 54).',
+      formulaEs:
+        'Utilidad operacional (41 − 4175 − clases 6 y 7 − grupos 51 y 52) + D&A (5160, 5165, 5260, 5265, 7360, 7365)',
+      formulaEn:
+        'Operating profit (41 − 4175 − classes 6 and 7 − groups 51 and 52) + D&A (5160, 5165, 5260, 5265, 7360, 7365)',
     },
     waoo: {
       key: 'waoo',
@@ -203,8 +179,8 @@ export function computeValorExecutiveCards(
       deltaVsComparative: safeDelta(waoo, prevWaoo),
       descriptionEs: 'Eficiencia operativa: porcentaje de ingresos que se convierte en EBITDA.',
       descriptionEn: 'Operating efficiency: share of revenue converted to EBITDA.',
-      formulaEs: 'EBITDA / Total Ingresos (Clase 4) × 100',
-      formulaEn: 'EBITDA / Total Revenue (Class 4) × 100',
+      formulaEs: 'EBITDA / Ingresos operacionales netos (41 − 4175) × 100',
+      formulaEn: 'EBITDA / Net operating revenue (41 − 4175) × 100',
     },
     ratio: {
       key: 'ratio',
@@ -262,14 +238,12 @@ function buildAudit(
   const claseGastos = snapshot.classes.find((c) => c.code === 5);
   const claseCostos = snapshot.classes.find((c) => c.code === 6);
   const efe = snapshot.cashFlowIndirecto;
-  const impuestoPeriodo =
-    sumClassByPrefix(claseGastos, '5410') + sumClassByPrefix(claseGastos, '5415');
-  const interesesFinancieros = sumClassByPrefix(claseGastos, '5305');
+  const ebitdaRes = computeEbitda(snapshot);
   return {
     utilidadNeta: ct.utilidadNeta,
-    utilidadOperacional: ct.utilidadNeta + impuestoPeriodo + interesesFinancieros,
-    depreciaciones: sumClassByPrefix(claseGastos, '5160'),
-    amortizaciones: sumClassByPrefix(claseGastos, '5165'),
+    utilidadOperacional: ebitdaRes.utilidadOperacional,
+    depreciaciones: ebitdaRes.depreciaciones,
+    amortizaciones: ebitdaRes.amortizaciones,
     totalGastos: claseGastos?.auxiliaryTotal ?? 0,
     totalCostos: claseCostos?.auxiliaryTotal ?? 0,
     totalIngresos: ct.ingresos,

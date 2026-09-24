@@ -118,7 +118,9 @@ function ExecutiveCardTile({ card, language, density }: TileProps) {
         {/* Middle: animated value */}
         <div className={`font-serif-elite text-2xl lg:text-3xl ${accent.text} leading-none`}>
           {card.value === null ? (
-            <span className="text-n-500">—</span>
+            <span className="text-n-600" title={isEs ? 'No disponible: ver motivo en la descripción' : 'Not available: see reason in the description'}>
+              {isEs ? 'N/D' : 'N/A'}
+            </span>
           ) : (
             <CountUp target={display} />
           )}

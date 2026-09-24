@@ -14,6 +14,8 @@
 
 import type { PeriodSnapshot, PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 
+import { computeEbitda } from './ebitda';
+
 // ─── Tipos públicos ─────────────────────────────────────────────────────────
 
 export type ValorGranularity = 'monthly' | 'quarterly' | 'annual';
@@ -21,8 +23,8 @@ export type ValorGranularity = 'monthly' | 'quarterly' | 'annual';
 export interface ValorBarSeries {
   /** Etiqueta del eje X (ej. "2023", "T-1", "ene 25"). */
   label: string;
-  /** EBITDA del periodo (pesos colombianos). */
-  ebitda: number;
+  /** EBITDA del periodo (pesos colombianos). `null` si no es calculable. */
+  ebitda: number | null;
   /** Free Cash Flow; null si no hay EFE (sin periodo comparativo). */
   fcf: number | null;
   /** Ingresos totales (Clase 4). */
@@ -40,19 +42,10 @@ const MESES_ES = [
   'jul', 'ago', 'sep', 'oct', 'nov', 'dic',
 ] as const;
 
-/** Extrae EBITDA de un snapshot.
- *  EBITDA = Utilidad Operacional + Depreciaciones (5160) + Amortizaciones (5165). */
-function extractEbitda(snap: PeriodSnapshot): number {
-  const ct = snap.controlTotals;
-  const claseGastos = snap.classes.find((c) => c.code === 5);
-  const dep = claseGastos?.accounts
-    .filter((a) => a.code.startsWith('5160') && !isVirtual(a.code))
-    .reduce((s, a) => s + a.balance, 0) ?? 0;
-  const amor = claseGastos?.accounts
-    .filter((a) => a.code.startsWith('5165') && !isVirtual(a.code))
-    .reduce((s, a) => s + a.balance, 0) ?? 0;
-  const utilidadOp = ct.utilidadNeta + ct.impuestosCuenta24;
-  return utilidadOp + dep + amor;
+/** EBITDA del snapshot — definición única de ./ebitda.ts (ratios-kpis-05).
+ *  `null` sin desglose del grupo 41; nunca utilidad neta + saldo del pasivo 24. */
+function extractEbitda(snap: PeriodSnapshot): number | null {
+  return computeEbitda(snap).ebitda;
 }
 
 /** Extrae FCF del EFE indirecto del snapshot; null si no disponible. */
@@ -63,15 +56,6 @@ function extractFcf(snap: PeriodSnapshot): number | null {
   const capex = efe.investing.varPPE;
   if (capex === null || capex === undefined) return ocf;
   return ocf - Math.abs(capex);
-}
-
-function isVirtual(code: string): boolean {
-  return (
-    code.endsWith('VC') ||
-    code.endsWith('ZZ') ||
-    code.startsWith('2810ZZ-') ||
-    code.startsWith('3710ZZ')
-  );
 }
 
 /** Genera etiqueta legible dado el identificador de periodo. */
@@ -166,7 +150,7 @@ function buildInterpolatedMonths(snap: PeriodSnapshot): ValorBarSeries[] {
     const weight = seasonal / 12;
     return {
       label: `${mes} ${year}`,
-      ebitda: Math.round(ebitdaAnual * weight),
+      ebitda: ebitdaAnual === null ? null : Math.round(ebitdaAnual * weight),
       fcf: fcfAnual !== null ? Math.round(fcfAnual * weight) : null,
       ingresos: Math.round(ingresosAnual * weight),
       period: `${snap.period}-${String(i + 1).padStart(2, '0')}`,
