@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import type { MonthlyReportPayload } from '@/components/workspace/pyme/types';
 
 import {
+  alertBackground,
   alertIcon,
   formatPymeCop,
   formatPymeMargin,
@@ -99,6 +100,26 @@ describe('generateMonthlyReportPDF', () => {
     expect(joined).toContain('FIN-DEL-MENSAJE');
     expect(joined).toContain('Mes en pérdida.');
     expect(joined).not.toContain('⚠');
+  });
+
+  it('el recuadro de la alerta es un tinte claro RGB, no un CMYK fuera de rango (casi negro)', () => {
+    const out = generateMonthlyReportPDF(
+      payload({}, { alerts: [{ severity: 'warning', message: 'Los egresos subieron.' }] }),
+    ).output();
+    // Antes: "196. 138. 46. 0.08 k" → el visor recorta a C = M = Y = 1.
+    expect(out).not.toMatch(/(?:^|\s)[\d.]+ [\d.]+ [\d.]+ [\d.]+ k\b/m);
+    const i = out.indexOf('(Los egresos subieron.) Tj');
+    expect(i).toBeGreaterThan(0);
+    // Rellenos RGB antes del texto de la alerta: uno es el tinte del recuadro.
+    // jsPDF imprime el relleno con 2 decimales: se compara con ±0,005.
+    const fills = [...out.slice(0, i).matchAll(/([\d.]+) ([\d.]+) ([\d.]+) rg/g)].map((m) =>
+      [m[1], m[2], m[3]].map(Number),
+    );
+    const expected = alertBackground('warning').map((c) => c / 255);
+    expect(fills.some((f) => f.every((v, k) => Math.abs(v - expected[k]) <= 0.005))).toBe(true);
+    for (const sev of ['info', 'warning', 'critical'] as const) {
+      expect(Math.min(...alertBackground(sev))).toBeGreaterThanOrEqual(230);
+    }
   });
 
   it('íconos de alerta dentro de WinAnsi', () => {

@@ -83,6 +83,18 @@ function alertColor(sev: MonthlyAlert['severity']): readonly [number, number, nu
   return GREEN_MID;
 }
 
+/**
+ * Fondo de la alerta: el color de la severidad al 8 % sobre blanco, en RGB.
+ * jsPDF no tiene alfa en `setFillColor`: con un cuarto argumento lo lee como
+ * CMYK, y `(196, 138, 46, 0.08)` salía como `196 138 46 0.08 k`, que el visor
+ * recorta a C = M = Y = 1 (casi negro) y dejaba el texto de la alerta ilegible.
+ */
+export function alertBackground(sev: MonthlyAlert['severity']): [number, number, number] {
+  const [r, g, b] = alertColor(sev);
+  const mix = (c: number) => Math.round(255 - (255 - c) * 0.08);
+  return [mix(r), mix(g), mix(b)];
+}
+
 export interface ReportPDFOptions {
   businessName?: string;
   language?: string;
@@ -237,7 +249,7 @@ export function generateMonthlyReportPDF(
       if (y + boxH > 280) { doc.addPage(); y = 20; }
 
       const col = alertColor(alert.severity);
-      doc.setFillColor(col[0], col[1], col[2], 0.08);
+      doc.setFillColor(...alertBackground(alert.severity));
       doc.setDrawColor(...col);
       doc.roundedRect(14, y, 182, boxH, 1, 1, 'FD');
 
