@@ -1,6 +1,9 @@
 /**
- * KPI mocks — deterministic, timestamp-free fixtures so UI consumers
- * (agents C, E-H) can render the Executive Dashboard without real data.
+ * KPI mocks — SOLO para pruebas / historias visuales. Movido desde
+ * `src/lib/kpis/mocks.ts` (auditoría ratios-kpis-12): era alcanzable en
+ * producción y /workspace/verdad pintaba 95/100 'favorable' como dato del
+ * cliente. Ningún módulo de producción puede importarlo (guard en
+ * `src/lib/kpis/__tests__/no-mocks-in-production.test.ts`).
  *
  * `generateMockKpiSet(severity)` returns a consistent 4-KPI bundle at the
  * requested severity level — handy for visual regression of each state.
@@ -11,10 +14,10 @@
  */
 
 import type { KpiBreakdown, KpiResult, KpiSeverity } from '@/types/kpis';
-import { calculateComplianceScore } from './compliance-score';
-import { calculateExitValue } from './exit-value';
-import { calculateRoiProbabilistic } from './roi-probabilistic';
-import { calculateTef } from './tax-efficiency';
+import { calculateComplianceScore } from '../compliance-score';
+import { calculateExitValue } from '../exit-value';
+import { calculateRoiProbabilistic } from '../roi-probabilistic';
+import { calculateTef } from '../tax-efficiency';
 
 const FIXED_TS = '2026-04-23T00:00:00Z';
 

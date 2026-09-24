@@ -5,13 +5,18 @@
  *
  * Layout matches handoff `El Futuro.html` + `assets/module.css`:
  *  - 2-column hero: left (eyebrow + h1 + lede) · right (teal gradient KPI card)
- *  - KPI card: "28 meses" Runway, Activity icon, scenario fan chart (3 lines),
- *    sub-KPIs (Optimista/Pesimista/ROI esperado)
+ *  - KPI card: runway N/D con motivo + enlace al Centro de Mando (donde se
+ *    proyecta desde el libro mayor)
  *  - Section headers with teal left-bar accent (border-left: 3px solid #5A7F7A)
  *  - 3 submodule cards (.subcard style) — Escenarios, Factibilidad, Macroeconomía
- *  - Histograma Monte Carlo · ROI (bell distribution)
+ *  - Monte Carlo: estado vacío (la simulación real vive en el Centro de Mando)
  *  - DataSourceLadder + CapabilityZones
  *  - Comet-trail sine-wave particles handled by AreaFX via AreaShell
+ *
+ * Auditoría ratios-kpis-01: el héroe pintaba "28 meses", "Monte Carlo 10.000
+ * corridas", optimista 34m / pesimista 19m, ROI esperado 22 %, un abanico de
+ * escenarios y un histograma fijos, sin rótulo de demostración. Esta vista no
+ * tiene una proyección de la empresa: todo eso es N/D o estado vacío.
  */
 
 import Link from 'next/link';
@@ -19,7 +24,6 @@ import { motion, useReducedMotion } from 'motion/react';
 import { useMemo } from 'react';
 import {
   Compass,
-  Activity,
   Layers,
   ClipboardCheck,
   Globe,
@@ -27,7 +31,6 @@ import {
 } from 'lucide-react';
 
 import { useLanguage } from '@/context/LanguageContext';
-import { useAncoraView } from '@/hooks/useAncoraView';
 import { cn } from '@/lib/utils';
 import type { KpiResult } from '@/types/kpis';
 import { DataSourceLadder } from './shared/DataSourceLadder';
@@ -78,118 +81,15 @@ interface FuturoSubmoduleDef {
   key: FuturoSubmoduleKey;
   href: string;
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
-  statusLabel: { es: string; en: string };
-  statusColor: string;
 }
 
-// Order matches handoff SUBS array: Escenarios → Factibilidad → Macroeconomía
+// Sin estados inventados ("Al día", "En análisis"): las tres subpáginas son
+// herramientas que el usuario abre (simulador, factibilidad y macro con fuente).
 const SUBMODULES: FuturoSubmoduleDef[] = [
-  {
-    key: 'escenarios',
-    href: '/workspace/futuro/escenarios',
-    icon: Layers,
-    statusLabel: { es: 'Activo', en: 'Active' },
-    statusColor: '#22C55E',
-  },
-  {
-    key: 'factibilidad',
-    href: '/workspace/futuro/factibilidad',
-    icon: ClipboardCheck,
-    statusLabel: { es: 'En análisis', en: 'In analysis' },
-    statusColor: '#E8B42C',
-  },
-  {
-    key: 'macroeconomia',
-    href: '/workspace/futuro/macroeconomia',
-    icon: Globe,
-    statusLabel: { es: 'Al día', en: 'Up to date' },
-    statusColor: '#22C55E',
-  },
+  { key: 'escenarios', href: '/workspace/futuro/escenarios', icon: Layers },
+  { key: 'factibilidad', href: '/workspace/futuro/factibilidad', icon: ClipboardCheck },
+  { key: 'macroeconomia', href: '/workspace/futuro/macroeconomia', icon: Globe },
 ];
-
-// ─── Scenario fan chart (3 lines: base, optimista, pesimista) ────────────────
-// Data from handoff: scenarios('vFut', base, optimista, pesimista, '#fff', 'rgba(255,255,255,.5)')
-
-const SCENARIO_BASE =     [30, 38, 46, 55, 64, 72, 80];
-const SCENARIO_OPTIMISTA = [34, 46, 58, 70, 82, 92, 98];
-const SCENARIO_PESIMISTA = [26, 30, 34, 38, 42, 45, 48];
-
-function ScenarioChart() {
-  const W = 100, H = 60;
-  const allPts = [...SCENARIO_BASE, ...SCENARIO_OPTIMISTA, ...SCENARIO_PESIMISTA];
-  const minV = Math.min(...allPts), maxV = Math.max(...allPts);
-  const span = maxV - minV || 1;
-  const n = SCENARIO_BASE.length;
-
-  const toX = (i: number) => (i / (n - 1)) * W;
-  const toY = (v: number) => H - 2 - ((v - minV) / span) * (H - 4);
-
-  const makePath = (pts: readonly number[]) =>
-    pts.map((v, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)} ${toY(v).toFixed(1)}`).join(' ');
-
-  // Filled area between optimista and pesimista
-  const areaPath = [
-    ...SCENARIO_OPTIMISTA.map((v, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)} ${toY(v).toFixed(1)}`),
-    ...[...SCENARIO_PESIMISTA].reverse().map((v, i, arr) =>
-      `L${toX(arr.length - 1 - i).toFixed(1)} ${toY(v).toFixed(1)}`
-    ),
-    'Z',
-  ].join(' ');
-
-  return (
-    <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
-      {/* Shaded band between scenarios */}
-      <path d={areaPath} fill="rgba(255,255,255,.12)" />
-      {/* Pesimista line */}
-      <path d={makePath(SCENARIO_PESIMISTA)} fill="none" stroke="rgba(255,255,255,.42)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="3 2" />
-      {/* Base line */}
-      <path d={makePath(SCENARIO_BASE)} fill="none" stroke="rgba(255,255,255,.8)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      {/* Optimista line */}
-      <path d={makePath(SCENARIO_OPTIMISTA)} fill="none" stroke="rgba(255,255,255,.55)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-      {/* End-point dot on base */}
-      <circle
-        cx={toX(n - 1)}
-        cy={toY(SCENARIO_BASE[n - 1])}
-        r="2"
-        fill="rgba(255,255,255,.85)"
-      />
-    </svg>
-  );
-}
-
-// ─── Monte Carlo Histogram ────────────────────────────────────────────────────
-// Data from handoff: vals=[3,6,11,19,30,46,66,84,96,100,94,80,62,44,29,18,10,5,2], p50=9
-
-const HIST_VALS = [3, 6, 11, 19, 30, 46, 66, 84, 96, 100, 94, 80, 62, 44, 29, 18, 10, 5, 2] as const;
-const HIST_P50 = 9;
-
-function MonteCarloHistogram() {
-  const W = 900, H = 150;
-  const n = HIST_VALS.length, gap = 4;
-  const bw = (W - (n - 1) * gap) / n;
-  const max = 100;
-
-  return (
-    <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
-      {HIST_VALS.map((v, i) => {
-        const h = (v / max) * (H - 8);
-        const x = i * (bw + gap);
-        const y = H - h;
-        const fill = i === HIST_P50
-          ? '#5A7F7A'
-          : 'color-mix(in srgb, #5A7F7A 38%, var(--color-n-100, #F0EDE8))';
-        return (
-          <rect
-            key={i}
-            x={x} y={y} width={bw} height={h}
-            rx="2"
-            fill={fill}
-          />
-        );
-      })}
-    </svg>
-  );
-}
 
 // ─── Component principal ──────────────────────────────────────────────────────
 
@@ -199,8 +99,8 @@ export function FuturoArea({
 }: FuturoAreaProps) {
   const { t, language } = useLanguage();
   const futuro = t.elite.areas.futuro;
+  const ds = t.elite.dataStatus;
   const reduced = useReducedMotion();
-  const { view } = useAncoraView();
 
   const sources = useMemo(() => getFuturoSources(language), [language]);
   const zones = useMemo(() => getFuturoZones(language), [language]);
@@ -218,9 +118,6 @@ export function FuturoArea({
             ease: [0.16, 1, 0.3, 1] as const,
           },
         };
-
-  // Supress unused view warning — real runway would come from view.derived
-  void view;
 
   return (
     <div
@@ -306,7 +203,7 @@ export function FuturoArea({
                       color: 'rgba(255,255,255,.82)',
                     }}
                   >
-                    {language === 'es' ? 'RUNWAY · ESCENARIO BASE' : 'RUNWAY · BASE SCENARIO'}
+                    {ds.futuro.runwayLabel}
                   </p>
 
                   <div
@@ -318,119 +215,21 @@ export function FuturoArea({
                       margin: '10px 0 6px',
                     }}
                   >
-                    28
-                    <span
-                      style={{
-                        fontSize: '.34em',
-                        color: 'rgba(255,255,255,.5)',
-                        marginLeft: 4,
-                      }}
-                    >
-                      {language === 'es' ? 'meses' : 'months'}
-                    </span>
+                    {ds.notAvailable}
                   </div>
 
-                  <div
-                    className="inline-flex items-center gap-[6px]"
-                    style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,.75)' }}
+                  <p style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,.86)', maxWidth: '42ch' }}>
+                    {ds.reason}: {ds.futuro.runwayReason}
+                  </p>
+
+                  <Link
+                    href="/workspace/comando"
+                    prefetch={false}
+                    className="inline-flex items-center gap-1 mt-4 text-xs font-semibold uppercase tracking-eyebrow text-white hover:underline"
                   >
-                    <Activity className="h-[15px] w-[15px]" strokeWidth={1.75} aria-hidden />
-                    <span>
-                      {language === 'es'
-                        ? 'Simulación Monte Carlo · 10.000 corridas'
-                        : 'Monte Carlo simulation · 10,000 runs'}
-                    </span>
-                  </div>
-
-                  {/* Scenario fan chart */}
-                  <div style={{ marginTop: 18, height: 60 }}>
-                    <ScenarioChart />
-                  </div>
-
-                  {/* Sub-KPIs */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      gap: 24,
-                      marginTop: 20,
-                      paddingTop: 18,
-                      borderTop: '1px solid rgba(255,255,255,.25)',
-                      flexWrap: 'wrap',
-                    }}
-                  >
-                    <div>
-                      <div
-                        className="num"
-                        style={{
-                          fontFamily: 'var(--font-mono)',
-                          fontWeight: 700,
-                          fontSize: '1.25rem',
-                          color: '#22C55E',
-                        }}
-                      >
-                        34m
-                      </div>
-                      <div
-                        style={{
-                          fontSize: '0.625rem',
-                          textTransform: 'uppercase',
-                          letterSpacing: '.08em',
-                          color: 'rgba(255,255,255,.72)',
-                          marginTop: 2,
-                        }}
-                      >
-                        {language === 'es' ? 'Optimista' : 'Optimistic'}
-                      </div>
-                    </div>
-                    <div>
-                      <div
-                        className="num"
-                        style={{
-                          fontFamily: 'var(--font-mono)',
-                          fontWeight: 700,
-                          fontSize: '1.25rem',
-                          color: '#F87171',
-                        }}
-                      >
-                        19m
-                      </div>
-                      <div
-                        style={{
-                          fontSize: '0.625rem',
-                          textTransform: 'uppercase',
-                          letterSpacing: '.08em',
-                          color: 'rgba(255,255,255,.72)',
-                          marginTop: 2,
-                        }}
-                      >
-                        {language === 'es' ? 'Pesimista' : 'Pessimistic'}
-                      </div>
-                    </div>
-                    <div>
-                      <div
-                        className="num"
-                        style={{
-                          fontFamily: 'var(--font-mono)',
-                          fontWeight: 700,
-                          fontSize: '1.25rem',
-                          color: '#fff',
-                        }}
-                      >
-                        22%
-                      </div>
-                      <div
-                        style={{
-                          fontSize: '0.625rem',
-                          textTransform: 'uppercase',
-                          letterSpacing: '.08em',
-                          color: 'rgba(255,255,255,.72)',
-                          marginTop: 2,
-                        }}
-                      >
-                        {language === 'es' ? 'ROI esperado' : 'Expected ROI'}
-                      </div>
-                    </div>
-                  </div>
+                    {ds.goToCommandCenter}
+                    <ArrowRight className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                  </Link>
                 </div>
               </div>
             </div>
@@ -464,66 +263,39 @@ export function FuturoArea({
                   sub={sub}
                   title={futuro.submodules[sub.key].title}
                   description={futuro.submodules[sub.key].description}
-                  language={language}
+                  statusLabel={ds.openModule}
                 />
               ))}
             </div>
           </motion.section>
 
-          {/* ── Histograma Monte Carlo · ROI ── */}
+          {/* ── Monte Carlo: estado vacío (sin simulación sobre datos de la empresa) ── */}
           <motion.section {...fadeItem(2)} className="mb-10">
-            <div className="flex items-center justify-between gap-4 mb-[18px]">
-              <h2
-                className="font-serif-elite font-medium text-n-1000"
-                style={{
-                  fontSize: 'clamp(1.25rem, 2vw, 1.5rem)',
-                  paddingLeft: 14,
-                  borderLeft: '3px solid #5A7F7A',
-                }}
-              >
-                {language === 'es' ? 'Histograma Monte Carlo · ROI' : 'Monte Carlo Histogram · ROI'}
-              </h2>
-              <span
-                className="inline-flex items-center gap-[6px] rounded-full font-bold uppercase"
-                style={{
-                  height: 22,
-                  padding: '0 10px',
-                  fontSize: '0.625rem',
-                  letterSpacing: '.1em',
-                  background: 'color-mix(in srgb, #5A7F7A 18%, transparent)',
-                  color: '#4A6F6A',
-                }}
-              >
-                <span className="h-[6px] w-[6px] rounded-full bg-current animate-pulse" aria-hidden />
-                {language === 'es' ? 'Distribución de resultados' : 'Results distribution'}
-              </span>
-            </div>
-
-            <div
-              className="p-6 rounded-xl"
+            <h2
+              className="font-serif-elite font-medium text-n-1000 mb-[18px]"
               style={{
-                border: '1px solid color-mix(in srgb, #5A7F7A 20%, transparent)',
-                background: 'color-mix(in srgb, #5A7F7A 4%, var(--color-n-0, #FCFBF8))',
+                fontSize: 'clamp(1.25rem, 2vw, 1.5rem)',
+                paddingLeft: 14,
+                borderLeft: '3px solid #5A7F7A',
               }}
             >
-              <div style={{ height: 150 }}>
-                <MonteCarloHistogram />
-              </div>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  marginTop: 10,
-                  fontSize: 'var(--text-xs, 0.75rem)',
-                  color: 'var(--color-n-500, #6B6762)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '.1em',
-                }}
+              {ds.futuro.monteCarloTitle}
+            </h2>
+            <div
+              role="status"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-n-300 bg-n-100 px-5 py-4"
+            >
+              <p className="text-sm leading-relaxed text-n-800 max-w-[60ch]">
+                {ds.futuro.monteCarloEmpty}
+              </p>
+              <Link
+                href="/workspace/comando"
+                prefetch={false}
+                className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-eyebrow text-n-800 hover:text-n-1000"
               >
-                <span>−8% ROI</span>
-                <span>P50 · 22%</span>
-                <span>+48% ROI</span>
-              </div>
+                {ds.goToCommandCenter}
+                <ArrowRight className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              </Link>
             </div>
           </motion.section>
         </>
@@ -563,11 +335,11 @@ interface SubmoduleCardProps {
   sub: FuturoSubmoduleDef;
   title: string;
   description: string;
-  language: 'es' | 'en';
+  statusLabel: string;
 }
 
-function SubmoduleCard({ sub, title, description, language }: SubmoduleCardProps) {
-  const { icon: Icon, href, statusLabel, statusColor } = sub;
+function SubmoduleCard({ sub, title, description, statusLabel }: SubmoduleCardProps) {
+  const { icon: Icon, href } = sub;
 
   return (
     <Link
@@ -605,12 +377,9 @@ function SubmoduleCard({ sub, title, description, language }: SubmoduleCardProps
       <p className="text-sm text-n-600 leading-snug mt-[5px]">{description}</p>
 
       <div className="flex items-center justify-between mt-4">
-        <span
-          className="inline-flex items-center gap-[6px] text-xs font-semibold"
-          style={{ color: statusColor }}
-        >
-          <span aria-hidden className="inline-block h-[6px] w-[6px] rounded-full" style={{ background: statusColor }} />
-          {statusLabel[language]}
+        <span className="inline-flex items-center gap-[6px] text-xs font-semibold text-n-600">
+          <span aria-hidden className="inline-block h-[6px] w-[6px] rounded-full bg-current" />
+          {statusLabel}
         </span>
         <span className="inline-flex" style={{ color: '#5A7F7A' }}>
           <ArrowRight

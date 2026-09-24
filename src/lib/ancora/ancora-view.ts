@@ -70,17 +70,25 @@ export interface AncoraView {
     /** Deuda / Patrimonio (A03 / A05). */
     deRatio: number | null;
     valoracion: {
-      /** EV/EBIT operacional (múltiplo de mercado, NO EBITDA). */
+      /** Valor EMPRESA de referencia = EBIT operacional × 6 (múltiplo
+       *  heurístico, NO EBITDA). No es valor del patrimonio. */
       evEbit: number | null;
-      /** Valor de liquidación ≈ patrimonio neto contable. */
+      /** Patrimonio neto contable (A05). No es valor de mercado. */
       liquidacion: number | null;
+      /** Deuda financiera neta (obligaciones financieras − efectivo). null:
+       *  el Âncora no expone el grupo 21. */
+      deudaNeta: number | null;
+      /** Patrimonio implícito = evEbit − deudaNeta. null sin deuda neta. */
+      equityDesdeEvEbit: number | null;
       /** null — requiere WACC. */
       dcf: number | null;
       /** null — requiere WACC + g. */
       gordon: number | null;
       /** null — requiere comparables BVC. */
       transacciones: number | null;
-      /** Promedio de los métodos disponibles; null si ninguno. */
+      /** Valor de salida (patrimonio): promedio de los métodos de PATRIMONIO
+       *  disponibles. Requiere `equityDesdeEvEbit`; nunca promedia un EV con
+       *  un patrimonio. null si no hay puente EV → patrimonio. */
       ponderado: number | null;
       faltaWacc: boolean;
     };
@@ -91,7 +99,7 @@ export interface AncoraView {
     /** Razón de por qué `altmanZ` es null, o la variante usada. */
     altmanRazon: string | null;
     oportunidades: {
-      /** Capitalización utilidades — Art. 36-3 E.T. (heurístico 40%). */
+      /** Art. 36-3 E.T. derogado (Ley 2277/2022 art. 96): siempre null. */
       capitalizacion36_3: number | null;
       /** Caja liberable optimizando rotación de cartera. */
       liberacionCartera: number | null;
