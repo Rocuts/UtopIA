@@ -37,6 +37,11 @@ import { PlaneacionCard } from './cards/PlaneacionCard';
 import { DefensaDianCard } from './cards/DefensaDianCard';
 import { DevolucionesCard } from './cards/DevolucionesCard';
 import { SurvivalModeSection } from './survival/SurvivalModeSection';
+import {
+  MODOS_CON_DEVOLUCION,
+  buildFiscalAgentStartInput,
+  parseSaldoDeclarado,
+} from './fiscal-agent-form';
 import type { FiscalAgentMode } from '@/lib/agents/financial/escudo-survival/fiscal-agent';
 
 // ---------------------------------------------------------------------------
@@ -154,6 +159,9 @@ export function FiscalAgentPanel() {
   const [instructions, setInstructions] = useState('');
   const [dianText, setDianText] = useState('');
   const [selectedMode, setSelectedMode] = useState<FiscalAgentMode>('full');
+  // Saldo a favor liquidado en el Formulario 110 (pesos es-CO → centavos
+  // MoneyCop). Opcional; sólo lo usa el Módulo 6 (cross-dep W3-B).
+  const [saldoDeclarado, setSaldoDeclarado] = useState('');
 
   const fiscal = t.elite.areas.escudo.fiscalAgent;
 
@@ -162,26 +170,31 @@ export function FiscalAgentPanel() {
     setRawData(text);
   }, []);
 
+  const muestraSaldoDeclarado = MODOS_CON_DEVOLUCION.includes(selectedMode);
+  const saldoDeclaradoInvalido =
+    muestraSaldoDeclarado && !parseSaldoDeclarado(saldoDeclarado).ok;
+
   const handleRun = useCallback(() => {
-    if (!rawData.trim()) return;
-    start({
+    const input = buildFiscalAgentStartInput({
       rawData,
       mode: selectedMode,
-      company: {
-        name: companyName.trim() || undefined,
-        nit: companyNit.trim() || undefined,
-      },
+      companyName,
+      companyNit,
       language,
-      instructions: instructions.trim() || undefined,
-      dianRequirementText: dianText.trim() || undefined,
+      instructions,
+      dianText,
+      saldoDeclarado,
     });
-  }, [rawData, selectedMode, companyName, companyNit, language, instructions, dianText, start]);
+    if (!input) return;
+    start(input);
+  }, [rawData, selectedMode, companyName, companyNit, language, instructions, dianText, saldoDeclarado, start]);
 
   const handleReset = useCallback(() => {
     reset();
     setRawData('');
     setInstructions('');
     setDianText('');
+    setSaldoDeclarado('');
   }, [reset]);
 
   const fadeItem = (index: number) =>
@@ -356,12 +369,45 @@ export function FiscalAgentPanel() {
               </div>
             )}
 
+            {/* Saldo a favor declarado (Formulario 110) — modos con Módulo 6 */}
+            {muestraSaldoDeclarado && (
+              <div className="flex flex-col gap-1.5 mb-4 max-w-md">
+                <label htmlFor="fiscal-saldo-declarado" className="text-xs uppercase tracking-eyebrow text-n-500 font-medium">
+                  {fiscal.saldoDeclarado.label}
+                </label>
+                <input
+                  id="fiscal-saldo-declarado"
+                  type="text"
+                  inputMode="decimal"
+                  value={saldoDeclarado}
+                  onChange={(e) => setSaldoDeclarado(e.target.value)}
+                  placeholder={fiscal.saldoDeclarado.placeholder}
+                  aria-invalid={saldoDeclaradoInvalido}
+                  aria-describedby="fiscal-saldo-declarado-help"
+                  className={cn(
+                    'h-10 px-3 rounded-md text-sm',
+                    'bg-n-50 dark:bg-[rgba(10,10,10,0.5)]',
+                    'border border-n-300/60',
+                    'text-n-800 placeholder:text-n-400',
+                    'focus:outline-none focus:border-area-escudo focus:ring-1 focus:ring-area-escudo transition-[border-color,box-shadow]',
+                  )}
+                />
+                <p id="fiscal-saldo-declarado-help" className="text-xs text-n-700 leading-relaxed">
+                  {saldoDeclaradoInvalido ? (
+                    <span className="text-danger" role="alert">{fiscal.saldoDeclarado.invalid}</span>
+                  ) : (
+                    fiscal.saldoDeclarado.help
+                  )}
+                </p>
+              </div>
+            )}
+
             {/* Run button */}
             <button
               type="button"
               onClick={handleRun}
-              disabled={!rawData.trim()}
-              aria-disabled={!rawData.trim()}
+              disabled={!rawData.trim() || saldoDeclaradoInvalido}
+              aria-disabled={!rawData.trim() || saldoDeclaradoInvalido}
               className={cn(
                 'inline-flex items-center gap-2 px-6 py-3 rounded-lg',
                 'text-sm font-semibold transition-all duration-150',
