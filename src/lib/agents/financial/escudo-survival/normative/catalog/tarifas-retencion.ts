@@ -19,33 +19,46 @@ import type { RetentionTariffEntry } from '../types';
 export const TARIFAS_RETENCION: readonly RetentionTariffEntry[] = [
   {
     id: 'RTF_HONORARIOS',
-    concepto: 'Honorarios y comisiones — personas jurídicas declarantes',
+    concepto: 'Honorarios y comisiones — personas jurídicas',
+    // DUR 1.2.4.3.1 inc. 1: 11 % cuando el beneficiario es persona jurídica o
+    // asimilada. La condición de "declarante" no define la tarifa.
     tarifaDeclarante: '11%',
-    tarifaNoDeclarante: '11%',
+    tarifaNoDeclarante: null,
     umbralUVT: null,
     // Honorarios no tienen umbral mínimo UVT — se retiene desde el primer peso.
     // Ver RTF_HONORARIOS_THRESHOLD_UVT = 0 en constants.ts.
-    normaRef: 'Decreto 1625/2016, Art. 1.2.4.1.4',
+    normaRef: 'Decreto 1625/2016, Art. 1.2.4.3.1 inc. 1',
     estado: 'VIGENTE_2026',
   },
   {
     id: 'RTF_HONORARIOS_PN',
     concepto: 'Honorarios y comisiones — personas naturales',
-    // Art. 392 inciso 2 E.T. (mod. Art. 75 Ley 1819/2016): la tarifa del DIEZ
-    // por ciento (10%) es la del beneficiario NO obligado a declarar renta.
-    // El once por ciento (11%) es la del declarante. El catálogo las tenía
-    // INVERTIDAS (10% declarante / 11% no declarante) — corregido.
-    tarifaDeclarante: '11%',
+    // Auditoría 2026-09 (tributario-calc-09): el criterio del DUR 1.2.4.3.1
+    // para personas naturales es el MONTO, no la condición de declarante:
+    // 10 % por regla general y 11 % cuando del contrato se desprende que los
+    // ingresos del año superarán 3.300 UVT o cuando los pagos acumulados del
+    // mismo agente retenedor los superan (desde el pago que excede el tope).
+    // El 10 % del no obligado a declarar viene del Art. 392 inc. 3 E.T. Las
+    // rentas de trabajo no laborales de quien no contrató 2 o más
+    // trabajadores se retienen con la tabla del Art. 383 E.T. (par. 2 mod.
+    // Ley 2277/2022; DUR 1.2.4.1.17 par. 4 mod. Decreto 2231/2023).
+    tarifaDeclarante:
+      '10% — 11% cuando del contrato se desprenda que los ingresos del año ' +
+      'superarán 3.300 UVT ($172.834.200 con UVT 2026) o desde el pago con el ' +
+      'que los pagos acumulados del mismo agente retenedor en el año gravable ' +
+      'superen ese valor (DUR 1625/2016 Art. 1.2.4.3.1). La condición de ' +
+      'declarante no define la tarifa. Rentas de trabajo no laborales de quien ' +
+      'no contrató 2 o más trabajadores asociados a la actividad: tabla del ' +
+      'Art. 383 E.T. (par. 2 mod. Ley 2277/2022; DUR 1.2.4.1.17 par. 4 mod. ' +
+      'Decreto 2231/2023), no la tarifa plana.',
     tarifaNoDeclarante:
-      '10% — sube a 11% desde el pago que haga que los pagos acumulados del ' +
-      'mismo agente retenedor en el año gravable superen 3.300 UVT ' +
-      '($172.834.200 con UVT 2026), o cuando del contrato se desprenda que ' +
-      'los superará (DUR 1625/2016 Art. 1.2.4.3.1).',
+      '10% (Art. 392 inc. 3 E.T.), salvo que aplique la tabla del Art. 383 E.T. ' +
+      'a rentas de trabajo no laborales.',
     umbralUVT: null,
     // Vigencia: la regla 10%/11% rige sin cambios desde el año gravable 2017
     // (Ley 1819/2016). El Decreto 0572/2025 NO la modificó.
     normaRef:
-      'Art. 392 inc. 2 E.T. (mod. Art. 75 Ley 1819/2016) / Decreto 1625/2016, Art. 1.2.4.3.1',
+      'Art. 392 E.T. (mod. Art. 75 Ley 1819/2016) / Decreto 1625/2016, Arts. 1.2.4.3.1 y 1.2.4.1.17 par. 4 (mod. Decreto 2231/2023) / Art. 383 par. 2 E.T.',
     estado: 'VIGENTE_2026',
   },
   {
