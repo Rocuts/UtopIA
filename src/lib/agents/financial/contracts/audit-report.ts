@@ -323,8 +323,16 @@ export type TmtStatusJson = z.infer<typeof TmtStatusEnum>;
  * Analisis 5 — Tasa de Tributación Depurada (TTD, Art. 240 par. 6 E.T.;
  * Ley 2277/2022).
  * Aplica a TODO contribuyente de renta de los Arts. 240 / 240-1 E.T. sin
- * umbral de activos o patrimonio; 'no_aplica' se reserva para las excepciones
- * legales del paragrafo 6 (RTE Art. 19, SIMPLE, ZESE, hoteles parag. 5, etc.).
+ * umbral de activos o patrimonio. 'no_aplica' se reserva para:
+ *   - las exclusiones del texto del paragrafo 6 (ley_2277_2022.md), listadas
+ *     en EXCEPCIONES_TTD_PAR6 (tax-planning/prompts/tax-optimizer.prompt.ts):
+ *     personas juridicas extranjeras sin residencia, ZESE durante la tarifa
+ *     del 0%, ZOMAC, sociedades de los paragrafos 1, 5 y 7 del Art. 240 (los
+ *     5 y 7 si no estan obligadas al informe pais por pais), UD <= 0 y
+ *     contribuyentes del Art. 32 E.T.;
+ *   - quien no liquida el Art. 240: el RTE (Art. 19) y el SIMPLE no son
+ *     contribuyentes del Art. 240, asi que la TTD no les aplica; no son
+ *     excepciones del paragrafo 6.
  */
 export const TmtAnalysisSchema = z.object({
   tasaMinimaExigidaPct: z

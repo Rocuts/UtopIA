@@ -70,4 +70,31 @@ export const JURISPRUDENCIA: readonly JurisprudenceEntry[] = [
     normasAfectadas: ['Ley 1943 de 2018'],
     urlOficial: null,
   },
+  {
+    // I4-escudo 3: el resumen del Art. 240 par. 4 que va al prompt la cita.
+    // Fuente: ley_2277_2022.md y estatuto_tributario_completo.md
+    // (jurisprudencia de vigencia del par. 4 del Art. 240).
+    id: 'SENTENCIA_C_389_2023',
+    cita: 'Sentencia C-389 de 2023',
+    tribunal: 'Corte Constitucional',
+    fecha: '2023-10-04',
+    tema: 'Art. 240 par. 4 E.T. (Ley 2277/2022 art. 10) — sobretasa a la generación hidroeléctrica',
+    tesis:
+      'Parágrafo 4 CONDICIONALMENTE exequible: la sobretasa sólo grava la actividad de generación de energía eléctrica a través de recursos hídricos siempre que, en el año gravable, esa actividad tenga una renta gravable igual o superior a 30.000 UVT. Exequible por los cargos de legalidad y equidad tributaria.',
+    normasAfectadas: ['Art. 240 par. 4 E.T.', 'Ley 2277 de 2022, Art. 10'],
+    urlOficial: null,
+  },
+  {
+    // I4-escudo 3: misma fuente; el corpus la registra según el comunicado de
+    // prensa del 13-mar-2026.
+    id: 'SENTENCIA_C_050_2026',
+    cita: 'Sentencia C-050 de 2026',
+    tribunal: 'Corte Constitucional',
+    fecha: '2026-03-13',
+    tema: 'Art. 240 par. 4 E.T. (Ley 2277/2022 art. 10) — sobretasa a la generación hidroeléctrica',
+    tesis:
+      'Declaró EXEQUIBLE el parágrafo 4 frente a los cargos de libre competencia económica y justicia tributaria, estándose a lo resuelto en la C-389 de 2023, y se inhibió frente al cargo ambiental.',
+    normasAfectadas: ['Art. 240 par. 4 E.T.'],
+    urlOficial: null,
+  },
 ] as const;

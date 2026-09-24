@@ -446,6 +446,7 @@ export const dict = {
               title: 'Modo Supervivencia Élite',
               subtitle: 'Optimización fiscal y protección patrimonial en tiempo real',
               intro: 'Cinco análisis paralelos sobre tu balance bajo la normativa tributaria colombiana 2026.',
+              blockedReasonsTitle: 'Motivos por los que el balance no se puede usar',
               statusLabels: {
                 idle: 'Listo para analizar',
                 running: 'Analizando...',
@@ -640,6 +641,7 @@ export const dict = {
             cancel: 'Cancelar',
             runAgain: 'Analizar de nuevo',
             errorTitle: 'Error en análisis',
+            blockedReasonsTitle: 'Motivos por los que el balance no se puede usar',
             modes: {
               quick: 'Rápido',
               full: 'Completo',
@@ -2247,6 +2249,7 @@ export const dict = {
               title: 'Elite Survival Mode',
               subtitle: 'Real-time tax optimization and asset protection',
               intro: 'Five parallel analyses of your balance sheet under Colombian 2026 tax regulations.',
+              blockedReasonsTitle: 'Why the trial balance cannot be used',
               statusLabels: {
                 idle: 'Ready to analyze',
                 running: 'Analyzing...',
@@ -2441,6 +2444,7 @@ export const dict = {
             cancel: 'Cancel',
             runAgain: 'Analyze again',
             errorTitle: 'Analysis error',
+            blockedReasonsTitle: 'Why the trial balance cannot be used',
             modes: {
               quick: 'Quick',
               full: 'Full',

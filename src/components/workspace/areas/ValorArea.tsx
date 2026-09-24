@@ -31,7 +31,8 @@ import { useMemo } from 'react';
 
 import { useLanguage } from '@/context/LanguageContext';
 import { cn } from '@/lib/utils';
-import { calculateExitValue, formatCop } from '@/lib/kpis/exit-value';
+import { calculateExitValue } from '@/lib/kpis/exit-value';
+import { formatBigCop } from '@/lib/charts/format';
 import type { KpiResult } from '@/types/kpis';
 import { useAncoraView } from '@/hooks/useAncoraView';
 import { DataSourceLadder } from './shared/DataSourceLadder';
@@ -90,8 +91,10 @@ export function ValorArea({ compact = false, className }: ValorAreaProps) {
 
   // Sólo campos de AncoraView; null ⇒ N/D (nunca una cifra del mockup).
   const nd = ds.notAvailable;
+  // Formato compacto es-CO / en del helper común (coma decimal, «mil M»,
+  // negativos entre paréntesis), no el formatCop deprecado de exit-value.
   const fmt = (n: number | null | undefined) =>
-    view.hasData && n != null ? formatCop(n) : nd;
+    view.hasData && n != null && Number.isFinite(n) ? formatBigCop(n, language) : nd;
   const heroValue = fmt(v.ponderado);
   const heroReason = view.hasData && v.ponderado == null ? ds.valor.exitValueReason : null;
   const subKpis: Array<{ label: string; value: string; reason?: string | null }> = [
@@ -425,5 +428,5 @@ function SubmoduleCard({ sub, title, description, statusLabel }: SubmoduleCardPr
 }
 
 // Re-export helpers for consumer convenience
-export { calculateExitValue, formatCop };
+export { calculateExitValue };
 export default ValorArea;
