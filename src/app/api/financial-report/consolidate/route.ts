@@ -16,6 +16,7 @@ import { ancoraOrNull } from '@/lib/agents/financial/ancora/build-ancora';
 import { requireAuthSession } from '@/lib/auth/require-session';
 import { toJsonSafe } from '@/lib/preprocessing/json-safe';
 import { foldReportQualifications } from '@/lib/reports/fold-qualifications';
+import { serverActaVerdict, withServerActaVerdict } from '@/lib/reports/acta-verdict';
 import { parseReportParts } from '@/lib/reports/report-parts';
 import { buildFinancialReportVersion } from '@/lib/reports/financial-report-version';
 import {
@@ -171,20 +172,27 @@ export async function POST(req: Request) {
     if (!fromParts) return NextResponse.json(result);
 
     // ─── Versión persistida (procedencia servidor) ─────────────────────────
-    // El informe final lo ensambla el servidor: las salvedades de la Parte II y
-    // del acta se pliegan con la misma regla que la UI; el snapshot fiscal y el
-    // Âncora son los que `prepareFinancialContext` acaba de calcular desde el
-    // balance re-derivado (no los que el navegador recibió de /niif).
+    // El informe final lo ensambla el servidor: el acta se vuelve a cruzar
+    // contra la aritmética determinista del balance re-derivado (un veredicto
+    // omitido o reescrito por el cliente no llega a la versión: el del servidor
+    // sólo endurece el recibido); las salvedades de la Parte II y del acta se
+    // pliegan con la misma regla que la UI; el snapshot fiscal y el Âncora son
+    // los que `prepareFinancialContext` acaba de calcular desde el balance
+    // re-derivado (no los que el navegador recibió de /niif).
+    const governance = withServerActaVerdict(
+      fromParts.governance,
+      serverActaVerdict(fromParts.governance, ctx.effectiveCompany, ctx.ppForAgents),
+    );
     const ancora = ancoraOrNull(ctx.ancora);
     const report: FinancialReport = {
       company: ctx.effectiveCompany,
       niifAnalysis: foldReportQualifications(
         fromParts.niifAnalysis,
         fromParts.strategicAnalysis,
-        fromParts.governance,
+        governance,
       ),
       strategicAnalysis: fromParts.strategicAnalysis,
-      governance: fromParts.governance,
+      governance,
       consolidatedReport: result.consolidatedReport,
       validation: result.validation,
       ...(result.emittability ? { emittability: result.emittability } : {}),
