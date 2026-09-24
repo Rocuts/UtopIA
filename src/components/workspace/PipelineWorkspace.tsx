@@ -53,7 +53,10 @@ import type {
   StrategicAnalysisResult,
   GovernanceResult,
   FiscalSnapshot,
+  ReportValidationResult,
+  ReportEmittabilityState,
 } from '@/lib/agents/financial/types';
+import { buildConsolidatedReportMarkdown } from '@/lib/agents/financial/consolidated-markdown';
 import type { NiifAncora } from '@/lib/agents/financial/ancora/types';
 import { formatCopFromCents } from '@/lib/agents/financial/contracts/money';
 import type {
@@ -65,6 +68,7 @@ import type { QualityAssessment as BackendQualityAssessment } from '@/lib/agents
 import type { ReportIterationTurn } from './types';
 import { consumeSSE, fetchSSEWithRetry } from '@/lib/sse/consume';
 import { recallUploadedPreprocessed } from '@/lib/upload/preprocessed-handoff';
+import { resolveReportExportBlock, reportExportBlockCopy } from './report-export-gate';
 import {
   CLIENT_REPORT_MODEL_ID,
   detectMissingPhases,
@@ -610,13 +614,13 @@ function readReportMode(niifJson: unknown): 'LINEA_BASE' | 'TRANSICION' | 'COMPA
   return 'LINEA_BASE';
 }
 
-// Reproduce el `buildConsolidatedReport` del orchestrator backend para que el
-// cliente pueda ensamblar el Markdown final tras correr las 3 sub-fases. No es
-// 100% idéntico al server-side: este cliente NO ejecuta `validateConsolidatedReport`,
-// `provisionalWatermark`, ni `buildAdjustmentsAuditSection`. Esos validators viven
-// solo en el endpoint legacy `/api/financial-report` (mantenido por compat con
-// `/export`). Wave 4 los moverá a un endpoint `/consolidate` dedicado si el
-// audit team detecta regresiones medibles.
+// Ensamblaje del consolidado. El Markdown lo construye el módulo compartido
+// `buildConsolidatedReportMarkdown` (mismo texto que arma el servidor). Los
+// gates post-render (`validateConsolidatedReport` + `auditReportEmittable`
+// completo, con V8/V9/V10/V15 sobre el texto) corren en servidor:
+// `/api/financial-report/consolidate` (pipeline-flujo-16). Antes el cliente
+// ensamblaba el consolidado sin ninguno de ellos y el único lugar donde
+// corrían era el orchestrator legacy, sin llamador en la UI.
 function buildClientConsolidatedReport(
   company: CompanyInfo,
   niifContent: string,
@@ -624,58 +628,86 @@ function buildClientConsolidatedReport(
   governanceContent: string,
   language: 'es' | 'en',
 ): string {
-  const title =
-    language === 'en'
-      ? 'CONSOLIDATED FINANCIAL REPORT'
-      : 'REPORTE FINANCIERO CONSOLIDADO';
-  const subtitle =
-    language === 'en'
-      ? 'NIIF Elite Corporate Analysis'
-      : 'Analisis Corporativo Elite NIIF';
-  const date = new Date().toLocaleDateString(
-    language === 'es' ? 'es-CO' : 'en-US',
-    { year: 'numeric', month: 'long', day: 'numeric' },
+  return buildConsolidatedReportMarkdown(
+    company,
+    niifContent,
+    strategyContent,
+    governanceContent,
+    language,
   );
+}
 
-  return `# ${title}
-## ${subtitle}
+interface ServerConsolidation {
+  /** `null` si el servidor no respondió: se conserva el ensamblado local. */
+  consolidatedReport: string | null;
+  validation: ReportValidationResult;
+  emittability: ReportEmittabilityState | null;
+}
 
----
-
-| Campo | Detalle |
-|-------|---------|
-| **Empresa** | ${company.name} |
-| **NIT** | ${company.nit} |
-| **Tipo Societario** | ${company.entityType || 'N/A'} |
-| **Periodo Fiscal** | ${company.fiscalPeriod} |
-| **Fecha de Generacion** | ${date} |
-| **Generado por** | 1+1 — Financial Orchestrator (3 Agentes Especializados) |
-
----
-
-# PARTE I: ESTADOS FINANCIEROS NIIF
-*Preparado por: Agente Analista Contable NIIF*
-
-${niifContent}
-
----
-
-# PARTE II: ANALISIS ESTRATEGICO Y PROYECCIONES
-*Preparado por: Agente Director de Estrategia Financiera*
-
-${strategyContent}
-
----
-
-# PARTE III: GOBIERNO CORPORATIVO Y DOCUMENTOS LEGALES
-*Preparado por: Agente Especialista en Gobierno Corporativo*
-
-${governanceContent}
-
----
-
-> **Nota Legal:** Este reporte fue generado por 1+1, un sistema de inteligencia artificial. Las cifras, analisis y documentos legales deben ser validados por un Contador Publico certificado y un abogado antes de su uso oficial. 1+1 no reemplaza la asesoria profesional.
-`;
+/**
+ * Pide al servidor el consolidado validado. Si el paso no se pudo ejecutar
+ * (red, 4xx/5xx), el informe queda con `validation.ok = false` y un motivo
+ * explícito: sin gates post-render no se ofrece para descarga (política
+ * conservadora — nunca "validado" por omisión). Devuelve `null` si la corrida
+ * se abortó.
+ */
+async function runServerConsolidation(args: {
+  rawData: string;
+  company: CompanyInfo;
+  language: 'es' | 'en';
+  niifContent: string;
+  strategyContent: string;
+  governanceContent: string;
+  adjustmentLedger?: AdjustmentLedger;
+  signal: AbortSignal;
+}): Promise<ServerConsolidation | null> {
+  try {
+    const result = await fetchJSONWithRetry<{
+      consolidatedReport: string;
+      validation: ReportValidationResult;
+      emittability: ReportEmittabilityState | null;
+    }>(
+      '/api/financial-report/consolidate',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rawData: args.rawData,
+          company: args.company,
+          language: args.language,
+          niifContent: args.niifContent,
+          strategyContent: args.strategyContent,
+          governanceContent: args.governanceContent,
+          ...(args.adjustmentLedger?.adjustments?.length
+            ? { adjustmentLedger: args.adjustmentLedger }
+            : {}),
+        }),
+        signal: args.signal,
+      },
+      { retries: 2, backoffMs: [1000, 3000] },
+    );
+    return {
+      consolidatedReport: result.consolidatedReport,
+      validation: result.validation,
+      emittability: result.emittability ?? null,
+    };
+  } catch (err) {
+    if ((err as Error)?.name === 'AbortError') return null;
+    const detail = err instanceof Error ? err.message : String(err);
+    return {
+      consolidatedReport: null,
+      validation: {
+        ok: false,
+        errors: [
+          args.language === 'es'
+            ? `No se pudo ejecutar la validación post-render en el servidor (${detail.slice(0, 200)}). El informe no se ofrece para descarga hasta validarlo; vuelva a generarlo.`
+            : `Server post-render validation could not run (${detail.slice(0, 200)}). The report is not offered for download until validated; regenerate it.`,
+        ],
+        warnings: [],
+      },
+      emittability: null,
+    };
+  }
 }
 
 // Stubs vacíos para `strategicAnalysis` y `governance` cuando se construye el
@@ -1174,12 +1206,20 @@ function ReportViewer({
    * los eventos SSE `warning` mueren en el navegador sin handler, así que la
    * única señal que el usuario no puede pasar por alto es que el botón no esté.
    */
-  const reportQualifications = report?.niifAnalysis?.reconciliation;
-  const reportHasQualifications =
-    reportQualifications !== undefined && reportQualifications.clean === false;
+  // pipeline-flujo-14 / -16: el mismo gate cubre además el informe INCOMPLETO
+  // (Partes II/III vacías tras un fallo de Estrategia/Gobierno) y los gates
+  // post-render del servidor (validation / emittability de /consolidate).
+  const exportBlock = resolveReportExportBlock(report);
+  const downloadsBlocked = exportBlock !== null;
+  const downloadBlockCopy = exportBlock
+    ? reportExportBlockCopy(exportBlock, language, 'download')
+    : null;
+  const generateBlockCopy = exportBlock
+    ? reportExportBlockCopy(exportBlock, language, 'generate')
+    : null;
 
   const handleDownloadExcel = useCallback(async () => {
-    if (!report || isExportingExcel || reportHasQualifications) return;
+    if (!report || isExportingExcel || downloadsBlocked) return;
     setIsExportingExcel(true);
     setExportError(null);
     try {
@@ -1217,7 +1257,7 @@ function ReportViewer({
     } finally {
       setIsExportingExcel(false);
     }
-  }, [report, rawData, isExportingExcel, language, reportHasQualifications]);
+  }, [report, rawData, isExportingExcel, language, downloadsBlocked]);
 
   // ─── Exportar PDF ────────────────────────────────────────────────────────
   // POST /api/financial-report/export con { report, rawData, company,
@@ -1235,7 +1275,7 @@ function ReportViewer({
     // firmable tal como está, y el formato de salida no cambia ese hecho.
     // Auditoría 2026-08 (item 9): el PDF editorial se descargaba igual, de modo
     // que el mismo entregable quedaba bloqueado en .xlsx y disponible en .pdf.
-    if (!report || isExportingPdf || reportHasQualifications) return;
+    if (!report || isExportingPdf || downloadsBlocked) return;
     setIsExportingPdf(true);
     setExportError(null);
     try {
@@ -1286,7 +1326,7 @@ function ReportViewer({
     } finally {
       setIsExportingPdf(false);
     }
-  }, [report, rawData, company, language, auditReport, qualityReport, outputOptions, isExportingPdf, reportHasQualifications]);
+  }, [report, rawData, company, language, auditReport, qualityReport, outputOptions, isExportingPdf, downloadsBlocked]);
 
   // ─── Copiar Markdown ─────────────────────────────────────────────────────
   // Preferimos navigator.clipboard; fallback a textarea + execCommand.
@@ -1413,28 +1453,20 @@ function ReportViewer({
           <button
             type="button"
             onClick={handleDownloadExcel}
-            disabled={isExportingExcel || !report || reportHasQualifications}
+            disabled={isExportingExcel || !report || downloadsBlocked}
             aria-label={
-              reportHasQualifications
-                ? language === 'es'
-                  ? 'Descarga bloqueada: el informe tiene salvedades de reconciliación'
-                  : 'Download blocked: the report has reconciliation qualifications'
+              downloadBlockCopy
+                ? downloadBlockCopy.ariaLabel
                 : language === 'es'
                   ? 'Descargar Excel'
                   : 'Download Excel'
             }
-            title={
-              reportHasQualifications
-                ? language === 'es'
-                  ? 'La reconciliación contra el balance preprocesado no cerró. El informe no es firmable tal como está; revise las salvedades de la portada.'
-                  : 'Reconciliation against the preprocessed trial balance did not close. This report is not signable as issued; see the qualifications on the cover.'
-                : undefined
-            }
+            title={downloadBlockCopy?.title}
             className={cn(
               'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors',
               // `text-n-600` es el mínimo WCAG AA para estado deshabilitado
               // (3:1). `text-n-400` colapsa por debajo de 2:1 en modo claro.
-              isExportingExcel || !report || reportHasQualifications
+              isExportingExcel || !report || downloadsBlocked
                 ? 'bg-n-100 text-n-600 cursor-not-allowed'
                 : 'bg-gold-500 text-n-0 hover:bg-gold-700',
             )}
@@ -1451,28 +1483,20 @@ function ReportViewer({
           <button
             type="button"
             onClick={handleExportPdf}
-            disabled={isExportingPdf || !report || reportHasQualifications}
+            disabled={isExportingPdf || !report || downloadsBlocked}
             aria-label={
-              reportHasQualifications
-                ? language === 'es'
-                  ? 'Descarga bloqueada: el informe tiene salvedades de reconciliación'
-                  : 'Download blocked: the report has reconciliation qualifications'
+              downloadBlockCopy
+                ? downloadBlockCopy.ariaLabel
                 : language === 'es'
                   ? 'Exportar a PDF editorial'
                   : 'Export to editorial PDF'
             }
-            title={
-              reportHasQualifications
-                ? language === 'es'
-                  ? 'La reconciliación contra el balance preprocesado no cerró. El informe no es firmable tal como está; revise las salvedades de la portada.'
-                  : 'Reconciliation against the preprocessed trial balance did not close. This report is not signable as issued; see the qualifications on the cover.'
-                : undefined
-            }
+            title={downloadBlockCopy?.title}
             className={cn(
               'flex items-center gap-1.5 px-3 py-1.5 rounded border text-xs font-medium transition-colors',
               // `text-n-600` es el mínimo WCAG AA para estado deshabilitado
               // (3:1); `text-n-400` es nivel superficie y colapsa bajo 2:1.
-              isExportingPdf || !report || reportHasQualifications
+              isExportingPdf || !report || downloadsBlocked
                 ? 'border-n-200 text-n-600 cursor-not-allowed'
                 : 'border-n-200 text-n-700 hover:bg-n-50 hover:text-n-1000',
             )}
@@ -1517,26 +1541,18 @@ function ReportViewer({
               // El HTML editorial es un entregable como el .xlsx y el .pdf:
               // reproduce las mismas cifras que la reconciliación no cuadró.
               // Un informe CON SALVEDADES no se emite en ningún formato.
-              disabled={isGeneratingHtml || !report || reportHasQualifications}
+              disabled={isGeneratingHtml || !report || downloadsBlocked}
               aria-label={
-                reportHasQualifications
-                  ? language === 'es'
-                    ? 'Generación bloqueada: el informe tiene salvedades de reconciliación'
-                    : 'Generation blocked: the report has reconciliation qualifications'
+                generateBlockCopy
+                  ? generateBlockCopy.ariaLabel
                   : htmlReady
                     ? language === 'es' ? 'Ver reporte HTML' : 'View HTML report'
                     : language === 'es' ? 'Generar reporte HTML' : 'Generate HTML report'
               }
-              title={
-                reportHasQualifications
-                  ? language === 'es'
-                    ? 'La reconciliación contra el balance preprocesado no cerró. El informe no es firmable tal como está; revise las salvedades de la portada.'
-                    : 'Reconciliation against the preprocessed trial balance did not close. This report is not signable as issued; see the qualifications on the cover.'
-                  : undefined
-              }
+              title={generateBlockCopy?.title}
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded border text-xs font-medium transition-colors',
-                isGeneratingHtml || !report || reportHasQualifications
+                isGeneratingHtml || !report || downloadsBlocked
                   ? 'border-n-200 text-n-600 cursor-not-allowed'
                   : htmlReady
                     ? 'border-success/30 bg-success/10 text-success hover:bg-success/20'
@@ -2381,7 +2397,7 @@ export function PipelineWorkspace() {
       // canónico (concatenación de los 3 fullContent — mismo formato que el
       // orchestrator legacy en `buildConsolidatedReport`).
       // Las salvedades del acta se pliegan sobre la reconciliación del NIIF: es
-      // el ÚNICO canal que apaga los botones de descarga (`reportHasQualifications`
+      // el canal que apaga los botones de descarga (`downloadsBlocked`
       // lee `niifAnalysis.reconciliation.clean`). Sin esto, un acta con la reserva
       // legal mal calculada seguiría siendo descargable en Excel, PDF y HTML pese
       // a llevar el sello impreso en el cuerpo.
@@ -2404,12 +2420,39 @@ export function PipelineWorkspace() {
         governanceResult.fullContent,
         runLanguage,
       );
+      // pipeline-flujo-16 — gates post-render en servidor sobre el mismo
+      // consolidado (validateConsolidatedReport + auditReportEmittable sin
+      // skip). `validation` y `emittability` viajan en el reporte: apagan los
+      // botones de descarga y /export los ve vía financialExportBlockers.
+      const serverConsolidation = await runServerConsolidation({
+        rawData: runRawData,
+        company: niifContext.company,
+        language: runLanguage,
+        niifContent: niifResult.fullContent,
+        strategyContent: strategyResult.fullContent,
+        governanceContent: governanceResult.fullContent,
+        adjustmentLedger,
+        signal: controller.signal,
+      });
+      if (!serverConsolidation) return;
+      const consolidationNotices = [
+        ...serverConsolidation.validation.errors,
+        ...(serverConsolidation.emittability?.kind === 'no-emitible'
+          ? serverConsolidation.emittability.blockers.map((b) => b.message)
+          : []),
+        ...serverConsolidation.validation.warnings,
+      ];
+      if (consolidationNotices.length > 0) collectWarnings(consolidationNotices);
       phase1Report = {
         company: niifContext.company,
         niifAnalysis: niifResult,
         strategicAnalysis: strategyResult,
         governance: governanceResult,
-        consolidatedReport: fullConsolidated,
+        consolidatedReport: serverConsolidation.consolidatedReport ?? fullConsolidated,
+        validation: serverConsolidation.validation,
+        ...(serverConsolidation.emittability
+          ? { emittability: serverConsolidation.emittability }
+          : {}),
         generatedAt: new Date().toISOString(),
         ...(fiscalSnapshotRef.current ? { fiscalSnapshot: fiscalSnapshotRef.current } : {}),
         ...(ancoraRef.current ? { ancora: ancoraRef.current } : {}),
@@ -2784,11 +2827,16 @@ export function PipelineWorkspace() {
     // reconciliación no logró cuadrar. Un informe sellado CON SALVEDADES no se
     // emite en NINGÚN formato — el visor Markdown sigue disponible con el sello
     // en portada, que es donde el usuario debe leer las salvedades.
-    if (backendReport.niifAnalysis.reconciliation?.clean === false) {
+    // pipeline-flujo-14 / -16: el mismo gate cubre el informe INCOMPLETO y los
+    // gates post-render del servidor (validation / emittability).
+    const htmlBlock = resolveReportExportBlock(backendReport);
+    if (htmlBlock) {
       setHtmlError(
-        language === 'es'
-          ? 'La reconciliación contra el balance preprocesado no cerró: el informe está sellado CON SALVEDADES y no es firmable tal como está. Revise las salvedades de la portada antes de emitirlo.'
-          : 'Reconciliation against the preprocessed trial balance did not close: the report is sealed WITH QUALIFICATIONS and is not signable as issued. Review the qualifications on the cover before issuing it.',
+        htmlBlock.reason === 'qualifications'
+          ? language === 'es'
+            ? 'La reconciliación contra el balance preprocesado no cerró: el informe está sellado CON SALVEDADES y no es firmable tal como está. Revise las salvedades de la portada antes de emitirlo.'
+            : 'Reconciliation against the preprocessed trial balance did not close: the report is sealed WITH QUALIFICATIONS and is not signable as issued. Review the qualifications on the cover before issuing it.'
+          : reportExportBlockCopy(htmlBlock, language, 'generate').title,
       );
       return;
     }
