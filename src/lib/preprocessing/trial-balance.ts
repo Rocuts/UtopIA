@@ -146,16 +146,18 @@ export interface ControlTotalsCents {
   /** Ingresos netos = |ingresos bruto Clase 4| − totalDevoluciones, en cents. */
   ingresosNetos: bigint;
   /**
-   * Saldo a favor del impuesto de renta (Pulido NIIF PYME Grupo 2).
-   * Detector cents:
-   *   1. Si grupo 5404 acreedor (saldo crédito) → magnitud absoluta del crédito.
-   *   2. Si 5404 ausente y 1805 (Impuesto corriente activo) > 0 → saldo de 1805.
-   *   3. Si 1355 (Anticipo de impuestos) > 0 sin 1805 ni 5404 → ese saldo.
+   * Saldo a favor del impuesto de renta (niif-preproceso-19).
+   * Créditos de renta − pasivo 2404, sólo si el resultado es positivo:
+   *   - 1355: sólo 135505 (anticipo de renta), 135515 (retención en la
+   *     fuente) y 135595 cuando el nombre es de renta. ICA, IVA retenido,
+   *     sobrantes, contribuciones e impuestos descontables no cuentan.
+   *   - 1805 ("Bienes de arte y cultura" en el PUC oficial) sólo cuando el
+   *     nombre de la cuenta indica un crédito de impuesto (catálogo propio).
    *   0n cuando no hay saldo a favor identificable.
    * Why: el Art. 850 E.T. exige que un saldo a favor de renta se presente como
-   * activo (1355 / 1805), nunca neteado contra el gasto (clase 54). V13 lee este
-   * campo para validar que el reporte declara el saldo a favor en cuenta de
-   * activo y NO compensa contra gasto en P&L.
+   * activo, nunca neteado contra el gasto (clase 54). V13 lee este campo para
+   * validar que el reporte declara el saldo a favor en cuenta de activo y NO
+   * compensa contra gasto en P&L.
    */
   saldoAFavorImpuesto: bigint;
 }
@@ -1853,32 +1855,27 @@ function buildSnapshotForPeriod(
   const utilidadAntesImpuestos = ingresosNetos - (gastosTotales - impuestoCausadoPeriodo);
 
   // -------------------------------------------------------------------------
-  // Saldo a favor del impuesto de renta (Pulido NIIF PYME Grupo 2).
-  // Detector cents:
-  //   1. Si grupo 5404 acreedor (saldo crédito → balance < 0 en clase 5
-  //      cuya naturaleza es deudora) → magnitud absoluta del crédito.
-  //   2. Si 5404 ausente y 1805 (Impuesto corriente activo) > 0 → ese saldo.
-  //   3. Si 1355 (Anticipo de impuestos) > 0 sin 1805 ni 5404 → ese saldo.
-  //   0 cuando no hay saldo a favor identificable.
+  // Saldo a favor del impuesto de renta (niif-preproceso-19, decisión fase 3).
+  //   Créditos de renta = 135505 (anticipo de renta) + 135515 (retención en
+  //   la fuente) + 135595 con nombre de renta + 1805 cuyo NOMBRE indica un
+  //   crédito de impuesto (en el PUC oficial 1805 es "Bienes de arte y
+  //   cultura"). ICA, IVA retenido, sobrantes, contribuciones e impuestos
+  //   descontables no son renta. 5404 no existe en el PUC (grupo 54 = 5405).
+  //   Saldo a favor = créditos de renta − pasivo 2404, sólo si es positivo.
   // Why: el Art. 850 E.T. exige que un saldo a favor de renta se presente
-  // como activo (1355 / 1805), nunca neteado contra el gasto (clase 54).
+  // como activo, nunca neteado contra el gasto (clase 54); presentar como
+  // "saldo a favor" una obra de arte o un anticipo de ICA es una cifra falsa.
   // -------------------------------------------------------------------------
-  // ITEM 1 — cent-exact: estos saldos se restan/comparan contra
-  // controlTotals al centavo (R16, art. 850 E.T.). Acumular en cents
-  // garantiza que el "Neto a Pagar" cuadre exactamente.
-  const saldo5404 = sumLeavesPrecise(leafRows.filter((r) => r.code.startsWith('5404')));
-  const saldo1805 = sumLeavesPrecise(leafRows.filter((r) => r.code.startsWith('1805')));
-  const saldo1355 = sumLeavesPrecise(leafRows.filter((r) => r.code.startsWith('1355')));
-
-  let saldoAFavorImpuesto = 0;
-  if (saldo5404 < 0) {
-    // 5404 acreedor: clase 5 con saldo negativo es crédito (Art. 850 E.T.).
-    saldoAFavorImpuesto = Math.abs(saldo5404);
-  } else if (saldo1805 > 0) {
-    saldoAFavorImpuesto = saldo1805;
-  } else if (saldo1355 > 0) {
-    saldoAFavorImpuesto = saldo1355;
-  }
+  // ITEM 1 — cent-exact: créditos y pasivo se netean en centavos.
+  const creditosRentaCents = toCents(
+    sumLeavesPrecise(leafRows.filter((r) => isRentaCreditAccount(r.code, r.name))),
+  );
+  const pasivoRenta2404Cents = toCents(
+    sumLeavesPrecise(leafRows.filter((r) => r.code.startsWith('2404'))),
+  );
+  const saldoAFavorCents = creditosRentaCents - pasivoRenta2404Cents;
+  const saldoAFavorImpuesto =
+    saldoAFavorCents > BigInt(0) ? Number(saldoAFavorCents) / 100 : 0;
 
   // -------------------------------------------------------------------------
   // Wave 2.F4 — Devoluciones 4175 (Parte 1.3 spec v2.0).
@@ -2931,6 +2928,25 @@ function collectParseIssueReasons(rows: RawAccountRow[], period: string): string
   return reasons;
 }
 
+// ---------------------------------------------------------------------------
+// Créditos del impuesto de renta (niif-preproceso-19, decisión fase 3)
+// ---------------------------------------------------------------------------
+const TAX_CREDIT_NAME =
+  /\b(impuestos?|anticipos?|retencion(?:es)?|autorretencion(?:es)?|saldos? a favor|sobrantes?)\b/;
+const RENTA_NAME = /\b(renta|retencion en la fuente|autorretencion(?:es)?)\b/;
+const NON_RENTA_TAX_NAME =
+  /\b(ica|reteica|industria y comercio|iva|reteiva|impuestos? (?:a|sobre) las ventas|descontables?|contribucion(?:es)?|timbre|predial|gmf)\b/;
+
+function isRentaCreditAccount(code: string, name: string): boolean {
+  const n = normalizeHeaderText(name);
+  if (NON_RENTA_TAX_NAME.test(n)) return false;
+  if (code.startsWith('1805')) return TAX_CREDIT_NAME.test(n);
+  if (!code.startsWith('1355')) return false;
+  const subcuenta = code.slice(0, 6);
+  if (subcuenta === '135505' || subcuenta === '135515') return true;
+  if (subcuenta === '135595' || code.length < 6) return RENTA_NAME.test(n);
+  return false;
+}
 
 function findMissingAccountsForClass(
   allRows: ViewRow[],
