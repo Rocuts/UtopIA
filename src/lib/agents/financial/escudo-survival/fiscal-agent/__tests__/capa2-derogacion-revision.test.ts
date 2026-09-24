@@ -78,6 +78,20 @@ describe('NT-09 — Art. 36-3 presentado como aplicable', () => {
     expect(veredicto(t)).toBe('advertencia');
   });
 
+  // Revisión adversarial de NT-09: la cita con el prefijo en inglés
+  // («Article 36-3») no se extraía y la frase pasaba como válida.
+  it.each([
+    'Article 36-3 E.T. still applies, so the capitalization is tax-free.',
+    'Under Article 36-3 of the Tax Code, capitalized profits are tax-free.',
+  ])('«Article 36-3» presentado como aplicable ⇒ bloqueo: %s', (t) => {
+    expect(veredicto(t)).toBe('bloqueo');
+  });
+
+  it('«Article 36-3» mencionado como derogado ⇒ advertencia; el de otra ley no se extrae', () => {
+    expect(veredicto('Article 36-3 E.T. was repealed by Law 2277 of 2022.')).toBe('advertencia');
+    expect(veredicto('Article 36-3 of Law 9999 of 2030 governs another matter.')).toBeUndefined();
+  });
+
   it('el «Art. 36-3» de otra norma o de un artículo vigente no se extrae', () => {
     const r = validateNormativeResponse('El Art. 36-3 de la Ley 9999 de 2030 y el Art. 240 regulan otra materia.', MOTOR_NORMATIVO_CATALOG);
     expect(r.citations.some((c) => c.citation.normalized === 'Art. 36-3 E.T.')).toBe(false);

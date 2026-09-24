@@ -585,13 +585,20 @@ function citasDerogadasSinSufijo(
     const m = /^Art\. (\d+(?:-\d+)?) E\.T\.$/.exec(a.cita);
     if (!m) continue;
     const num = m[1].replace(/-/g, '\\-');
-    const re = new RegExp(`\\b(?:Art(?:[íi]culo|\\.)?|Articulo)\\s*${num}(?![\\d-])`, 'gi');
+    // «Article» (salida en inglés) también: «Article 36-3 E.T. still applies»
+    // no se extraía (revisión adversarial de NT-09).
+    const re = new RegExp(`\\b(?:Art(?:[íi]culo|icle|\\.)?|Articulo)\\s*${num}(?![\\d-])`, 'gi');
     for (const hit of text.matchAll(re)) {
       const start = hit.index ?? 0;
       const end = start + hit[0].length;
       if (yaExtraidas.some((c) => start >= c.position.start && start < c.position.end)) continue;
       const despues = text.slice(end, end + 30);
-      if (/^\s*(?:de\s+la\s+|del\s+|de\s+)?(?:Ley|Decreto|DUR|C\.?\s*Co\b|C[óo]digo|Resoluci[óo]n)/i.test(despues)) continue;
+      if (
+        /^\s*(?:(?:de\s+la\s+|del\s+|de\s+)?(?:Ley|Decreto|DUR|C\.?\s*Co\b|C[óo]digo|Resoluci[óo]n)|of\s+(?:the\s+)?(?:Law|Decree|Resolution|Commercial\s+Code)\b)/i.test(
+          despues,
+        )
+      )
+        continue;
       out.push({ kind: 'articulo_et', normalized: a.cita, raw: hit[0], position: { start, end } });
     }
   }
