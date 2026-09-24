@@ -528,16 +528,74 @@ const AFIRMA_VIGENCIA =
   /(?<!\bno\s)\b(?:sigue|contin[úu]a|permanece|est[áa]|es)\s+vigente\b|\b(?:remains|still|is)\s+in\s+force\b/i;
 
 /**
+ * Re-auditoría 2026-09-24 (NT-09): frases que mencionan la derogación pero
+ * presentan la norma como APLICABLE pasaban como advertencia: «Aunque fue
+ * derogado, el Art. 36-3 E.T. sigue siendo aplicable…», «…permite capitalizar
+ * utilidades sin impuesto pese a la propuesta de derogación», «is yet to be
+ * repealed, so … tax-free», «La derogación … quedó sin efecto…». Patrones
+ * estrechos (presente de indicativo, derogación sólo propuesta o dejada sin
+ * efecto): una mención en pasado («permitía capitalizar») no cuenta.
+ */
+const PRESENTA_COMO_APLICABLE = new RegExp(
+  [
+    '(?<!\\bno\\s)(?<!\\bya\\s)\\b(?:sigue|siguen|contin[úu]an?|permanecen?)\\s+(?:siendo\\s+)?(?:aplicables?|vigentes?|en\\s+vigor)\\b',
+    '(?<!\\bno\\s)(?<!\\bya\\s)\\b(?:sigue|siguen|contin[úu]an?)\\s+(?:aplic[áa]ndose|aplicando|rigiendo|produciendo\\s+efectos)\\b',
+    '(?<!\\bno\\s)(?<!\\bya\\s)\\bpermiten?\\s+capitalizar\\b',
+    '\\b(?:propuesta|proyecto|intento)\\s+de\\s+(?:su\\s+)?derogaci[óo]n\\b',
+    '\\bderogaci[óo]n\\b[^;\\n]{0,80}\\bqued[óo]\\s+sin\\s+efectos?\\b',
+    '\\b(?:yet\\s+to\\s+be|not\\s+yet)\\s+repealed\\b',
+    '\\bproposed\\s+repeal\\b',
+    '\\bstill\\s+(?:applies|apply|applicable|in\\s+effect)\\b',
+    '\\b(?:is|are|remains?)\\s+(?:still\\s+)?tax[-\\s]free\\b',
+  ].join('|'),
+  'i',
+);
+
+/**
  * `true` si la frase afirma la derogación de la norma y no la presenta como
  * vigente («fue derogado», «está derogada», «derogó», «repealed»). Una
- * negación («no fue derogado») o una afirmación de vigencia («sigue vigente»)
+ * negación («no fue derogado»), una afirmación de vigencia («sigue vigente»)
+ * o de aplicabilidad («sigue siendo aplicable», «permite capitalizar», NT-09)
  * la descartan.
  */
 export function fraseAfirmaDerogacion(frase: string): boolean {
   if (!AFIRMA_DEROGACION.test(frase)) return false;
   if (NIEGA_DEROGACION.test(frase)) return false;
   if (AFIRMA_VIGENCIA.test(frase)) return false;
+  if (PRESENTA_COMO_APLICABLE.test(frase)) return false;
   return true;
+}
+
+/**
+ * Re-auditoría 2026-09-24 (NT-09): sin el sufijo «E.T.» el extractor no ve
+ * «Con el Art. 36-3 se capitalizan utilidades sin impuesto» y la frase pasaba
+ * como válida. Para los artículos que el catálogo marca DEROGADO se extrae
+ * también la cita sin sufijo (salvo que la siga otra norma: «de la Ley…»,
+ * «del Decreto…»). Se limita a los derogados para no bloquear como
+ * NO_VERIFICADO los «Art. N» de otras normas.
+ */
+function citasDerogadasSinSufijo(
+  text: string,
+  catalogue: NormativeCatalogue,
+  yaExtraidas: readonly ParsedCitation[],
+): ParsedCitation[] {
+  const out: ParsedCitation[] = [];
+  for (const a of catalogue.articulosET) {
+    if (a.estado !== 'DEROGADO') continue;
+    const m = /^Art\. (\d+(?:-\d+)?) E\.T\.$/.exec(a.cita);
+    if (!m) continue;
+    const num = m[1].replace(/-/g, '\\-');
+    const re = new RegExp(`\\b(?:Art(?:[íi]culo|\\.)?|Articulo)\\s*${num}(?![\\d-])`, 'gi');
+    for (const hit of text.matchAll(re)) {
+      const start = hit.index ?? 0;
+      const end = start + hit[0].length;
+      if (yaExtraidas.some((c) => start >= c.position.start && start < c.position.end)) continue;
+      const despues = text.slice(end, end + 30);
+      if (/^\s*(?:de\s+la\s+|del\s+|de\s+)?(?:Ley|Decreto|DUR|C\.?\s*Co\b|C[óo]digo|Resoluci[óo]n)/i.test(despues)) continue;
+      out.push({ kind: 'articulo_et', normalized: a.cita, raw: hit[0], position: { start, end } });
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -558,7 +616,10 @@ export function validateCitations(
   text: string,
   catalogue: NormativeCatalogue,
 ): CitationCheckResult[] {
-  const citations = extractCitations(text);
+  const extraidas = extractCitations(text);
+  const citations = [...extraidas, ...citasDerogadasSinSufijo(text, catalogue, extraidas)].sort(
+    (a, b) => a.position.start - b.position.start,
+  );
   if (citations.length === 0) return [];
 
   const index = buildLookupIndex(catalogue);
