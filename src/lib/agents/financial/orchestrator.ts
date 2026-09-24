@@ -826,8 +826,10 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
   // real era 500 M, así que NO se publica. Se publican los ingresos
   // operacionales netos (41 − 4175) y los otros ingresos no operacionales
   // (grupo 42 y demás) por separado — decisión del coordinador 2026-09: el 42
-  // va debajo de la utilidad operacional — y el total neto de devoluciones
-  // (NIIF 15 §47 obliga presentación neta).
+  // va debajo de la utilidad operacional — y el total neto de devoluciones.
+  // Restar la 4175 (41 − 4175) y revelar su cifra en su propia línea es un
+  // criterio de presentación de UtopIA, no una exigencia normativa: el texto
+  // que viaja al LLM no lo atribuye a NIIF 15 §47 (I5-8; spec v10.1, I4-4).
   const totalsForRev = totals as ControlTotalsInput & {
     ingresosNetos?: number;
     totalDevoluciones?: number;
@@ -862,7 +864,8 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
         'Total Ingresos Netos (neto de devoluciones 4175)',
         totalsForRev.ingresosNetos,
         cts?.ingresosNetos,
-        ` (devoluciones 4175 detectadas: ${fmtCop(devs)} COP; NIIF 15 §47)${pygTag}`,
+        ` (devoluciones 4175 detectadas: ${fmtCop(devs)} COP; criterio de presentación de UtopIA: ` +
+          `ingresos operacionales netos = 41 − 4175, con la 4175 revelada en su propia línea)${pygTag}`,
       ),
     );
   }
