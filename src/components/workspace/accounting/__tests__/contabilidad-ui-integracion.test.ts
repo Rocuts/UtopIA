@@ -116,6 +116,14 @@ describe('cierre anual en el período 13 (contab-nomina-04)', () => {
     });
   });
 
+  it('OpenPeriodModal conserva el mes elegido (fecha de referencia estable entre renders)', () => {
+    // Con `const now = new Date()` el efecto que depende de `now` corría en cada
+    // render y devolvía la selección al mes actual: el 13 no se podía elegir.
+    const s = src('OpenPeriodModal.tsx');
+    expect(s).toMatch(/const now = useMemo\(\(\) => new Date\(\), \[\]\)/);
+    expect(s).not.toMatch(/const now = new Date\(\);/);
+  });
+
   it('OpenPeriodModal y ClosePeriodConfirmDialog usan esas decisiones', () => {
     expect(src('OpenPeriodModal.tsx')).toMatch(/periodMonthOptions\(/);
     const dialog = src('ClosePeriodConfirmDialog.tsx');

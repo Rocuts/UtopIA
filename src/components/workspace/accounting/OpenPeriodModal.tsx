@@ -41,7 +41,10 @@ export function OpenPeriodModal({
   const monthOptions = periodMonthOptions(isEs ? 'es' : 'en');
   const monthName = (m: number) => periodMonthLabel(m, isEs ? 'es' : 'en');
 
-  const now = new Date();
+  // Estable entre renders: con `new Date()` en cada render el efecto de abajo
+  // (que depende de `now`) se re-ejecutaba tras cada cambio y devolvía el mes y
+  // el año seleccionados a los de hoy — no se podía elegir el período 13.
+  const now = useMemo(() => new Date(), []);
   const [year, setYear] = useState<number>(defaultYear);
   const [month, setMonth] = useState<number>(now.getMonth() + 1);
   const [submitting, setSubmitting] = useState(false);
