@@ -496,7 +496,11 @@ async function extractText(buffer: Buffer, filename: string): Promise<string> {
         // los convierte a texto y escapa cada campo segun RFC 4180: un nombre
         // de cuenta con coma ("Propiedades, planta y equipo") ya no desplaza
         // las columnas (ingesta-05).
-        rows.push(xlsxRowToCsvLine(row.values as unknown[], rows.length === 0));
+        const line = xlsxRowToCsvLine(row.values as unknown[], rows.length === 0);
+        // Filas sin ningún valor (sólo formato) no aportan: si quedaran
+        // primeras, el parser las tomaría como encabezado.
+        if (/^,*$/.test(line)) return;
+        rows.push(line);
       });
       if (rows.length === 0) return;
       // Cada hoja viaja como bloque etiquetado con su NOMBRE. El periodo lo

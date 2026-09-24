@@ -151,6 +151,17 @@ describe('/api/upload — XLSX → CSV (ingesta-05 y celdas numéricas)', () => 
     expect(r.preprocessed!.primary.controlTotals.activo).toBe(1_000_000);
   });
 
+  it('filas vacías (sólo formato) antes del encabezado no se toman como encabezado', async () => {
+    const wb = new Workbook();
+    const ws = wb.addWorksheet('Balance 2025');
+    ws.addRow(['', '', '']);
+    ws.addRow(['codigo', 'nombre', 'saldo']);
+    for (const [c, n, v] of BASE) ws.addRow([c, n, v]);
+    const r = await upload(Buffer.from(await wb.xlsx.writeBuffer()), 'balance.xlsx');
+    expect(r.rawData!.split('\n')[1]).toBe('codigo,nombre,saldo');
+    expect(r.preprocessed!.primary.controlTotals.activo).toBe(1_000_000);
+  });
+
   it('códigos PUC numéricos se emiten como enteros y el resultado de fórmula IEEE-754 se redondea a centavos', async () => {
     const rows: unknown[][] = BASE.map(([c, n, v]) => [Number(c), plain(n), v]);
     rows[0] = [11050501, 'Caja general', 100.1 + 200.2]; // 300.29999999999995
