@@ -22,6 +22,11 @@
 //   UVT 2026 = $52.374 (Res. DIAN 000238 de 15-dic-2025) ⇒ 1.090 UVT =
 //   $57.087.660.
 // Fuente: https://normograma.dian.gov.co/dian/compilacion/docs/decreto_1103_2023.htm
+//
+// auditoria-calidad-31 (fase 2): el texto de la Ley 43/1990 art. 13 par. 2
+// (umbrales del Revisor Fiscal) no está en src/data/tax_docs; el operador
+// ('>') se conserva igual que en prompts/governance-specialist.prompt.ts
+// hasta incorporar la fuente (si dice "sean o excedan", pasa a '≥').
 // ---------------------------------------------------------------------------
 
 import type { CompanyInfo } from '../../types';
@@ -124,7 +129,7 @@ export function buildLegalAuditorPrompt(
     tipoSocietarioRules.push('- S.A.: convocatoria con 15 dias habiles de antelacion cuando se examinan los estados financieros de fin de ejercicio (Art. 424 C.Co.). Quorum: mayoria de acciones suscritas (Art. 427 C.Co.). Reserva legal 10% bajo Art. 452 C.Co. El minimo a repartir sube al 70% cuando las reservas legal, estatutaria y ocasionales exceden el 100% del capital suscrito (Art. 454 C.Co.). Revisor fiscal SIEMPRE obligatorio (Art. 203 C.Co.).');
   }
   if (isLTDA) {
-    tipoSocietarioRules.push('- LTDA: convocatoria segun estatutos o Arts. 181-186 C.Co. Quorum: mayoria de socios representando al menos la mitad del capital (Art. 359 C.Co.). Reserva legal 10% bajo Art. 371 + 452 C.Co. Dividendos en proporcion a aportes (Art. 150 C.Co.). Revisor fiscal obligatorio si ingresos>3.000 SMMLV o activos>5.000 SMMLV.');
+    tipoSocietarioRules.push('- LTDA: convocatoria segun estatutos o Arts. 181-186 C.Co. Quorum: mayoria de socios representando al menos la mitad del capital (Art. 359 C.Co.). Reserva legal 10% bajo Art. 371 + 452 C.Co. Dividendos en proporcion a aportes (Art. 150 C.Co.). Revisor fiscal obligatorio si ingresos>3.000 SMMLV o activos>5.000 SMMLV (Art. 13 par. 2 Ley 43/1990).');
   }
   if (tipo === 'OTRO') {
     tipoSocietarioRules.push('- Tipo societario no identificado: evaluar contra los estatutos y el Codigo de Comercio; NEVER presumir el regimen supletorio de la SAS.');

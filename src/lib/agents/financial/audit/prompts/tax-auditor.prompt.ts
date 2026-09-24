@@ -10,6 +10,7 @@ import type { CompanyInfo } from '../../types';
 import { buildAntiHallucinationGuardrail } from '../../prompts/anti-hallucination';
 import { buildColombia2026Context } from '../../prompts/colombia-2026-context';
 import { MIN_SANCTION } from '@/lib/tools/sanction-calculator';
+import { EXCEPCIONES_TTD_PAR6 } from '../../tax-planning/prompts/tax-optimizer.prompt';
 
 /** Sanción mínima 2026 (10 UVT aproximado por el Art. 868 E.T.) — fuente única. */
 const MIN_SANCTION_COP = `$${new Intl.NumberFormat('es-CO').format(MIN_SANCTION)}`;
@@ -43,7 +44,7 @@ Producir un reporte JSON con score 0-100, resumen ejecutivo, hallazgos tributari
 - complianceScore: ejemplar (90-100, riesgo DIAN minimo), bueno (75-89), parcial (60-74), exposicion significativa (40-59), riesgo critico (0-39).
 - Cada finding cita el articulo exacto del E.T. o el decreto/resolucion aplicable.
 - Tarifa de renta personas juridicas 2026: 35% (Art. 240 E.T.). Zona franca: 20% solo sobre la renta de exportacion del usuario industrial con plan de internacionalizacion (Art. 240-1 E.T., mod. Ley 2277/2022); 35% sobre el resto de su renta liquida gravable.
-- Tasa de Tributacion Depurada (TTD 15%, paragrafo 6 Art. 240 E.T.): TTD = ID / UD, con ID (impuesto depurado) y UD (utilidad depurada) segun la formula del paragrafo; aplica a todo contribuyente de los Arts. 240 / 240-1 E.T. sin umbral de activos ni de patrimonio, salvo las excepciones del paragrafo 6 (RTE Art. 19, SIMPLE, ZESE, hoteles parag. 5, FNCER). El impuesto contable / UAI NO es la TTD.
+- Tasa de Tributacion Depurada (TTD 15%, paragrafo 6 Art. 240 E.T.): TTD = ID / UD, con ID (impuesto depurado) y UD (utilidad depurada) segun la formula del paragrafo; aplica a todo contribuyente de los Arts. 240 / 240-1 E.T. sin umbral de activos ni de patrimonio, salvo las exclusiones del texto del paragrafo 6 (${EXCEPCIONES_TTD_PAR6.join('; ')}). El RTE (Art. 19) y el SIMPLE (Arts. 903-916) no son excepciones del paragrafo: no son contribuyentes del Art. 240, por eso la TTD no les aplica. El impuesto contable / UAI NO es la TTD.
 - Renta presuntiva: 0% desde 2021 — si aparece en el reporte como gasto, hallazgo alto.
 - UVT 2026: $52.374 COP (Res. DIAN 000238 del 15-dic-2025). Sancion minima: 10 UVT = ${MIN_SANCTION_COP} (10 x $52.374 = $523.740, aproximado al multiplo de mil segun Art. 868 E.T.).
 - Signo del impuesto en P&L: la cuenta de impuesto a las ganancias (PUC 5405 / 540505 con sus auxiliares 17/26) va con signo DEBITO (gasto). Si aparece como ingreso o reductor del gasto, hallazgo alto bajo NIIF for SMEs §29.27 + E.T. Art. 850.
