@@ -54,7 +54,7 @@ import {
   describeActaQualifications,
 } from './contracts/base';
 import { buildActaExpectedArithmetic } from './prompts/governance-specialist.prompt';
-import { normalizeTipoSocietarioParaGate } from './split-consolidation';
+import { normalizeTipoSocietarioParaGate, regimenTributarioParaGate } from './split-consolidation';
 import { ANCHOR_LABELS, buildPeriodAnchors, moneyCopToken } from './contracts/anchors';
 import { mesesDelPeriodo, periodosDeIgualDuracion } from '@/lib/preprocessing/periodo-meses';
 import {
@@ -2019,6 +2019,7 @@ export async function prepareFinancialContext(
           niifGroup: effectiveCompany.niifGroup ?? 2,
           tipoSocietario: normalizeTipoSocietario(effectiveCompany.entityType),
           estatutosRequierenReservaLegal: getEstatutosFlag(effectiveCompany),
+          regimenTributario: regimenTributarioParaGate(effectiveCompany),
         },
         {
           comparativos_impracticables: ppForAgents?.comparativos_impracticables,
@@ -3016,6 +3017,8 @@ export async function orchestrateFinancialReport(
     niifGroup: effectiveCompany.niifGroup ?? 2,
     tipoSocietario: normalizeTipoSocietario(effectiveCompany.entityType),
     estatutosRequierenReservaLegal: getEstatutosFlag(effectiveCompany),
+    // auditoria-calidad-31: con Régimen Simple V10 (TTD) no se exige.
+    regimenTributario: regimenTributarioParaGate(effectiveCompany),
   };
 
   const primarySnapshotForGate = getPrimarySnapshot(preprocessed);
