@@ -25,7 +25,7 @@
 // ---------------------------------------------------------------------------
 
 import 'server-only';
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 // Ola 2: `cacheComponents: true` activo en `next.config.ts`. En Next.js 16.2
 // los exports estables son `cacheTag` y `cacheLife` (sin prefijo `unstable_`).
 // import { cacheLife, cacheTag } from 'next/cache'; // re-enable when cacheComponents flips
@@ -250,7 +250,15 @@ export async function getCachedJournalList(
 
   const conds = [eq(journalEntries.workspaceId, workspaceId)];
   if (opts.periodId) conds.push(eq(journalEntries.periodId, opts.periodId));
-  if (opts.status) conds.push(eq(journalEntries.status, opts.status));
+  // 'reversed' es un estado de presentación (contab-nomina-01): el original
+  // conserva status='posted' y sólo gana reversed_by_entry_id (igual que
+  // listEntries en double-entry/service.ts).
+  if (opts.status === 'reversed') {
+    conds.push(eq(journalEntries.status, 'posted'));
+    conds.push(sql`${journalEntries.reversedByEntryId} IS NOT NULL`);
+  } else if (opts.status) {
+    conds.push(eq(journalEntries.status, opts.status));
+  }
 
   const rows = await db
     .select()
