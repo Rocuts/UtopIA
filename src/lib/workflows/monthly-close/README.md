@@ -10,8 +10,14 @@ closeMonthWorkflow (index.ts)   — 'use workflow': orquestación pura
 ├── runHealthCheck               — 'use step': chequeos de integridad del período
 │   ├── [pausa con createHook si blocking=true y override=false]
 │   └── POST /api/accounting/close/resume → resumeHook → continúa
-├── runAdjustments               — 'use step': llama AdjustmentsPort (WS4)
-├── generateClosingEntry         — 'use step': asiento de cierre zero-out
+├── runAdjustments               — 'use step': AdjustmentsPort (WS4) + posting.ts
+│                                   (asiento + estado del activo en la misma TX,
+│                                   idempotente por período; período 13 sin ajustes)
+├── generateClosingEntry         — 'use step': meses 1–12 NO trasladan resultados
+│                                   (sólo informan el resultado del mes); el
+│                                   período 13 (cierre anual) cancela 4/5/6 del
+│                                   ejercicio contra 360505/361005, por cuenta +
+│                                   centro de costo + tercero, idempotente
 ├── lockPeriod                   — 'use step': accounting_periods.status = 'locked'
 ├── computePeriodHash            — 'use step': sha256 encadenado
 ├── generatePdfReport            — 'use step': PDF élite → Vercel Blob

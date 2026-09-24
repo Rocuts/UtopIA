@@ -142,6 +142,20 @@ describe.skipIf(!HAS_TEST_DB)('libro mayor — integridad en Postgres', () => {
       SELECT SUM(debit)::text AS d, SUM(credit)::text AS c FROM journal_lines WHERE entry_id = ${ok.entry.id}`);
     expect(r[0]).toEqual({ d: '1000.50', c: '1000.50' });
     expect(ok.entry.totalDebit).toBe('1000.50');
+
+    // El health check del cierre detecta líneas que no suman la cabecera
+    // (antes sólo comparaba total_debit vs total_credit de la cabecera).
+    const { getUnbalancedPostedEntriesCount } = await import('@/lib/workflows/monthly-close/repository');
+    expect(await getUnbalancedPostedEntriesCount(L.workspaceId, jun.id)).toBe(0);
+    const [bad] = await rows<{ id: string }>(sql`
+      INSERT INTO journal_entries (workspace_id, period_id, entry_number, entry_date, status, description, total_debit, total_credit)
+      VALUES (${L.workspaceId}, ${jun.id}, 999, '2026-06-11', 'posted', 'legado descuadrado', 100.00, 100.00)
+      RETURNING id`);
+    await rows(sql`
+      INSERT INTO journal_lines (workspace_id, entry_id, line_number, account_id, debit, credit, functional_debit, functional_credit)
+      VALUES (${L.workspaceId}, ${bad.id}, 1, ${L.acc['110505']}, 100.01, 0, 100.01, 0),
+             (${L.workspaceId}, ${bad.id}, 2, ${L.acc['311505']}, 0, 100.00, 0, 100.00)`);
+    expect(await getUnbalancedPostedEntriesCount(L.workspaceId, jun.id)).toBe(1);
   });
 
   it('contab-nomina-13: la BD rechaza mutar/borrar asientos y líneas posteados', async () => {
