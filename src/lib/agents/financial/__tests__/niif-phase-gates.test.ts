@@ -142,6 +142,16 @@ describe('Periodo determinista (pipeline-flujo-17)', () => {
     expect(changed.length).toBeGreaterThan(0);
   });
 
+  it('comparativo impracticable (§3.14) → sin rótulo comparativo (E9 no exige columnas que no se presentan)', () => {
+    const pp = preprocessTrialBalance(parseTrialBalanceCSV(TWO_PERIODS));
+    pp.comparativos_impracticables = true;
+    const json = makeCoherentNiifReport();
+    json.company.comparativePeriod = '2024';
+    const { json: aligned } = alignReportCompanyPeriods(json, COMPANY, pp);
+    expect(aligned.company.fiscalPeriod).toBe('2025');
+    expect(aligned.company.comparativePeriod).toBeNull();
+  });
+
   it('sin preprocesado usa el periodo del intake y no inventa comparativo', () => {
     const json = makeCoherentNiifReport();
     json.company.comparativePeriod = '2023';

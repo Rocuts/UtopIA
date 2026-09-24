@@ -28,7 +28,7 @@
 // preprocesador (`controlTotals`), y los rubros con `buildPeriodAnchors`.
 // ---------------------------------------------------------------------------
 
-import type { PeriodSnapshot } from '@/lib/preprocessing/trial-balance';
+import type { PeriodSnapshot, PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { pesosToCents } from '@/lib/preprocessing/curator-rules/sync-control-totals';
 import { buildPeriodAnchors } from '../contracts/anchors';
 import { formatCopFromCents } from '../contracts/money';
@@ -72,6 +72,24 @@ export interface StrategyQualifications {
 export type QualifiedStrategicAnalysisResult = StrategicAnalysisResult & {
   strategyQualifications?: StrategyQualifications;
 };
+
+/**
+ * Fuentes de anclas desde el preprocesado (y el JSON NIIF de respaldo). Un
+ * comparativo impracticable (§3.14/§10.21) cuenta como AUSENTE: el reporte es
+ * LINEA_BASE (`deriveReportMode`) y no presenta cifras comparativas.
+ */
+export function strategyAnchorSources(
+  preprocessed: PreprocessedBalance | undefined,
+  niif: NiifReportJson | null | undefined,
+): StrategyAnchorSources {
+  if (!preprocessed) return { niif: niif ?? null };
+  return {
+    primary: preprocessed.primary,
+    comparative:
+      preprocessed.comparativos_impracticables === true ? null : (preprocessed.comparative ?? null),
+    niif: niif ?? null,
+  };
+}
 
 /** Lectura defensiva del veredicto desde un payload que viajó por JSON. */
 export function readStrategyQualifications(strategic: unknown): StrategyQualifications | undefined {

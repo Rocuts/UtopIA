@@ -21,6 +21,7 @@ import { validateNiifReportJson } from '@/lib/agents/financial/validators/niif-j
 import {
   reconcileStrategyAnchors,
   readStrategyQualifications,
+  strategyAnchorSources,
 } from '@/lib/agents/financial/validators/strategy-anchors';
 import { applyAdjustments } from '@/lib/agents/repair/adjustments';
 import type { AdjustmentLedger } from '@/lib/agents/repair/types';
@@ -186,11 +187,10 @@ function sourceCoherenceBlockers(
   const niif = niifParsed.success ? niifParsed.data : null;
   const strategyParsed = StrategyReportSchema.safeParse(report.strategicAnalysis?.json);
   if (strategyParsed.success) {
-    const check = reconcileStrategyAnchors(strategyParsed.data, {
-      primary: preprocessed?.primary,
-      comparative: preprocessed ? (preprocessed.comparative ?? null) : undefined,
-      niif,
-    });
+    const check = reconcileStrategyAnchors(
+      strategyParsed.data,
+      strategyAnchorSources(preprocessed, niif),
+    );
     out.push(...check.deviations.map((d) => `Parte II — ${d}`));
   }
 

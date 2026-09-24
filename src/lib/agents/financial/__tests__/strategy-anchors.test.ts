@@ -18,6 +18,7 @@ import { runStrategyPhase } from '@/lib/agents/financial/orchestrator';
 import {
   reconcileStrategyAnchors,
   readStrategyQualifications,
+  strategyAnchorSources,
 } from '@/lib/agents/financial/validators/strategy-anchors';
 import { parseTrialBalanceCSV, preprocessTrialBalance } from '@/lib/preprocessing/trial-balance';
 import { makeCoherentNiifReport } from '@/lib/agents/financial/__fixtures__/coherent-niif-report';
@@ -159,6 +160,27 @@ describe('reconcileStrategyAnchors', () => {
     ppSinPasivoCorriente.primary.controlTotals.razonCorriente = null;
     const r = reconcileStrategyAnchors(j, { primary: ppSinPasivoCorriente.primary, comparative: null });
     expect(r.deviations.join(' ')).toMatch(/Razón Corriente: .* N\/D/);
+  });
+
+  it('comparativo impracticable cuenta como ausente: un resultado comparativo es desviación', () => {
+    const TWO = [
+      'codigo,nombre,nivel,transaccional,saldo 2024,saldo 2025',
+      '110505,Caja,Auxiliar,1,50000000,50000000',
+      '130505,Clientes,Auxiliar,1,40000000,40000000',
+      '220505,Proveedores,Auxiliar,1,30000000,30000000',
+      '311505,Capital,Auxiliar,1,40000000,40000000',
+      '360505,Utilidad del ejercicio,Auxiliar,1,20000000,20000000',
+      '410505,Ventas,Auxiliar,1,100000000,100000000',
+      '510505,Sueldos,Auxiliar,1,80000000,80000000',
+    ].join('\n');
+    const pp2 = preprocessTrialBalance(parseTrialBalanceCSV(TWO));
+    pp2.comparativos_impracticables = true;
+    const sources = strategyAnchorSources(pp2, null);
+    expect(sources.comparative).toBeNull();
+    const j = coherentStrategy();
+    j.kpis[1] = { ...j.kpis[1], resultComparative: '2,90' };
+    const r = reconcileStrategyAnchors(j, sources);
+    expect(r.deviations.join(' ')).toMatch(/Razón Corriente: presenta resultado comparativo/);
   });
 
   it('sin preprocesado usa los totales del JSON NIIF como ancla del dashboard', () => {

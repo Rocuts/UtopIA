@@ -50,7 +50,10 @@ import {
   checkCashFlowInvariants,
   formatCashFlowViolations,
 } from '@/lib/agents/financial/contracts/deterministic-breakdown';
-import { reconcileStrategyAnchors } from '@/lib/agents/financial/validators/strategy-anchors';
+import {
+  reconcileStrategyAnchors,
+  strategyAnchorSources,
+} from '@/lib/agents/financial/validators/strategy-anchors';
 import { buildNiifValidatorOptions } from '@/lib/agents/financial/orchestrator';
 import { revivePreprocessedBalance } from '@/lib/preprocessing/json-safe';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
@@ -93,11 +96,10 @@ function htmlArithmeticBlockers(
 
   const strategy = StrategyReportSchema.safeParse(strategyReport);
   if (strategy.success) {
-    const check = reconcileStrategyAnchors(strategy.data, {
-      primary: preprocessed?.primary,
-      comparative: preprocessed ? (preprocessed.comparative ?? null) : undefined,
-      niif: niif.data,
-    });
+    const check = reconcileStrategyAnchors(
+      strategy.data,
+      strategyAnchorSources(preprocessed, niif.data),
+    );
     blockers.push(...check.deviations.map((d) => `Parte II — ${d}`));
   }
   return Array.from(new Set(blockers));

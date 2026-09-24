@@ -51,6 +51,7 @@ import {
 import { toNiifAnalysisResult } from './agents/renderer';
 import {
   reconcileStrategyAnchors,
+  strategyAnchorSources,
   type QualifiedStrategicAnalysisResult,
   type StrategyAnchorSources,
   type StrategyQualifications,
@@ -283,8 +284,11 @@ export function alignReportCompanyPeriods(
     (pp ? fiscalYearOf(pp.primary?.period) : null) ??
     fiscalYearOf(company.fiscalPeriod) ??
     current.fiscalPeriod;
+  // Comparativo impracticable (§3.14/§10.21): el prompt pide amountComparative
+  // null en todas las líneas y `deriveReportMode` lo trata como LINEA_BASE; no
+  // se rotula una columna comparativa que no se presenta.
   const comparativePeriod = pp
-    ? pp.comparative
+    ? pp.comparative && pp.comparativos_impracticables !== true
       ? fiscalYearOf(pp.comparative.period)
       : null
     : fiscalYearOf(company.comparativePeriod);
@@ -2064,11 +2068,7 @@ export async function runStrategyPhase(
   // liquidez) y se declara lo que no la tiene.
   const qualified = qualifyStrategyResult(
     strategy,
-    {
-      primary: preprocessed?.primary,
-      comparative: preprocessed ? (preprocessed.comparative ?? null) : undefined,
-      niif: niifResult.json ?? null,
-    },
+    strategyAnchorSources(preprocessed, niifResult.json),
     language,
     onProgress,
   );
