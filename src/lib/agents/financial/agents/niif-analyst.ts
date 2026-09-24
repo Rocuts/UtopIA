@@ -37,9 +37,15 @@ import {
   reconcileAnchors,
   completeBreakdownFromSnapshot,
   buildQualificationSeal,
+  buildDegradationNotice,
   type ReconciliationOutcome,
 } from './reconcile-anchors';
 import { buildReportAnchors } from '../contracts/anchors';
+import {
+  buildDeterministicCashFlow,
+  crossCheckCashFlowAgainstDeterministic,
+  formatCashFlowCrossCheckViolations,
+} from '../contracts/deterministic-breakdown';
 import {
   BalanceAndPnlSubSchema,
   CashFlowAndEquitySubSchema,
@@ -203,6 +209,18 @@ export async function runNiifAnalyst(
     .filter(Boolean)
     .join('\n');
 
+  // -- Degradación visible (auditoría pipeline-flujo-15) --------------------
+  // `callFinancialAgent` baja a effort='low' cuando un pase no produce salida
+  // y avisa por `onDegraded`. Antes nadie registraba el callback: el aviso
+  // "Revísela antes de firmarla" moría en la consola. Ahora se reenvía como
+  // progreso y la sección degradada viaja marcada en el cuerpo del informe.
+  const degradedPasses: string[] = [];
+  const onDegradedFor = (passLabel: string) =>
+    (info: { agentName: string; message: string }) => {
+      if (!degradedPasses.includes(passLabel)) degradedPasses.push(passLabel);
+      onProgress?.({ type: 'stage_progress', stage: 1, detail: info.message });
+    };
+
   // -- Pass 1: Backbone (Balance + P&L + company + curatorFlags) ----------
   onProgress?.({
     type: 'stage_progress',
@@ -219,6 +237,7 @@ export async function runNiifAnalyst(
       userContent,
       ...MODELS_CONFIG.niifAnalystPass1,
       signal: chainSignals(signal, AbortSignal.timeout(NIIF_PASS_TIMEOUT_MS.pass1)),
+      onDegraded: onDegradedFor('Balance General y Estado de Resultados'),
     });
     pass1 = result.json;
   } catch (err) {
@@ -302,6 +321,7 @@ export async function runNiifAnalyst(
         userContent,
         ...MODELS_CONFIG.niifAnalystPass1,
         signal: chainSignals(signal, AbortSignal.timeout(NIIF_PASS_TIMEOUT_MS.pass1Repair)),
+        onDegraded: onDegradedFor('Balance General y Estado de Resultados'),
       });
       const retryReconciled = reconcileAnchors(retry.json, anchors);
       // Nos quedamos con el intento que deje MENOS descuadre. Un reintento peor
@@ -349,6 +369,7 @@ export async function runNiifAnalyst(
       userContent,
       ...MODELS_CONFIG.niifAnalystPass2,
       signal: chainSignals(signal, AbortSignal.timeout(NIIF_PASS_TIMEOUT_MS.pass2)),
+      onDegraded: onDegradedFor('Flujo de Efectivo y Cambios en el Patrimonio'),
     });
     pass2 = result.json;
   } catch (err) {
@@ -384,6 +405,7 @@ export async function runNiifAnalyst(
       userContent,
       ...MODELS_CONFIG.niifAnalystPass3,
       signal: chainSignals(signal, AbortSignal.timeout(NIIF_PASS_TIMEOUT_MS.pass3)),
+      onDegraded: onDegradedFor('Notas técnicas'),
     });
     pass3 = result.json;
   } catch (err) {
@@ -412,6 +434,19 @@ export async function runNiifAnalyst(
   // aporta `cashFlow.cashClosing`, que no existía cuando corrió la primera.
   const finalReconciled = reconcileAnchors(parsed.data, anchors);
 
+  // EFE emitido contra el EFE determinista (auditoría niif-contrato-02). El
+  // determinista se inyectaba sólo como texto del prompt; nada comprobaba que
+  // el modelo lo copiara. Cualquier diferencia por actividad o en los totales
+  // de caja es una salvedad que sella el informe y bloquea la descarga.
+  const deterministicCashFlow = preprocessed?.primary && preprocessed.comparative
+    ? buildDeterministicCashFlow(preprocessed.primary, preprocessed.comparative)
+    : null;
+  const cashFlowDiscrepancies = deterministicCashFlow
+    ? formatCashFlowCrossCheckViolations(
+        crossCheckCashFlowAgainstDeterministic(parsed.data.cashFlow, deterministicCashFlow),
+      )
+    : [];
+
   const reconciliation: ReconciliationOutcome = {
     deviations: [...reconciled.deviations, ...finalReconciled.deviations],
     lineGaps: finalReconciled.lineGaps,
@@ -421,7 +456,10 @@ export async function runNiifAnalyst(
     // este booleano.
     clean:
       finalReconciled.repairInstructions.length === 0 &&
-      finalReconciled.deviations.length === 0,
+      finalReconciled.deviations.length === 0 &&
+      cashFlowDiscrepancies.length === 0,
+    cashFlowDiscrepancies,
+    degradedPasses,
   };
 
   const rendered = toNiifAnalysisResult(finalReconciled.json);
@@ -433,6 +471,11 @@ export async function runNiifAnalyst(
   if (seal) {
     rendered.balanceSheet = `${seal}\n${rendered.balanceSheet}`;
     rendered.fullContent = `${seal}\n${rendered.fullContent}`;
+  }
+  const degradation = buildDegradationNotice(degradedPasses, language);
+  if (degradation) {
+    rendered.fullContent = `${degradation}\n${rendered.fullContent}`;
+    rendered.technicalNotes = `${degradation}\n${rendered.technicalNotes}`;
   }
 
   return { ...rendered, reconciliation };

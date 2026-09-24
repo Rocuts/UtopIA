@@ -138,16 +138,28 @@ function extractTotalsMentions(
  * que en el formato Markdown de tabla `| TOTAL ACTIVO | $xxx |` es el monto.
  */
 function extractHeadlineTotal(markdown: string, pattern: RegExp): number | null {
+  // Auditoría 2026-09 (niif-contrato-16): antes se tomaba la ÚLTIMA cifra de
+  // la fila, que en un estado comparativo es la columna del año anterior. La
+  // cifra del periodo actual es la PRIMERA celda numérica después del rótulo.
+  const NUM_RE =
+    /\$?\s*\(?-?\s*\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?\)?|\$?\s*\(?-?\s*\d+(?:[.,]\d{1,2})?\)?/g;
   const lines = markdown.split(/\r?\n/);
   for (const rawLine of lines) {
     const line = rawLine.replace(/\*+/g, '').trim();
     if (!pattern.test(line)) continue;
-    const nums = line.match(
-      /\$?\s*\(?-?\s*\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?\)?|\$?\s*\(?-?\s*\d+(?:[.,]\d{1,2})?\)?/g,
-    );
+    let tail: string;
+    if (line.includes('|')) {
+      const cells = line.split('|').map((c) => c.trim());
+      const labelIdx = cells.findIndex((c) => pattern.test(`${c} |`) || pattern.test(c));
+      tail = labelIdx >= 0 ? cells.slice(labelIdx + 1).join(' | ') : line;
+    } else {
+      const m = line.match(pattern);
+      tail = m && m.index !== undefined ? line.slice(m.index + m[0].length) : line;
+    }
+    const nums = tail.match(NUM_RE);
     if (!nums) continue;
-    for (let i = nums.length - 1; i >= 0; i--) {
-      const n = parseCopAmount(nums[i]);
+    for (const raw of nums) {
+      const n = parseCopAmount(raw);
       if (n !== null && n !== 0) return n;
     }
   }
@@ -376,7 +388,7 @@ export function validateConsolidatedReport(
   // "Ajustes de Convergencia / Resultados Acumulados" antes de emitir.
   const reportedEcpClose = extractHeadlineTotal(
     consolidatedMarkdown,
-    /saldo\s+final\s*(?:del?\s+)?(?:patrimonio|periodo)\s*(?:\||:|$|\s{2,})/i,
+    /saldo\s+final\s*(?:del?\s+)?(?:patrimonio|per[ií]odo)\s*(?:\||:|$|\s{2,})/i,
   );
   if (reportedEquity !== null && reportedEcpClose !== null) {
     const ecpDiff = Math.abs(reportedEquity - reportedEcpClose);
@@ -398,7 +410,7 @@ export function validateConsolidatedReport(
   // corregirse via "Variaciones en Capital de Trabajo (ajuste de cierre)".
   const reportedEfeClose = extractHeadlineTotal(
     consolidatedMarkdown,
-    /efectivo\s+al\s+final\s+del\s+periodo\s*(?:\||:|$|\s{2,})/i,
+    /efectivo\s+al\s+final\s+del\s+per[ií]odo\s*(?:\||:|$|\s{2,})/i,
   );
   if (
     controlTotals?.efectivoCuenta11 !== undefined &&

@@ -316,3 +316,63 @@ export function collectBindingFigures(niifReport: NiifReportJson): BindingFigure
 
   return candidates.filter((f): f is BindingFigure => f !== null);
 }
+
+/**
+ * Cifras vinculantes del ACTA (auditoría 2026-09, pipeline-flujo-09): la
+ * utilidad del acta, cada renglón de destinación y la capitalización. Antes el
+ * Editor Jefe las convertía de centavos a pesos por su cuenta y un desliz ×100
+ * en el documento que se firma e inscribe sólo producía un aviso.
+ *
+ * Lectura defensiva: `governanceReport` llega como `unknown` a los
+ * consumidores que no validan el schema completo.
+ */
+export function collectActaBindingFigures(governanceReport: unknown): BindingFigure[] {
+  const gov = governanceReport as {
+    shareholderMinutes?: {
+      resultDistribution?: {
+        netIncomeCop?: unknown;
+        applies?: unknown;
+        lines?: Array<{ label?: unknown; amountCop?: unknown }>;
+      };
+      capitalizationProposal?: {
+        applies?: unknown;
+        retainedEarningsBaseCop?: unknown;
+        capitalizationAmountCop?: unknown;
+      };
+    };
+  } | null;
+  const minutes = gov?.shareholderMinutes;
+  if (!minutes) return [];
+  const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+  const out: Array<BindingFigure | null> = [];
+  const rd = minutes.resultDistribution;
+  if (rd) {
+    out.push(
+      toBindingFigure(
+        'shareholderMinutes.resultDistribution.netIncomeCop',
+        'Acta — Utilidad Neta del Ejercicio',
+        str(rd.netIncomeCop),
+      ),
+    );
+    for (const [i, line] of (Array.isArray(rd.lines) ? rd.lines : []).entries()) {
+      out.push(
+        toBindingFigure(
+          `shareholderMinutes.resultDistribution.lines[${i}].amountCop`,
+          `Acta — ${typeof line?.label === 'string' ? line.label : `renglón ${i + 1}`}`,
+          str(line?.amountCop),
+        ),
+      );
+    }
+  }
+  const cap = minutes.capitalizationProposal;
+  if (cap && cap.applies === true) {
+    out.push(
+      toBindingFigure(
+        'shareholderMinutes.capitalizationProposal.capitalizationAmountCop',
+        'Acta — Monto a capitalizar',
+        str(cap.capitalizationAmountCop),
+      ),
+    );
+  }
+  return out.filter((f): f is BindingFigure => f !== null);
+}

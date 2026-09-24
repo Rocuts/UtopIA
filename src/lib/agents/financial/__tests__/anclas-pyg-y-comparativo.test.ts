@@ -140,21 +140,27 @@ function informeCorrecto(): NiifReportJson {
     },
     incomeStatement: {
       lines: [
-        linea('4', 'Ingresos de actividades ordinarias', '242910953157', 1, '167631515047'),
+        // Enmienda spec v2.1 (2026-09-24, auditoría niif-contrato-01): el
+        // grupo 42 (ingresos no operacionales, $163.653,88 en 2025 y
+        // $73.672,93 en 2024 en este balance) va DEBAJO del EBIT. La corrida
+        // real presentaba toda la clase 4 en un renglón '4' dentro de la
+        // Utilidad Bruta; la fixture se actualiza a la presentación PUC.
+        linea('41', 'Ingresos de actividades ordinarias', '242894587769', 1, '167624147754'),
         linea('74', '(-) Costos de producción', '1250000000', 2, '1250000000'),
-        linea(null, 'UTILIDAD BRUTA', '241660953157', 3, '166381515047'),
+        linea(null, 'UTILIDAD BRUTA', '241644587769', 3, '166374147754'),
         linea('51', '(-) Gastos administrativos', '16654133410', 2, '7886222859'),
         linea('52', '(-) Gastos de ventas', '543139932', 2, '464886667'),
-        linea(null, 'RESULTADO OPERACIONAL — EBIT', '224463679815', 3, '158030405521'),
+        linea(null, 'RESULTADO OPERACIONAL — EBIT', '224447314427', 3, '158023038228'),
+        linea('42', '(+) Otros ingresos no operacionales', '16365388', 2, '7367293'),
         linea('53', '(-) Gastos no operacionales', '1614000842', 2, '758258225'),
         linea(null, 'UTILIDAD ANTES DE IMPUESTOS', '222849678973', 3, '157272147296'),
         linea('54', '(-) Gasto por impuesto de renta', '0', 2, '0'),
         linea(null, 'UTILIDAD NETA DEL EJERCICIO', '222849678973', 4, '157272147296'),
       ],
-      grossProfitPrimary: '241660953157',
-      grossProfitComparative: '166381515047',
-      operatingProfitPrimary: '224463679815',
-      operatingProfitComparative: '158030405521',
+      grossProfitPrimary: '241644587769',
+      grossProfitComparative: '166374147754',
+      operatingProfitPrimary: '224447314427',
+      operatingProfitComparative: '158023038228',
       netIncomePrimary: '222849678973',
       netIncomeComparative: '157272147296',
       oriPrimary: '0',
@@ -179,6 +185,13 @@ function informeCorrecto(): NiifReportJson {
       degeneracyFlag: null,
     },
     equityChanges: {
+      // Auditoría 2026-09 (niif-contrato-11, regla E19): la corrida real abría
+      // el ECP en −$5.056.798,19 frente a un patrimonio 2024 de
+      // $1.565.940.939,11 y escondía la diferencia en el propio saldo inicial.
+      // El ECP ahora abre en el patrimonio comparativo, traslada el resultado
+      // 2024 (total $0) y declara como partida no conciliada la disminución
+      // que el balance no explica ($1.570.997.737,30: utilidad 2025 publicada
+      // acumulada, recalculo-03).
       rows: [
         {
           kind: 'opening_balance',
@@ -187,10 +200,34 @@ function informeCorrecto(): NiifReportJson {
           primaColocacion: '0',
           reservaLegal: '0',
           otrasReservas: '0',
-          resultadosAcumulados: '-505679819',
+          resultadosAcumulados: '-678053385',
+          resultadoEjercicio: '157272147296',
+          ori: '0',
+          total: '156594093911',
+        },
+        {
+          kind: 'prior_period_result_cancellation',
+          label: 'Traslado del resultado 2024 a resultados acumulados',
+          capitalSocial: '0',
+          primaColocacion: '0',
+          reservaLegal: '0',
+          otrasReservas: '0',
+          resultadosAcumulados: '157272147296',
+          resultadoEjercicio: '-157272147296',
+          ori: '0',
+          total: '0',
+        },
+        {
+          kind: 'convergence_adjustment',
+          label: 'Partida patrimonial no conciliada — requiere explicación del contador',
+          capitalSocial: '0',
+          primaColocacion: '0',
+          reservaLegal: '0',
+          otrasReservas: '0',
+          resultadosAcumulados: '-157099773730',
           resultadoEjercicio: '0',
           ori: '0',
-          total: '-505679819',
+          total: '-157099773730',
         },
         {
           kind: 'profit_for_period',
@@ -260,10 +297,13 @@ describe('anclas del P&G — las cuatro cifras que la auditoría midió como lib
 
   it('el preprocesador entrega Utilidad Bruta y EBIT en centavos exactos, ambos periodos', () => {
     const a = buildReportAnchors(pp.primary, pp.comparative ?? undefined);
-    expect(a.primary?.cents.utilidadBruta).toBe(BigInt('241660953157'));
-    expect(a.primary?.cents.ebit).toBe(BigInt('224463679815'));
-    expect(a.comparative?.cents.utilidadBruta).toBe(BigInt('166381515047'));
-    expect(a.comparative?.cents.ebit).toBe(BigInt('158030405521'));
+    // Enmienda spec v2.1 (2026-09-24): UB y EBIT sin el grupo 42.
+    expect(a.primary?.cents.utilidadBruta).toBe(BigInt('241644587769'));
+    expect(a.primary?.cents.ebit).toBe(BigInt('224447314427'));
+    expect(a.primary?.cents.otrosIngresos).toBe(BigInt('16365388'));
+    expect(a.comparative?.cents.utilidadBruta).toBe(BigInt('166374147754'));
+    expect(a.comparative?.cents.ebit).toBe(BigInt('158023038228'));
+    expect(a.comparative?.cents.otrosIngresos).toBe(BigInt('7367293'));
     // Σ Clase 5 — el total que E8 necesitaba y que el call-site no pasaba.
     expect(a.primary?.cents.gastosClase5).toBe(BigInt('18811274184'));
   });
@@ -333,7 +373,7 @@ describe('anclas del P&G — las cuatro cifras que la auditoría midió como lib
     [
       'renglón de ingresos multiplicado ×3',
       (j) => {
-        const l = j.incomeStatement.lines.find((x) => x.account === '4')!;
+        const l = j.incomeStatement.lines.find((x) => x.account === '41')!;
         l.amountPrimary = serializeMoneyCop(parseMoneyCop(l.amountPrimary) * BigInt(3));
       },
     ],
@@ -409,7 +449,10 @@ describe('columna comparativa del Balance (NIIF para las PYMES §3.14)', () => {
       equity: anchors.comparative!.cents.patrimonio!,
     };
     for (const seccion of ['assets', 'liabilities', 'equity'] as const) {
-      const lineas = conComparativo.balanceSheet[seccion];
+      // Desde la auditoría 2026-09 (niif-contrato-07) el completado agrega los
+      // subtotales corriente / no corriente (renglones sin código): la suma
+      // del detalle se hace sobre los renglones con código PUC.
+      const lineas = conComparativo.balanceSheet[seccion].filter((l) => l.account !== null);
       // Cero "n/c": la auditoría midió 11 de 11 renglones sin cifra comparativa.
       expect(lineas.filter((l) => l.amountComparative === null)).toHaveLength(0);
       const suma = lineas.reduce(

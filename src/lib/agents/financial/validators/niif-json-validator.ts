@@ -41,7 +41,17 @@
 // orchestrator pueda sumar errores/warnings sin discriminar el origen.
 // ---------------------------------------------------------------------------
 
-import { sumStatementDetail } from '../contracts/statement-lines';
+import {
+  sumStatementDetail,
+  sumStatementDetailByPeriod,
+  findUnsupportedSubtotals,
+  type StatementPeriod,
+} from '../contracts/statement-lines';
+import {
+  crossCheckCashFlowAgainstDeterministic,
+  formatCashFlowCrossCheckViolations,
+  type DeterministicCashFlow,
+} from '../contracts/deterministic-breakdown';
 import { moneyCopEquals, parseMoneyCop, serializeMoneyCop } from '../contracts/money';
 import type { NiifReportJson, EquityChangeRowJson } from '../contracts/niif-report';
 import type { ReportValidationResult } from '../types';
@@ -130,6 +140,13 @@ export interface NiifJsonValidatorOptions {
     impuestoCausado?: string;
   };
   presentationV3?: import('@/lib/agents/financial/prompts/presentation-v3').PresentationV3Data;
+  /**
+   * E18 — EFE determinista (`buildDeterministicCashFlow(primary, comparative)`).
+   * Cuando existe, el EFE emitido se cruza contra él: subtotal por actividad,
+   * efectivo inicial, variación neta y efectivo final, tolerancia $0; y una
+   * línea de dividendos sin sustento en el balance es error (niif-contrato-02).
+   */
+  deterministicCashFlow?: DeterministicCashFlow | null;
 }
 
 /**
@@ -244,6 +261,20 @@ export function validateNiifReportJson(
     }
   }
 
+  // -- E18. EFE emitido == EFE determinista (auditoría niif-contrato-02) -----
+  // E2/E3 son coherencia interna y cierre contra el PUC 11; no ven una
+  // reclasificación entre actividades, un efectivo inicial inventado
+  // compensado en otra sección ni un dividendo fabricado compensado en
+  // operación. El EFE determinista es la identidad del Balance: se exige al
+  // centavo por actividad y en los tres totales.
+  if (options.deterministicCashFlow) {
+    for (const msg of formatCashFlowCrossCheckViolations(
+      crossCheckCashFlowAgainstDeterministic(cf, options.deterministicCashFlow),
+    )) {
+      errors.push(`E18. ${msg}`);
+    }
+  }
+
   // -- E4. ECP saldo final == Patrimonio Balance -----------------------------
   const closing = findEquityClosingRow(json);
   if (!closing) {
@@ -295,7 +326,7 @@ export function validateNiifReportJson(
         `E5. EBIT incorrectamente igualado a Utilidad Neta — el Grupo 53 debe deducirse DESPUÉS del EBIT. ` +
           `operatingProfitPrimary (${fmtCop(op)}) ≈ netIncomePrimary (${fmtCop(net)}); ` +
           `diferencia ${fmtCop(opMinusNet)} < tolerancia ${fmtCop(EQUALITY_TOL)} con netIncome material. ` +
-          `Revisar cascada: EBIT = grossProfit − Grupo 51 − Grupo 52; UAI = EBIT − Grupo 53; netIncome = UAI − impuesto.`,
+          `Revisar cascada: EBIT = grossProfit − Grupo 51 − Grupo 52; UAI = EBIT + otros ingresos (Grupo 42) − Grupo 53; netIncome = UAI − impuesto.`,
       );
     }
   }
@@ -318,6 +349,10 @@ export function validateNiifReportJson(
   }
 
   // -- E6. ORI cruzado P&G ↔ ECP --------------------------------------------
+  // Auditoría 2026-09 (niif-contrato-12): era warning, así que un ORI
+  // inventado llegaba al "Resultado integral total" con el informe limpio. La
+  // variación de la columna ORI del ECP y el ORI del P&G son la misma cifra
+  // (NIIF PYMES 6.3): la diferencia es error.
   const oriPnl = parseMoneyCop(json.incomeStatement.oriPrimary);
   if (closing) {
     const openingRow = json.equityChanges.rows.find((r) => r.kind === 'opening_balance');
@@ -325,8 +360,103 @@ export function validateNiifReportJson(
       const oriDelta = parseMoneyCop(closing.ori) - parseMoneyCop(openingRow.ori);
       if (oriDelta !== oriPnl) {
         const gap = oriDelta - oriPnl;
-        warnings.push(
+        errors.push(
           `E6. Δ(ORI) en ECP (${fmtCop(oriDelta)}) ≠ ORI del P&G (${fmtCop(oriPnl)}). Brecha: ${fmtCop(gap)}.`,
+        );
+      }
+    }
+  }
+  // E6b. Sin componentes ORI mapeados por el preprocesador, el ORI no tiene
+  // ancla: se exige $0 en ambos periodos. Presentar un ORI requiere un mapeo
+  // explícito de cuentas ORI de la entidad (auditoría niif-contrato-12 /
+  // prompts-normativa-11: el grupo 31 es capital, no ORI).
+  if (options.presentationV3 && options.presentationV3.oriComponents.length === 0) {
+    const oriCmp = json.incomeStatement.oriComparative;
+    if (oriPnl !== ZERO || (oriCmp !== null && parseMoneyCop(oriCmp) !== ZERO)) {
+      errors.push(
+        `E6b. El P&G presenta Otro Resultado Integral (${fmtCop(oriPnl)}` +
+          `${oriCmp !== null ? ` / comparativo ${fmtCop(parseMoneyCop(oriCmp))}` : ''}) y el ` +
+          `balance de prueba no tiene cuentas ORI mapeadas: el ORI no tiene ancla y debe ser $0.`,
+      );
+    }
+  }
+
+  // -- E19. Saldo inicial del ECP == patrimonio comparativo del ESF ----------
+  // Auditoría 2026-09 (niif-contrato-11a): el saldo inicial nunca se cruzaba
+  // con el patrimonio del periodo anterior; una fila de "convergencia" podía
+  // compensar un saldo inicial inventado. NIIF PYMES 6.3(c).
+  {
+    const openingRow = json.equityChanges.rows.find((r) => r.kind === 'opening_balance');
+    if (openingRow && bs.totalEquityComparative !== null) {
+      const opening = parseMoneyCop(openingRow.total);
+      const expected = parseMoneyCop(bs.totalEquityComparative);
+      if (opening !== expected) {
+        errors.push(
+          `E19. ECP saldo inicial (${fmtCop(opening)}) ≠ Total Patrimonio del periodo comparativo ` +
+            `(${fmtCop(expected)}). Brecha: ${fmtCop(opening - expected)}. El saldo inicial es el ` +
+            `patrimonio de cierre del periodo anterior (NIIF PYMES 6.3).`,
+        );
+      }
+    }
+  }
+
+  // -- E20. Columnas del cierre del ECP == renglones de patrimonio del ESF ----
+  // Auditoría 2026-09 (niif-contrato-11b). Sólo se contrastan los componentes
+  // de mapeo inequívoco (31 capital, 32 prima, 33 reservas, 36 resultado del
+  // ejercicio, 37 acumulados, 38 ORI/valorizaciones) y sólo cuando TODOS los
+  // renglones de patrimonio con monto traen código PUC reconocible.
+  if (closing) {
+    const byGroup = new Map<string, bigint>();
+    let mappable = true;
+    let detailCount = 0;
+    for (const line of bs.equity) {
+      if (line.account === null || line.account.trim() === '') continue;
+      const code = line.account.replace(/\D/g, '');
+      const group = code.slice(0, 2);
+      if (!['31', '32', '33', '34', '35', '36', '37', '38'].includes(group)) {
+        mappable = false;
+        break;
+      }
+      const amount = parseMoneyCop(line.amountPrimary);
+      byGroup.set(group, (byGroup.get(group) ?? ZERO) + amount);
+      detailCount++;
+    }
+    // 34/35 no tienen columna propia en el ECP: si traen saldo, no se compara.
+    const hasUnmappedEquity = (byGroup.get('34') ?? ZERO) !== ZERO || (byGroup.get('35') ?? ZERO) !== ZERO;
+    // El ESF debe desagregar los grupos que el ECP usa: si el ECP muestra
+    // reservas pero el ESF no tiene renglón 33, la presentación del ESF es
+    // agregada y la comparación por columna no es posible (E15/E4 ya atan el
+    // total).
+    const columnGroups: Array<[string, string[]]> = [
+      ['31', [closing.capitalSocial]],
+      ['32', [closing.primaColocacion]],
+      ['33', [closing.reservaLegal, closing.otrasReservas]],
+      ['36', [closing.resultadoEjercicio]],
+      ['37', [closing.resultadosAcumulados]],
+      ['38', [closing.ori]],
+    ];
+    const esfCoversEcp = columnGroups.every(
+      ([group, cells]) => byGroup.has(group) || cells.every((c) => parseMoneyCop(c) === ZERO),
+    );
+    if (mappable && detailCount > 0 && !hasUnmappedEquity && esfCoversEcp) {
+      const g = (k: string) => byGroup.get(k) ?? ZERO;
+      const checks: Array<[string, bigint, bigint]> = [
+        ['Capital social (31)', parseMoneyCop(closing.capitalSocial), g('31')],
+        ['Superávit / prima (32)', parseMoneyCop(closing.primaColocacion), g('32')],
+        [
+          'Reservas (33)',
+          parseMoneyCop(closing.reservaLegal) + parseMoneyCop(closing.otrasReservas),
+          g('33'),
+        ],
+        ['Resultado del ejercicio (36)', parseMoneyCop(closing.resultadoEjercicio), g('36')],
+        ['Resultados acumulados (37)', parseMoneyCop(closing.resultadosAcumulados), g('37')],
+        ['ORI / superávit por valorizaciones (38)', parseMoneyCop(closing.ori), g('38')],
+      ];
+      for (const [nombre, ecp, esf] of checks) {
+        if (ecp === esf) continue;
+        errors.push(
+          `E20. ECP saldo final — ${nombre}: ${fmtCop(ecp)} ≠ renglones del Estado de Situación ` +
+            `Financiera ${fmtCop(esf)}. Brecha: ${fmtCop(ecp - esf)}.`,
         );
       }
     }
@@ -334,24 +464,24 @@ export function validateNiifReportJson(
 
   // -- E7. Utilidad Neta del periodo registrada en el ECP (v2.5) ------------
   //
-  // Antes (v2.0) se comparaba el delta `closing.resultadoEjercicio −
-  // opening.resultadoEjercicio` contra netIncomePrimary. Esa heurística
-  // fallaba cuando el opening_balance arrastraba el resultado del periodo
-  // anterior (PUC 3605 no cerrado vía asiento Dr.3605/Cr.3705 al cierre
-  // prior — práctica común en SAS colombianas donde 3605 se "sobreescribe"
-  // anualmente).
-  //
-  // v2.5 introduce el modo matricial estricto cuando existe fila
-  // `profit_for_period`:
+  // Modo matricial estricto cuando existe fila `profit_for_period`:
   //   E7a — profit_for_period.resultadoEjercicio == netIncomePrimary.
   //   E7b — Si opening_balance.resultadoEjercicio es material y ≠ 0,
   //         DEBE existir una fila prior_period_result_cancellation con
-  //         resultadoEjercicio = -opening.resultadoEjercicio.
+  //         resultadoEjercicio = -opening.resultadoEjercicio. Esa fila es el
+  //         traslado interno Dr 3605 / Cr 37: su total es $0 (auditoría
+  //         niif-contrato-11d — antes el contrato la hacía reducir el
+  //         patrimonio sin contrapartida, que es una distribución disfrazada).
   //   E7c — Cuadre matricial: opening + Σ(movement rows) == closing,
-  //         columna a columna, tolerancia $1.000 COP.
+  //         columna a columna.
   //
-  // Modo legacy (sin profit_for_period): delta opening→closing como
-  // proxy, válido SOLO cuando opening.resultadoEjercicio no es material.
+  // Modo legacy (sin profit_for_period): el resultado del periodo es implícito
+  // (netIncome en la columna resultadoEjercicio y en el total) y el cuadre por
+  // columna se exige igual (auditoría niif-contrato-11c).
+  //
+  // Tolerancia $0 en todo (auditoría niif-contrato-10): las cifras viajan en
+  // centavos exactos; la holgura anterior (0,5% + $100 en E7a, $1.000 por
+  // columna en E7c) sólo servía para que una fila compensatoria la usara.
   {
     const openingRow = json.equityChanges.rows.find((r) => r.kind === 'opening_balance');
     const profitRow = json.equityChanges.rows.find((r) => r.kind === 'profit_for_period');
@@ -363,80 +493,80 @@ export function validateNiifReportJson(
       errors.push('E7. ECP debe incluir opening_balance y closing_balance.');
     } else {
       const netIncome = parseMoneyCop(json.incomeStatement.netIncomePrimary);
-      const absNetIncome = netIncome < ZERO ? -netIncome : netIncome;
-      // Tolerancia: 0.5% del netIncome (mín $10.000 cents = $100 COP para casos cercanos a cero)
-      const tolerance = absNetIncome / BigInt(200) + BigInt(10000);
       const openingResult = parseMoneyCop(openingRow.resultadoEjercicio);
       const absOpeningResult = openingResult < ZERO ? -openingResult : openingResult;
       const MATERIALITY = BigInt(100_000_000); // $1.000.000 COP en centavos
+      const cols = [
+        'capitalSocial',
+        'primaColocacion',
+        'reservaLegal',
+        'otrasReservas',
+        'resultadosAcumulados',
+        'resultadoEjercicio',
+        'ori',
+        'total',
+      ] as const;
+      const matrixCheck = (label: string, implied: Partial<Record<(typeof cols)[number], bigint>>) => {
+        for (const col of cols) {
+          const computed =
+            json.equityChanges.rows.reduce<bigint>((acc, row) => {
+              if (row.kind === 'closing_balance') return acc;
+              return acc + parseMoneyCop(row[col]);
+            }, ZERO) + (implied[col] ?? ZERO);
+          const closingVal = parseMoneyCop(closing[col]);
+          if (computed === closingVal) continue;
+          errors.push(
+            `${label}. ECP columna "${col}" no cuadra: Σ filas (${fmtCop(computed)}) ≠ ` +
+              `closing_balance (${fmtCop(closingVal)}); brecha ${fmtCop(computed - closingVal)}. ` +
+              `Cuadre matricial: opening + Σ(movements) == closing, tolerancia $0.`,
+          );
+        }
+      };
 
       if (profitRow) {
         // -- Modo v2.5 -----------------------------------------------------
-        // E7a — profit_for_period autoritativo.
         const profitInEcp = parseMoneyCop(profitRow.resultadoEjercicio);
-        const diff = profitInEcp > netIncome ? profitInEcp - netIncome : netIncome - profitInEcp;
-        if (diff > tolerance) {
+        if (profitInEcp !== netIncome) {
           errors.push(
             `E7a. ECP fila profit_for_period.resultadoEjercicio (${fmtCop(profitInEcp)}) ≠ ` +
-              `Utilidad Neta P&L (${fmtCop(netIncome)}); diferencia ${fmtCop(diff)} ` +
-              `excede tolerancia ${fmtCop(tolerance)}. Parte 8.1 CHECK 2 spec v2.5.`,
+              `Utilidad Neta P&L (${fmtCop(netIncome)}); diferencia ` +
+              `${fmtCop(profitInEcp - netIncome)}. Tolerancia $0 (NIIF PYMES 6.3).`,
           );
         }
 
-        // E7b — Cancelación obligatoria si opening arrastra resultado prior material.
+        // E7b — Traslado obligatorio si opening arrastra resultado prior material.
         if (absOpeningResult > MATERIALITY) {
           if (!cancellationRow) {
             errors.push(
               `E7b. ECP: opening_balance.resultadoEjercicio material (${fmtCop(openingResult)}) ` +
-                `exige fila kind="prior_period_result_cancellation" que cancele ese saldo. ` +
-                `Cierre contable PUC 3605 no trasladado a PUC 37 al cierre prior (v2.5).`,
+                `exige fila kind="prior_period_result_cancellation" que traslade ese saldo ` +
+                `a resultados acumulados (Dr 3605 / Cr 37).`,
             );
           } else {
             const cancellation = parseMoneyCop(cancellationRow.resultadoEjercicio);
-            const expected = -openingResult;
-            const cancelDiff =
-              cancellation > expected ? cancellation - expected : expected - cancellation;
-            if (cancelDiff > BigInt(10000)) {
+            if (cancellation !== -openingResult) {
               errors.push(
                 `E7b. ECP fila prior_period_result_cancellation.resultadoEjercicio ` +
                   `(${fmtCop(cancellation)}) ≠ -opening_balance.resultadoEjercicio ` +
-                  `(${fmtCop(expected)}); diferencia ${fmtCop(cancelDiff)} excede $100 COP. v2.5.`,
+                  `(${fmtCop(-openingResult)}); diferencia ${fmtCop(cancellation + openingResult)}. ` +
+                  `Tolerancia $0.`,
               );
             }
           }
         }
+        if (cancellationRow && parseMoneyCop(cancellationRow.total) !== ZERO) {
+          errors.push(
+            `E7b. ECP fila prior_period_result_cancellation con total ` +
+              `${fmtCop(parseMoneyCop(cancellationRow.total))}: el traslado del resultado anterior ` +
+              `es interno del patrimonio (Dr 3605 / Cr 37) y su total es $0. Una disminución del ` +
+              `patrimonio es una distribución (fila dividend_distribution, con soporte).`,
+          );
+        }
 
         // E7c — Cuadre matricial columna a columna.
-        const cols = [
-          'capitalSocial',
-          'primaColocacion',
-          'reservaLegal',
-          'otrasReservas',
-          'resultadosAcumulados',
-          'resultadoEjercicio',
-          'ori',
-          'total',
-        ] as const;
-        const TOL = BigInt(100_000); // $1.000 COP en centavos
-        for (const col of cols) {
-          const computed = json.equityChanges.rows.reduce<bigint>((acc, row) => {
-            if (row.kind === 'closing_balance') return acc;
-            return acc + parseMoneyCop(row[col]);
-          }, ZERO);
-          const closingVal = parseMoneyCop(closing[col]);
-          const diff = computed > closingVal ? computed - closingVal : closingVal - computed;
-          if (diff > TOL) {
-            errors.push(
-              `E7c. ECP columna "${col}" no cuadra: Σ filas (${fmtCop(computed)}) ≠ ` +
-                `closing_balance (${fmtCop(closingVal)}); brecha ${fmtCop(diff)}. ` +
-                `v2.5 cuadre matricial: opening + Σ(movements) == closing.`,
-            );
-          }
-        }
+        matrixCheck('E7c', {});
       } else {
-        // -- Modo legacy: delta opening→closing ----------------------------
-        // SOLO válido cuando opening.resultadoEjercicio no es material. Si es
-        // material y no hay profit_for_period, el reporte viola v2.5.
+        // -- Modo legacy: resultado implícito -------------------------------
         if (absOpeningResult > MATERIALITY) {
           errors.push(
             `E7. ECP: opening_balance.resultadoEjercicio material (${fmtCop(openingResult)}) ` +
@@ -447,14 +577,14 @@ export function validateNiifReportJson(
         } else {
           const closingResult = parseMoneyCop(closing.resultadoEjercicio);
           const delta = closingResult - openingResult;
-          const diff = delta > netIncome ? delta - netIncome : netIncome - delta;
-          if (diff > tolerance) {
+          if (delta !== netIncome) {
             errors.push(
               `E7. Variación resultadoEjercicio ECP (${fmtCop(delta)}) ≠ ` +
-                `Utilidad Neta P&L (${fmtCop(netIncome)}); diferencia ${fmtCop(diff)} ` +
-                `excede tolerancia ${fmtCop(tolerance)}. Parte 8.1 CHECK 2.`,
+                `Utilidad Neta P&L (${fmtCop(netIncome)}); diferencia ${fmtCop(delta - netIncome)}. ` +
+                `Tolerancia $0.`,
             );
           }
+          matrixCheck('E7c', { resultadoEjercicio: netIncome, total: netIncome });
         }
       }
     }
@@ -743,6 +873,84 @@ export function validateNiifReportJson(
     }
   }
 
+  // -- E15 (subtotales y columna comparativa) — auditoría 2026-09 -------------
+  // niif-contrato-06: los subtotales impresos (activo/pasivo corriente y no
+  // corriente) y los encabezados con monto no se contrastaban y el PDF los
+  // imprime como subtotales. niif-contrato-08: la columna comparativa de los
+  // renglones no estaba cubierta por ninguna identidad. Mismo prefijo `E15.`
+  // (el canal de exportación los bloquea); una celda comparativa ausente no se
+  // trata como cero: si impide verificar, se avisa como `E15c.` (no bloquea).
+  const hasComparative = json.company.comparativePeriod !== null;
+  for (const [nombre, lineas, totalPrimario, totalComparativo] of [
+    ['Activo', bs.assets, bs.totalAssetsPrimary, bs.totalAssetsComparative],
+    ['Pasivo', bs.liabilities, bs.totalLiabilitiesPrimary, bs.totalLiabilitiesComparative],
+    ['Patrimonio', bs.equity, bs.totalEquityPrimary, bs.totalEquityComparative],
+  ] as const) {
+    const periods: Array<[StatementPeriod, string | null]> = [['primary', totalPrimario]];
+    if (hasComparative) periods.push(['comparative', totalComparativo]);
+    for (const [period, totalRaw] of periods) {
+      const total = totalRaw === null ? null : parseMoneyCop(totalRaw);
+      const etiqueta = period === 'primary' ? 'periodo actual' : 'periodo comparativo';
+      for (const s of findUnsupportedSubtotals(lineas, total, period)) {
+        warnings.push(
+          `E15. En ${nombre} (${etiqueta}), el renglón sin código "${s.label}" imprime ` +
+            `${fmtCop(s.amount)}, que no es la suma de los renglones de detalle de su bloque ni ` +
+            `el total de la sección. Un subtotal que no se reconstruye sumando la columna no ` +
+            `puede imprimirse; un encabezado no lleva monto.`,
+        );
+      }
+      if (period === 'comparative' && total !== null) {
+        const { sum, count, missing } = sumStatementDetailByPeriod(lineas, 'comparative');
+        if (count === 0 && total === ZERO) continue;
+        if (sum === total) continue;
+        if (missing > 0) {
+          warnings.push(
+            `E15c. En ${nombre} (periodo comparativo), ${missing} renglón(es) de detalle no traen ` +
+              `cifra comparativa y la columna no se puede verificar contra el total ` +
+              `${fmtCop(total)} (suma disponible ${fmtCop(sum)}).`,
+          );
+        } else {
+          warnings.push(
+            `E15. En ${nombre} (periodo comparativo), la suma de los ${count} renglones de detalle ` +
+              `(${fmtCop(sum)}) ≠ el total comparativo declarado (${fmtCop(total)}). ` +
+              `Brecha: ${fmtCop(sum - total)}. NIIF PYMES 3.14.`,
+          );
+        }
+      }
+    }
+  }
+
+  // -- E3b. Renglón de efectivo del ESF == efectivo del EFE -----------------
+  // Auditoría 2026-09 (niif-contrato-09): E3 ata cashClosing al PUC 11, pero
+  // nadie ataba el renglón '11' que imprime el ESF. Trasladar un monto de 13 a
+  // 11 conservaba el total y el ESF mostraba un efectivo distinto del cierre
+  // del EFE (NIC 7 ¶45 / NIIF PYMES 7.20).
+  {
+    const cashLines = bs.assets.filter(
+      (l) => l.account !== null && l.account.replace(/\D/g, '').startsWith('11'),
+    );
+    if (cashLines.length > 0) {
+      const esfCash = cashLines.reduce((a, l) => a + parseMoneyCop(l.amountPrimary), ZERO);
+      const efeClose = parseMoneyCop(cf.cashClosing);
+      if (esfCash !== efeClose) {
+        errors.push(
+          `E3b. Efectivo del Estado de Situación Financiera (renglones PUC 11: ${fmtCop(esfCash)}) ≠ ` +
+            `efectivo al final del EFE (${fmtCop(efeClose)}). Brecha: ${fmtCop(esfCash - efeClose)}.`,
+        );
+      }
+      if (hasComparative && cashLines.every((l) => l.amountComparative !== null)) {
+        const esfCashCmp = cashLines.reduce((a, l) => a + parseMoneyCop(l.amountComparative!), ZERO);
+        const efeOpen = parseMoneyCop(cf.cashOpening);
+        if (esfCashCmp !== efeOpen) {
+          errors.push(
+            `E3b. Efectivo del periodo comparativo en el ESF (${fmtCop(esfCashCmp)}) ≠ efectivo al ` +
+              `inicio del EFE (${fmtCop(efeOpen)}). Brecha: ${fmtCop(esfCashCmp - efeOpen)}.`,
+          );
+        }
+      }
+    }
+  }
+
   // -- E16. Los renglones del P&G sostienen la cascada que declara -----------
   //
   // Auditoría 2026-08 (superficie 5): el Estado de Resultados no tenía NINGÚN
@@ -753,49 +961,95 @@ export function validateNiifReportJson(
   // sostiene, libre.
   //
   // La verificación NO usa etiquetas. Usa el CÓDIGO PUC de cada renglón
-  // (Decreto 2650/1993, catálogo cerrado), que es dato estructurado:
+  // (Decreto 2650/1993, catálogo cerrado), que es dato estructurado. Cascada
+  // (enmienda spec v2.1 del 2026-09-24 — grupo 42 DEBAJO de la utilidad
+  // operacional; auditoría niif-contrato-01):
   //
-  //   Utilidad Bruta = Σ|clase 4 salvo 4175| − Σ|4175| − Σ|clase 6| − Σ|clase 7|
-  //   EBIT           = Utilidad Bruta − Σ|grupo 51| − Σ|grupo 52|
-  //   UAI            = EBIT − Σ|grupo 53| − Σ|resto de clase 5 salvo 54|
-  //   Utilidad Neta  = UAI − Σ|grupo 54|
+  //   Utilidad Bruta = ingresos 41 − devoluciones 4175 − costos (clases 6 y 7)
+  //   EBIT           = Utilidad Bruta − grupo 51 − grupo 52
+  //   UAI            = EBIT + otros ingresos (42 y demás de clase 4)
+  //                    − grupo 53 − resto de clase 5 salvo 54
+  //   Utilidad Neta  = UAI − grupo 54
   //
-  // El 4175 (Devoluciones en ventas, naturaleza débito) se RESTA aunque venga
-  // en valor absoluto: NIIF 15 §47 exige presentar el ingreso neto, y un
-  // informe que liste "Ingresos brutos" y "(-) Devoluciones" por separado es
-  // presentación legítima que no debe producir un falso positivo.
+  // Un renglón con código de un dígito "4" no permite separar 41 de 42: se
+  // toma como operacional, y si el balance tiene grupo 42 la cascada no cierra
+  // contra el ancla — el modelo debe desagregar.
   //
-  // Se toma la MAGNITUD de cada renglón (`abs`) porque el contrato permite las
-  // dos convenciones —`isAbsolute = true` imprime el gasto como positivo que
-  // resta, `false` lo trae ya firmado— y un costo es una resta en ambas.
+  // Signo de cada renglón (auditoría niif-contrato-13):
+  //   - `isAbsolute = true` → magnitud: el ingreso suma y el costo/gasto resta.
+  //   - `isAbsolute = false` → el importe viaja firmado. En la clase 4 el signo
+  //     es el del ingreso (una recuperación 4250 con saldo débito resta). En
+  //     las clases 5/6/7 el contrato admite dos lecturas estables: signo de
+  //     efecto en el resultado (gasto negativo) o signo natural (gasto
+  //     positivo, saldo crédito negativo). Se acepta la cascada si cierra bajo
+  //     UNA de las dos lecturas aplicada a todos los renglones; tomar `abs`
+  //     rechazaba un P&G correcto con una partida contranatura firmada.
+  //   - 4175 siempre resta su magnitud (NIIF 15 §47).
   //
   // Tolerancia $0. Todas las cifras son enteros de centavos que el modelo
   // compone en la misma respuesta: no existe ruta de redondeo que produzca
-  // deriva de un centavo. Medido en las 7 corridas reales con LLM archivadas
-  // en `.fase0*`: la cascada reprodujo los tres subtotales con brecha $0,00 en
-  // 7/7.
+  // deriva de un centavo.
   {
     const is = json.incomeStatement;
-    const bucket = { ingresos: ZERO, devoluciones: ZERO, costos: ZERO, g51: ZERO, g52: ZERO, g53: ZERO, g54: ZERO, otros5: ZERO };
+    type Buckets = {
+      ingresos41: bigint;
+      devoluciones: bigint;
+      otrosIngresos: bigint;
+      costos: bigint;
+      g51: bigint;
+      g52: bigint;
+      g53: bigint;
+      g54: bigint;
+      otros5: bigint;
+    };
+    // Aporte de cada renglón al resultado (+ aumenta la utilidad, − la reduce).
+    let comparativeCellsMissing = 0;
+    const buildBuckets = (
+      expenseSignedIsEffect: boolean,
+      period: StatementPeriod = 'primary',
+    ): Buckets => {
+      const b: Buckets = {
+        ingresos41: ZERO, devoluciones: ZERO, otrosIngresos: ZERO, costos: ZERO,
+        g51: ZERO, g52: ZERO, g53: ZERO, g54: ZERO, otros5: ZERO,
+      };
+      for (const line of is.lines) {
+        if (line.account === null) continue; // subtotales del propio modelo
+        const code = String(line.account).replace(/\D/g, '');
+        if (code.length === 0) continue;
+        const raw = period === 'primary' ? line.amountPrimary : line.amountComparative;
+        if (raw === null) {
+          comparativeCellsMissing++;
+          continue;
+        }
+        const v = parseMoneyCop(raw);
+        if (code.startsWith('4')) {
+          if (code.startsWith('4175')) b.devoluciones -= abs(v);
+          else {
+            const aporte = line.isAbsolute ? abs(v) : v;
+            if (code === '4' || code.startsWith('41')) b.ingresos41 += aporte;
+            else b.otrosIngresos += aporte;
+          }
+          continue;
+        }
+        if (!/^[567]/.test(code)) continue;
+        const aporte = line.isAbsolute ? -abs(v) : expenseSignedIsEffect ? v : -v;
+        if (code.startsWith('6') || code.startsWith('7')) b.costos += aporte;
+        else if (code.startsWith('51')) b.g51 += aporte;
+        else if (code.startsWith('52')) b.g52 += aporte;
+        else if (code.startsWith('53')) b.g53 += aporte;
+        else if (code.startsWith('54')) b.g54 += aporte;
+        else b.otros5 += aporte;
+      }
+      return b;
+    };
     let codedLines = 0;
     let revenueLines = 0;
     for (const line of is.lines) {
-      if (line.account === null) continue; // subtotales del propio modelo
+      if (line.account === null) continue;
       const code = String(line.account).replace(/\D/g, '');
       if (code.length === 0) continue;
-      const magnitude = abs(parseMoneyCop(line.amountPrimary));
       codedLines++;
-      if (code.startsWith('4')) {
-        revenueLines++;
-        if (code.startsWith('4175')) bucket.devoluciones += magnitude;
-        else bucket.ingresos += magnitude;
-      } else if (code.startsWith('6') || code.startsWith('7')) {
-        bucket.costos += magnitude;
-      } else if (code.startsWith('51')) bucket.g51 += magnitude;
-      else if (code.startsWith('52')) bucket.g52 += magnitude;
-      else if (code.startsWith('53')) bucket.g53 += magnitude;
-      else if (code.startsWith('54')) bucket.g54 += magnitude;
-      else if (code.startsWith('5')) bucket.otros5 += magnitude;
+      if (code.startsWith('4')) revenueLines++;
     }
 
     const gross = parseMoneyCop(is.grossProfitPrimary);
@@ -818,24 +1072,38 @@ export function validateNiifReportJson(
         );
       }
     } else {
-      const grossCalc = bucket.ingresos - bucket.devoluciones - bucket.costos;
-      const opCalc = gross - bucket.g51 - bucket.g52;
-      const uaiCalc = opProfit - bucket.g53 - bucket.otros5;
-      const netCalc = uaiCalc - bucket.g54;
+      const cascadeOf = (b: Buckets) => {
+        const grossCalc = b.ingresos41 + b.devoluciones + b.costos;
+        const opCalc = gross + b.g51 + b.g52;
+        const uaiCalc = opProfit + b.otrosIngresos + b.g53 + b.otros5;
+        const netCalc = uaiCalc + b.g54;
+        return { grossCalc, opCalc, uaiCalc, netCalc };
+      };
+      const cierra = (c: ReturnType<typeof cascadeOf>) =>
+        c.grossCalc === gross && c.opCalc === opProfit && c.netCalc === netIncome;
+      // Lectura A: gasto firmado por su efecto (negativo). Lectura B: signo
+      // natural (positivo). Sólo difieren si hay gastos con isAbsolute=false.
+      const bucketsA = buildBuckets(true);
+      const bucketsB = buildBuckets(false);
+      const cascadeA = cascadeOf(bucketsA);
+      const cascadeB = cascadeOf(bucketsB);
+      const useB = !cierra(cascadeA) && cierra(cascadeB);
+      const bucket = useB ? bucketsB : bucketsA;
+      const { grossCalc, opCalc, uaiCalc, netCalc } = useB ? cascadeB : cascadeA;
 
       const cascada: Array<[string, bigint, bigint, string]> = [
         [
           'Utilidad Bruta',
           grossCalc,
           gross,
-          'Σ ingresos (clase 4) − devoluciones (4175) − costos (clases 6 y 7)',
+          'ingresos operacionales (grupo 41) − devoluciones (4175) − costos (clases 6 y 7); el grupo 42 va debajo del EBIT',
         ],
         ['Resultado Operacional (EBIT)', opCalc, opProfit, 'Utilidad Bruta − grupo 51 − grupo 52'],
         [
           'Utilidad Neta',
           netCalc,
           netIncome,
-          'EBIT − grupo 53 − resto de clase 5 − impuesto (grupo 54)',
+          'EBIT + otros ingresos (grupo 42) − grupo 53 − resto de clase 5 − impuesto (grupo 54)',
         ],
       ];
       for (const [nombre, calculado, declarado, formula] of cascada) {
@@ -847,17 +1115,65 @@ export function validateNiifReportJson(
         );
       }
 
+      // Columna comparativa (auditoría niif-contrato-08): la misma cascada con
+      // `amountComparative` contra los subtotales comparativos. Una celda
+      // ausente no se trata como cero: si impide cerrar, se avisa (`E16c.`).
+      if (
+        json.company.comparativePeriod !== null &&
+        is.grossProfitComparative !== null &&
+        is.operatingProfitComparative !== null &&
+        is.netIncomeComparative !== null
+      ) {
+        const grossC = parseMoneyCop(is.grossProfitComparative);
+        const opC = parseMoneyCop(is.operatingProfitComparative);
+        const netC = parseMoneyCop(is.netIncomeComparative);
+        comparativeCellsMissing = 0;
+        const evalC = (b: Buckets) => ({
+          grossCalc: b.ingresos41 + b.devoluciones + b.costos,
+          opCalc: grossC + b.g51 + b.g52,
+          netCalc: opC + b.otrosIngresos + b.g53 + b.otros5 + b.g54,
+        });
+        const cA = evalC(buildBuckets(true, 'comparative'));
+        const missing = comparativeCellsMissing;
+        const cB = evalC(buildBuckets(false, 'comparative'));
+        const ok = (c: ReturnType<typeof evalC>) =>
+          c.grossCalc === grossC && c.opCalc === opC && c.netCalc === netC;
+        if (!ok(cA) && !ok(cB)) {
+          const c = cA;
+          const pares: Array<[string, bigint, bigint]> = [
+            ['Utilidad Bruta', c.grossCalc, grossC],
+            ['Resultado Operacional (EBIT)', c.opCalc, opC],
+            ['Utilidad Neta', c.netCalc, netC],
+          ];
+          for (const [nombre, calculado, declarado] of pares) {
+            if (calculado === declarado) continue;
+            const msg =
+              `${nombre} del periodo comparativo (${json.company.comparativePeriod}): los renglones ` +
+              `suman ${fmtCop(calculado)} y el estado declara ${fmtCop(declarado)}. ` +
+              `Brecha: ${fmtCop(calculado - declarado)}.`;
+            if (missing > 0) {
+              warnings.push(
+                `E16c. ${msg} ${missing} celda(s) comparativa(s) ausente(s): la columna no es verificable.`,
+              );
+            } else {
+              errors.push(`E16. ${msg}`);
+            }
+          }
+        }
+      }
+
       // Impuesto de renta — la línea que la auditoría midió como totalmente
       // libre. Se contrasta contra el grupo 54 preprocesado con tolerancia $0.
       // Defensa Art. 647 E.T.: un gasto por impuesto que no existe en libros
       // es inexactitud sancionable con el 100% del mayor impuesto.
       if (bpt?.impuestoCausado !== undefined) {
-        const impuestoAncla = abs(parseMoneyCop(bpt.impuestoCausado));
-        if (bucket.g54 !== impuestoAncla) {
+        const impuestoAncla = parseMoneyCop(bpt.impuestoCausado);
+        const impuestoRenglones = -bucket.g54;
+        if (impuestoRenglones !== impuestoAncla) {
           errors.push(
             `E14. Impuesto de renta del periodo ${json.company.fiscalPeriod}: los renglones del ` +
-              `P&G del grupo PUC 54 suman ${fmtCop(bucket.g54)} y el preprocesador causó ` +
-              `${fmtCop(impuestoAncla)}. Brecha: ${fmtCop(bucket.g54 - impuestoAncla)}. ` +
+              `P&G del grupo PUC 54 suman ${fmtCop(impuestoRenglones)} y el preprocesador causó ` +
+              `${fmtCop(impuestoAncla)}. Brecha: ${fmtCop(impuestoRenglones - impuestoAncla)}. ` +
               `El gasto por impuesto no lo autora el analista: sale del grupo 54 del balance ` +
               `de prueba (Art. 26 y Art. 647 E.T.).`,
           );
@@ -905,9 +1221,12 @@ export function validateNiifReportJson(
         netIncome + parseMoneyCop(is.oriPrimary),
       ];
       const agregados = [
-        bucket.ingresos,
-        bucket.ingresos - bucket.devoluciones,
+        bucket.ingresos41,
+        bucket.ingresos41 + bucket.devoluciones,
         bucket.devoluciones,
+        bucket.otrosIngresos,
+        bucket.ingresos41 + bucket.devoluciones + bucket.otrosIngresos,
+        bucket.ingresos41 + bucket.otrosIngresos,
         bucket.costos,
         bucket.g51,
         bucket.g52,
@@ -916,7 +1235,9 @@ export function validateNiifReportJson(
         bucket.g54,
         bucket.otros5,
         bucket.g53 + bucket.otros5,
+        bucket.otrosIngresos + bucket.g53 + bucket.otros5,
         bucket.g51 + bucket.g52 + bucket.g53 + bucket.g54 + bucket.otros5,
+        bucket.g51 + bucket.g52 + bucket.g53 + bucket.otros5,
       ];
       const admisibles = new Set([ZERO, ...cierres, ...agregados].map((v) => v.toString()));
       for (const line of is.lines) {

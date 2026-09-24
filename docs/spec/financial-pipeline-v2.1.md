@@ -4,6 +4,11 @@
 
 > Northstar Wave 6. Auditora externa identificó 9 correcciones tras revisar un informe real generado por el pipeline. Cada corrección lleva ejemplo correcto/incorrecto y mapeo a archivos del codebase.
 
+> **Enmiendas del 2026-09-24 (auditoría de exactitud NIIF, paquete WP04).** Prevalecen sobre el texto original donde lo contradigan; el resto del documento no cambia.
+>
+> 1. **Corrección 4 — impuesto de renta sin grupo 54 (sustituida).** El gasto por impuesto de renta del P&G es exclusivamente el saldo del grupo PUC 54. Sin grupo 54 el impuesto queda **no reconocido en libros**: no se presenta renglón de impuesto con monto, la Utilidad Neta es la UAI vinculante y el P&G lleva una nota que remite a la conciliación fiscal del contador (NIC 12 / NIIF para las PYMES, Sección 29). Quedan derogados el uso de la cuenta 1805 como gasto (en el PUC del Decreto 2650/1993 la 1805 es "Bienes de arte y cultura"; sólo se trata como impuesto si su nombre en el balance de prueba lo indica), la "provisión teórica al 35% × utilidad operativa" y la nota que la presentaba como dato. La UAI no es base fiscal; la Tasa de Tributación Depurada (Art. 240 par. 6 E.T.) sólo se calcula con impuesto depurado y utilidad depurada verificados.
+> 2. **Presentación del grupo PUC 42 (ingresos no operacionales).** Decisión del coordinador: el grupo 42 (4210 financieros, 4245 utilidad en venta de PPE, 4250 recuperaciones…) va **debajo de la utilidad operacional**, igual que el grupo 53. Cascada vinculante: Utilidad Bruta = ingresos operacionales netos (grupo 41 − devoluciones 4175) − costo de ventas y producción (clases 6 y 7); EBIT = Utilidad Bruta − grupos 51 y 52; UAI = EBIT + otros ingresos (42) − gastos no operacionales (53 y resto de la clase 5 salvo 54); Utilidad Neta = UAI − grupo 54. Sustituye la lectura de la spec v2 (Partes 1 y 4.1) que rotulaba el grupo 42 como "otros ingresos operacionales" y la definición de "ingresos operacionales = Clase 4 completa". La cobertura de intereses usa sólo la cuenta 5305 (sin 5305, N/D). Implementado en `trial-balance.ts` (EBIT), `contracts/anchors.ts` (anclas UB/EBIT), validadores E14/E16 y el prompt del Analista NIIF.
+
 ---
 
 ## CORRECCIÓN 1 — FORMATO DE ESTADOS FINANCIEROS (Error crítico)
@@ -107,6 +112,8 @@ NUNCA incluir el asiento 3605 para "hacer cuadrar" el EFE.
 ---
 
 ## CORRECCIÓN 4 — IMPUESTO DE RENTA CUANDO NO HAY CLASE 54 (Error moderado)
+
+> **Enmendada el 2026-09-24:** el árbol de decisión de abajo (Cta.1805 como gasto y provisión teórica del 35%) quedó sustituido. Ver la enmienda 1 al inicio de este documento.
 
 ### Si no existe gasto de renta (Clase 54), deducir la Cta.1805
 

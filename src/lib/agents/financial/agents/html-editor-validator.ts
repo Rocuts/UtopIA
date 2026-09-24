@@ -32,6 +32,7 @@
 import { parseHTML } from 'linkedom';
 import {
   collectBindingFigures,
+  collectActaBindingFigures,
   type BindingFigure,
   type HtmlEditorMetadata,
 } from '../contracts/html-editor';
@@ -865,6 +866,39 @@ export function reconcileBindingFigures(
     });
   }
 
+  // ── R1b · cifras vinculantes del ACTA (auditoría pipeline-flujo-09) ──────
+  // El acta es el documento que se firma e inscribe: un desliz ×100 en su
+  // tabla de destinación sólo generaba el aviso R2. Si el HTML incluye el
+  // acta, sus cifras se exigen literalmente, igual que las del NIIF.
+  if (/\bacta\b/i.test(text)) {
+    for (const fig of collectActaBindingFigures(input.governanceReport)) {
+      const cents = parseMoneyCop(fig.cents);
+      const abs = cents < BigInt(0) ? -cents : cents;
+      if (acceptableRenderings(abs).some((r) => containsFigure(text, r))) continue;
+      const slipUp = acceptableRenderings(abs * HUNDRED).some((r) => containsFigure(text, r));
+      const slipDown = acceptableRenderings(abs / HUNDRED).some((r) => containsFigure(text, r));
+      failures.push({
+        rule: '§1.1 · Reconciliación JSON↔HTML — cifra del acta ausente',
+        detail:
+          `${fig.label} vale ${fig.formatted} en el reporte de Gobierno, pero esa cifra no aparece ` +
+          `en el HTML emitido.` +
+          (slipUp
+            ? ' Se detectó la misma cifra multiplicada por 100 — desliz de escala centavos→pesos.'
+            : slipDown
+              ? ' Se detectó la misma cifra dividida entre 100 — desliz de escala pesos→centavos.'
+              : ''),
+        severity: 'block',
+      });
+    }
+  }
+
+  // ── R3 · signo de las cifras vinculantes (auditoría pipeline-flujo-09) ────
+  // R1 compara valores absolutos: una pérdida presentada como utilidad pasaba.
+  failures.push(...checkBindingSigns(text, figures));
+
+  // ── R4/R5 · columna y periodo (auditoría pipeline-flujo-08) ──────────────
+  failures.push(...checkPeriodColumns(document, input.niifReport));
+
   // ── R2 · cifras del HTML que no se rastrean al payload ───────────────────
   const allowed = collectPayloadRenderings(input);
   const figurePattern = /\$\d{1,3}(?:\.\d{3})+(?:,\d{2})?/g;
@@ -901,4 +935,177 @@ export function reconcileBindingFigures(
   }
 
   return failures;
+}
+
+// ---------------------------------------------------------------------------
+// Signo, columna y periodo de las cifras vinculantes (auditoría 2026-09)
+// ---------------------------------------------------------------------------
+
+/** Palabras que, antes de una cifra sin signo, la presentan como positiva/negativa. */
+const POSITIVE_CONTEXT = /(utilidad|ganancia|super[aá]vit|excedente|aument[oó]|incremento)[^$]{0,60}$/i;
+const NEGATIVE_CONTEXT = /(p[eé]rdida|d[eé]ficit|negativ|disminu|reducci|ca[ií]da)[^$]{0,60}$/i;
+
+function figureOccurrences(text: string, candidate: string): Array<{ negative: boolean; index: number }> {
+  const re = new RegExp(`(\\(\\s*|[-−]\\s*)?${escapeRegExp(candidate)}(?![.,]?\\d)`, 'g');
+  const out: Array<{ negative: boolean; index: number }> = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    out.push({ negative: m[1] !== undefined, index: m.index });
+  }
+  return out;
+}
+
+/**
+ * R3 — Una cifra vinculante NEGATIVA no puede presentarse sin signo como
+ * utilidad/ganancia, ni aparecer SIEMPRE sin signo; una POSITIVA no puede
+ * aparecer SIEMPRE entre paréntesis o con signo menos.
+ */
+function checkBindingSigns(text: string, figures: BindingFigure[]): ChecklistFailure[] {
+  const out: ChecklistFailure[] = [];
+  for (const fig of figures) {
+    const cents = parseMoneyCop(fig.cents);
+    const abs = cents < BigInt(0) ? -cents : cents;
+    const occ = acceptableRenderings(abs).flatMap((r) => figureOccurrences(text, r));
+    if (occ.length === 0) continue; // la ausencia ya la reporta R1
+    if (fig.isNegative) {
+      const unsigned = occ.filter((o) => !o.negative);
+      const asProfit = unsigned.filter((o) => {
+        const before = text.slice(Math.max(0, o.index - 80), o.index);
+        return POSITIVE_CONTEXT.test(before) && !NEGATIVE_CONTEXT.test(before);
+      });
+      if (unsigned.length === occ.length || asProfit.length > 0) {
+        out.push({
+          rule: '§1.1 · Reconciliación JSON↔HTML — signo invertido',
+          detail:
+            `${fig.label} es NEGATIVA (${fig.formatted} con signo menos en el reporte NIIF) y el HTML ` +
+            `la presenta ${asProfit.length > 0 ? 'como utilidad o ganancia' : 'siempre sin signo'}. ` +
+            `Preséntela entre paréntesis o con signo menos.`,
+          severity: 'block',
+        });
+      }
+    } else if (occ.every((o) => o.negative)) {
+      out.push({
+        rule: '§1.1 · Reconciliación JSON↔HTML — signo invertido',
+        detail:
+          `${fig.label} es POSITIVA (${fig.formatted}) y el HTML sólo la presenta entre paréntesis o ` +
+          `con signo menos.`,
+        severity: 'block',
+      });
+    }
+  }
+  return out;
+}
+
+function yearOf(period: string | null | undefined): string | null {
+  const m = typeof period === 'string' ? period.match(/(\d{4})/) : null;
+  return m ? m[1] : null;
+}
+
+/**
+ * R4 — en las tablas con encabezado de año, la cifra vinculante del periodo
+ * actual debe estar bajo la columna del periodo actual (y la comparativa bajo
+ * la suya). R5 — los encabezados y la fecha de corte deben corresponder al
+ * periodo del reporte (company.fiscalPeriod / comparativePeriod).
+ */
+function checkPeriodColumns(document: ParsedDocument, niif: NiifReportJson): ChecklistFailure[] {
+  const out: ChecklistFailure[] = [];
+  const primaryYear = yearOf(niif?.company?.fiscalPeriod);
+  if (!primaryYear) return out;
+  const comparativeYear = yearOf(niif?.company?.comparativePeriod ?? null);
+  const allowed = new Set([primaryYear, ...(comparativeYear ? [comparativeYear] : [])]);
+
+  // R5 — fecha de corte y años de encabezado.
+  const headingTexts = Array.from(document.querySelectorAll('h1, h2, h3, th, caption')).map(
+    (el) => (el.textContent ?? '').replace(/ /g, ' '),
+  );
+  const cutoffYears = new Set<string>();
+  const thYears = new Set<string>();
+  for (const t of headingTexts) {
+    for (const m of t.matchAll(/31\s+de\s+diciembre\s+(?:de|del)\s+(\d{4})/gi)) cutoffYears.add(m[1]);
+  }
+  for (const th of Array.from(document.querySelectorAll('th'))) {
+    const t = (th.textContent ?? '').trim();
+    if (/^(?:19|20)\d{2}$/.test(t)) thYears.add(t);
+  }
+  // Un año posterior al del reporte es un rótulo de proyección, no un corte
+  // equivocado; lo que se bloquea es un corte ANTERIOR ajeno al comparativo.
+  const foreignCutoff = [...cutoffYears].filter(
+    (y) => !allowed.has(y) && Number(y) < Number(primaryYear),
+  );
+  const historicalCutoffs = [...cutoffYears].filter((y) => Number(y) <= Number(primaryYear));
+  if (foreignCutoff.length > 0 || (historicalCutoffs.length > 0 && !cutoffYears.has(primaryYear))) {
+    out.push({
+      rule: '§1.1 · Periodo del reporte — fecha de corte',
+      detail:
+        `Los encabezados declaran fecha de corte al 31 de diciembre de ${[...cutoffYears].join(', ')} ` +
+        `y el reporte NIIF corresponde al periodo ${primaryYear}` +
+        `${comparativeYear ? ` (comparativo ${comparativeYear})` : ''}.`,
+      severity: 'block',
+    });
+  }
+  if (thYears.size > 0 && !thYears.has(primaryYear)) {
+    out.push({
+      rule: '§1.1 · Periodo del reporte — encabezados de columna',
+      detail:
+        `Las columnas de los estados se rotulan ${[...thYears].join(', ')} y el periodo del reporte ` +
+        `es ${primaryYear}.`,
+      severity: 'block',
+    });
+  }
+
+  // R4 — cifra bajo la columna de su periodo.
+  const bs = niif.balanceSheet;
+  const is = niif.incomeStatement;
+  const concepts: Array<{ re: RegExp; label: string; primary: string | null; comparative: string | null }> = [
+    { re: /^total\s+(?:de\s+)?activos?$/i, label: 'Total Activo', primary: bs?.totalAssetsPrimary ?? null, comparative: bs?.totalAssetsComparative ?? null },
+    { re: /^total\s+(?:de\s+)?pasivos?$/i, label: 'Total Pasivo', primary: bs?.totalLiabilitiesPrimary ?? null, comparative: bs?.totalLiabilitiesComparative ?? null },
+    { re: /^total\s+(?:del?\s+)?patrimonio$/i, label: 'Total Patrimonio', primary: bs?.totalEquityPrimary ?? null, comparative: bs?.totalEquityComparative ?? null },
+    { re: /^(?:utilidad|resultado)\s+neto?a?(?:\s+del\s+ejercicio)?$/i, label: 'Utilidad Neta', primary: is?.netIncomePrimary ?? null, comparative: is?.netIncomeComparative ?? null },
+  ];
+  const renders = (v: string | null): string[] => {
+    if (v === null) return [];
+    try {
+      const c = parseMoneyCop(v);
+      return acceptableRenderings(c < BigInt(0) ? -c : c);
+    } catch {
+      return [];
+    }
+  };
+  for (const table of Array.from(document.querySelectorAll('table'))) {
+    const headerRow = table.querySelector('tr');
+    if (!headerRow) continue;
+    const headers = Array.from(headerRow.querySelectorAll('th, td')).map((c) => (c.textContent ?? '').trim());
+    const pIdx = headers.findIndex((h) => h === primaryYear || h.endsWith(` ${primaryYear}`));
+    const cIdx = comparativeYear
+      ? headers.findIndex((h) => h === comparativeYear || h.endsWith(` ${comparativeYear}`))
+      : -1;
+    if (pIdx < 0) continue;
+    for (const row of Array.from(table.querySelectorAll('tr')).slice(1)) {
+      const cells = Array.from(row.querySelectorAll('th, td')).map((c) =>
+        (c.textContent ?? '').replace(/ /g, ' ').replace(/\$\s+/g, '$').trim(),
+      );
+      if (cells.length !== headers.length) continue;
+      const concept = concepts.find((k) => k.re.test(cells[0].replace(/\s+/g, ' ')));
+      if (!concept) continue;
+      // Sólo celdas con la cifra completa: una tabla de resumen con montos
+      // abreviados ($1.000 M, §1.9/L38) no es un estado financiero.
+      if (!/\$\d{1,3}(?:\.\d{3})+(?:,\d{2})?(?![.,]?\d)/.test(cells[pIdx])) continue;
+      if (/\$[\d.,]+\s*(?:M{1,2}\b|mil(?:es)?\b|millones\b)/i.test(cells[pIdx])) continue;
+      const inPrimary = renders(concept.primary).some((r) => containsFigure(cells[pIdx], r));
+      const primaryHasComparative = renders(concept.comparative).some((r) => containsFigure(cells[pIdx], r));
+      const comparativeOk =
+        cIdx < 0 || concept.comparative === null || renders(concept.comparative).some((r) => containsFigure(cells[cIdx], r));
+      if (concept.primary !== null && renders(concept.primary).length > 0 && (!inPrimary || !comparativeOk)) {
+        out.push({
+          rule: '§1.1 · Periodo del reporte — columna',
+          detail:
+            `${concept.label}: la columna ${primaryYear} imprime "${cells[pIdx]}"` +
+            `${primaryHasComparative ? ', que es la cifra del periodo comparativo (columnas intercambiadas)' : ''}; ` +
+            `el reporte NIIF da ${renders(concept.primary)[0]} para ${primaryYear}.`,
+          severity: 'block',
+        });
+      }
+    }
+  }
+  return out;
 }

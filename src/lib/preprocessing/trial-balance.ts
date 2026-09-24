@@ -287,7 +287,19 @@ export interface ControlTotals {
   // Sub-bloque P&L de soporte para los KPIs (no expuesto antes; sin ellos
   // los ratios divergen entre LLM y renderers).
   // -----------------------------------------------------------------------
-  /** EBIT = utilidadBruta − gastosOp51 − gastosAdmin52. Excluye impuesto y financieros. */
+  /**
+   * Ingresos operacionales netos = Σ grupo 41 (salvo 4175) − devoluciones 4175.
+   * Enmienda spec v2.1 (2026-09-24): el grupo 42 queda fuera.
+   */
+  ingresosOperacionalesNetos?: number;
+  /** Otros ingresos no operacionales = ingresosNetos − ingresosOperacionalesNetos (grupo 42 y demás). */
+  otrosIngresosNoOperacionales?: number;
+  /** Utilidad bruta = ingresosOperacionalesNetos − (clase 6 + clase 7). */
+  utilidadBruta?: number;
+  /**
+   * EBIT = utilidadBruta − gastosOp51 − gastosAdmin52. Excluye impuesto, los
+   * otros ingresos no operacionales (42) y los gastos no operacionales (53).
+   */
   ebit?: number;
   /** Saldo cuenta 14 (Inventarios). */
   inventarios14?: number;
@@ -297,7 +309,7 @@ export interface ControlTotals {
   costoVentas6?: number;
   /** Saldo cuenta 7 (Costo de Producción — clase 7). */
   costoProduccion7?: number;
-  /** Σ auxiliares 5305xx — gasto financiero (intereses). */
+  /** Σ auxiliares 5305xx — gasto financiero (intereses). 0 si no hay 5305 (sin fallback al grupo 53). */
   gastoFinanciero5305?: number;
   /** Promedio patrimonial = (actual + comparativo) / 2 (= actual si no hay comparativo). */
   patrimonioPromedio?: number;
@@ -1914,29 +1926,46 @@ function buildSnapshotForPeriod(
   }
   // -------------------------------------------------------------------------
   // Wave 2.F4 — Sub-bloque P&L de soporte para KPIs.
-  // EBIT = utilidadBruta − gastos operacionales (grupo 51 + 52).
-  // utilidadBruta = ingresosNetos − costos (clase 6 + clase 7).
+  //
+  // Auditoría 2026-09 (niif-contrato-01 / niif-preproceso-24; decisión del
+  // coordinador, enmienda spec v2.1 del 2026-09-24): el grupo PUC 42 (ingresos
+  // NO operacionales — 4210 financieros, 4245 utilidad en venta de PPE, 4250
+  // recuperaciones…) va DEBAJO de la utilidad operacional, igual que el 53.
+  //   ingresosOperacionalesNetos = Σ 41 (salvo 4175) − devoluciones 4175
+  //   utilidadBruta              = ingresosOperacionalesNetos − (clase 6 + 7)
+  //   EBIT                       = utilidadBruta − grupo 51 − grupo 52
+  //   otrosIngresos (42 y demás grupos de clase 4 distintos del 41)
+  //                              = ingresosNetos − ingresosOperacionalesNetos
+  // La orientación de signo del 41 es la misma del total ordinario de la
+  // clase 4 (convención firmada o de magnitudes), y los otros ingresos se
+  // obtienen por diferencia para que 41 + 42 = ingresosNetos al centavo.
+  // Fuente: PUC Decreto 2650/1993 (grupo 42 NO OPERACIONALES); NIC 1.82(a) /
+  // NIIF PYMES 5.5(a).
   // -------------------------------------------------------------------------
   const gastosOp51 = sumLeavesByGroupPrefixes(leafRows, '5', new Set(['51']));
   const gastosAdmin52 = sumLeavesByGroupPrefixes(leafRows, '5', new Set(['52']));
   const costoVentas6 = totalCosts;
   const costoProduccion7 = totalProduction;
-  const utilidadBrutaForEbit = ingresosNetos - (costoVentas6 + costoProduccion7);
+  const sumOrdinariasCents = sumFirmadaCents(ordinariasClase4);
+  const signoOrdinarias = sumOrdinariasCents < ZERO_BIG ? BigInt(-1) : BigInt(1);
+  const ingresosOperacionales41Cents =
+    sumFirmadaCents(ordinariasClase4.filter((r) => r.code.startsWith('41'))) * signoOrdinarias;
+  const ingresosOperacionalesNetosCents = ingresosOperacionales41Cents - totalDevolucionesCents;
+  const otrosIngresosNoOperacionalesCents = ingresosNetosCents - ingresosOperacionalesNetosCents;
+  const ingresosOperacionalesNetos = Number(ingresosOperacionalesNetosCents) / 100;
+  const otrosIngresosNoOperacionales = Number(otrosIngresosNoOperacionalesCents) / 100;
+  const utilidadBrutaForEbit = ingresosOperacionalesNetos - (costoVentas6 + costoProduccion7);
   const ebit = utilidadBrutaForEbit - gastosOp51 - gastosAdmin52;
   const inventarios14 = sumLeavesByGroupPrefixes(leafRows, '1', new Set(['14']));
   const proveedores22 = sumLeavesByGroupPrefixes(leafRows, '2', new Set(['22']));
-  const gastoFinanciero5305Raw = sumLeavesByGroupPrefixes(
-    leafRows,
-    '5',
-    new Set(['53']),
-  );
-  // Why: grupo 5305 (Financieros) → en este pase usamos el grupo 53 entero
-  // (Gastos no operacionales financieros) como aproximación. Si el balance
-  // detalla 5305xx específicamente, el filtro directo lo captura.
+  // Gasto financiero = cuenta 5305 (Financieros). Sin 5305 NO se toma el
+  // grupo 53 entero: incluiría 5310 pérdida en venta de bienes y 5315
+  // extraordinarios, que no son intereses (spec v2 Parte 6: "COBERTURA =
+  // EBIT/|5305| solo si 5305 > 0"). 0 ⇒ la cobertura sale N/D (null).
   const saldo5305 = sumLeavesPrecise(
     leafRows.filter((r) => r.code.startsWith('5305')),
   );
-  const gastoFinanciero5305 = saldo5305 !== 0 ? saldo5305 : gastoFinanciero5305Raw;
+  const gastoFinanciero5305 = saldo5305;
 
   // KPIs averages: en single-period, promedio = actual. preprocessTrialBalance
   // (cuando hay comparative) patchea estos campos con el verdadero promedio.
@@ -2014,6 +2043,9 @@ function buildSnapshotForPeriod(
     // Wave 2.F4 — campos nuevos para fuente única de KPIs.
     totalDevoluciones,
     ingresosNetos,
+    ingresosOperacionalesNetos,
+    otrosIngresosNoOperacionales,
+    utilidadBruta: utilidadBrutaForEbit,
     ebit,
     inventarios14,
     proveedores22,

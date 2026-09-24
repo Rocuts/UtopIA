@@ -36,8 +36,11 @@ export type AnchorKey =
   | 'patrimonio'
   | 'ingresos'
   | 'ingresosNetos'
+  | 'ingresosOperacionales'
   | 'utilidadBruta'
   | 'ebit'
+  | 'otrosIngresos'
+  | 'gastosNoOperacionales'
   | 'gastos'
   | 'gastosClase5'
   | 'utilidadAntesImpuestos'
@@ -59,8 +62,11 @@ export const ANCHOR_LABELS: Record<AnchorKey, string> = {
   patrimonio: 'Total Patrimonio',
   ingresos: 'Total Ingresos (bruto Clase 4)',
   ingresosNetos: 'Total Ingresos Netos',
+  ingresosOperacionales: 'Ingresos operacionales netos (grupo 41 − devoluciones 4175)',
   utilidadBruta: 'Utilidad Bruta',
   ebit: 'Resultado Operacional (EBIT)',
+  otrosIngresos: 'Otros ingresos no operacionales (grupo 42 y demás grupos de clase 4 distintos del 41)',
+  gastosNoOperacionales: 'Gastos no operacionales (grupo 53 y demás grupos de clase 5 salvo 51, 52 y 54)',
   gastos: 'Total Gastos',
   gastosClase5: 'Total Gastos operacionales y no operacionales (Clase 5)',
   utilidadAntesImpuestos: 'Utilidad Antes de Impuestos (UAI)',
@@ -107,36 +113,64 @@ function sumLeafCents(
 }
 
 /**
- * Utilidad Bruta y EBIT del periodo, en centavos exactos.
+ * Σ FIRMADA en centavos de las hojas de la clase 4 que cumplen un predicado de
+ * código. La clase 4 puede venir en convención firmada (créditos negativos) o
+ * de magnitudes; la orientación se resuelve fuera, con el signo del total
+ * ordinario, igual que `trial-balance.ts`.
+ */
+function sumClass4LeafCents(snapshot: PeriodSnapshot, predicate: (code: string) => boolean): bigint {
+  const puc = snapshot.classes?.find((c) => c.code === 4);
+  if (!puc) return ZERO;
+  let total = ZERO;
+  for (const account of puc.accounts) {
+    if (!account.isLeaf) continue;
+    const code = String(account.code).replace(/\D/g, '');
+    if (code.length === 0 || !predicate(code)) continue;
+    total += pesosToCents(account.balance);
+  }
+  return total;
+}
+
+/**
+ * Cascada del P&G del periodo, en centavos exactos.
  *
  * Por qué se derivan aquí y no se leen de `controlTotals`: el preprocesador
  * publica `ebit` como `number` en pesos y NO publica la Utilidad Bruta en
- * ninguna forma. Un ancla con tolerancia $0 no puede colgar de un `float`.
+ * centavos. Un ancla con tolerancia $0 no puede colgar de un `float`.
  *
  * Por qué esto NO es "otra implementación de la cascada" —el patrón que la
  * auditoría integral nombró como causa raíz—: la derivación se acepta SÓLO si
- * reproduce, al centavo, tres cifras que el preprocesador ya calculó por su
- * cuenta (`gastos`, `impuestoCausado` y `utilidadAntesImpuestos`). Si el
- * balance tiene una forma que rompe la equivalencia, la función devuelve
+ * reproduce, al centavo, cifras que el preprocesador ya calculó por su cuenta
+ * (`ingresosNetos`, `gastos`, `impuestoCausado` y `utilidadAntesImpuestos`). Si
+ * el balance tiene una forma que rompe la equivalencia, la función devuelve
  * `null` y el informe se queda SIN ancla de UB/EBIT. Ningún ancla es mejor que
- * un ancla equivocada: una cifra anclada mal se promueve a "binding figure" y
- * el resto del pipeline la exige literalmente.
+ * un ancla equivocada.
  *
- * Definición (la misma de `trial-balance.ts`, Wave 2.F4):
- *   Utilidad Bruta = ingresos netos − (Clase 6 + Clase 7)
+ * Definición (enmienda spec v2.1 del 2026-09-24, decisión del coordinador;
+ * auditoría niif-contrato-01): el grupo PUC 42 (ingresos NO operacionales,
+ * Decreto 2650/1993) va DEBAJO de la utilidad operacional, igual que el 53.
+ *   Ingresos operacionales netos = Σ 41 (salvo 4175) − devoluciones 4175
+ *   Utilidad Bruta = ingresos operacionales netos − (Clase 6 + Clase 7)
  *   EBIT           = Utilidad Bruta − Grupo 51 − Grupo 52
- *   UAI            = EBIT − Grupo 53          ← ésta es la que se contrasta
+ *   UAI            = EBIT + otros ingresos (42…) − gastos no operacionales
+ *                    (53 y resto de clase 5 salvo 54)   ← la que se contrasta
  */
 function deriveGrossAndEbitCents(
   snapshot: PeriodSnapshot,
   cents: { ingresosNetos: bigint; gastos: bigint; impuestoCausado: bigint; utilidadAntesImpuestos: bigint },
-): { utilidadBruta: bigint; ebit: bigint; gastosClase5: bigint } | null {
+): {
+  ingresosOperacionales: bigint;
+  otrosIngresos: bigint;
+  utilidadBruta: bigint;
+  ebit: bigint;
+  gastosNoOperacionales: bigint;
+  gastosClase5: bigint;
+} | null {
   const clase5 = sumLeafCents(snapshot, 5);
   const clase6 = sumLeafCents(snapshot, 6);
   const clase7 = sumLeafCents(snapshot, 7);
   const grupo51 = sumLeafCents(snapshot, 5, ['51']);
   const grupo52 = sumLeafCents(snapshot, 5, ['52']);
-  const grupo53 = sumLeafCents(snapshot, 5, ['53']);
   const grupo54 = sumLeafCents(snapshot, 5, ['54']);
 
   // Guarda 1 — la proyección por hojas reproduce el gasto total del preprocesador.
@@ -144,15 +178,38 @@ function deriveGrossAndEbitCents(
   // Guarda 2 — y su grupo 54 es exactamente el impuesto causado que ya publicó.
   if (grupo54 !== cents.impuestoCausado) return null;
 
-  const utilidadBruta = cents.ingresosNetos - (clase6 + clase7);
+  // Ingresos: la misma regla de signo de `trial-balance.ts` (magnitud del total
+  // ordinario firmado; devoluciones 4175 por su magnitud).
+  const ordinarias = sumClass4LeafCents(snapshot, (code) => !code.startsWith('4175'));
+  const devoluciones = sumClass4LeafCents(snapshot, (code) => code.startsWith('4175'));
+  const signo = ordinarias < ZERO ? BigInt(-1) : BigInt(1);
+  const absBig = (v: bigint): bigint => (v < ZERO ? -v : v);
+  // Guarda 0 — la proyección por hojas reproduce los ingresos netos publicados.
+  if (absBig(ordinarias) - absBig(devoluciones) !== cents.ingresosNetos) return null;
+
+  const operacionales41 =
+    sumClass4LeafCents(snapshot, (code) => code.startsWith('41') && !code.startsWith('4175')) * signo;
+  const ingresosOperacionales = operacionales41 - absBig(devoluciones);
+  // Por diferencia: 41 + 42 (y cualquier otro grupo de la clase 4) = netos exactos.
+  const otrosIngresos = cents.ingresosNetos - ingresosOperacionales;
+
+  const utilidadBruta = ingresosOperacionales - (clase6 + clase7);
   const ebit = utilidadBruta - grupo51 - grupo52;
+  const gastosNoOperacionales = clase5 - grupo51 - grupo52 - grupo54;
 
   // Guarda 3 — la cascada completa aterriza en la UAI que el preprocesador ya
   // calculó por otra vía (`ingresosNetos − (gastos − impuesto)`). Si coincide,
   // las dos rutas son la misma cifra y UB/EBIT son tan vinculantes como ella.
-  if (ebit - grupo53 !== cents.utilidadAntesImpuestos) return null;
+  if (ebit + otrosIngresos - gastosNoOperacionales !== cents.utilidadAntesImpuestos) return null;
 
-  return { utilidadBruta, ebit, gastosClase5: clase5 };
+  return {
+    ingresosOperacionales,
+    otrosIngresos,
+    utilidadBruta,
+    ebit,
+    gastosNoOperacionales,
+    gastosClase5: clase5,
+  };
 }
 
 /**
@@ -217,8 +274,11 @@ export function buildPeriodAnchors(snapshot: PeriodSnapshot | undefined): Period
       utilidadAntesImpuestos: c.utilidadAntesImpuestos,
     });
     if (derived) {
+      cents.ingresosOperacionales = derived.ingresosOperacionales;
+      cents.otrosIngresos = derived.otrosIngresos;
       cents.utilidadBruta = derived.utilidadBruta;
       cents.ebit = derived.ebit;
+      cents.gastosNoOperacionales = derived.gastosNoOperacionales;
       cents.gastosClase5 = derived.gastosClase5;
     }
   }

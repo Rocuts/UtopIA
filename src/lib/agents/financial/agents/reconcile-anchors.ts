@@ -44,6 +44,7 @@ import { parseMoneyCop, serializeMoneyCop } from '../contracts/money';
 import { sumStatementDetail } from '../contracts/statement-lines';
 import {
   buildDeterministicBreakdown,
+  termOfGroup,
   type BreakdownSection,
 } from '../contracts/deterministic-breakdown';
 import type { PeriodSnapshot } from '@/lib/preprocessing/trial-balance';
@@ -101,6 +102,17 @@ export interface ReconciliationOutcome {
   repairAttempted: boolean;
   /** `true` sólo si NO quedó ninguna discrepancia tras la reparación. */
   clean: boolean;
+  /**
+   * Discrepancias del EFE emitido contra el EFE determinista (auditoría
+   * niif-contrato-02), ya redactadas. Opcional por compatibilidad con los
+   * consumidores que reconstruyen el objeto (UI, orquestador).
+   */
+  cashFlowDiscrepancies?: string[];
+  /**
+   * Pases del analista que se completaron con esfuerzo de razonamiento
+   * degradado tras un primer intento fallido (auditoría pipeline-flujo-15).
+   */
+  degradedPasses?: string[];
 }
 
 /**
@@ -128,7 +140,37 @@ export function describeQualifications(outcome: ReconciliationOutcome): string[]
         `${fmtCop(parseMoneyCop(g.gapCents))}.`,
     );
   }
+  for (const msg of outcome.cashFlowDiscrepancies ?? []) out.push(msg);
   return out;
+}
+
+/**
+ * Aviso visible de sección degradada (auditoría pipeline-flujo-15). No es una
+ * salvedad aritmética —las cifras siguen pasando los cruces deterministas—,
+ * pero la redacción se generó con razonamiento reducido y el cliente debe
+ * saberlo en el cuerpo del entregable, no sólo por un evento SSE.
+ */
+export function buildDegradationNotice(
+  degradedPasses: readonly string[],
+  language: 'es' | 'en' = 'es',
+): string {
+  if (degradedPasses.length === 0) return '';
+  if (language === 'en') {
+    return [
+      '> **SECTION GENERATED WITH REDUCED REASONING**',
+      '>',
+      `> ${degradedPasses.join(', ')}: the first attempt produced no output and the section was ` +
+        'regenerated with reduced reasoning effort. Review it before signing.',
+      '',
+    ].join('\n');
+  }
+  return [
+    '> **SECCIÓN GENERADA CON RAZONAMIENTO REDUCIDO**',
+    '>',
+    `> ${degradedPasses.join(', ')}: el primer intento no produjo salida y la sección se ` +
+      'regeneró con esfuerzo de razonamiento reducido. Revísela antes de firmar.',
+    '',
+  ].join('\n');
 }
 
 export interface ReconcileResult<T extends ReconcilableReport = NiifReportJson> {
@@ -453,6 +495,81 @@ const SECTION_BY_STATEMENT: Record<LineGap['statement'], BreakdownSection> = {
   Patrimonio: 'equity',
 };
 
+/** Renglón del Balance tal como lo emite el completado determinista. */
+interface BalanceLine {
+  account: string | null;
+  label: string;
+  amountPrimary: string;
+  amountComparative: string | null;
+  level: 0 | 1 | 2 | 3 | 4;
+  isAbsolute: boolean;
+  confidence: 'high' | 'medium' | 'low' | null;
+  anomalyFlag: null;
+}
+
+const TERM_SUBTOTAL_LABELS: Record<'assets' | 'liabilities', Record<'current' | 'nonCurrent', string>> = {
+  assets: { current: 'Total activo corriente', nonCurrent: 'Total activo no corriente' },
+  liabilities: { current: 'Total pasivo corriente', nonCurrent: 'Total pasivo no corriente' },
+};
+
+/**
+ * Ordena renglones de grupo PUC de dos dígitos en bloques corriente / no
+ * corriente con su subtotal (level 3, sin código), según la misma partición
+ * del preprocesador (`termOfGroup`). Auditoría 2026-09 (niif-contrato-07):
+ * NIIF PYMES 4.4 exige presentar por separado corriente y no corriente.
+ *
+ * Devuelve `null` si algún grupo no tiene plazo determinable (o si la sección
+ * es patrimonio): el llamador presenta la sección sin subtotales y declara la
+ * presentación en `balanceSheet.notes`.
+ */
+function layoutByTerm(section: BreakdownSection, detail: BalanceLine[]): BalanceLine[] | null {
+  if (section === 'equity') return null;
+  const blocks: Record<'current' | 'nonCurrent', BalanceLine[]> = { current: [], nonCurrent: [] };
+  for (const line of detail) {
+    const term = termOfGroup(section, (line.account ?? '').trim());
+    if (term === null) return null;
+    blocks[term].push(line);
+  }
+  const out: BalanceLine[] = [];
+  for (const term of ['current', 'nonCurrent'] as const) {
+    const rows = blocks[term].sort((a, b) => (a.account ?? '').localeCompare(b.account ?? ''));
+    if (rows.length === 0) continue;
+    const primary = rows.reduce((acc, r) => acc + parseMoneyCop(r.amountPrimary), ZERO);
+    const withCmp = rows.filter((r) => r.amountComparative !== null);
+    const comparative =
+      withCmp.length === 0
+        ? null
+        : serializeMoneyCop(withCmp.reduce((acc, r) => acc + parseMoneyCop(r.amountComparative!), ZERO));
+    out.push(...rows, {
+      account: null,
+      label: TERM_SUBTOTAL_LABELS[section][term],
+      amountPrimary: serializeMoneyCop(primary),
+      amountComparative: comparative,
+      level: 3,
+      isAbsolute: false,
+      confidence: 'high',
+      anomalyFlag: null,
+    });
+  }
+  return out;
+}
+
+/** Nota de presentación cuando el plazo de algún grupo no es determinable. */
+function termPresentationNote(section: BreakdownSection, detail: BalanceLine[]) {
+  const groups = detail
+    .map((l) => (l.account ?? '').trim())
+    .filter((g) => termOfGroup(section, g) === null);
+  return {
+    ref: null,
+    norma: 'NIIF para PYMES, Sección 4.4',
+    body:
+      `${section === 'assets' ? 'Los activos' : 'Los pasivos'} se presentan por grupo PUC sin ` +
+      `separar corriente y no corriente porque ${groups.length > 1 ? 'los grupos' : 'el grupo'} ` +
+      `${groups.join(', ')} no ${groups.length > 1 ? 'tienen' : 'tiene'} un plazo determinable ` +
+      `desde el balance de prueba. La clasificación por vencimiento requiere revisión del contador.`,
+  };
+}
+
 /**
  * Reemplaza el desglose de los estados que no cuadran por el desglose
  * determinista del preprocesador, agregado por grupo PUC.
@@ -500,7 +617,7 @@ export function completeBreakdownFromSnapshot<T extends ReconcilableReport>(
     // determinista. Ver la nota de `fillComparativeBreakdownFromSnapshot`.
     const comparativeByAccount = buildComparativeCentsByAccount(comparativeSnapshot, section);
 
-    balanceSheet[section] = rows.map((row) => ({
+    const detail: BalanceLine[] = rows.map((row) => ({
       account: row.account,
       label: labelByAccount.get(row.account) ?? row.label,
       amountPrimary: serializeMoneyCop(row.cents),
@@ -523,7 +640,15 @@ export function completeBreakdownFromSnapshot<T extends ReconcilableReport>(
       // Una cifra derivada del preprocesador no puede tener anomalía sectorial:
       // no la derivó el modelo.
       anomalyFlag: null,
-    })) as T['balanceSheet'][typeof section];
+    }));
+    // Corriente / no corriente con subtotales anclados a la partición del
+    // preprocesador; si algún grupo no tiene plazo, presentación sin
+    // subtotales declarada en las notas (niif-contrato-07).
+    const laidOut = layoutByTerm(section, detail);
+    if (!laidOut && section !== 'equity') {
+      balanceSheet.notes = [...balanceSheet.notes, termPresentationNote(section, detail)];
+    }
+    balanceSheet[section] = (laidOut ?? detail) as T['balanceSheet'][typeof section];
     completed.push(gap.statement);
   }
 
@@ -610,18 +735,24 @@ export function fillComparativeBreakdownFromSnapshot<T extends ReconcilableRepor
     }>;
     if (lines.length === 0) continue;
 
-    // Firma de "esto ya es la proyección determinista": todos los renglones
-    // llevan código de grupo PUC de dos dígitos y ninguno se repite.
-    const codes = lines.map((l) => (l.account ?? '').trim());
+    // Firma de "esto ya es la proyección determinista": todos los renglones de
+    // detalle llevan código de grupo PUC de dos dígitos y ninguno se repite; los
+    // únicos renglones sin código son los subtotales corriente / no corriente
+    // que agrega el completado (niif-contrato-07).
+    const detailLines = lines.filter((l) => l.account !== null);
+    const hasTermSubtotals = detailLines.length !== lines.length;
+    const codes = detailLines.map((l) => (l.account ?? '').trim());
     const esProyeccionDeterminista =
-      codes.every((c) => /^\d{2}$/.test(c)) && new Set(codes).size === codes.length;
+      codes.every((c) => /^\d{2}$/.test(c)) &&
+      new Set(codes).size === codes.length &&
+      lines.every((l) => l.account !== null || l.level === 3);
     if (!esProyeccionDeterminista) continue;
 
-    const yaTieneComparativo = lines.every((l) => l.amountComparative !== null);
+    const yaTieneComparativo = detailLines.every((l) => l.amountComparative !== null);
     const gruposFaltantes = [...comparativeByAccount.keys()].filter((g) => !codes.includes(g));
     if (yaTieneComparativo && gruposFaltantes.length === 0) continue;
 
-    const conComparativo = lines.map((l) => {
+    const conComparativo = detailLines.map((l) => {
       const cmp = comparativeByAccount.get(l.account ?? '');
       return {
         ...l,
@@ -650,9 +781,11 @@ export function fillComparativeBreakdownFromSnapshot<T extends ReconcilableRepor
         };
       });
 
-    balanceSheet[section] = [...conComparativo, ...nuevos].sort((a, b) =>
+    const merged = [...conComparativo, ...nuevos].sort((a, b) =>
       (a.account ?? '').localeCompare(b.account ?? ''),
-    ) as T['balanceSheet'][typeof section];
+    ) as unknown as BalanceLine[];
+    balanceSheet[section] = ((hasTermSubtotals ? layoutByTerm(section, merged) : null) ??
+      merged) as unknown as T['balanceSheet'][typeof section];
     filled.push(statement);
   }
 
