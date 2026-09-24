@@ -34,9 +34,10 @@ function comparative(): NiifReportJson {
   json.company.comparativePeriod = '2024';
   const bs = json.balanceSheet;
   bs.assets = [L('11', '170000', '100000'), L('13', '830000', '700000')];
-  bs.liabilities = [L('22', '400000', '300000')];
-  bs.equity = [L('31', '600000', '500000')];
-  Object.assign(bs, { totalAssetsComparative: '800000', totalLiabilitiesComparative: '300000', totalEquityComparative: '500000' });
+  // Patrimonio 2024 = saldo inicial del ECP del fixture base (E19, NIIF PYMES 6.3).
+  bs.liabilities = [L('22', '400000', '400000')];
+  bs.equity = [L('31', '600000', '400000')];
+  Object.assign(bs, { totalAssetsComparative: '800000', totalLiabilitiesComparative: '400000', totalEquityComparative: '400000' });
   const is = json.incomeStatement;
   is.lines = [L('4', '700000', '600000'), L('6', '200000', '200000'), L('51', '200000', '150000'), L('53', '100000', '50000')];
   Object.assign(is, { grossProfitComparative: '400000', operatingProfitComparative: '250000', netIncomeComparative: '200000', oriComparative: '0' });
