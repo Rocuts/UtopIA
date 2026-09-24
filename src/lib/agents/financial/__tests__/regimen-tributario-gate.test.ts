@@ -8,9 +8,10 @@
 // ahora de la empresa, con la misma lectura defensiva que
 // `estatutosRequierenReservaLegal`.
 //
-// Límite: ni el intake NIIF ni `companyInfoSchema` (src/lib/validation/schemas.ts)
-// capturan todavía el régimen, así que en las rutas el campo no llega (Zod lo
-// descarta) y V10 se sigue evaluando como régimen ordinario: conservador.
+// El intake NIIF y `companyInfoSchema` capturan el régimen desde I3-intake
+// (prueba de punta a punta en
+// src/components/workspace/intake/__tests__/regimen-tributario-intake.test.tsx);
+// sin dato, V10 se sigue evaluando como régimen ordinario: conservador.
 // ---------------------------------------------------------------------------
 
 import { describe, expect, it } from 'vitest';

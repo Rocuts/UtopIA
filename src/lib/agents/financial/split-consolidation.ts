@@ -92,10 +92,10 @@ export function normalizeTipoSocietarioParaGate(
  * inyectarlo en la empresa; cualquier otro valor → `undefined` (V10 se evalúa
  * como régimen ordinario).
  *
- * Límite vigente: ni el intake NIIF (`NiifReportIntake`) ni
- * `companyInfoSchema` (src/lib/validation/schemas.ts) capturan el régimen, y
- * Zod descarta la clave en /niif y /consolidate: hasta que se agregue allí,
- * el SIMPLE sigue viendo V10 (comportamiento conservador).
+ * El intake NIIF (`NiifReportIntake.regimenTributario`) y `companyInfoSchema`
+ * (src/lib/validation/schemas.ts) capturan el régimen desde la fase 2 de la
+ * auditoría (I3-intake); sin dato llega `null` y V10 se sigue exigiendo
+ * (comportamiento conservador).
  */
 export function regimenTributarioParaGate(
   company: unknown,

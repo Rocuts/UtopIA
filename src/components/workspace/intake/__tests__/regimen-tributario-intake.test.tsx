@@ -116,6 +116,12 @@ async function correr(regimen?: RegimenTributarioIntake | null) {
 
   const parts = makeProvenanceParts();
   parts.strategicAnalysis.fullContent = 'Análisis estratégico del periodo.';
+  // Desde I3-markdown el servidor re-renderiza las Partes desde su JSON y
+  // descarta el Markdown del navegador: la TTD se retira del JSON (nota de
+  // impuestos de la Parte III), no sólo del texto.
+  for (const note of parts.governance.json?.financialNotes ?? []) {
+    if (/TTD|Tributaci[oó]n Depurada/i.test(note.body)) note.body = 'Impuesto de renta del ejercicio.';
+  }
   const body = buildConsolidationRequestBody({
     rawData: CSV_PERDIDA_COMPARATIVO,
     company: phase.context.company,
