@@ -88,7 +88,7 @@ export interface MonthlyAccountRow {
   type: string;
   /** Σ(débito − crédito) de todos los períodos con cierre ≤ corte (incluye el asiento de cierre). */
   balanceToDateCents: bigint;
-  /** Σ(débito − crédito) del período, SIN el asiento de cierre (P&G del mes). */
+  /** Σ(débito − crédito) del período, SIN el asiento de cierre ni sus reversos (P&G del período). */
   periodMovementCents: bigint;
 }
 
@@ -97,14 +97,18 @@ export interface MonthlyAccountRow {
  *
  * - INNER JOIN con `journal_entries` y `accounting_periods`: sólo cuentan
  *   líneas de asientos del workspace, nunca líneas huérfanas de otro período.
- * - Estado `posted` y `reversed`: al reversar, el original pasa a `reversed` y
- *   el asiento espejo (`source_type = 'reversal'`) queda `posted`; ambos deben
- *   sumarse para que el efecto neto sea cero. Filtrar sólo `posted` dejaría el
- *   reverso sin su original (efecto neto = −original). Los borradores (`draft`)
+ * - Estado `posted` y `reversed`: original y reverso (`source_type =
+ *   'reversal'`) deben sumarse para que el efecto neto sea cero. Desde la
+ *   migración 0022 el original conserva `posted` (con `reversed_by_entry_id`);
+ *   `reversed` se mantiene por las filas históricas. Los borradores (`draft`)
  *   nunca cuentan.
  * - Saldo a la fecha de corte: períodos cuyo `ends_at` ≤ el del período.
  * - Movimiento del período: `period_id` = período y sin el asiento de cierre
- *   (`source_type <> 'closing'`), que deja en cero las cuentas de resultado.
+ *   (`source_type <> 'closing'`), que deja en cero las cuentas de resultado,
+ *   ni sus reversos (contab-nomina-04): el reverso de un cierre —p. ej. el
+ *   anual del período 13— devolvería a resultados el saldo trasladado e
+ *   invertiría el P&G. Mismo criterio que `pillar_kpis_view` (migración 0022).
+ *   El saldo a la fecha de corte sí incluye ambos (netean entre sí).
  * - Sumas en NUMERIC y devueltas como texto (sin `parseFloat`).
  */
 export function monthlyBalancesQuery(workspaceId: string, periodId: string) {
@@ -116,7 +120,13 @@ export function monthlyBalancesQuery(workspaceId: string, periodId: string) {
       COALESCE(SUM(jl.functional_debit - jl.functional_credit)
         FILTER (WHERE ap.ends_at <= cut.ends_at), 0)::text AS balance_to_date,
       COALESCE(SUM(jl.functional_debit - jl.functional_credit)
-        FILTER (WHERE je.period_id = ${periodId} AND je.source_type <> 'closing'), 0)::text AS period_movement
+        FILTER (WHERE je.period_id = ${periodId}
+          AND je.source_type <> 'closing'
+          AND NOT EXISTS (
+            SELECT 1 FROM journal_entries orig
+            WHERE orig.id = je.reversal_of_entry_id
+              AND orig.source_type = 'closing'
+          )), 0)::text AS period_movement
     FROM chart_of_accounts ca
     JOIN journal_lines jl
       ON jl.account_id = ca.id

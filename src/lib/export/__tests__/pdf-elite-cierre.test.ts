@@ -49,9 +49,21 @@ describe('contab-nomina-02 — consulta de saldos', () => {
     expect(text).toMatch(/je\.status IN \('posted', 'reversed'\)/);
   });
 
+  it('contab-nomina-04: el P&G del período excluye también los REVERSOS del asiento de cierre', () => {
+    // Si un cierre (p. ej. el anual del período 13) se reversa, el reverso
+    // (source_type 'reversal') devolvía a las cuentas de resultado el saldo
+    // que el cierre había trasladado: excluido sólo el cierre, el P&G del
+    // período quedaba con el resultado invertido.
+    const filter = /FILTER \(WHERE (je\.period_id = \$\d+[\s\S]*?)\), 0\)::text AS period_movement/.exec(text)?.[1] ?? '';
+    expect(filter).toMatch(/je\.source_type <> 'closing'/);
+    expect(filter).toMatch(
+      /NOT EXISTS \(\s*SELECT 1 FROM journal_entries orig\s+WHERE orig\.id = je\.reversal_of_entry_id\s+AND orig\.source_type = 'closing'\s*\)/,
+    );
+  });
+
   it('balance a la fecha de corte y P&G del período sin el asiento de cierre', () => {
     expect(text).toMatch(/FILTER \(WHERE ap\.ends_at <= cut\.ends_at\)/);
-    expect(text).toMatch(/FILTER \(WHERE je\.period_id = \$\d+ AND je\.source_type <> 'closing'\)/);
+    expect(text).toMatch(/FILTER \(WHERE je\.period_id = \$\d+\s+AND je\.source_type <> 'closing'/);
     expect(text).toMatch(/ap\.ends_at <= cut\.ends_at/);
     expect(text).not.toMatch(/parseFloat/);
   });
