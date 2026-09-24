@@ -44,12 +44,15 @@ import {
   checkRoeUnits,
   findForeignCutoffYears,
   narrativeSourcesFromPreprocessed,
-  windowAfter,
+  type NarrativeCheckOptions,
   type NarrativeUnit,
 } from '../validators/narrative-anchors';
 import {
   applyKpiAnchors,
+  discardedFigureHits,
   discardedKpiFigures,
+  kpiMentionWindow,
+  kpiNamePattern,
   strategyAnchorSources,
   type DiscardedKpiFigure,
 } from '../validators/strategy-anchors';
@@ -1417,27 +1420,136 @@ function equityRowColumnSums(row: Record<string, unknown>): string[] {
 // `validators/narrative-anchors.ts` y es el mismo que cruza la prosa de las
 // Partes II y III antes de que lleguen al HTML (pendiente #2 de la auditoría
 // integral 2026-09-24). Aquí sólo se leen las unidades de texto del DOM.
+//
+// Re-auditoría final de la fase 2 (narrativa-08): R6 juzgaba sin las
+// exenciones con que el mismo núcleo cruza la prosa de la Parte II, así que la
+// prosa que la Parte II acepta dejaba el HTML en BORRADOR: una proyección
+// ("Para 2026 se proyecta una utilidad neta de $30M"), una meta, el impacto de
+// una recomendación ("Elevar la utilidad neta a $30 M y el EBITDA en $12 M",
+// página 13 de la plantilla), un inciso ("el 10 % de la utilidad neta
+// ($20M)") o un componente ("el total de activos se concentra en el efectivo,
+// con $50M"). Ahora R6 usa las mismas opciones que la Parte II
+// (`skipForwardLooking`, `lenientProse`, año del periodo) y marca como
+// propuesta —igual que la acción y el impacto de una recomendación en la
+// Parte II— la prosa de las secciones de recomendaciones, plan de acción,
+// próximo cierre y proyección, y toda frase que empieza en infinitivo (el
+// "imperativo suave" con que la spec v10.1 redacta las recomendaciones),
+// salvo la frase que AFIRMA un saldo ("fue de", "asciende a", "cerró en"),
+// que se sigue juzgando. Las filas de tabla conservan el modo estricto salvo
+// en una tabla de proyección. Límite documentado: una cifra sin verbo de saldo
+// dentro de esas secciones ("Mantener la utilidad neta de $X") no la cruza R6;
+// R1/R3 siguen exigiendo las cifras vinculantes con su signo.
 
 const R6_RULE = '§1.1 · Reconciliación JSON↔HTML — concepto anclado con otra cifra';
-const R6_OPTIONS = { language: 'es' as const, subject: { es: 'el HTML', en: 'the HTML' } };
+
+/** Encabezados de sección cuya prosa es propuesta, meta o impacto esperado. */
+const PROPOSAL_SECTION =
+  /recomendaci|plan\s+de\s+acci[oó]n|acciones?\s+(?:urgentes|prioritarias|recomendadas|propuestas|sugeridas|inmediatas)|pr[oó]ximo\s+cierre|pr[oó]ximos\s+pasos|recommendation|action\s+plan|next\s+steps|next\s+close|urgent\s+actions/i;
+/** Encabezados (o captions/cabeceras de tabla) de una proyección. */
+const PROJECTION_SECTION = /proyecci[oó]n|proyectad[oa]s?|escenarios?\b|presupuest|projection|projected|scenarios?\b|forecast|budget/i;
+
+/** Sustantivos y adjetivos terminados en -ar/-er/-ir que abren frases que no son acciones. */
+const NOT_INFINITIVE = new Set([
+  'lugar', 'similar', 'particular', 'regular', 'auxiliar', 'titular', 'familiar', 'popular', 'singular', 'escolar',
+  'militar', 'dolar', 'pilar', 'hogar', 'bienestar', 'malestar', 'par', 'mar', 'bar', 'azar', 'alquiler', 'taller',
+  'mujer', 'poder', 'deber', 'haber', 'placer', 'ayer', 'caracter', 'lider', 'master', 'super', 'primer', 'tercer',
+  'cualquier', 'porvenir', 'other', 'under', 'over', 'after', 'never', 'either', 'whether', 'water', 'paper', 'order',
+  'power', 'number', 'member', 'register', 'ever', 'however',
+]);
+
+/**
+ * ¿La frase empieza con un verbo en infinitivo (con o sin pronombre
+ * enclítico)? "Elevar la utilidad neta a $30 M…", "Mantenerla…",
+ * "02 · Reducir la cartera…", "Acción: documentar…".
+ */
+function startsWithInfinitive(sentence: string): boolean {
+  const head = sentence
+    .replace(/^[\s\d.)(\-–—•·*:]+/, '')
+    .replace(/^(?:acci[oó]n|recomendaci[oó]n|propuesta|paso)\s*\d*\s*[:.—–-]\s*/i, '');
+  const word = /^[\p{L}]+/u.exec(head)?.[0];
+  if (!word || word.length < 4) return false;
+  const folded = word.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  if (NOT_INFINITIVE.has(folded)) return false;
+  return /(?:ar|er|ir)(?:se|lo|la|los|las|le|les|nos)?$/.test(folded);
+}
+
+/**
+ * Verbo que AFIRMA el saldo del periodo ("fue de", "asciende a", "cerró en",
+ * "registró"): una frase así no es una propuesta aunque esté en la sección de
+ * recomendaciones o empiece en infinitivo ("Destacar que la utilidad neta fue
+ * de $X"), y se juzga.
+ */
+const STATEMENT_VERB =
+  /\b(?:fue|fueron|es|son|era|eran)\s+de\b|\b(?:asciende|ascendi[oó]|ascendieron|totaliza|totaliz[oó]|suma|sum[oó]|cerr[oó]|registr[oó]|alcanz[oó]|report[oó])\b|\bse\s+ubic[oó]\b/i;
+
+/**
+ * Separa las propuestas (toda frase de una sección de propuestas, o una frase
+ * en infinitivo) del resto de la unidad, salvo las que afirman un saldo.
+ */
+function splitProposals(text: string, inProposalSection: boolean): NarrativeUnit[] {
+  const sentences = text.split(/(?<=[.;!?])\s+/);
+  const isProposal = (s: string) => (inProposalSection || startsWithInfinitive(s)) && !STATEMENT_VERB.test(s);
+  const proposals = sentences.filter(isProposal);
+  if (proposals.length === 0) return [{ text, firstCell: null }];
+  const rest = sentences.filter((s) => !isProposal(s)).join(' ');
+  return [
+    ...(rest ? [{ text: rest, firstCell: null }] : []),
+    ...proposals.map((p) => ({ text: p, firstCell: null, forwardLooking: true })),
+  ];
+}
+
+/** Tabla de proyección: caption/cabecera con palabras de proyección o sólo años futuros. */
+function isProjectionTable(table: Element | null, primaryYear: string | null): boolean {
+  if (!table) return false;
+  const caption = (table.querySelector('caption')?.textContent ?? '').replace(/\s+/g, ' ');
+  const headerRow = table.querySelector('tr');
+  const header = headerRow ? cellTexts(headerRow).join(' ') : '';
+  if (PROJECTION_SECTION.test(caption) || PROJECTION_SECTION.test(header)) return true;
+  if (!primaryYear) return false;
+  const years = [...header.matchAll(/(?<!\d)((?:19|20)\d{2})(?!\d)/g)].map((m) => Number(m[1]));
+  return years.length > 0 && years.every((y) => y > Number(primaryYear));
+}
 
 /** Texto de las unidades que el lector ve como una frase o una fila. */
-function textUnits(document: ParsedDocument): NarrativeUnit[] {
+function textUnits(document: ParsedDocument, primaryYear: string | null = null): NarrativeUnit[] {
   const clean = (t: string) =>
-    t.replace(/\u00a0/g, ' ').replace(/\$\s+/g, '$').replace(/\s+/g, ' ').trim();
+    t.replace(/ /g, ' ').replace(/\$\s+/g, '$').replace(/\s+/g, ' ').trim();
   const out: NarrativeUnit[] = [];
-  const blocks = document.querySelectorAll(
-    'p, li, h1, h2, h3, h4, h5, h6, caption, figcaption, blockquote, dd, dt',
+  let article: Element | null = null;
+  // Encabezados vigentes (por nivel) dentro de la página: una sección de
+  // recomendaciones o de proyección rige hasta un encabezado de igual o mayor
+  // rango, o hasta la página siguiente.
+  let stack: Array<{ level: number; proposal: boolean; projection: boolean }> = [];
+  const nodes = document.querySelectorAll(
+    'h1, h2, h3, h4, h5, h6, p, li, caption, figcaption, blockquote, dd, dt, tr',
   );
-  for (const el of Array.from(blocks)) {
+  for (const el of Array.from(nodes)) {
+    const owner = el.closest('article');
+    if (owner !== article) {
+      article = owner;
+      stack = [];
+    }
+    const tag = el.tagName.toLowerCase();
+    if (/^h[1-6]$/.test(tag)) {
+      const level = Number(tag[1]);
+      const t = clean(el.textContent ?? '');
+      stack = stack.filter((h) => h.level < level);
+      stack.push({ level, proposal: PROPOSAL_SECTION.test(t), projection: PROJECTION_SECTION.test(t) });
+    }
+    const projection = stack.some((h) => h.projection);
+    const proposal = projection || stack.some((h) => h.proposal);
+    if (tag === 'tr') {
+      const cells = Array.from(el.querySelectorAll('th, td')).map((c) => clean(c.textContent ?? ''));
+      if (cells.length < 2) continue;
+      const forward = projection || isProjectionTable(el.closest('table'), primaryYear);
+      out.push({ text: cells.join(' | '), firstCell: cells[0], ...(forward ? { forwardLooking: true } : {}) });
+      continue;
+    }
     // Un bloque que contiene <p>/<li> se lee por sus hijos.
     if (el.querySelector('p, li')) continue;
-    out.push({ text: clean(el.textContent ?? ''), firstCell: null });
-  }
-  for (const row of Array.from(document.querySelectorAll('tr'))) {
-    const cells = Array.from(row.querySelectorAll('th, td')).map((c) => clean(c.textContent ?? ''));
-    if (cells.length < 2) continue;
-    out.push({ text: cells.join(' | '), firstCell: cells[0] });
+    const text = clean(el.textContent ?? '');
+    if (!text) continue;
+    out.push(...splitProposals(text, proposal));
   }
   return out;
 }
@@ -1450,63 +1562,44 @@ function textUnits(document: ParsedDocument): NarrativeUnit[] {
 // Editor Jefe ya recibe el JSON anclado, pero la cifra del modelo puede seguir
 // viva en otra prosa del payload: si reaparece junto al nombre del KPI (fila,
 // tarjeta o frase), el HTML imprime una cifra sin base.
+//
+// Re-auditoría fase 2 (narrativa-15): sólo se cazaba la escritura exacta junto
+// al nombre exacto; "24 %" (23,7 redondeado) o "margen de EBITDA ajustado"
+// pasaban. El reconocedor es ahora el mismo con que `applyKpiAnchors` sanea la
+// prosa de la Parte II (`kpiNamePattern` + `discardedFigureHits`): nombre
+// plegado con conectores opcionales y cifra a la precisión impresa, sin la
+// banda sectorial ni la cifra que el sistema sí publica.
 
 const R7_RULE = '§1.1 · Reconciliación JSON↔HTML — KPI sin ancla con la cifra del modelo';
-
-const foldText = (t: string) =>
-  t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ');
-
-/** Formas impresas de la cifra descartada (regex sobre texto plegado). */
-function discardedPatterns(d: DiscardedKpiFigure): RegExp[] {
-  if (d.unit === 'cop') {
-    let cents: bigint;
-    try {
-      cents = parseMoneyCop(d.value);
-    } catch {
-      return [];
-    }
-    return acceptableRenderings(cents).map((r) => new RegExp(`${escapeRegExp(r)}(?![.,]?\\d)`));
-  }
-  const m = /^[-+−]?\s*(\d+)(?:[.,](\d+))?/.exec(d.value.trim());
-  if (!m) return [];
-  const [, int, dec] = m;
-  // "23,7" / "23.7" / "23,70"; un entero de un dígito es demasiado ambiguo.
-  if (!dec && int.length < 2) return [];
-  const decimals = dec ? `[.,]${escapeRegExp(dec)}0*` : '(?:[.,]0+)?';
-  return [new RegExp(`(?<![\\d.,])${escapeRegExp(int)}${decimals}(?![\\d]|[.,]\\d)`)];
-}
 
 function checkDiscardedKpiFigures(
   document: ParsedDocument,
   discarded: DiscardedKpiFigure[],
 ): ChecklistFailure[] {
   if (discarded.length === 0) return [];
-  const units = textUnits(document).map((u) => foldText(u.text));
+  const units = textUnits(document).map((u) => u.text);
   const out: ChecklistFailure[] = [];
   const seen = new Set<string>();
   for (const d of discarded) {
-    const name = foldText(d.name).trim();
-    if (name.length < 3) continue;
-    const band = foldText(d.band).trim();
-    const patterns = discardedPatterns(d);
-    if (patterns.length === 0) continue;
+    const re = kpiNamePattern(d.name);
+    if (!re) continue;
+    const key = `${d.name}|${d.value}`;
     for (const text of units) {
-      const at = text.indexOf(name);
-      if (at < 0) continue;
-      // Lo que sigue al nombre en la misma fila o frase, sin la banda sectorial.
-      let tail = windowAfter(text, at + name.length, []);
-      if (band) tail = tail.split(band).join(' ');
-      if (!patterns.some((re) => re.test(tail))) continue;
-      const key = `${d.name}|${d.value}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push({
-        rule: R7_RULE,
-        detail:
-          `El KPI "${d.name}" se publica N/D o recalculado por el sistema, pero el HTML imprime la cifra ` +
-          `que estimó el modelo (${d.unit === 'cop' ? formatCopFromCents(parseMoneyCop(d.value), false) : d.value}).`,
-        severity: 'block',
-      });
+      if (seen.has(key)) break;
+      re.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(text)) !== null) {
+        if (discardedFigureHits(kpiMentionWindow(text, m.index + m[0].length), d).length === 0) continue;
+        seen.add(key);
+        out.push({
+          rule: R7_RULE,
+          detail:
+            `El KPI "${d.name}" se publica N/D o recalculado por el sistema, pero el HTML imprime la cifra ` +
+            `que estimó el modelo (${d.unit === 'cop' ? formatCopFromCents(parseMoneyCop(d.value), false) : d.value}).`,
+          severity: 'block',
+        });
+        break;
+      }
     }
   }
   return out;
@@ -1517,18 +1610,27 @@ function checkAnchoredConceptsInText(
   input: ReconciliationInput,
 ): ChecklistFailure[] {
   const sources = narrativeSourcesFromPreprocessed(input.preprocessed ?? null, input.niifReport);
+  const primaryYear = yearOf(input.niifReport?.company?.fiscalPeriod);
   // El JSON NIIF manda en el HTML (lo que el Editor Jefe recibe como vinculante);
   // sin preprocesado no hay ingresos, EBITDA ni ROE contra los cuales cruzar.
-  const units = textUnits(document);
+  const units = textUnits(document, primaryYear);
   const concepts = buildNarrativeConcepts(sources);
-  const money = checkNarrativeUnits(units, concepts, R6_OPTIONS);
-  const roe = checkRoeUnits(units, sources.primary, sources.comparative, R6_OPTIONS);
+  // Mismas exenciones que la prosa de la Parte II (narrativa-08). Los mensajes
+  // van en español, como el resto de las reglas del validador.
+  const options: NarrativeCheckOptions = {
+    language: 'es',
+    subject: { es: 'el HTML', en: 'the HTML' },
+    skipForwardLooking: true,
+    lenientProse: true,
+    primaryYear,
+  };
+  const money = checkNarrativeUnits(units, concepts, options);
+  const roe = checkRoeUnits(units, sources.primary, sources.comparative, options);
   const out: ChecklistFailure[] = [...money.findings, ...roe.findings].map((f) => ({
     rule: R6_RULE,
     detail: f.detail,
     severity: 'block' as const,
   }));
-  const primaryYear = yearOf(input.niifReport?.company?.fiscalPeriod);
   const foreign = findForeignCutoffYears(units, primaryYear);
   if (foreign.length > 0) {
     out.push({

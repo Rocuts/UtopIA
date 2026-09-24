@@ -9,7 +9,9 @@
 //   interanual de un KPI anclado ("+999,0 pp" en el ROE) no se recalculaban.
 // narrativa-15: un KPI publicado N/D (sin ancla) conservaba la cifra del modelo
 //   en el comentario ejecutivo, los títulos y los diagnósticos de la Parte II
-//   (Markdown, PDF, Excel).
+//   (Markdown, PDF, Excel); y R7 del HTML sólo cazaba la escritura exacta
+//   junto al nombre exacto ("24 %" o "margen de EBITDA ajustado … 23,7 %"
+//   pasaban).
 // ---------------------------------------------------------------------------
 
 import { describe, expect, it, vi } from 'vitest';
@@ -21,8 +23,15 @@ vi.mock('@/lib/agents/financial/agents/runtime', () => ({
 vi.mock('@/lib/macro/prompt-snapshot', () => ({ getMacroSnapshotForPrompts: vi.fn(async () => null) }));
 
 import { runStrategyPhase } from '@/lib/agents/financial/orchestrator';
-import { applyKpiAnchors, reconcileStrategyAnchors, strategyAnchorSources } from '../validators/strategy-anchors';
+import {
+  applyKpiAnchors,
+  discardedKpiFigures,
+  reconcileStrategyAnchors,
+  strategyAnchorSources,
+} from '../validators/strategy-anchors';
+import { reconcileBindingFigures } from '../agents/html-editor-validator';
 import { StrategyReportSchema, type KpiJson, type StrategyReportJson } from '../contracts/strategy-report';
+import type { NiifReportJson } from '../contracts/niif-report';
 import type { CompanyInfo, NiifAnalysisResult } from '../types';
 import { parseTrialBalanceCSV, preprocessTrialBalance } from '@/lib/preprocessing/trial-balance';
 
@@ -266,5 +275,56 @@ describe('narrativa-15 — la cifra de un KPI publicado N/D no sobrevive en la p
     expect(out.fullContent).not.toMatch(/23,7/);
     expect(out.fullContent).toContain('> El margen EBITDA ajustado de N/D y un índice de solvencia de 4,8 veces');
     expect(out.fullContent).toContain('Sostener el margen EBITDA ajustado de N/D');
+  });
+});
+
+describe('narrativa-15 — R7 del HTML: nombre plegado y cifra redondeada', () => {
+  const C = (p: number) => String(BigInt(p) * BigInt(100));
+  const NIIF = {
+    company: { fiscalPeriod: '2025', comparativePeriod: null },
+    balanceSheet: { totalAssetsPrimary: C(100_000_000), totalLiabilitiesPrimary: C(30_000_000), totalEquityPrimary: C(70_000_000) },
+    incomeStatement: { grossProfitPrimary: C(70_000_000), operatingProfitPrimary: C(18_000_000), netIncomePrimary: C(20_000_000), oriPrimary: '0' },
+    cashFlow: { cashOpening: C(0), cashClosing: C(60_000_000), netChange: C(60_000_000) },
+    equityChanges: { rows: [{ kind: 'closing_balance', total: C(70_000_000) }] },
+  } as unknown as NiifReportJson;
+  const BASE =
+    '<p>Total activos $100.000.000,00; total pasivos $30.000.000,00; total patrimonio $70.000.000,00; ' +
+    'utilidad neta $20.000.000,00; utilidad bruta $70.000.000,00; utilidad operacional $18.000.000,00; efectivo al cierre $60.000.000,00.</p>';
+  const strategyReport = strategy({
+    kpis: [
+      kpi({}),
+      kpi({ name: 'Margen EBITDA ajustado', resultPrimary: '23,7', benchmarkBand: { description: '> 10 %', lowerBound: '10', upperBound: null } }),
+      kpi({ name: 'Margen bruto', resultPrimary: '64,5' }),
+    ],
+  });
+  const r7 = (p: string) =>
+    reconcileBindingFigures(`<html><body>${BASE}${p}</body></html>`, { niifReport: NIIF, strategyReport, preprocessed: pp })
+      .filter((f) => /KPI sin ancla/.test(f.rule))
+      .map((f) => f.detail);
+
+  it('las cifras descartadas del caso', () => {
+    const anchored = applyKpiAnchors(strategyReport, strategyAnchorSources(pp, NIIF), { keepWhenNoSource: true }).json;
+    expect(discardedKpiFigures(strategyReport, anchored).map((d) => [d.name, d.value, d.published])).toEqual([
+      ['Margen EBITDA ajustado', '23,7', 'ND'],
+      ['Margen bruto', '64,5', '70,0'],
+    ]);
+  });
+
+  it('control: la escritura exacta bloquea; la banda sectorial y el N/D no', () => {
+    expect(r7('<p>Margen EBITDA ajustado: 23,7 %.</p>')).toHaveLength(1);
+    expect(r7('<p>Margen EBITDA ajustado: N/D (banda > 10 %).</p>')).toEqual([]);
+  });
+
+  it('"24 %" (redondeo) y "margen de EBITDA ajustado … 23,7 %" (nombre con "de") bloquean', () => {
+    expect(r7('<p>Margen EBITDA ajustado: 24 %.</p>')).toHaveLength(1);
+    expect(r7('<p>El margen de EBITDA ajustado se ubicó en 23,7 %.</p>')).toHaveLength(1);
+    expect(r7('<table><tr><td>MARGEN EBITDA AJUSTADO</td><td>23,70%</td></tr></table>')).toHaveLength(1);
+  });
+
+  it('KPI recalculado: la cifra del sistema junto al nombre no bloquea; la del modelo sí', () => {
+    expect(r7('<p>El margen bruto fue de 70,0 %.</p>')).toEqual([]);
+    expect(r7('<p>El margen bruto fue de 70 %.</p>')).toEqual([]);
+    expect(r7('<p>El margen bruto fue de 64,5 %.</p>')).toHaveLength(1);
+    expect(r7('<p>El margen bruto fue de 65 %.</p>')).toHaveLength(1);
   });
 });
