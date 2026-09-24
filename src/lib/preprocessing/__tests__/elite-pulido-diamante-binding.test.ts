@@ -25,6 +25,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { buildDeterministicCashFlow } from '@/lib/agents/financial/contracts/deterministic-breakdown';
 import { renderSnapshotLines } from '@/lib/agents/financial/orchestrator';
 
 import {
@@ -39,14 +40,18 @@ const FIXTURE_PATH = resolve(
   'elite-pulido-diamante.csv',
 );
 
-function loadPrimarySnapshot() {
+function loadBalance() {
   const csv = readFileSync(FIXTURE_PATH, 'utf-8');
   const rows = parseTrialBalanceCSV(csv);
   const result = preprocessTrialBalance(rows);
   if (!result.primary) {
     throw new Error('preprocessTrialBalance no produjo snapshot primario.');
   }
-  return result.primary;
+  return result;
+}
+
+function loadPrimarySnapshot() {
+  return loadBalance().primary;
 }
 
 describe('ELITE Pulido Diamante — smoke del bloque vinculante (LLM-facing)', () => {
@@ -61,9 +66,15 @@ describe('ELITE Pulido Diamante — smoke del bloque vinculante (LLM-facing)', (
   // (b) R6 sólo absorbe redondeos (≤ $1). La brecha del EFE de este fixture
   //     es la variación del descuadre entre periodos ($177,5M) y queda
   //     visible: la sección R6 NO aparece y el EFE se declara no reconciliado.
+  //
+  // (c) recalculo-11: el EFE del curator R2 ya no se publica como bloque
+  //     vinculante (la única fuente vinculante del EFE es el determinista de
+  //     TOTALES VINCULANTES, que imprime "Reconciliado: sí/no"). En este
+  //     helper la brecha de R2 llega al LLM como hallazgo del curator.
   // -------------------------------------------------------------------------
   it('renderSnapshotLines emite R1 + R8 + R7 (R5 y R6 no maquillan el descuadre)', () => {
-    const snap = loadPrimarySnapshot();
+    const balance = loadBalance();
+    const snap = balance.primary;
     const lines = renderSnapshotLines(snap);
     const text = lines.join('\n');
 
@@ -102,7 +113,15 @@ describe('ELITE Pulido Diamante — smoke del bloque vinculante (LLM-facing)', (
       text,
       'La seccion R6 NO deberia emitirse: no hubo cierre forzado. Output recibido:\n' + text,
     ).not.toContain('## Cierre de Flujo de Efectivo aplicado (Curator R6)');
-    expect(text).toContain('Reconciliado: no');
+    // El EFE no se declara reconciliado: ni el R2 (su brecha exacta llega como
+    // hallazgo ALTO, sin sección vinculante propia) ni el determinista.
+    expect(text).not.toContain('EFE INDIRECTO PRECALCULADO (Curator R2)');
+    expect(text).toMatch(
+      /\[CURATOR CUR-R2 · ALTO\] Estado de Flujos de Efectivo[^\n]*Brecha: \$177\.500\.000 \(NO cuadra/,
+    );
+    const efe = buildDeterministicCashFlow(snap, balance.comparative!)!;
+    expect(efe.reconciled).toBe(false);
+    expect(efe.reconciliationGapCents).toBe(BigInt(17_750_000_000));
 
     // Sub-string 5: R7 (costo presunto) — DEBE aparecer
     expect(
