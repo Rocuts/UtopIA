@@ -2937,7 +2937,13 @@ const RENTA_NAME = /\b(renta|retencion en la fuente|autorretencion(?:es)?)\b/;
 const NON_RENTA_TAX_NAME =
   /\b(ica|reteica|industria y comercio|iva|reteiva|impuestos? (?:a|sobre) las ventas|descontables?|contribucion(?:es)?|timbre|predial|gmf)\b/;
 
-function isRentaCreditAccount(code: string, name: string): boolean {
+/**
+ * ¿La cuenta es un crédito del impuesto de renta (anticipo, retención en la
+ * fuente, autorretención) según la decisión de catálogo de la fase 3?
+ * Exportada para que otros detectores (p. ej. `repair/adjustments.ts`) usen
+ * la misma regla en lugar de duplicarla.
+ */
+export function isRentaCreditAccount(code: string, name: string): boolean {
   const n = normalizeHeaderText(name);
   if (NON_RENTA_TAX_NAME.test(n)) return false;
   if (code.startsWith('1805')) return TAX_CREDIT_NAME.test(n);
