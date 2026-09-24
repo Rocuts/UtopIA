@@ -282,6 +282,41 @@ export const dict = {
         'La mayoría de las empresas operan mirando el retrovisor: ven lo que gastaron, lo que pagaron y lo que quedó. Con 1+1, cambiamos la perspectiva 180°. Hemos estructurado su ecosistema empresarial en cuatro pilares de alto impacto. No hablamos de contabilidad o impuestos; hablamos de Resiliencia, Valor, Integridad y Futuro.',
       niifEliteCTA: 'Informe NIIF Elite',
       niifEliteCTALong: 'Informe NIIF Elite en determinado periodo',
+      // Centro de Alertas (/workspace/alertas). Re-auditoría e2e-niif-15
+      // (2026-09): sólo alertas reales del Centinela; nada de maquetas.
+      alertCenter: {
+        eyebrow: 'Sentinel · Centro de Alertas',
+        title: 'Centro de Alertas',
+        subtitle:
+          'Alertas activas registradas por el Centinela y El Escudo para su empresa (pendientes, pospuestas y escaladas), filtradas por área.',
+        filters: {
+          todas: 'Todas',
+          escudo: 'Escudo',
+          valor: 'Valor',
+          verdad: 'Verdad',
+          futuro: 'Futuro',
+        },
+        inboxTitle: 'Alertas activas',
+        criticalCount: '{n} críticas',
+        loading: 'Cargando alertas…',
+        empty: 'Sin alertas activas',
+        emptyBody:
+          'Las alertas aparecen cuando el Centinela o El Escudo detectan hallazgos en los informes de su empresa. No mostramos alertas de ejemplo.',
+        emptyFilter: 'No hay alertas activas en esta área.',
+        error: 'No fue posible cargar las alertas. Intente de nuevo más tarde.',
+        severity: {
+          critico: 'Crítica',
+          advertencia: 'Advertencia',
+          informativo: 'Informativa',
+        },
+        status: {
+          pending: 'Pendiente',
+          snoozed: 'Pospuesta',
+          escalated: 'Escalada',
+          resolved: 'Resuelta',
+        },
+        subscriptionsTitle: 'Suscripciones',
+      },
       // Auditoría WP07 (2026-09): estados honestos de dato. Ninguna cifra
       // literal se presenta como dato del cliente.
       dataStatus: {
@@ -1980,6 +2015,41 @@ export const dict = {
         'Most companies operate looking in the rear-view mirror: what was spent, what was paid, what remained. With 1+1, we flip the perspective 180°. We have structured your business ecosystem into four high-impact pillars. We do not talk about accounting or taxes; we talk about Resilience, Value, Integrity, and the Future.',
       niifEliteCTA: 'IFRS Elite Report',
       niifEliteCTALong: 'IFRS Elite Report for a specific period',
+      // Alert Center (/workspace/alertas). Re-audit e2e-niif-15 (2026-09):
+      // only real Sentinel alerts; no mock-ups.
+      alertCenter: {
+        eyebrow: 'Sentinel · Alert Center',
+        title: 'Alert Center',
+        subtitle:
+          'Active alerts recorded by the Sentinel and the Shield for your company (pending, snoozed and escalated), filtered by area.',
+        filters: {
+          todas: 'All',
+          escudo: 'Shield',
+          valor: 'Value',
+          verdad: 'Truth',
+          futuro: 'Future',
+        },
+        inboxTitle: 'Active alerts',
+        criticalCount: '{n} critical',
+        loading: 'Loading alerts…',
+        empty: 'No active alerts',
+        emptyBody:
+          'Alerts appear when the Sentinel or the Shield detect findings in your company reports. We do not show sample alerts.',
+        emptyFilter: 'No active alerts in this area.',
+        error: 'Alerts could not be loaded. Please try again later.',
+        severity: {
+          critico: 'Critical',
+          advertencia: 'Warning',
+          informativo: 'Informational',
+        },
+        status: {
+          pending: 'Pending',
+          snoozed: 'Snoozed',
+          escalated: 'Escalated',
+          resolved: 'Resolved',
+        },
+        subscriptionsTitle: 'Subscriptions',
+      },
       // WP07 audit (2026-09): honest data states. No literal figure is shown
       // as client data.
       dataStatus: {
