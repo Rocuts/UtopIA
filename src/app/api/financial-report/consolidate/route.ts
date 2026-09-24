@@ -7,6 +7,7 @@ import {
 import {
   prepareFinancialContext,
   BalanceValidationError,
+  buildAdjustmentsAuditSection,
 } from '@/lib/agents/financial/orchestrator';
 import { consolidateSplitReport } from '@/lib/agents/financial/split-consolidation';
 import type { AdjustmentLedger } from '@/lib/agents/repair/types';
@@ -101,6 +102,18 @@ export async function POST(req: Request) {
       governanceContent: parts.data.governanceContent,
       language,
     });
+    // Traza auditable de los ajustes confirmados del Doctor de Datos: la MISMA
+    // sección que el legacy agrega al consolidado (pipeline-flujo-16). Va al
+    // final, fuera de las Partes I–III que validan los gates post-render.
+    if (ctx.adjustmentsApplicationDetail && ctx.appliedAdjustments.length > 0) {
+      result.consolidatedReport +=
+        '\n\n' +
+        buildAdjustmentsAuditSection(
+          ctx.appliedAdjustments,
+          ctx.adjustmentsApplicationDetail.affected,
+          language,
+        );
+    }
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof BalanceValidationError) {

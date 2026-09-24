@@ -174,3 +174,24 @@ describe('recalculo-11 — el pre-vuelo recibe el snapshot comparativo', () => {
     expect(call[4]?.comparativeSnapshot).toBeTruthy();
   });
 });
+
+describe('prompts-normativa-08 — tipo societario del gate con la misma normalización del acta', () => {
+  it.each([
+    ['S. A. S.', 'SAS'],
+    ['Sociedad por Acciones Simplificada', 'SAS'],
+    ['Sociedad Anónima', 'SA'],
+    ['Limitada', 'LTDA'],
+    ['E.U.', 'EU'],
+    ['Comandita simple', 'OTRO'],
+  ])('%s → %s', async (entityType, expected) => {
+    await prepareFinancialContext({ rawData: SINGLE_2025, company: { ...COMPANY, entityType }, language: 'es' });
+    const call = vi.mocked(auditReportEmittable).mock.calls.at(-1)!;
+    expect(call[2].tipoSocietario).toBe(expected);
+  });
+
+  it('sin tipo declarado sigue siendo indeterminado (no se asume SAS en el gate)', async () => {
+    await prepareFinancialContext({ rawData: SINGLE_2025, company: { ...COMPANY, entityType: undefined }, language: 'es' });
+    const call = vi.mocked(auditReportEmittable).mock.calls.at(-1)!;
+    expect(call[2].tipoSocietario).toBeUndefined();
+  });
+});

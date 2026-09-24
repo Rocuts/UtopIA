@@ -33,6 +33,7 @@ import {
   type AuditCompanyContext,
 } from '@/lib/pillars/audit-report-emittable';
 import { validateConsolidatedReport, type ControlTotalsInput } from './validators/report-validator';
+import { buildConsolidatedReportMarkdown } from './consolidated-markdown';
 import {
   validateNiifReportJson,
   type NiifJsonValidatorOptions,
@@ -47,7 +48,10 @@ import {
   reconcileActaArithmetic,
   describeActaQualifications,
 } from './contracts/base';
-import { buildActaExpectedArithmetic } from './prompts/governance-specialist.prompt';
+import {
+  buildActaExpectedArithmetic,
+  normalizeTipoSocietario as normalizeTipoSocietarioActa,
+} from './prompts/governance-specialist.prompt';
 import { buildPeriodAnchors, moneyCopToken } from './contracts/anchors';
 import {
   fillComparativeBreakdownFromSnapshot,
@@ -932,8 +936,25 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
     lines.push(`- Razón Corriente: ${fmtRatio(totalsKpi.razonCorriente)}`);
     lines.push(`- Prueba Ácida: ${fmtRatio(totalsKpi.pruebaAcida)}`);
     lines.push(`- Endeudamiento Total: ${fmtPct(totalsKpi.endeudamientoTotal)}`);
+    // Motivo del N/D (ratios-kpis-07): con patrimonio ≤ 0 el preprocesador
+    // publica ROE / apalancamiento en null con su causa en `kpiNdMotivos`.
+    const ndMotivos = (totals as ControlTotalsInput & {
+      kpiNdMotivos?: Partial<Record<'roe' | 'apalancamientoFinanciero', string>>;
+    }).kpiNdMotivos;
+    const withNdMotivo = (
+      value: number | null | undefined,
+      motivo: string | undefined,
+      formatted: string,
+    ): string =>
+      (value === null || value === undefined || !Number.isFinite(value)) && motivo
+        ? motivo
+        : formatted;
     lines.push(
-      `- Apalancamiento Financiero: ${fmtRatio(totalsKpi.apalancamientoFinanciero)}`,
+      `- Apalancamiento Financiero: ${withNdMotivo(
+        totalsKpi.apalancamientoFinanciero,
+        ndMotivos?.apalancamientoFinanciero,
+        fmtRatio(totalsKpi.apalancamientoFinanciero),
+      )}`,
     );
     lines.push(
       `- Cobertura de Intereses: ${
@@ -944,7 +965,7 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
     );
     lines.push(`- Margen Operativo: ${fmtPct(totalsKpi.margenOperativo)}`);
     lines.push(`- Margen Neto: ${fmtPct(totalsKpi.margenNeto)}`);
-    lines.push(`- ROE: ${fmtPct(totalsKpi.roe)}`);
+    lines.push(`- ROE: ${withNdMotivo(totalsKpi.roe, ndMotivos?.roe, fmtPct(totalsKpi.roe))}`);
     lines.push(`- ROA: ${fmtPct(totalsKpi.roa)}`);
     lines.push(`- Rotación de Activos: ${fmtRatio(totalsKpi.rotacionActivos)}`);
     lines.push(
@@ -1002,10 +1023,12 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
 
   // --- Seccion A2 — Cierre Virtual aplicado (Curator R8) ---
   // R8 corre antes que R5 en `runCurator`. Cuando hay actividad P&L (clases 4-7),
-  // R8 SIEMPRE inyecta 3605VC con la utilidad dinámica del periodo y, si hace
-  // falta, absorbe el residual de la ecuación contable en 3710VC. El LLM debe
-  // ver explícitamente este ajuste para no alucinar la utilidad del ejercicio
-  // contra el saldo CSV de 3605 (que R8 anula a 0).
+  // R8 SIEMPRE inyecta 3605VC con la utilidad dinámica del periodo. Desde la
+  // auditoría 2026-09 NO absorbe residuales (centsAdjustment = 0): un
+  // descuadre que el resultado no explica queda visible y bloqueante
+  // (niif-preproceso-16). El LLM debe ver explícitamente este ajuste para no
+  // alucinar la utilidad del ejercicio contra el saldo CSV de 3605 (que R8
+  // anula a 0).
   const vcAdj = snap.virtualCloseAdjustment;
   if (vcAdj) {
     lines.push('');
@@ -1027,11 +1050,15 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
           `(${vcAdj.virtualRetainedName}).`,
       );
     }
-    if (vcAdj.centsAdjustment !== 0) {
+    if (vcAdj.blocking) {
+      const raw = vcAdj.unexplainedResidualRaw;
+      const residual =
+        typeof raw === 'string' && /^-?\d+\.\d{2}$/.test(raw)
+          ? formatCopFromCents(BigInt(raw.replace('.', '')), false)
+          : fmtCop(vcAdj.unexplainedResidual ?? vcAdj.residualGapBeforeCents);
       lines.push(
-        `- Ajuste residual absorbido en ${vcAdj.virtualRetainedCode}: ` +
-          `${fmtCop(vcAdj.centsAdjustment)} ` +
-          `(garantiza Activo = Pasivo + Patrimonio al centavo).`,
+        `- Descuadre NO explicado por el resultado del ejercicio: ${residual} ` +
+          `(bloqueante). R8 no lo absorbe: Activo − Pasivo − Patrimonio ≠ 0.`,
       );
     }
     lines.push(
@@ -2823,17 +2850,20 @@ function getExtractedMetadataFromPreprocessed(
   return pp.extractedCompanyMetadata ?? null;
 }
 
+/**
+ * Tipo societario para el gate. SAS / S.A. / Ltda. se normalizan con la MISMA
+ * función que usa el acta (`normalizeTipoSocietario` del prompt de Gobierno:
+ * tolera "S. A. S.", "Sociedad Anónima", "Limitada"), para que gate y acta no
+ * lean tipos distintos (prompts-normativa-08). Se conservan aquí la E.U. y el
+ * vacío → `undefined` (tri-estado del gate: no se asume SAS).
+ */
 function normalizeTipoSocietario(
   raw: string | undefined,
 ): AuditCompanyContext['tipoSocietario'] {
-  if (!raw) return undefined;
-  const upper = raw.toUpperCase().trim();
-  if (upper === 'SAS' || upper === 'S.A.S.' || upper === 'S.A.S') return 'SAS';
-  if (upper === 'SA' || upper === 'S.A.' || upper === 'S.A') return 'SA';
-  if (upper === 'LTDA' || upper === 'LTDA.') return 'LTDA';
-  if (upper === 'EU' || upper === 'E.U.' || upper === 'E.U') return 'EU';
-  if (upper === 'SCS' || upper === 'OTRO') return 'OTRO';
-  return 'OTRO';
+  if (!raw || !raw.trim()) return undefined;
+  const compact = raw.toUpperCase().replace(/[.\s]/g, '');
+  if (compact === 'EU' || compact === 'EMPRESAUNIPERSONAL') return 'EU';
+  return normalizeTipoSocietarioActa(raw);
 }
 
 function getEstatutosFlag(
@@ -2857,6 +2887,11 @@ export { extractCompanyMetadata };
 // Build the final consolidated Markdown report
 // ---------------------------------------------------------------------------
 
+/**
+ * Markdown del consolidado legacy. Delega en el módulo compartido con el
+ * camino partido (`/api/financial-report/consolidate` y PipelineWorkspace)
+ * para que ambos caminos no deriven (pipeline-flujo-16).
+ */
 function buildConsolidatedReport(
   company: FinancialReportRequest['company'],
   niifContent: string,
@@ -2864,60 +2899,13 @@ function buildConsolidatedReport(
   governanceContent: string,
   language: 'es' | 'en',
 ): string {
-  const title =
-    language === 'en'
-      ? 'CONSOLIDATED FINANCIAL REPORT'
-      : 'REPORTE FINANCIERO CONSOLIDADO';
-
-  const subtitle =
-    language === 'en'
-      ? 'NIIF Elite Corporate Analysis'
-      : 'Analisis Corporativo Elite NIIF';
-
-  const date = new Date().toLocaleDateString(
-    language === 'es' ? 'es-CO' : 'en-US',
-    { year: 'numeric', month: 'long', day: 'numeric' },
+  return buildConsolidatedReportMarkdown(
+    company,
+    niifContent,
+    strategyContent,
+    governanceContent,
+    language,
   );
-
-  return `# ${title}
-## ${subtitle}
-
----
-
-| Campo | Detalle |
-|-------|---------|
-| **Empresa** | ${company.name} |
-| **NIT** | ${company.nit} |
-| **Tipo Societario** | ${company.entityType || 'N/A'} |
-| **Periodo Fiscal** | ${company.fiscalPeriod} |
-| **Fecha de Generacion** | ${date} |
-| **Generado por** | 1+1 — Financial Orchestrator (3 Agentes Especializados) |
-
----
-
-# PARTE I: ESTADOS FINANCIEROS NIIF
-*Preparado por: Agente Analista Contable NIIF*
-
-${niifContent}
-
----
-
-# PARTE II: ANALISIS ESTRATEGICO Y PROYECCIONES
-*Preparado por: Agente Director de Estrategia Financiera*
-
-${strategyContent}
-
----
-
-# PARTE III: GOBIERNO CORPORATIVO Y DOCUMENTOS LEGALES
-*Preparado por: Agente Especialista en Gobierno Corporativo*
-
-${governanceContent}
-
----
-
-> **Nota Legal:** Este reporte fue generado por 1+1, un sistema de inteligencia artificial. Las cifras, analisis y documentos legales deben ser validados por un Contador Publico certificado y un abogado antes de su uso oficial. 1+1 no reemplaza la asesoria profesional.
-`;
 }
 
 // ---------------------------------------------------------------------------
@@ -2927,7 +2915,7 @@ ${governanceContent}
 // que el reporte va marcado como borrador.
 // ---------------------------------------------------------------------------
 
-function buildProvisionalWatermark(
+export function buildProvisionalWatermark(
   reason: string,
   errors: string[],
   language: 'es' | 'en',
@@ -2968,7 +2956,7 @@ function buildProvisionalWatermark(
  * (que ya conocen oldBalance / newBalance / isNewAccount) para que la tabla
  * sea autoexplicativa.
  */
-function buildAdjustmentsAuditSection(
+export function buildAdjustmentsAuditSection(
   applied: AdjustmentLedger['adjustments'],
   affected: ReturnType<typeof applyAdjustments>['affected'],
   language: 'es' | 'en',

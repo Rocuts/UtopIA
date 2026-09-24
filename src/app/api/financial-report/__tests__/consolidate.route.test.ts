@@ -171,6 +171,48 @@ describe('/api/financial-report/consolidate', () => {
     expect(json.code).toBe('BALANCE_VALIDATION_FAILED');
   });
 
+  // pipeline-flujo-16 (paridad con el legacy): los ajustes confirmados del
+  // Doctor de Datos quedan documentados al final del consolidado, con la MISMA
+  // sección que arma `orchestrateFinancialReport`.
+  it('con ajustes aplicados del Doctor de Datos el consolidado incluye su traza auditable', async () => {
+    const csvConDuplicado = `${CSV}\n11050502,Caja duplicada,50000`;
+    const ledger = {
+      adjustments: [
+        {
+          id: 'adj-caja-dup-0001', accountCode: '11050502', accountName: 'Caja duplicada', amount: -50000,
+          rationale: 'Registro duplicado de caja confirmado por el contador', status: 'applied',
+          proposedAt: '2026-09-01T00:00:00Z', appliedAt: '2026-09-01T00:00:00Z',
+        },
+      ],
+    };
+    const { status, json } = await consolidate({
+      rawData: csvConDuplicado,
+      company: COMPANY,
+      language: 'es',
+      niifContent: NIIF_OK,
+      strategyContent: STRATEGY_OK,
+      governanceContent: GOVERNANCE_OK,
+      adjustmentLedger: ledger,
+    });
+    expect(status).toBe(200);
+    const r = json as unknown as Result;
+    expect(r.consolidatedReport).toContain('## Ajustes contables aplicados durante el proceso de revision');
+    expect(r.consolidatedReport).toContain('`adj-caja`');
+    expect(r.consolidatedReport).toContain('Registro duplicado de caja confirmado por el contador');
+  });
+
+  it('sin ajustes no se agrega la sección', async () => {
+    const { json } = await consolidate({
+      rawData: CSV,
+      company: COMPANY,
+      language: 'es',
+      niifContent: NIIF_OK,
+      strategyContent: STRATEGY_OK,
+      governanceContent: GOVERNANCE_OK,
+    });
+    expect((json as unknown as Result).consolidatedReport).not.toContain('Ajustes contables aplicados');
+  });
+
   it('partes vacías → 400', async () => {
     const { status } = await consolidate({
       rawData: CSV,
