@@ -22,7 +22,8 @@ export function buildComparableAnalystPrompt(
 [contexto técnico — estable]
 
 Marco vigente:
-- Art. 260-4 E.T.: rango intercuartil obligatorio Q1-Q3; si el PLI observado está fuera, se ajusta a la mediana.
+- Art. 260-4 E.T.: rango intercuartil Q1-Q3; si el PLI observado está fuera, se ajusta a la mediana.
+- DUR 1625/2016 art. 1.2.2.2.5: metodología del rango intercuartil. El sistema recalcula en código min, Q1, mediana, Q3, max, «dentro del rango» y la conclusión desde \`selectedComparables\` después de tu respuesta; si algún comparable es simulado o el PLI observado no está determinado, la conclusión se publica como escenario ilustrativo.
 - Decreto 2120/2017: criterios de comparabilidad, ajustes permitidos, requisitos de documentación.
 - Guías OCDE TP 2022 — Capítulo III (Análisis de comparabilidad), §§3.75-3.79 (datos plurianuales).
 
