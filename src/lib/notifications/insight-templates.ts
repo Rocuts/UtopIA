@@ -253,6 +253,57 @@ const TEMPLATES: TemplateDict = {
   },
 };
 
+// ─── Valor / advertencia (T3) según el disparador ──────────────────────────
+// Re-auditoría 2026-09-24 (ICU-06): T3 se dispara por margen bruto > 90 % o
+// por días de inventario > 365, pero la plantilla siempre decía «Margen
+// inusualmente alto detectado» y «tu rentabilidad podría estar inflada», aun
+// con margen del 35 % o N/D. El asunto, el impacto y la acción nombran ahora
+// la condición que disparó la alerta; el hallazgo (margen y días) no cambia.
+
+export type ValorAnomaliaDisparador = 'margen' | 'inventario' | 'ambos';
+
+const VALOR_ANOMALIA: Record<
+  Exclude<ValorAnomaliaDisparador, 'margen'>,
+  Record<'es' | 'en', Pick<InsightTemplate, 'subjectTpl' | 'impactoTpl' | 'accionLabelTpl'>>
+> = {
+  inventario: {
+    es: {
+      subjectTpl: '💰 Anomalía de Valor: Inventario sin rotación por más de un año.',
+      impactoTpl:
+        'Un inventario que tarda más de 365 días en rotar puede estar sobrevalorado (mercancía obsoleta o costo de ventas sin registrar).',
+      accionLabelTpl: 'Revisar inventario y costo de ventas',
+    },
+    en: {
+      subjectTpl: '💰 Value Anomaly: Inventory not turning over for more than a year.',
+      impactoTpl:
+        'Inventory that takes more than 365 days to turn over may be overstated (obsolete stock or unrecorded cost of sales).',
+      accionLabelTpl: 'Review inventory and cost of sales',
+    },
+  },
+  ambos: {
+    es: {
+      subjectTpl: '💰 Anomalía de Valor: Margen inusualmente alto e inventario sin rotación.',
+      impactoTpl:
+        'Tu rentabilidad podría estar inflada por falta de registro de costos, y el inventario podría estar sobrevalorado.',
+      accionLabelTpl: 'Revisar registro de costos e inventario',
+    },
+    en: {
+      subjectTpl: '💰 Value Anomaly: Unusually high margin and slow-moving inventory.',
+      impactoTpl: 'Profitability may be inflated by missing cost entries, and inventory may be overstated.',
+      accionLabelTpl: 'Review cost entries and inventory',
+    },
+  },
+};
+
+/** Plantilla de valor/advertencia (T3) para la condición que la disparó. */
+export function getValorAnomaliaTemplate(
+  disparador: ValorAnomaliaDisparador,
+  language: 'es' | 'en',
+): InsightTemplate {
+  const base = TEMPLATES.valor.advertencia[language];
+  return disparador === 'margen' ? base : { ...base, ...VALOR_ANOMALIA[disparador][language] };
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 export function getInsightTemplate(
@@ -287,10 +338,12 @@ export function fillInsightFromTemplate(
     workspaceId?: string;
     language?: 'es' | 'en';
     tone?: Insight['tone'];
+    /** Plantilla explícita (p. ej. la de T3 según su disparador). */
+    template?: InsightTemplate;
   },
 ): Insight {
   const language = insight.language ?? 'es';
-  const tpl = getInsightTemplate(insight.pillar, insight.severity, language);
+  const tpl = insight.template ?? getInsightTemplate(insight.pillar, insight.severity, language);
   return {
     pillar: insight.pillar,
     severity: insight.severity,

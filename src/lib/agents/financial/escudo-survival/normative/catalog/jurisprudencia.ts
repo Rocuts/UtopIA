@@ -9,18 +9,12 @@
 import type { JurisprudenceEntry } from '../types';
 
 export const JURISPRUDENCIA: readonly JurisprudenceEntry[] = [
-  {
-    id: 'SENTENCIA_C_079_2026',
-    cita: 'Sentencia C-079 de 2026',
-    tribunal: 'Corte Constitucional',
-    fecha: '2026-01-01',
-    tema: 'Decreto 1474 de 2025 — Emergencia Económica',
-    tesis:
-      'Declara INEXEQUIBLE el Decreto 1474 de 2025 que declaró emergencia económica y estableció medidas tributarias temporales (sobretasa del 50%, restricción de regalías). Las medidas tributarias del Decreto 1474 NO están vigentes y NO deben citarse como fundamento de obligaciones fiscales 2026.',
-    normasAfectadas: ['Decreto 1474 de 2025'],
-    urlOficial:
-      'https://www.perezllorca.com/es-co/actualidad/boletin/corte-constitucional-tumba-el-decreto-1474-se-caen-las-medidas-tributarias-de-la-emergencia-economica/',
-  },
+  // Re-auditoría 2026-09-24 (NT-12): se retiró la entrada «Sentencia C-079 de
+  // 2026». El corpus (decreto_1474_2025_emergencia.md) registra la
+  // inexequibilidad del Decreto 1474 de 2025 el 15-abr-2026 como «Sentencia
+  // Corte Constitucional C-XXX de 2026»: el número no tiene fuente en
+  // src/data/tax_docs, así que no se cataloga (la Capa 2 lo trata como no
+  // verificado). El estado del decreto vive en la blacklist BL_DECRETO_1474_2025.
   {
     id: 'SENTENCIA_C_219_2024',
     cita: 'Sentencia C-219 de 2024',

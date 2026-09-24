@@ -242,9 +242,27 @@ export function tpAjusteCopDeterminista(check: TpRangeCheck): string | null {
  * "… dólares", "… MM", "millones", "million", o una cifra sin moneda con dos
  * o más grupos de miles («1.250.000.000»; no un NIT). Sin la base del PLI
  * ningún monto de la nota lo calculó el código, esté en pesos o en otra moneda.
+ *
+ * Re-auditoría 2026-09-24 (NT-10): también las escalas y unidades que el
+ * filtro dejaba pasar: «850 mil dólares», «420 mil pesos», «1,2 billones de
+ * pesos», «850 thousand dollars», «3.5bn COP», «2,5M», «16.000 UVT». Una cifra
+ * sin unidad ni moneda (p. ej. «Art. 260-4», «2,3 puntos») no cuenta.
  */
-const MONTO_EN_NOTA =
-  /(?:\$|€|\bCOP|\bUSD|\bEUR)\s?\d|\d\s?(?:de\s+)?(?:COP|USD|EUR|pesos|d[oó]lares|dollars|euros?|MM|millones|mil\s+millones|million|billion)\b|(?<!\bNIT\.?\s{0,2})(?<![\d.,])\d{1,3}(?:[.,]\d{3}){2,}(?![\d-])/i;
+const MONTO_EN_NOTA_I = new RegExp(
+  '(?:\\$|€|\\bCOP|\\bUSD|\\bEUR)\\s?\\d' +
+    '|\\d\\s?(?:de\\s+)?(?:COP|USD|EUR|pesos|d[oó]lares|dollars|euros?|MM|mil\\s+millones|mill[oó]n(?:es)?|mil|billones|bill[oó]n|million|billion|thousand|bn|UVT)\\b' +
+    '|(?<!\\bNIT\\.?\\s{0,2})(?<![\\d.,])\\d{1,3}(?:[.,]\\d{3}){2,}(?![\\d-])',
+  'i',
+);
+/**
+ * Sufijos de escala pegados a la cifra («2,5M», «850K», «3B»); sensible a
+ * mayúsculas. La cifra no va pegada a una letra: «B2B» (operaciones entre
+ * empresas) no es un monto (revisión adversarial de NT-10).
+ */
+const MONTO_SUFIJO_ESCALA = /(?<![A-Za-z\d.,])\d+(?:[.,]\d+)?(?:M|B|K|k)\b/;
+const MONTO_EN_NOTA = {
+  test: (t: string): boolean => MONTO_EN_NOTA_I.test(t) || MONTO_SUFIJO_ESCALA.test(t),
+};
 
 /**
  * Nota del modelo con montos en pesos ⇒ se sustituye por el motivo (en el

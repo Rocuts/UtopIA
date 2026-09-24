@@ -154,13 +154,26 @@ export function citaArt854(text: string): boolean {
 }
 
 /**
+ * Prefijo de artículo: «Art.», «Arts.», «Artículo(s)» y, en salidas en inglés
+ * que conservan las citas, «Article(s)».
+ */
+const PREFIJO_ARTICULO = 'Art(?:[íi]culos?|icles?|s)?\\.?';
+/**
+ * Separador de una enumeración de artículos: «,», «y», «e» y, en inglés,
+ * «and» (también «, y» / «, and»). Re-auditoría 2026-09-24 (NT-08): «Arts.
+ * 850, 854 and 855 E.T.» no contaba el 855.
+ */
+const SEPARADOR_ARTICULOS = '(?:,\\s*(?:y|e|and)\\b|,|\\by\\b|\\be\\b|\\band\\b)';
+
+/**
  * True si el texto cita el artículo `numero` (p. ej. "707", "258-1"), también
- * dentro de una enumeración: "Arts. 703 y 707", "artículos 684, 686 y 707".
+ * dentro de una enumeración: "Arts. 703 y 707", "artículos 684, 686 y 707",
+ * "Arts. 850, 854 and 855".
  */
 export function citaArticulo(text: string, numero: string): boolean {
   const n = numero.replace(/[-]/g, '\\-');
   const re = new RegExp(
-    `\\bArt(?:[íi]culos?|s)?\\.?\\s*(?:\\d{1,4}(?:-\\d+)?\\s*(?:,|y|e)\\s*)*${n}(?![\\d-])`,
+    `\\b${PREFIJO_ARTICULO}\\s*(?:\\d{1,4}(?:-\\d+)?\\s*${SEPARADOR_ARTICULOS}\\s*)*${n}(?![\\d-])`,
     'i',
   );
   return re.test(text);
@@ -168,12 +181,17 @@ export function citaArticulo(text: string, numero: string): boolean {
 
 /**
  * Números de artículo citados en un texto normativo corto ("Art. 686 E.T. y
- * Art. 261 Ley 223/1995" → ["686", "261"]; "Arts. 651 y 860" → ["651", "860"]).
+ * Art. 261 Ley 223/1995" → ["686", "261"]; "Arts. 651 y 860" → ["651", "860"];
+ * "Arts. 850, 854 and 855" → ["850", "854", "855"]).
  */
 export function articulosCitados(text: string): string[] {
   const out: string[] = [];
-  for (const m of text.matchAll(/\bArt(?:[íi]culos?|s)?\.?\s*((?:\d{1,4}(?:-\d+)?\s*(?:,|y|e)\s*)*\d{1,4}(?:-\d+)?)/gi)) {
-    for (const n of m[1].split(/\s*(?:,|y|e)\s*/)) if (n) out.push(n);
+  const re = new RegExp(
+    `\\b${PREFIJO_ARTICULO}\\s*((?:\\d{1,4}(?:-\\d+)?\\s*${SEPARADOR_ARTICULOS}\\s*)*\\d{1,4}(?:-\\d+)?)`,
+    'gi',
+  );
+  for (const m of text.matchAll(re)) {
+    for (const n of m[1].split(/\s*(?:,|\band\b|\by\b|\be\b)\s*/i)) if (n) out.push(n);
   }
   return [...new Set(out)];
 }

@@ -82,7 +82,10 @@ describe('Conciliación Validator — L2 Lógica de negocio', () => {
     const checks = validateConciliacionL2(bad);
     const c = findCheck(checks, 'M2.L2.4_tarifa_valida_2026');
     expect(c?.passed).toBe(false);
-    expect(c?.detail).toContain('Sentencia C-079/2026');
+    // NT-12: el corpus no trae el número de la sentencia; se cita la fecha.
+    expect(c?.detail).toContain('Decreto 1474/2025');
+    expect(c?.detail).toContain('15-abr-2026');
+    expect(c?.detail).not.toContain('C-079');
   });
 
   it('M2.L2.3: rentas exentas > UAI dispara warning de plausibilidad', () => {

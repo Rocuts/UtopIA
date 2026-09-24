@@ -803,7 +803,7 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     // Corrección normativa 2026-08: el resumen anterior omitía la exclusión del lit. e) (juegos
     // por internet) y el "desde el exterior" del lit. c). El Decreto Legislativo 175 de 2025 y
     // el Decreto 1474 de 2025 gravaron temporalmente con IVA esos juegos; el 1474 fue declarado
-    // INEXEQUIBLE (Sentencia C-079 de 2026, abril de 2026, con orden de devolución). Desde 2026
+    // INEXEQUIBLE (Corte Constitucional, 15-abr-2026, con orden de devolución). Desde 2026
     // la exclusión del lit. e) opera plenamente.
     tags: ['IVA', 'hecho_generador', 'juegos_suerte_azar', 'internet', 'servicios_exterior', 'inmuebles'],
   },

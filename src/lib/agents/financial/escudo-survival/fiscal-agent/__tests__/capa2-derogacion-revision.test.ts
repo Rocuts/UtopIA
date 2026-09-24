@@ -47,3 +47,54 @@ describe('Art. 36-3 E.T. — menciones honestas de la derogación advierten', ()
     expect(veredicto(t)).toBe('advertencia');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Re-auditoría 2026-09-24 (NT-09): la palabra de derogación no protege una
+// frase que presenta el Art. 36-3 como aplicable, y la cita sin «E.T.» del
+// artículo derogado también se valida.
+// ---------------------------------------------------------------------------
+describe('NT-09 — Art. 36-3 presentado como aplicable', () => {
+  it.each([
+    'Aunque fue derogado, el Art. 36-3 E.T. sigue siendo aplicable a las capitalizaciones de 2026.',
+    'El Art. 36-3 E.T. permite capitalizar utilidades sin impuesto pese a la propuesta de derogación.',
+    'Art. 36-3 E.T. is yet to be repealed, so the capitalization is tax-free.',
+    'La derogación del Art. 36-3 E.T. quedó sin efecto, por lo que la capitalización no está gravada.',
+  ])('%s ⇒ bloqueo', (t) => {
+    expect(veredicto(t)).toBe('bloqueo');
+  });
+
+  it('sin «E.T.»: «Con el Art. 36-3 se capitalizan utilidades sin impuesto» ⇒ bloqueo', () => {
+    const r = validateNormativeResponse('Con el Art. 36-3 se pueden capitalizar utilidades sin impuesto para el socio.', MOTOR_NORMATIVO_CATALOG);
+    expect(r.citations.map((c) => [c.citation.normalized, c.veredicto])).toEqual([['Art. 36-3 E.T.', 'bloqueo']]);
+    expect(r.veredictoGlobal).toBe('bloqueo');
+  });
+
+  it.each([
+    'La capitalización de utilidades sigue este régimen general de distribución (Art. 36-3 derogado).',
+    'El Art. 36-3 E.T., que permitía capitalizar sin impuesto, fue derogado por la Ley 2277 de 2022.',
+    'El Art. 36-3 E.T. fue derogado, por lo que es aplicable el régimen de dividendos (Art. 242 E.T.).',
+    'Art. 36-3 del E.T. derogado desde el 1-ene-2023: capitalizar tributa como distribuir.',
+  ])('menciones honestas siguen advirtiendo: %s', (t) => {
+    expect(veredicto(t)).toBe('advertencia');
+  });
+
+  // Revisión adversarial de NT-09: la cita con el prefijo en inglés
+  // («Article 36-3») no se extraía y la frase pasaba como válida.
+  it.each([
+    'Article 36-3 E.T. still applies, so the capitalization is tax-free.',
+    'Under Article 36-3 of the Tax Code, capitalized profits are tax-free.',
+  ])('«Article 36-3» presentado como aplicable ⇒ bloqueo: %s', (t) => {
+    expect(veredicto(t)).toBe('bloqueo');
+  });
+
+  it('«Article 36-3» mencionado como derogado ⇒ advertencia; el de otra ley no se extrae', () => {
+    expect(veredicto('Article 36-3 E.T. was repealed by Law 2277 of 2022.')).toBe('advertencia');
+    expect(veredicto('Article 36-3 of Law 9999 of 2030 governs another matter.')).toBeUndefined();
+  });
+
+  it('el «Art. 36-3» de otra norma o de un artículo vigente no se extrae', () => {
+    const r = validateNormativeResponse('El Art. 36-3 de la Ley 9999 de 2030 y el Art. 240 regulan otra materia.', MOTOR_NORMATIVO_CATALOG);
+    expect(r.citations.some((c) => c.citation.normalized === 'Art. 36-3 E.T.')).toBe(false);
+    expect(r.citations.some((c) => c.citation.normalized === 'Art. 240 E.T.')).toBe(false);
+  });
+});

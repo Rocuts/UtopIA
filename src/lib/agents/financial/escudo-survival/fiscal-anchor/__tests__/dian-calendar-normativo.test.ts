@@ -53,7 +53,9 @@ const METRICS: FiscalDerivedMetrics = {
 function calendario(nit: string | null, hoyIso: string): VencimientoDian[] {
   return buildCalendarioDian({
     nit,
-    hoy: new Date(`${hoyIso}T00:00:00Z`),
+    // Mediodía en Colombia: el calendario usa el día civil de America/Bogota
+    // (NT-11); la medianoche UTC es las 19:00 del día ANTERIOR en Colombia.
+    hoy: new Date(`${hoyIso}T12:00:00-05:00`),
     periodo: '2025',
     metrics: METRICS,
   }).vencimientos;
@@ -221,5 +223,30 @@ describe('procedencia de las fechas del Fiscal Anchor', () => {
       expect(venc.estado).toBe('verificar');
       expect(venc.norma).toContain('NO VERIFICADO');
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Re-auditoría 2026-09-24 (NT-11): hoy, año y días restantes en hora de
+// Colombia (America/Bogota), no en UTC.
+// ---------------------------------------------------------------------------
+describe('calendario DIAN en hora de Colombia (NT-11)', () => {
+  const nit = '900123451-8';
+  const retencion = (hoy: Date) =>
+    buildCalendarioDian({ nit, hoy, metrics: METRICS, periodo: '2025' }).vencimientos.find((v) =>
+      /retenci[óo]n en la fuente/i.test(v.obligacion),
+    )!;
+
+  it('el día del vencimiento a las 20:00 COT sigue siendo «hoy» (0 días, próximo)', () => {
+    const mediodia = retencion(new Date('2026-09-09T12:00:00-05:00'));
+    expect([mediodia.proximoVencimiento, mediodia.diasRestantes, mediodia.estado]).toEqual(['2026-09-09', 0, 'proximo']);
+    const noche = retencion(new Date('2026-09-09T20:00:00-05:00'));
+    expect([noche.proximoVencimiento, noche.diasRestantes, noche.estado]).toEqual(['2026-09-09', 0, 'proximo']);
+  });
+
+  it('el 31-dic a las 20:00 COT arma el calendario de ese año, no el del siguiente', () => {
+    const cal = buildCalendarioDian({ nit, hoy: new Date('2026-12-31T20:00:00-05:00'), metrics: METRICS, periodo: '2026' });
+    expect(cal.vencimientos.some((v) => v.proximoVencimiento.startsWith('2027-01-01'))).toBe(false);
+    expect(cal.vencimientos.every((v) => v.diasRestantes >= 0)).toBe(true);
   });
 });

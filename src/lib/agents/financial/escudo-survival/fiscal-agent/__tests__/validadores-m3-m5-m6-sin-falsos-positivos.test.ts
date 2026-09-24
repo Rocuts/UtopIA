@@ -36,9 +36,10 @@ import { orchestrateFiscalAgent } from '../orchestrator';
 import { computeRiskScore } from '../tools/risk-score-calculator';
 import { analyzeRefund } from '../tools/refund-analyzer';
 import { classificationFromKind } from '../tools/dian-letter-builder';
-import { validateDevolucionesL2 } from '../validators/devoluciones.validator';
+import { validateDevoluciones, validateDevolucionesL2 } from '../validators/devoluciones.validator';
 import { validateDefensaDian } from '../validators/defensa-dian.validator';
-import { scoresCitadosEnProsa, validateRiskScoreL3 } from '../validators/risk-score.validator';
+import { scoresCitadosEnProsa, validateRiskScore, validateRiskScoreL3 } from '../validators/risk-score.validator';
+import { articulosCitados, citaArticulo } from '../validators/helpers';
 import type { Modulo3RiskScore, Modulo5DefensaDian, Modulo6Devoluciones } from '../validators/types';
 
 // UAI = 1.240M − 760M − 158M = 322M → F02 = 112,7M; F03 = 150M → F04 = −37,3M.
@@ -247,5 +248,136 @@ describe('M3 — prosa honesta del score', () => {
     };
     expect(validateRiskScoreL3(m3)[0].passed).toBe(true);
     expect(validateRiskScoreL3({ ...m3, recomendaciones: ['Review the deductions.'] })[0].passed).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Re-auditoría 2026-09-24 — NT-06 (M5.L2.4), NT-07 (M3.L2.3), NT-08 (M6.L2.2):
+// salidas honestas que seguían bloqueando al Agente Fiscal.
+// ---------------------------------------------------------------------------
+
+const erroresDe = (cs: Array<{ passed: boolean; severity: string; name: string }>) =>
+  cs.filter((c) => !c.passed && c.severity === 'error').map((c) => c.name);
+
+describe('NT-06 — M5.L2.4: reducir la adición o el mayor impuesto no es reducir la sanción', () => {
+  const k = classificationFromKind('requerimiento_especial');
+  const carta = (peticion: string) =>
+    [
+      '## Antecedentes', 'Requerimiento especial notificado.',
+      '## Posición jurídica del contribuyente', 'Ingresos declarados (Art. 707 E.T.; Art. 647 E.T.).',
+      '## Soporte documental', 'Facturas.',
+      '## Petición', peticion,
+      '## Firmas', 'Representante legal.',
+      'Borrador para revisión del contador público o abogado.',
+    ].join('\n');
+  const m5e = (peticion: string): Modulo5DefensaDian => ({
+    tipoRequerimiento: k.kind, plazoRespuesta: k.plazoRespuesta, normaPlazo: k.normaPlazo, cartaTexto: carta(peticion), defensaArt647: null,
+  });
+
+  it.each([
+    'Solicitamos reducir la adición de ingresos propuesta a los valores efectivamente soportados.',
+    'Se solicita reducir el mayor impuesto propuesto, pues la glosa no tiene soporte.',
+    'We request that the proposed income adjustment be reduced to the supported amounts.',
+    'Solicitamos que se reduzca la adición de ingresos a los valores soportados.',
+    'Pedimos disminuir la glosa de costos, que carece de soporte.',
+  ])('sin error: %s', (p) => {
+    expect(erroresDe(validateDefensaDian(m5e(p)))).toEqual([]);
+  });
+
+  it.each([
+    'Solicitamos la reducción de la sanción por inexactitud propuesta.',
+    'We request that the inaccuracy penalty be reduced.',
+    'Nos acogemos a la reducción prevista para quien acepta los hechos.',
+    // Revisión adversarial: subjuntivo y sinónimos.
+    'Solicitamos que se reduzca la sanción por inexactitud.',
+    'Pedimos que la sanción se reduzca a la cuarta parte.',
+    'Solicitamos disminuir la sanción a la cuarta parte.',
+    'Solicitamos rebajar la sanción propuesta.',
+    'We request that the penalty be lowered to one quarter.',
+  ])('la reducción de la sanción sin norma sigue fallando: %s', (p) => {
+    expect(erroresDe(validateDefensaDian(m5e(p)))).toContain('M5.L2.4_reduccion_cita_norma');
+  });
+
+  it('con la norma disponible (Art. 709 E.T.) pasa', () => {
+    expect(erroresDe(validateDefensaDian(m5e('Aceptamos los hechos y solicitamos la reducción de la sanción a la cuarta parte (Art. 709 E.T.).')))).toEqual([]);
+  });
+});
+
+describe('NT-07 — M3.L2.3: umbral, rango y aporte de un factor no son el score', () => {
+  const base: Modulo3RiskScore = {
+    score: 72, nivel: 'muy_alto',
+    factores: [{ factor: 'tet_baja', puntos: 30 }, { factor: 'sin_provision_renta', puntos: 30 }, { factor: 'crecimiento_inusual', puntos: 12 }],
+    publicable: true, noPublicableMotivo: null, f01Cents: '10000000000',
+    narrativa: '', recomendaciones: ['Activar Modo Supervivencia Élite (Módulo 8)'], modoSupervivenciaActivo: null,
+  };
+
+  it.each([
+    'El score de 72/100 supera el umbral de 60/100 que activa el Modo Supervivencia.',
+    'Score 72/100: nivel muy alto (rango 61-80/100).',
+    'El factor tet_baja aporta 30 de 100 puntos posibles; el score total es 72/100.',
+    'Score 72/100; el umbral del Modo Supervivencia es 60/100.',
+  ])('sin error: %s', (narrativa) => {
+    expect(erroresDe(validateRiskScore({ ...base, narrativa }))).toEqual([]);
+  });
+
+  it('un score distinto del determinista sigue fallando', () => {
+    expect(erroresDe(validateRiskScore({ ...base, narrativa: 'El score es 45/100, riesgo medio.' }))).toContain(
+      'M3.L2.3_narrativa_cita_score_determinista',
+    );
+    expect(scoresCitadosEnProsa('Score 72/100 (umbral 60/100); el puntaje real es 45/100.')).toEqual([72, 45]);
+  });
+
+  // Revisión adversarial de NT-07: la ventana de 40 caracteres para cualquier
+  // clave dejaba sin verificar el score de la entidad en frases corrientes.
+  it.each([
+    'La entidad se ubica en el rango muy alto con 45/100.',
+    'The entity falls in the high range at 45/100.',
+    'El riesgo se ubica por encima de su nivel previo, 45/100.',
+    'La empresa alcanza el máximo nivel de riesgo, 45/100.',
+    'Supera ampliamente el nivel medio: 45/100.',
+    'Hasta la fecha, el riesgo es 45/100.',
+    'El umbral de alerta no se alcanza, con 45/100.',
+  ])('un score distinto tras una clave lejana sigue fallando: %s', (narrativa) => {
+    expect(scoresCitadosEnProsa(narrativa)).toEqual([45]);
+    expect(erroresDe(validateRiskScore({ ...base, narrativa }))).toContain('M3.L2.3_narrativa_cita_score_determinista');
+  });
+
+  it.each([
+    'Score 72/100, rango de 61 a 80/100.',
+    'Score 72/100; un score superior a 60/100 activa el Modo Supervivencia.',
+    'Score 72/100; el factor tet_baja aporta hasta 30/100.',
+    'Score 72/100, above the 60/100 threshold; the survival threshold is 60/100.',
+    'Score 72/100 (nivel muy alto, entre 61 y 80/100).',
+  ])('referencias honestas cercanas no fallan: %s', (narrativa) => {
+    expect(erroresDe(validateRiskScore({ ...base, narrativa }))).toEqual([]);
+  });
+});
+
+describe('NT-08 — M6.L2.2: enumeraciones en inglés («and», «Article»)', () => {
+  it('helpers: «Arts. 850, 854 and 855» y «Article 850» cuentan', () => {
+    const t = 'Refund rights, the 2-year limitation and the 50-business-day term are governed by Arts. 850, 854 and 855 E.T.';
+    expect(['850', '854', '855'].every((a) => citaArticulo(t, a))).toBe(true);
+    expect(articulosCitados(t)).toEqual(['850', '854', '855']);
+    expect(citaArticulo('Under Article 850 E.T. the taxpayer may request the refund.', '850')).toBe(true);
+    expect(articulosCitados('Arts. 850, 854, and 855')).toEqual(['850', '854', '855']);
+    // Español sin cambios.
+    expect(articulosCitados('Arts. 850, 854 y 855 E.T.')).toEqual(['850', '854', '855']);
+    expect(citaArticulo('Art. 8550 E.T.', '855')).toBe(false);
+  });
+
+  it('el análisis honesto en inglés no bloquea; sin el 855 sigue fallando', () => {
+    const m6: Modulo6Devoluciones = {
+      saldoDeclaradoCents: '5000000000', saldoAFavorCents: '5000000000', viabilidad: 'alta', f04Cents: '-3000000000',
+      documentosRequeridos: [
+        'Solicitud por MUISCA (formulario 010)', 'Certificación del contador público o revisor fiscal',
+        'Relación de agentes retenedores con NIT', 'Copia de la declaración de renta (Formulario 110)',
+      ],
+      pasosProcedimentales: ['Radicar la solicitud'],
+      textoAnalisis: 'Refund rights, the 2-year limitation and the 50-business-day term are governed by Arts. 850, 854 and 855 E.T.',
+    };
+    expect(erroresDe(validateDevoluciones(m6))).toEqual([]);
+    expect(erroresDe(validateDevoluciones({ ...m6, textoAnalisis: 'Refund rights are governed by Arts. 850 and 854 E.T.' }))).toContain(
+      'M6.L2.2_citas_850_854_855',
+    );
   });
 });

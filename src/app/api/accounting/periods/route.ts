@@ -5,8 +5,9 @@
 // POST  body { year, month, startsAt?, endsAt? } → create a new 'open' period
 //       Rangos disjuntos (contab-nomina-26, mismas reglas que
 //       createPeriodAction): 400 `invalid_period_range` si el período 13 trae
-//       fechas distintas del instante canónico de fin de año o si el rango
-//       final queda invertido; 409 `period_overlap` si se solapa con otro mes.
+//       fechas distintas del instante canónico de fin de año, si el rango
+//       final queda invertido o si cae fuera del (año, mes) declarado (ICU-05);
+//       409 `period_overlap` si se solapa con otro mes.
 //
 // Subroutes for state transitions live under periods/close, periods/lock,
 // periods/reopen.
@@ -21,6 +22,7 @@ import { getOrCreateWorkspace } from '@/lib/db/workspace';
 import {
   findOverlappingPeriod,
   isCanonicalYearEndRange,
+  isRangeWithinDeclaredPeriod,
   YEAR_END_ADJUSTMENTS_MONTH,
 } from '@/lib/accounting/periods/ranges';
 import { createPeriodBodySchema } from '@/lib/validation/accounting-schemas';
@@ -145,6 +147,20 @@ export async function POST(req: Request) {
             'del workspace. Los periodos contables deben ser disjuntos.',
         },
         { status: 409, headers: { 'Cache-Control': 'no-store' } },
+      );
+    }
+    // ICU-05: el rango explícito debe caer dentro del (año, mes) declarado; si
+    // no, el período cubriría fechas de otro mes (y de otro cierre anual).
+    if (!isRangeWithinDeclaredPeriod(parsed.data.year, parsed.data.month, startsAt, endsAt)) {
+      const b = computed;
+      return NextResponse.json(
+        {
+          error: 'invalid_period_range',
+          message:
+            `El rango debe caer dentro del periodo ${parsed.data.year}-${String(parsed.data.month).padStart(2, '0')} ` +
+            `(${b.startsAt.toISOString()} a ${b.endsAt.toISOString()}).`,
+        },
+        { status: 400, headers: { 'Cache-Control': 'no-store' } },
       );
     }
 

@@ -6,7 +6,7 @@ entity: DIAN
 year: 2026
 normCode: "ET Libro V"
 status: vigente
-lastVerified: 2026-05-02
+lastVerified: 2026-09-24
 tags: [procedimiento, dian, fiscalizacion, requerimiento-especial, recursos]
 ---
 
@@ -110,7 +110,7 @@ Hasta 15.000 UVT o 5% de las sumas respecto de las cuales se requirió informaci
 
 ### 3.5 Sanción Mínima (Art. 639 E.T.)
 
-Ninguna sanción podrá ser inferior a **10 UVT** ($523.740 en 2026).
+Ninguna sanción podrá ser inferior a **10 UVT** = $524.000 en 2026 (10 × $52.374 = $523.740, aproximado al múltiplo de mil según el Art. 868 E.T.; ver `resolucion_dian_238_2025_uvt_2026.md`).
 
 ---
 

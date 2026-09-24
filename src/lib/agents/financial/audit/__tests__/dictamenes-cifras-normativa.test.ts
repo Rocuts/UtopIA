@@ -133,6 +133,55 @@ describe('Dictamen 2 — TTD y posición de renta (prompts-normativa-03 / audito
   });
 });
 
+// Re-auditoría 2026-09-24 (NT-02): el régimen SIMPLE del intake exime de V10
+// en el gate pero no llegaba al Dictamen Tributario: el override reescribía el
+// 'no_aplica' del modelo como «N/D, faltan ID/UD» y la cascada imprimía
+// 35% × UAI = $350.000.000 como impuesto teórico.
+describe('Dictamen 2 — régimen SIMPLE del intake (NT-02, Art. 903 E.T.)', () => {
+  const simple = { ...COMPANY, regimenTributario: 'simple' as const };
+  const jsonSimple = () =>
+    taxJson({
+      rentaAnalysis: { ...taxJson().rentaAnalysis!, impuestoRegistradoCop: '0' },
+      tmtAnalysis: { tasaMinimaExigidaPct: 15, tasaEfectivaPct: null, status: 'no_aplica', reference: 'Arts. 903-916 E.T.' },
+    });
+
+  it('el prompt recibe el régimen del intake', () => {
+    const p = buildTaxAuditorPrompt(simple as unknown as CompanyInfo, 'es');
+    const empresa = p.slice(p.indexOf('<empresa_auditada>'));
+    expect(empresa).toMatch(/Regimen de renta \(intake\): SIMPLE/);
+    const ordinario = buildTaxAuditorPrompt(COMPANY as never, 'es');
+    expect(ordinario.slice(ordinario.indexOf('<empresa_auditada>'))).toMatch(/No informado \(se audita como regimen ordinario\)/);
+  });
+
+  it('con SIMPLE la TTD no aplica (Art. 903) y no hay cascada al 35% × UAI', () => {
+    const res = toLegacyTaxAuditorResult(jsonSimple(), '2025', null, 'simple');
+    expect(res.fullContent).toMatch(/Estado: — NO APLICA/);
+    expect(res.fullContent).toContain('Art. 903 E.T.');
+    expect(res.fullContent).not.toContain('NO DETERMINABLE');
+    expect(res.fullContent).not.toMatch(/faltan impuesto depurado \(ID\)/);
+    expect(res.fullContent).not.toContain('$350.000.000,00');
+    expect(res.fullContent).not.toMatch(/35% x UAI/);
+    expect(res.fullContent).toMatch(/Impuesto teorico a la tarifa del Art\. 240 E\.T\.: N\/D — Régimen Simple/);
+  });
+
+  it('un modelo que calcula la TTD no la impone al SIMPLE', () => {
+    const res = toLegacyTaxAuditorResult(
+      taxJson({ tmtAnalysis: { tasaMinimaExigidaPct: 15, tasaEfectivaPct: 12, status: 'no_cumple', reference: 'r' } }),
+      '2025', null, 'simple',
+    );
+    expect(res.fullContent).toMatch(/Estado: — NO APLICA/);
+    expect(res.fullContent).not.toContain('NO CUMPLE');
+  });
+
+  it('sin régimen informado u ordinario se conserva la regla de renta ordinaria', () => {
+    for (const regimen of [null, 'ordinario'] as const) {
+      const res = toLegacyTaxAuditorResult(jsonSimple(), '2025', null, regimen);
+      expect(res.fullContent).toMatch(/Estado: — NO DETERMINABLE/);
+      expect(res.fullContent).toContain('$350.000.000,00');
+    }
+  });
+});
+
 function legalJson(over: Partial<LegalAuditReportJson> = {}): LegalAuditReportJson {
   return {
     ...(simpleJson(80) as unknown as LegalAuditReportJson),
