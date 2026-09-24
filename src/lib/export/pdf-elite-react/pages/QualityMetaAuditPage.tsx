@@ -185,7 +185,7 @@ export function QualityMetaAuditPage({ doc }: Props) {
         position: 'relative',
       }}
     >
-      <TocAnchor id="quality" />
+      <TocAnchor id="quality" collect={doc.tocCollector} />
       <View
         fixed
         style={{

@@ -61,7 +61,7 @@ export function DialGaugePage({ doc }: Props) {
         paddingBottom: PAGE_MARGIN + 48,
       }}
     >
-      <TocAnchor id="dials" />
+      <TocAnchor id="dials" collect={doc.tocCollector} />
       {/* Title */}
       <MixedWeightHeadline
         parts={[

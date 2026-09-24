@@ -3,7 +3,7 @@
 // Auditoría 2026-09-24 (reportes-export-21): la tabla de contenido imprimía
 // '—' en lugar de números y listaba secciones que el documento no tenía
 // (un "Resumen ejecutivo" sin página; pilares o KPIs omitidos por el toggle).
-// `render.ts` maqueta una vez con `TocAnchorContext` para saber en qué página
+// `render.ts` maqueta una vez con `EditorialReport.tocCollector` para saber en qué página
 // real empieza cada sección y pasa ese mapa a `resolveTocEntries`.
 // ───────────────────────────────────────────────────────────────────────────
 

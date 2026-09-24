@@ -106,7 +106,7 @@ export function DirectorLetter({ doc }: Props) {
         position: 'relative',
       }}
     >
-      <TocAnchor id="director" />
+      <TocAnchor id="director" collect={doc.tocCollector} />
       {/* Background watermark */}
       <WatermarkWord text="Liderazgo" opacity={0.04} />
 

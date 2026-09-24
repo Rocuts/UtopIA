@@ -61,7 +61,7 @@ export function WaterfallPnLPage({ doc }: Props) {
         position: 'relative',
       }}
     >
-      <TocAnchor id="waterfall" />
+      <TocAnchor id="waterfall" collect={doc.tocCollector} />
       {/* Topo ornament — bottom-left, low opacity (spec §3.7) */}
       <View fixed style={{ position: 'absolute', bottom: 40, left: 0 }}>
         <TopoOrnament variant="corner-bl" opacity={0.12} areaAccent="valor" seed={77} width={180} height={180} />

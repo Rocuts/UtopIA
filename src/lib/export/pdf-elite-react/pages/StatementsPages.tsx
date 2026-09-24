@@ -10,7 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import React from 'react';
 import { Page, View, Text, Svg, Path } from '@react-pdf/renderer';
-import type { EditorialReport, ParsedTable, ParsedTableRow } from '../types';
+import type { EditorialReport, ParsedTable, ParsedTableRow, TocAnchorCollector } from '../types';
 import { statementCitations, type StatementKind } from '../../statement-presentation';
 import {
   GoldRule,
@@ -632,11 +632,14 @@ function SplitStatementPage({
   table,
   cfg,
   opensSection = false,
+  tocCollector = null,
 }: {
   table: ParsedTable;
   cfg: SplitPageConfig;
   /** El primer estado abre la sección en la tabla de contenido. */
   opensSection?: boolean;
+  /** Recolector de la pasada de medición de la tabla de contenido. */
+  tocCollector?: TocAnchorCollector | null;
 }) {
   return (
     <Page
@@ -654,7 +657,7 @@ function SplitStatementPage({
         paddingBottom: BOTTOM_PAD,
       }}
     >
-      {opensSection ? <TocAnchor id="statements" /> : null}
+      {opensSection ? <TocAnchor id="statements" collect={tocCollector} /> : null}
       {/* ── LEFT PANEL (cream) ───────────────────────────────────────────── */}
       <View
         style={{
@@ -884,6 +887,7 @@ export function StatementsPages({ doc }: Props): React.ReactElement[] {
       key="balance"
       table={balance}
       opensSection
+      tocCollector={doc.tocCollector}
       cfg={{
         statementKey: 'balance',
         pageIndex: '01.',

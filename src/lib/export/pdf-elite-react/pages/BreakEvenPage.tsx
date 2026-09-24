@@ -53,7 +53,7 @@ export function BreakEvenPage({ doc }: Props) {
         position: 'relative',
       }}
     >
-      <TocAnchor id="breakEven" />
+      <TocAnchor id="breakEven" collect={doc.tocCollector} />
       {/* Decorative topo ornament — bottom-left, low opacity */}
       <View
         fixed

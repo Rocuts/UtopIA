@@ -616,7 +616,7 @@ export function NormativeAppendix({ doc }: Props) {
         position: 'relative',
       }}
     >
-      <TocAnchor id="appendix" />
+      <TocAnchor id="appendix" collect={doc.tocCollector} />
       {/* Topo ornament — bottom-left corner */}
       <View
         fixed

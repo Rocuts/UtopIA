@@ -61,7 +61,7 @@ export function OrbitalPillarsPage({ doc }: Props) {
         position: 'relative',
       }}
     >
-      <TocAnchor id="pillars" />
+      <TocAnchor id="pillars" collect={doc.tocCollector} />
       {/* Full-bleed topo contour at 8% opacity (spec §3.9) */}
       <View
         style={{

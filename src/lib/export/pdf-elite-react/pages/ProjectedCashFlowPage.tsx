@@ -51,7 +51,7 @@ export function ProjectedCashFlowPage({ doc }: Props) {
         position: 'relative',
       }}
     >
-      <TocAnchor id="projectedCashFlow" />
+      <TocAnchor id="projectedCashFlow" collect={doc.tocCollector} />
       <View
         style={{
           position: 'absolute',

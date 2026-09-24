@@ -7,7 +7,7 @@
 //   - PaginationFooter (gold rule + page badge) at very bottom.
 import React from 'react';
 import { Page, View, Text } from '@react-pdf/renderer';
-import type { AreaKey, TocAnchorId } from '../types';
+import type { AreaKey, TocAnchorCollector, TocAnchorId } from '../types';
 import {
   EditorialTitle,
   TopoOrnament,
@@ -47,6 +47,8 @@ interface Props {
    * sección que le sigue.
    */
   tocAnchor?: TocAnchorId;
+  /** Recolector de la pasada de medición de la tabla de contenido. */
+  tocCollector?: TocAnchorCollector | null;
 }
 
 const AREA_ORDER: Record<AreaKey, string> = {
@@ -79,6 +81,7 @@ export function SectionDivider({
   ornamentSeed,
   sectionIndex,
   tocAnchor,
+  tocCollector,
 }: Props) {
   const bg = darken(areaHex(areaAccent), 0.35);
   const numeral = sectionIndex ?? AREA_ORDER[areaAccent];
@@ -94,7 +97,7 @@ export function SectionDivider({
         padding: 0,
       }}
     >
-      {tocAnchor ? <TocAnchor id={tocAnchor} /> : null}
+      {tocAnchor ? <TocAnchor id={tocAnchor} collect={tocCollector} /> : null}
       {/* Full-bleed topo ribbons — 5% opacity sand contours covering whole page */}
       <View
         style={{

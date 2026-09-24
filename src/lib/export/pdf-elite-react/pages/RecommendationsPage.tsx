@@ -259,7 +259,7 @@ export function RecommendationsPage({ doc }: Props) {
         position: 'relative',
       }}
     >
-      <TocAnchor id="recommendations" />
+      <TocAnchor id="recommendations" collect={doc.tocCollector} />
       {/* Topo ornament — bottom-right corner */}
       <View
         fixed

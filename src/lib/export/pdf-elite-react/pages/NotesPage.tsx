@@ -8,7 +8,7 @@
 // `wrap={false}` so it never splits mid-header.
 import React from 'react';
 import { Page, View, Text } from '@react-pdf/renderer';
-import type { EditorialReport, NoteBlock } from '../types';
+import type { EditorialReport, NoteBlock, TocAnchorCollector } from '../types';
 import {
   AuthorityChip,
   PaginationFooter,
@@ -48,6 +48,8 @@ interface Props {
 interface NotePageProps {
   block: NoteBlock;
   index: number;
+  /** Recolector de la pasada de medición de la tabla de contenido. */
+  tocCollector?: TocAnchorCollector | null;
 }
 
 // Section header bar — emulates the ESLOP numbered forest-green bar with
@@ -171,7 +173,7 @@ function TwoColumnBody({ markdown }: { markdown: string }) {
   );
 }
 
-function NoteBlockPage({ block, index }: NotePageProps) {
+function NoteBlockPage({ block, index, tocCollector }: NotePageProps) {
   return (
     <Page
       size={[LW, LH]}
@@ -184,7 +186,7 @@ function NoteBlockPage({ block, index }: NotePageProps) {
       }}
     >
       {/* La primera nota abre la sección en la tabla de contenido. */}
-      {index === 1 ? <TocAnchor id="notes" /> : null}
+      {index === 1 ? <TocAnchor id="notes" collect={tocCollector} /> : null}
       {/* Topo ornament — bottom-left corner, very low opacity */}
       <View
         fixed
@@ -227,7 +229,7 @@ function NoteBlockPage({ block, index }: NotePageProps) {
  */
 export function NotesPage({ doc }: Props): React.ReactElement[] {
   return doc.notes.blocks.map((block, i) => (
-    <NoteBlockPage key={`note-${i}`} block={block} index={i + 1} />
+    <NoteBlockPage key={`note-${i}`} block={block} index={i + 1} tocCollector={doc.tocCollector} />
   ));
 }
 

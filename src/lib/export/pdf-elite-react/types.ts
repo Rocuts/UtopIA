@@ -358,6 +358,13 @@ export type TocAnchorId =
   | 'quality'
   | 'appendix';
 
+/**
+ * Recolector de anclas de la tabla de contenido (reportes-export-21): recibe
+ * la página real en la que cayó cada `<TocAnchor>` durante la pasada de
+ * medición de `render.ts`. Sólo existe en tiempo de ejecución.
+ */
+export type TocAnchorCollector = (anchor: TocAnchorId, pageNumber: number) => void;
+
 export interface TocEntry {
   label: string;
   /**
@@ -459,6 +466,14 @@ export interface OutputOptionsToggle {
 // ───────────────────────────────────────────────────────────────────────────
 export interface EditorialReport {
   meta: ReportMeta;
+  /**
+   * Sólo en tiempo de ejecución (no forma parte del IR serializable): el
+   * recolector de la pasada de medición de la tabla de contenido. Viaja en el
+   * IR y no en un contexto de React porque las rutas de Next empaquetan React
+   * con la condición `react-server`, que no expone `createContext` (el build
+   * fallaba en /api/financial-report/export).
+   */
+  tocCollector?: TocAnchorCollector | null;
   /**
    * Toggle del intake — si undefined, EditorialReportDoc renderiza el set
    * completo (default histórico). Si presente, cada página se gatea contra

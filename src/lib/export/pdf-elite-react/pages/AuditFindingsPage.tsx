@@ -141,7 +141,7 @@ export function AuditFindingsPage({ doc }: Props) {
         position: 'relative',
       }}
     >
-      <TocAnchor id="audit" />
+      <TocAnchor id="audit" collect={doc.tocCollector} />
       <View
         style={{
           position: 'absolute',

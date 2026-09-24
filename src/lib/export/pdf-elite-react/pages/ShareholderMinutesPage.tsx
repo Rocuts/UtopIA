@@ -51,7 +51,7 @@ export function ShareholderMinutesPage({ doc }: Props) {
         position: 'relative',
       }}
     >
-      <TocAnchor id="minutes" />
+      <TocAnchor id="minutes" collect={doc.tocCollector} />
       <View
         fixed
         style={{

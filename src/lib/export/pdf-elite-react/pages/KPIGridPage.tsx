@@ -314,7 +314,7 @@ export function KPIGridPage({ doc }: Props) {
         position: 'relative',
       }}
     >
-      <TocAnchor id="kpi" />
+      <TocAnchor id="kpi" collect={doc.tocCollector} />
       {/* Topo ornament bottom-left (ref p.80) */}
       <View fixed style={{ position: 'absolute', bottom: 40, left: 0, opacity: 0.15 }}>
         <TopoOrnament variant="corner-bl" opacity={0.18} seed={80} width={200} height={200} />

@@ -30,7 +30,7 @@
 // `onTocAnchor`, and the second pass prints them (`resolveTocEntries`).
 import React from 'react';
 import { Document } from '@react-pdf/renderer';
-import type { EditorialReport } from './types';
+import type { EditorialReport, TocAnchorCollector } from './types';
 import { CoverPage } from './pages/CoverPage';
 import { DirectorLetter } from './pages/DirectorLetter';
 import { TocPage } from './pages/TocPage';
@@ -49,7 +49,6 @@ import { ProjectedCashFlowPage } from './pages/ProjectedCashFlowPage';
 import { ShareholderMinutesPage } from './pages/ShareholderMinutesPage';
 import { AuditFindingsPage } from './pages/AuditFindingsPage';
 import { QualityMetaAuditPage } from './pages/QualityMetaAuditPage';
-import { TocAnchorContext, type TocAnchorCollector } from './primitives/TocAnchor';
 
 interface Props {
   doc: EditorialReport;
@@ -57,7 +56,10 @@ interface Props {
   onTocAnchor?: TocAnchorCollector;
 }
 
-export function EditorialReportDoc({ doc, onTocAnchor }: Props) {
+export function EditorialReportDoc({ doc: ir, onTocAnchor }: Props) {
+  // El recolector viaja en el IR (no en un contexto de React: la condición
+  // `react-server` de las rutas de Next no expone `createContext`).
+  const doc: EditorialReport = onTocAnchor ? { ...ir, tocCollector: onTocAnchor } : ir;
   const isBlocked = doc.meta.watermark === 'BLOQUEADO';
 
   if (isBlocked) {
@@ -103,7 +105,6 @@ export function EditorialReportDoc({ doc, onTocAnchor }: Props) {
       author="1+1"
       subject="Informe NIIF Élite"
     >
-      <TocAnchorContext.Provider value={onTocAnchor ?? null}>
       <CoverPage doc={doc} />
       {hasDirectorBody && <DirectorLetter doc={doc} />}
       <TocPage doc={doc} />
@@ -114,6 +115,7 @@ export function EditorialReportDoc({ doc, onTocAnchor }: Props) {
           sectionTitle="Estados"
           sectionEmphasis="financieros"
           tocAnchor="statements"
+          tocCollector={doc.tocCollector}
         />
       )}
       {/* StatementsPages returns array of 4 <Page> elements */}
@@ -149,7 +151,6 @@ export function EditorialReportDoc({ doc, onTocAnchor }: Props) {
       {showQuality && <QualityMetaAuditPage doc={doc} />}
       <NormativeAppendix doc={doc} />
       <ClosingPage doc={doc} />
-      </TocAnchorContext.Provider>
     </Document>
   );
 }
