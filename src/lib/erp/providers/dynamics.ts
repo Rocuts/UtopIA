@@ -2,6 +2,10 @@
 // OAuth 2.0 client credentials via Azure AD. OData v4 API.
 
 import { BaseERPConnector } from '../connector';
+import { connectionKey } from '../session-store';
+import { resolveERPPeriod } from '../period';
+import { buildMovementsTrialBalance } from '../trial-balance-builders';
+import { markLeafAccounts } from '../puc';
 import type {
   ERPProvider,
   ERPCredentials,
@@ -125,10 +129,6 @@ class RateLimiter {
 export class DynamicsConnector extends BaseERPConnector {
   readonly provider: ERPProvider = 'dynamics_365';
 
-  private accessToken: string | null = null;
-  private tokenExpiry = 0;
-  private rateLimiter = new RateLimiter(600, 60_000);
-
   // ─── Helpers ─────────────────────────────────────────────────────────────
 
   /** Build the BC API base URL for a company */
@@ -139,56 +139,67 @@ export class DynamicsConnector extends BaseERPConnector {
     return `https://api.businesscentral.dynamics.com/v2.0/${tenant}/${env}/api/v2.0/companies(${companyId})`;
   }
 
-  /** Obtain or refresh the OAuth 2.0 access token */
-  private async ensureToken(credentials: ERPCredentials): Promise<string> {
-    if (this.accessToken && Date.now() < this.tokenExpiry) {
-      return this.accessToken;
-    }
+  /** Rate limiter of THIS connection. */
+  private rateLimiterFor(credentials: ERPCredentials): RateLimiter {
+    return this.sessions.getOrCreate(
+      connectionKey(credentials, 'rate-limit'),
+      () => new RateLimiter(600, 60_000),
+    );
+  }
 
-    const tokenUrl = `https://login.microsoftonline.com/${credentials.tenantId}/oauth2/v2.0/token`;
-    const body = new URLSearchParams({
-      grant_type: 'client_credentials',
-      client_id: credentials.clientId ?? '',
-      client_secret: credentials.clientSecret ?? '',
-      scope: 'https://api.businesscentral.dynamics.com/.default',
-    });
+  /**
+   * OAuth 2.0 access token (client credentials) for THESE credentials, cached
+   * per connection (provider + credential fingerprint), never per instance.
+   */
+  private ensureToken(
+    credentials: ERPCredentials,
+    options: { forceRefresh?: boolean } = {},
+  ): Promise<string> {
+    return this.sessions.resolve(
+      connectionKey(credentials, 'token'),
+      async () => {
+        const tokenUrl = `https://login.microsoftonline.com/${credentials.tenantId}/oauth2/v2.0/token`;
+        const body = new URLSearchParams({
+          grant_type: 'client_credentials',
+          client_id: credentials.clientId ?? '',
+          client_secret: credentials.clientSecret ?? '',
+          scope: 'https://api.businesscentral.dynamics.com/.default',
+        });
 
-    const response = await this.fetchJSON<AzureADTokenResponse>(tokenUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString(),
-    });
+        const response = await this.fetchJSON<AzureADTokenResponse>(tokenUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body.toString(),
+        });
 
-    this.accessToken = response.access_token;
-    // Expire 60 seconds early to avoid edge-case failures
-    this.tokenExpiry = Date.now() + (response.expires_in - 60) * 1000;
-    return this.accessToken;
+        // Expire 60 seconds early to avoid edge-case failures
+        return { value: response.access_token, ttlMs: (response.expires_in - 60) * 1000 };
+      },
+      { forceRefresh: options.forceRefresh },
+    );
   }
 
   /** Make an authenticated, rate-limited request */
   private async authenticatedFetch<T>(
     credentials: ERPCredentials,
     path: string,
+    options: { forceRefresh?: boolean } = {},
   ): Promise<T> {
-    await this.rateLimiter.waitForSlot();
-    const token = await this.ensureToken(credentials);
+    const limiter = this.rateLimiterFor(credentials);
+    await limiter.waitForSlot();
     const url = `${this.getBaseUrl(credentials)}${path}`;
+    const request = (token: string) =>
+      this.fetchJSON<T>(url, { headers: { Authorization: `Bearer ${token}` } });
 
     try {
-      return await this.fetchJSON<T>(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      return await request(await this.ensureToken(credentials, options));
     } catch (error) {
-      // On 401, force token refresh and retry once
+      // On 401, force token refresh for THIS connection and retry once
       const msg = error instanceof Error ? error.message : '';
       if (msg.includes('401')) {
-        this.accessToken = null;
-        this.tokenExpiry = 0;
-        const newToken = await this.ensureToken(credentials);
-        await this.rateLimiter.waitForSlot();
-        return this.fetchJSON<T>(url, {
-          headers: { Authorization: `Bearer ${newToken}` },
-        });
+        const newToken = await this.ensureToken(credentials, { forceRefresh: true });
+        await limiter.waitForSlot();
+        return request(newToken);
       }
       throw error;
     }
@@ -200,10 +211,11 @@ export class DynamicsConnector extends BaseERPConnector {
     path: string,
   ): Promise<T[]> {
     const results: T[] = [];
+    const limiter = this.rateLimiterFor(credentials);
     let currentUrl: string | null = `${this.getBaseUrl(credentials)}${path}`;
 
     while (currentUrl) {
-      await this.rateLimiter.waitForSlot();
+      await limiter.waitForSlot();
       const token = await this.ensureToken(credentials);
       const page: D365ODataResponse<T> = await this.fetchJSON<D365ODataResponse<T>>(currentUrl, {
         headers: { Authorization: `Bearer ${token}` },
@@ -248,12 +260,13 @@ export class DynamicsConnector extends BaseERPConnector {
 
   // ─── Interface Implementation ────────────────────────────────────────────
 
-  /** Test connection by fetching a single account */
+  /** Test connection with a fresh token (never a cached one) */
   async testConnection(credentials: ERPCredentials): Promise<boolean> {
     try {
       await this.authenticatedFetch<D365ODataResponse<D365Account>>(
         credentials,
         '/accounts?$top=1',
+        { forceRefresh: true },
       );
       return true;
     } catch {
@@ -268,85 +281,76 @@ export class DynamicsConnector extends BaseERPConnector {
       '/accounts',
     );
 
-    return accounts
-      .filter((a) => !a.blocked)
-      .map((a) => ({
-        code: a.number,
-        name: a.displayName,
-        type: this.mapAccountType(a.category),
-        pucClass: this.inferPUCClass(a.number),
-        balance: a.netChange,
-        debit: a.netChange > 0 ? a.netChange : 0,
-        credit: a.netChange < 0 ? Math.abs(a.netChange) : 0,
-        level: this.inferLevel(a.number),
-        isAuxiliary: this.inferLevel(a.number) >= 4,
-      }));
+    return markLeafAccounts(
+      accounts
+        .filter((a) => !a.blocked && Boolean(a.number))
+        .map((a) => ({
+          code: a.number,
+          name: a.displayName,
+          type: this.mapAccountType(a.category),
+          pucClass: this.inferPUCClass(a.number),
+          balance: a.netChange,
+          debit: a.netChange > 0 ? a.netChange : 0,
+          credit: a.netChange < 0 ? Math.abs(a.netChange) : 0,
+          level: this.inferLevel(a.number),
+          isAuxiliary: false,
+        })),
+    );
   }
 
-  /** Fetch trial balance by aggregating GL entries for the given period (YYYY-MM) */
+  /**
+   * Local currency of the company (companyInformation.currencyCode). Empty
+   * string when it cannot be read, so COP-only consumers fail closed.
+   */
+  private async getCompanyCurrency(credentials: ERPCredentials): Promise<string> {
+    try {
+      const info = await this.authenticatedFetch<D365ODataResponse<{ currencyCode?: string }>>(
+        credentials,
+        '/companyInformation',
+      );
+      return (info.value?.[0]?.currencyCode ?? '').trim().toUpperCase();
+    } catch {
+      return '';
+    }
+  }
+
+  /**
+   * Movements of the period aggregated from general ledger entries. No
+   * opening balance is read, so the result is flagged `movements_only` and
+   * never presented as a trial balance.
+   * @param period - "AAAA", "AAAA-MM", "AAAA-Qn" or "AAAA-MM-DD..AAAA-MM-DD"
+   */
   async getTrialBalance(
     credentials: ERPCredentials,
     period: string,
   ): Promise<ERPTrialBalance> {
-    const [year, month] = period.split('-').map(Number);
-    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-    const lastDay = new Date(year, month, 0).getDate();
-    const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    const resolved = resolveERPPeriod(period);
 
-    // Fetch chart of accounts for metadata
-    const accounts = await this.getChartOfAccounts(credentials);
-    const accountMap = new Map(accounts.map((a) => [a.code, a]));
+    const [accounts, currency] = await Promise.all([
+      this.getChartOfAccounts(credentials),
+      this.getCompanyCurrency(credentials),
+    ]);
 
-    // Fetch GL entries filtered by period
-    const filter = `postingDate ge ${startDate} and postingDate le ${endDate}`;
+    const filter = `postingDate ge ${resolved.from} and postingDate le ${resolved.to}`;
     const glEntries = await this.fetchAllPages<D365GLEntry>(
       credentials,
       `/generalLedgerEntries?$filter=${encodeURIComponent(filter)}`,
     );
 
-    // Aggregate by account number
-    const aggregated = new Map<string, { debit: number; credit: number }>();
-    for (const entry of glEntries) {
-      const existing = aggregated.get(entry.accountNumber) ?? { debit: 0, credit: 0 };
-      existing.debit += entry.debitAmount;
-      existing.credit += entry.creditAmount;
-      aggregated.set(entry.accountNumber, existing);
-    }
-
-    // Build trial balance
-    const tbAccounts: ERPAccount[] = [];
-    let totalDebit = 0;
-    let totalCredit = 0;
-
-    for (const [code, totals] of aggregated) {
-      const acct = accountMap.get(code);
-      const balance = totals.debit - totals.credit;
-      totalDebit += totals.debit;
-      totalCredit += totals.credit;
-
-      tbAccounts.push({
-        code,
-        name: acct?.name ?? code,
-        type: acct?.type ?? 'asset',
-        pucClass: this.inferPUCClass(code),
-        balance,
-        debit: totals.debit,
-        credit: totals.credit,
-        level: acct?.level ?? this.inferLevel(code),
-        parentCode: acct?.parentCode,
-        isAuxiliary: acct?.isAuxiliary ?? false,
-      });
-    }
-
-    return {
-      period,
-      companyName: credentials.companyId ?? 'D365 Company',
-      currency: 'COP',
-      accounts: tbAccounts.sort((a, b) => a.code.localeCompare(b.code)),
-      totalDebit,
-      totalCredit,
-      generatedAt: new Date().toISOString(),
-    };
+    return buildMovementsTrialBalance({
+      providerName: 'Dynamics 365 Business Central',
+      period: resolved,
+      chart: accounts,
+      lines: glEntries.map((entry) => ({
+        accountCode: entry.accountNumber ?? '',
+        accountName: entry.description,
+        debit: entry.debitAmount ?? 0,
+        credit: entry.creditAmount ?? 0,
+      })),
+      companyName: credentials.companyId ?? '',
+      currency,
+      warnings: currency ? [] : ['Moneda local de la compañía no determinada.'],
+    });
   }
 
   /** Fetch journal entries (GL entries grouped by document number) for a date range */

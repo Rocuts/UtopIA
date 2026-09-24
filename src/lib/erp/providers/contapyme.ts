@@ -4,6 +4,16 @@
 // Base URL: configured per installation.
 
 import { BaseERPConnector } from '../connector';
+import { connectionKey } from '../session-store';
+import { resolveERPPeriod } from '../period';
+import { buildClosingTrialBalance } from '../trial-balance-builders';
+import {
+  accountLevelFromCode,
+  deriveParentCode,
+  markLeafAccounts,
+  pucClassFromCode,
+  pucTypeFromCode,
+} from '../puc';
 import type {
   ERPCredentials,
   ERPAccount,
@@ -21,6 +31,12 @@ interface ContaPymeAuthResponse {
   empresa?: string;
   nit?: string;
   expires?: number;
+}
+
+interface ContaPymeSession {
+  token: string;
+  empresa: string;
+  nit?: string;
 }
 
 interface ContaPymeAccount {
@@ -84,9 +100,6 @@ interface ContaPymeClient {
 export class ContaPymeConnector extends BaseERPConnector {
   readonly provider = 'contapyme' as const;
 
-  /** In-memory token cache. */
-  private cachedToken: { token: string; expiresAt: number; empresa: string; nit?: string } | null = null;
-
   // ─── Auth helpers ────────────────────────────────────────────────────────
 
   /** Build the base URL from credentials. */
@@ -98,59 +111,61 @@ export class ContaPymeConnector extends BaseERPConnector {
   }
 
   /**
-   * Authenticate and obtain a session token.
-   * Caches the token until expiry.
+   * Authenticate and obtain a session (token + company identity). Cached per
+   * connection (provider + credential fingerprint), never per instance, so the
+   * company name/NIT always belong to the credentials being served.
    */
-  private async getToken(credentials: ERPCredentials): Promise<string> {
-    if (this.cachedToken && Date.now() < this.cachedToken.expiresAt - 60_000) {
-      return this.cachedToken.token;
-    }
-
+  private async getSession(
+    credentials: ERPCredentials,
+    options: { forceRefresh?: boolean } = {},
+  ): Promise<ContaPymeSession> {
     const username = credentials.username;
     const password = credentials.password;
     if (!username || !password) {
       throw new Error('ContaPyme credentials require "username" and "password".');
     }
-
     const baseUrl = this.getBaseUrl(credentials);
-    const response = await this.fetchJSON<ContaPymeAuthResponse>(
-      `${baseUrl}/GetAuth`,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          usuario: username,
-          clave: password,
-          empresa: credentials.companyId,
-        }),
+
+    return this.sessions.resolve<ContaPymeSession>(
+      connectionKey(credentials, 'session'),
+      async () => {
+        const response = await this.fetchJSON<ContaPymeAuthResponse>(
+          `${baseUrl}/GetAuth`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              usuario: username,
+              clave: password,
+              empresa: credentials.companyId,
+            }),
+          },
+        );
+
+        if (!response.token) {
+          throw new Error('ContaPyme authentication failed: no token returned.');
+        }
+
+        return {
+          value: { token: response.token, empresa: response.empresa ?? '', nit: response.nit },
+          ttlMs: (response.expires ?? 3600) * 1000,
+        };
       },
+      { refreshMarginMs: 60_000, forceRefresh: options.forceRefresh },
     );
-
-    if (!response.token) {
-      throw new Error('ContaPyme authentication failed: no token returned.');
-    }
-
-    this.cachedToken = {
-      token: response.token,
-      expiresAt: Date.now() + (response.expires ?? 3600) * 1000,
-      empresa: response.empresa ?? '',
-      nit: response.nit,
-    };
-
-    return this.cachedToken.token;
   }
 
   /** Build auth headers with the session token. */
   private async getAuthHeaders(credentials: ERPCredentials): Promise<Record<string, string>> {
-    const token = await this.getToken(credentials);
+    const { token } = await this.getSession(credentials);
     return { Authorization: `Token ${token}` };
   }
 
   // ─── Interface implementation ────────────────────────────────────────────
 
-  /** Test connection by attempting authentication. */
+  /** Test connection by attempting a fresh authentication (never a cached token). */
   async testConnection(credentials: ERPCredentials): Promise<boolean> {
     try {
-      await this.getToken(credentials);
+      await this.getSession(credentials, { forceRefresh: true });
       return true;
     } catch {
       return false;
@@ -167,28 +182,31 @@ export class ContaPymeConnector extends BaseERPConnector {
       { headers },
     );
 
-    return (report.cuentas ?? []).map((a) => this.mapAccount(a));
+    return markLeafAccounts(
+      (report.cuentas ?? []).filter((a) => Boolean(a.codigo)).map((a) => this.mapAccount(a)),
+    );
   }
 
   /**
-   * Fetch the trial balance from the accounting report endpoint.
-   * ContaPyme provides trial balance data through its accounting reports.
-   * @param period - ISO month string, e.g. "2026-03"
+   * Fetch the trial balance (BalanceComprobacion): opening balance, debits,
+   * credits and closing balance per account for the requested range. Leaves
+   * are decided by the real hierarchy of the report and every account is
+   * checked for closing = opening + debits − credits.
+   * @param period - "AAAA", "AAAA-MM", "AAAA-Qn" or "AAAA-MM-DD..AAAA-MM-DD"
    */
   async getTrialBalance(
     credentials: ERPCredentials,
     period: string,
   ): Promise<ERPTrialBalance> {
+    const resolved = resolveERPPeriod(period);
     const baseUrl = this.getBaseUrl(credentials);
-    const headers = await this.getAuthHeaders(credentials);
-
-    const [year, month] = period.split('-').map(Number);
-    const lastDay = new Date(year, month, 0).getDate();
+    const session = await this.getSession(credentials);
+    const headers = { Authorization: `Token ${session.token}` };
 
     const qs = new URLSearchParams({
-      periodo: period,
-      fechaInicio: `${period}-01`,
-      fechaFin: `${period}-${String(lastDay).padStart(2, '0')}`,
+      periodo: resolved.label,
+      fechaInicio: resolved.from,
+      fechaFin: resolved.to,
     });
 
     const report = await this.fetchJSON<ContaPymeTrialBalanceReport>(
@@ -196,32 +214,22 @@ export class ContaPymeConnector extends BaseERPConnector {
       { headers },
     );
 
-    const accounts: ERPAccount[] = (report.cuentas ?? []).map((item) => ({
-      code: item.codigo,
-      name: item.nombre,
-      type: mapPUCType(item.codigo),
-      pucClass: pucClassFromCode(item.codigo),
-      balance: item.saldoFinal,
-      debit: item.debitos,
-      credit: item.creditos,
-      level: accountLevel(item.codigo),
-      parentCode: deriveParentCode(item.codigo),
-      isAuxiliary: item.codigo.length >= 6,
-    }));
-
-    const totalDebit = accounts.reduce((s, a) => s + a.debit, 0);
-    const totalCredit = accounts.reduce((s, a) => s + a.credit, 0);
-
-    return {
-      period,
-      companyName: report.empresa ?? this.cachedToken?.empresa ?? '',
-      companyNit: this.cachedToken?.nit,
+    return buildClosingTrialBalance({
+      period: resolved,
+      rows: (report.cuentas ?? []).map((item) => ({
+        code: item.codigo,
+        name: item.nombre,
+        opening: item.saldoAnterior,
+        debit: item.debitos,
+        credit: item.creditos,
+        closing: item.saldoFinal,
+      })),
+      // La identidad de la empresa sale del informe o de la sesión de ESTAS
+      // credenciales; nunca de un token de otra conexión.
+      companyName: report.empresa ?? session.empresa ?? '',
+      companyNit: report.nit ?? session.nit,
       currency: 'COP',
-      accounts,
-      totalDebit,
-      totalCredit,
-      generatedAt: new Date().toISOString(),
-    };
+    });
   }
 
   /**
@@ -333,14 +341,14 @@ export class ContaPymeConnector extends BaseERPConnector {
     return {
       code: a.codigo,
       name: a.nombre,
-      type: mapPUCType(a.codigo),
+      type: pucTypeFromCode(a.codigo),
       pucClass: pucClassFromCode(a.codigo),
       balance: 0,
       debit: 0,
       credit: 0,
-      level: a.nivel ?? accountLevel(a.codigo),
+      level: a.nivel ?? accountLevelFromCode(a.codigo),
       parentCode: a.cuentaPadre ?? deriveParentCode(a.codigo),
-      isAuxiliary: a.codigo.length >= 6,
+      isAuxiliary: false,
     };
   }
 
@@ -372,41 +380,4 @@ export class ContaPymeConnector extends BaseERPConnector {
         return 'customer';
     }
   }
-}
-
-// ─── Shared PUC helpers ──────────────────────────────────────────────────────
-
-function mapPUCType(code: string): ERPAccount['type'] {
-  const first = code.charAt(0);
-  switch (first) {
-    case '1': return 'asset';
-    case '2': return 'liability';
-    case '3': return 'equity';
-    case '4': return 'revenue';
-    case '5': return 'cost';
-    case '6': return 'expense';
-    case '7': return 'cost';
-    default: return 'asset';
-  }
-}
-
-function pucClassFromCode(code: string): number {
-  const n = parseInt(code.charAt(0), 10);
-  return isNaN(n) ? 0 : n;
-}
-
-function accountLevel(code: string): number {
-  if (code.length <= 1) return 1;
-  if (code.length <= 2) return 2;
-  if (code.length <= 4) return 3;
-  if (code.length <= 6) return 4;
-  return 5;
-}
-
-function deriveParentCode(code: string): string | undefined {
-  if (code.length > 6) return code.slice(0, 6);
-  if (code.length > 4) return code.slice(0, 4);
-  if (code.length > 2) return code.slice(0, 2);
-  if (code.length > 1) return code.slice(0, 1);
-  return undefined;
 }

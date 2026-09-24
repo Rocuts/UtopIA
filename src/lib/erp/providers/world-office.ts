@@ -5,6 +5,15 @@
 
 import { BaseERPConnector } from '../connector';
 import { assertSafeTenantUrl } from '../validate-base-url';
+import { resolveERPPeriod } from '../period';
+import { buildMovementsTrialBalance } from '../trial-balance-builders';
+import {
+  accountLevelFromCode,
+  deriveParentCode,
+  markLeafAccounts,
+  pucClassFromCode,
+  pucTypeFromCode,
+} from '../puc';
 import type {
   ERPCredentials,
   ERPAccount,
@@ -179,66 +188,49 @@ export class WorldOfficeConnector extends BaseERPConnector {
     }
   }
 
-  /** Fetch the chart of accounts. */
+  /**
+   * Fetch the chart of accounts. `isAuxiliary` uses the native `EsAuxiliar`
+   * flag when World Office sends it; otherwise the real hierarchy decides
+   * (an account is a leaf when no other account descends from it).
+   */
   async getChartOfAccounts(credentials: ERPCredentials): Promise<ERPAccount[]> {
     const raw = await this.fetchAllPages<WOAccount>(
       credentials,
       '/Contabilidad/PlanCuentas',
     );
-    return raw.map((a) => this.mapAccount(a));
+    const withCode = raw.filter((a) => Boolean(a.Codigo));
+    const byHierarchy = markLeafAccounts(withCode.map((a) => this.mapAccount(a)));
+    return byHierarchy.map((acct, i) => ({
+      ...acct,
+      isAuxiliary: withCode[i].EsAuxiliar ?? acct.isAuxiliary,
+    }));
   }
 
   /**
-   * Build a trial balance by aggregating journal entries for the period.
-   * @param period - ISO month string, e.g. "2026-03"
+   * Movements of the period aggregated from comprobantes. The API used here
+   * does not expose opening or accumulated balances, so the result is flagged
+   * `movements_only` and is never presented as a trial balance.
+   * @param period - "AAAA", "AAAA-MM", "AAAA-Qn" or "AAAA-MM-DD..AAAA-MM-DD"
    */
   async getTrialBalance(
     credentials: ERPCredentials,
     period: string,
   ): Promise<ERPTrialBalance> {
-    const [year, month] = period.split('-').map(Number);
-    const dateFrom = `${period}-01`;
-    const lastDay = new Date(year, month, 0).getDate();
-    const dateTo = `${period}-${String(lastDay).padStart(2, '0')}`;
+    const resolved = resolveERPPeriod(period);
 
     const [accounts, entries] = await Promise.all([
       this.getChartOfAccounts(credentials),
-      this.getJournalEntries(credentials, dateFrom, dateTo),
+      this.getJournalEntries(credentials, resolved.from, resolved.to),
     ]);
 
-    // Aggregate debits/credits per account code
-    const aggregation = new Map<string, { debit: number; credit: number }>();
-    for (const entry of entries) {
-      for (const line of entry.lines) {
-        const existing = aggregation.get(line.accountCode) ?? { debit: 0, credit: 0 };
-        existing.debit += line.debit;
-        existing.credit += line.credit;
-        aggregation.set(line.accountCode, existing);
-      }
-    }
-
-    const tbAccounts: ERPAccount[] = accounts.map((acct) => {
-      const agg = aggregation.get(acct.code);
-      return {
-        ...acct,
-        debit: agg?.debit ?? 0,
-        credit: agg?.credit ?? 0,
-        balance: (agg?.debit ?? 0) - (agg?.credit ?? 0),
-      };
-    });
-
-    const totalDebit = tbAccounts.reduce((s, a) => s + a.debit, 0);
-    const totalCredit = tbAccounts.reduce((s, a) => s + a.credit, 0);
-
-    return {
-      period,
+    return buildMovementsTrialBalance({
+      providerName: 'World Office',
+      period: resolved,
+      chart: accounts,
+      lines: entries.flatMap((e) => e.lines),
       companyName: '',
       currency: 'COP',
-      accounts: tbAccounts,
-      totalDebit,
-      totalCredit,
-      generatedAt: new Date().toISOString(),
-    };
+    });
   }
 
   /** Fetch journal entries (comprobantes) for a date range. */
@@ -326,14 +318,14 @@ export class WorldOfficeConnector extends BaseERPConnector {
     return {
       code: a.Codigo,
       name: a.Nombre,
-      type: mapPUCType(a.Codigo),
+      type: pucTypeFromCode(a.Codigo),
       pucClass: pucClassFromCode(a.Codigo),
       balance: 0,
       debit: 0,
       credit: 0,
-      level: a.Nivel ?? accountLevel(a.Codigo),
+      level: a.Nivel ?? accountLevelFromCode(a.Codigo),
       parentCode: a.CuentaPadre ?? deriveParentCode(a.Codigo),
-      isAuxiliary: a.EsAuxiliar ?? a.Codigo.length >= 6,
+      isAuxiliary: false,
     };
   }
 
@@ -367,41 +359,4 @@ export class WorldOfficeConnector extends BaseERPConnector {
         return 'customer';
     }
   }
-}
-
-// ─── Shared PUC helpers ──────────────────────────────────────────────────────
-
-function mapPUCType(code: string): ERPAccount['type'] {
-  const first = code.charAt(0);
-  switch (first) {
-    case '1': return 'asset';
-    case '2': return 'liability';
-    case '3': return 'equity';
-    case '4': return 'revenue';
-    case '5': return 'cost';
-    case '6': return 'expense';
-    case '7': return 'cost';
-    default: return 'asset';
-  }
-}
-
-function pucClassFromCode(code: string): number {
-  const n = parseInt(code.charAt(0), 10);
-  return isNaN(n) ? 0 : n;
-}
-
-function accountLevel(code: string): number {
-  if (code.length <= 1) return 1;
-  if (code.length <= 2) return 2;
-  if (code.length <= 4) return 3;
-  if (code.length <= 6) return 4;
-  return 5;
-}
-
-function deriveParentCode(code: string): string | undefined {
-  if (code.length > 6) return code.slice(0, 6);
-  if (code.length > 4) return code.slice(0, 4);
-  if (code.length > 2) return code.slice(0, 2);
-  if (code.length > 1) return code.slice(0, 1);
-  return undefined;
 }

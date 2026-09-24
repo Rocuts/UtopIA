@@ -2,6 +2,10 @@
 // JSON-RPC session-based auth. Data access via /web/dataset/call_kw.
 
 import { BaseERPConnector } from '../connector';
+import { connectionKey } from '../session-store';
+import { resolveERPPeriod } from '../period';
+import { buildMovementsTrialBalance } from '../trial-balance-builders';
+import { deriveParentCode, markLeafAccounts, pucTypeFromCode } from '../puc';
 import type {
   ERPProvider,
   ERPCredentials,
@@ -43,6 +47,12 @@ interface OdooAccountRecord {
   internal_group: string;
   user_type_id: [number, string];
   reconcile: boolean;
+}
+
+interface OdooSession {
+  sessionId: string;
+  uid: number;
+  companyId: number | null;
 }
 
 interface OdooMoveRecord {
@@ -100,8 +110,7 @@ interface OdooPartnerRecord {
 export class OdooConnector extends BaseERPConnector {
   readonly provider: ERPProvider = 'odoo';
 
-  private sessionId: string | null = null;
-  private uid: number | null = null;
+  /** JSON-RPC request id (not company data). */
   private rpcId = 0;
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
@@ -116,34 +125,53 @@ export class OdooConnector extends BaseERPConnector {
     return ++this.rpcId;
   }
 
-  /** Authenticate and obtain a session */
-  private async login(credentials: ERPCredentials): Promise<void> {
-    const url = `${this.getBaseUrl(credentials)}/web/session/authenticate`;
-    const body = {
-      jsonrpc: '2.0',
-      id: this.nextId(),
-      params: {
-        db: credentials.databaseName ?? '',
-        login: credentials.username ?? '',
-        password: credentials.password ?? '',
+  /**
+   * Authenticated session for THESE credentials (session_id + uid + company).
+   * Cached per connection (provider + credential fingerprint), never per
+   * instance, so one company's session is never sent with another's request.
+   */
+  private getSession(
+    credentials: ERPCredentials,
+    options: { forceRefresh?: boolean } = {},
+  ): Promise<OdooSession> {
+    return this.sessions.resolve<OdooSession>(
+      connectionKey(credentials, 'session'),
+      async () => {
+        const url = `${this.getBaseUrl(credentials)}/web/session/authenticate`;
+        const body = {
+          jsonrpc: '2.0',
+          id: this.nextId(),
+          params: {
+            db: credentials.databaseName ?? '',
+            login: credentials.username ?? '',
+            password: credentials.password ?? '',
+          },
+        };
+
+        const result = await this.fetchJSON<OdooRPCResponse<OdooAuthResult>>(url, {
+          method: 'POST',
+          body: JSON.stringify(body),
+        });
+
+        if (result.error) {
+          throw new Error(`Odoo auth error: ${result.error.data?.message ?? result.error.message}`);
+        }
+
+        if (!result.result?.uid || !result.result.session_id) {
+          throw new Error('Odoo authentication failed: invalid credentials');
+        }
+
+        return {
+          value: {
+            sessionId: result.result.session_id,
+            uid: result.result.uid,
+            companyId: result.result.company_id ?? null,
+          },
+          ttlMs: 60 * 60 * 1000,
+        };
       },
-    };
-
-    const result = await this.fetchJSON<OdooRPCResponse<OdooAuthResult>>(url, {
-      method: 'POST',
-      body: JSON.stringify(body),
-    });
-
-    if (result.error) {
-      throw new Error(`Odoo auth error: ${result.error.data?.message ?? result.error.message}`);
-    }
-
-    if (!result.result?.uid) {
-      throw new Error('Odoo authentication failed: invalid credentials');
-    }
-
-    this.uid = result.result.uid;
-    this.sessionId = result.result.session_id;
+      { forceRefresh: options.forceRefresh },
+    );
   }
 
   /** Execute a JSON-RPC call to Odoo with session auth */
@@ -154,10 +182,6 @@ export class OdooConnector extends BaseERPConnector {
     args: unknown[],
     kwargs: Record<string, unknown> = {},
   ): Promise<T> {
-    if (!this.sessionId) {
-      await this.login(credentials);
-    }
-
     const url = `${this.getBaseUrl(credentials)}/web/dataset/call_kw`;
     const body = {
       jsonrpc: '2.0',
@@ -174,11 +198,11 @@ export class OdooConnector extends BaseERPConnector {
       },
     };
 
-    try {
+    const call = async (session: OdooSession): Promise<T> => {
       const result = await this.fetchJSON<OdooRPCResponse<T>>(url, {
         method: 'POST',
         headers: {
-          Cookie: `session_id=${this.sessionId}`,
+          Cookie: `session_id=${session.sessionId}`,
         },
         body: JSON.stringify(body),
       });
@@ -188,26 +212,15 @@ export class OdooConnector extends BaseERPConnector {
       }
 
       return result.result as T;
+    };
+
+    try {
+      return await call(await this.getSession(credentials));
     } catch (error) {
       const msg = error instanceof Error ? error.message : '';
-      // Session expired — re-authenticate and retry once
+      // Session expired — re-authenticate THESE credentials and retry once
       if (msg.includes('401') || msg.includes('session_expired') || msg.includes('Session')) {
-        this.sessionId = null;
-        await this.login(credentials);
-
-        const retryResult = await this.fetchJSON<OdooRPCResponse<T>>(url, {
-          method: 'POST',
-          headers: {
-            Cookie: `session_id=${this.sessionId}`,
-          },
-          body: JSON.stringify(body),
-        });
-
-        if (retryResult.error) {
-          throw new Error(`Odoo RPC error: ${retryResult.error.data?.message ?? retryResult.error.message}`);
-        }
-
-        return retryResult.result as T;
+        return call(await this.getSession(credentials, { forceRefresh: true }));
       }
       throw error;
     }
@@ -265,7 +278,7 @@ export class OdooConnector extends BaseERPConnector {
     if (group === 'equity') return 'equity';
     if (group === 'income') return 'revenue';
     if (group === 'expense') return 'expense';
-    return 'asset';
+    return pucTypeFromCode(code);
   }
 
   /** Infer PUC class from account code (Colombian chart of accounts) */
@@ -286,14 +299,29 @@ export class OdooConnector extends BaseERPConnector {
 
   // ─── Interface Implementation ────────────────────────────────────────────
 
-  /** Test connection by authenticating */
+  /** Test connection by a fresh authentication (never a cached session) */
   async testConnection(credentials: ERPCredentials): Promise<boolean> {
     try {
-      await this.login(credentials);
-      return this.uid !== null && this.uid > 0;
+      const session = await this.getSession(credentials, { forceRefresh: true });
+      return session.uid > 0;
     } catch {
       return false;
     }
+  }
+
+  private mapAccountRecord(a: OdooAccountRecord): ERPAccount {
+    return {
+      code: a.code,
+      name: a.name,
+      type: this.mapAccountType(a.internal_group ?? '', a.code),
+      pucClass: this.inferPUCClass(a.code),
+      balance: 0,
+      debit: 0,
+      credit: 0,
+      level: this.inferLevel(a.code),
+      parentCode: deriveParentCode(a.code),
+      isAuxiliary: false,
+    };
   }
 
   /** Fetch the chart of accounts */
@@ -305,110 +333,89 @@ export class OdooConnector extends BaseERPConnector {
       ['code', 'name', 'internal_type', 'internal_group', 'user_type_id', 'reconcile'],
     );
 
-    return accounts.map((a) => ({
-      code: a.code,
-      name: a.name,
-      type: this.mapAccountType(a.internal_group, a.code),
-      pucClass: this.inferPUCClass(a.code),
-      balance: 0,
-      debit: 0,
-      credit: 0,
-      level: this.inferLevel(a.code),
-      parentCode: a.code.length > 2 ? a.code.slice(0, -2) : undefined,
-      isAuxiliary: this.inferLevel(a.code) >= 4,
-    }));
+    return markLeafAccounts(
+      accounts.filter((a) => Boolean(a.code)).map((a) => this.mapAccountRecord(a)),
+    );
   }
 
   /**
-   * Fetch trial balance by aggregating account.move.line records for the period.
-   * Groups by account and sums debit/credit.
+   * Company currency (res.company.currency_id). Empty string when it cannot
+   * be read, so COP-only consumers fail closed.
+   */
+  private async getCompanyCurrency(credentials: ERPCredentials): Promise<string> {
+    try {
+      const session = await this.getSession(credentials);
+      if (!session.companyId) return '';
+      const companies = await this.rpcCall<Array<{ currency_id: [number, string] | false }>>(
+        credentials,
+        'res.company',
+        'search_read',
+        [[['id', '=', session.companyId]]],
+        { fields: ['currency_id'], limit: 1 },
+      );
+      const currency = companies[0]?.currency_id;
+      return currency ? String(currency[1]).trim().toUpperCase() : '';
+    } catch {
+      return '';
+    }
+  }
+
+  /**
+   * Movements of the period aggregated from posted account.move.line
+   * records. No opening balance is read, so the result is flagged
+   * `movements_only` and never presented as a trial balance.
+   * @param period - "AAAA", "AAAA-MM", "AAAA-Qn" or "AAAA-MM-DD..AAAA-MM-DD"
    */
   async getTrialBalance(
     credentials: ERPCredentials,
     period: string,
   ): Promise<ERPTrialBalance> {
-    const [year, month] = period.split('-').map(Number);
-    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-    const lastDay = new Date(year, month, 0).getDate();
-    const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    const resolved = resolveERPPeriod(period);
 
-    // Fetch chart of accounts for metadata
-    const accounts = await this.getChartOfAccounts(credentials);
-    const accountMap = new Map(accounts.map((a) => [a.code, a]));
-
-    // Also build a map by account ID (Odoo uses integer IDs internally)
-    const accountById = new Map<number, ERPAccount>();
+    // Todas las cuentas (incluidas las deprecated): sus movimientos del
+    // periodo siguen existiendo y el ID interno nunca sustituye al código.
     const accountRecords = await this.searchRead<OdooAccountRecord>(
       credentials,
       'account.account',
-      [['deprecated', '=', false]],
-      ['code', 'name'],
+      [],
+      ['code', 'name', 'internal_group'],
     );
+    const chart = markLeafAccounts(
+      accountRecords.filter((a) => Boolean(a.code)).map((a) => this.mapAccountRecord(a)),
+    );
+    const codeById = new Map<number, string>();
     for (const rec of accountRecords) {
-      const mapped = accountMap.get(rec.code);
-      if (mapped) accountById.set(rec.id, mapped);
+      if (rec.code) codeById.set(rec.id, rec.code);
     }
 
-    // Fetch all move lines for the period
-    const moveLines = await this.searchRead<OdooMoveLineRecord>(
-      credentials,
-      'account.move.line',
-      [
-        ['date', '>=', startDate],
-        ['date', '<=', endDate],
-        ['parent_state', '=', 'posted'],
-      ],
-      ['account_id', 'debit', 'credit', 'balance'],
-    );
+    const [moveLines, currency] = await Promise.all([
+      this.searchRead<OdooMoveLineRecord>(
+        credentials,
+        'account.move.line',
+        [
+          ['date', '>=', resolved.from],
+          ['date', '<=', resolved.to],
+          ['parent_state', '=', 'posted'],
+        ],
+        ['account_id', 'debit', 'credit', 'balance'],
+      ),
+      this.getCompanyCurrency(credentials),
+    ]);
 
-    // Aggregate by account
-    const aggregated = new Map<string, { name: string; debit: number; credit: number }>();
-    for (const line of moveLines) {
-      const accountId = line.account_id[0];
-      const accountName = line.account_id[1];
-      const acct = accountById.get(accountId);
-      const code = acct?.code ?? String(accountId);
-
-      const existing = aggregated.get(code) ?? { name: accountName, debit: 0, credit: 0 };
-      existing.debit += line.debit;
-      existing.credit += line.credit;
-      aggregated.set(code, existing);
-    }
-
-    // Build trial balance
-    const tbAccounts: ERPAccount[] = [];
-    let totalDebit = 0;
-    let totalCredit = 0;
-
-    for (const [code, totals] of aggregated) {
-      const acct = accountMap.get(code);
-      const balance = totals.debit - totals.credit;
-      totalDebit += totals.debit;
-      totalCredit += totals.credit;
-
-      tbAccounts.push({
-        code,
-        name: acct?.name ?? totals.name,
-        type: acct?.type ?? this.mapAccountType('asset', code),
-        pucClass: this.inferPUCClass(code),
-        balance,
-        debit: totals.debit,
-        credit: totals.credit,
-        level: acct?.level ?? this.inferLevel(code),
-        parentCode: acct?.parentCode,
-        isAuxiliary: acct?.isAuxiliary ?? this.inferLevel(code) >= 4,
-      });
-    }
-
-    return {
-      period,
-      companyName: credentials.companyId ?? 'Odoo Company',
-      currency: 'COP',
-      accounts: tbAccounts.sort((a, b) => a.code.localeCompare(b.code)),
-      totalDebit,
-      totalCredit,
-      generatedAt: new Date().toISOString(),
-    };
+    return buildMovementsTrialBalance({
+      providerName: 'Odoo',
+      period: resolved,
+      chart,
+      lines: moveLines.map((line) => ({
+        accountCode: codeById.get(line.account_id[0]) ?? '',
+        accountName: line.account_id[1],
+        debit: line.debit ?? 0,
+        credit: line.credit ?? 0,
+      })),
+      companyName: credentials.companyId ?? credentials.databaseName ?? '',
+      currency,
+      warnings: currency ? [] : ['Moneda de la compañía no determinada.'],
+    });
   }
 
   /** Fetch journal entries (account.move with their lines) for a date range */

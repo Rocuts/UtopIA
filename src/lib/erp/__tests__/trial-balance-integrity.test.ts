@@ -12,7 +12,8 @@ vi.mock('../adapter', () => ({
 import { ERPService, type ERPServiceConnection } from '../service';
 const balance = (period = '2025'): ERPTrialBalance => ({
   period, currency: 'COP', companyName: 'Prueba SAS', totalDebit: 100, totalCredit: 100,
-  generatedAt: '2026-09-05T00:00:00Z', accounts: [{
+  generatedAt: '2026-09-05T00:00:00Z', balanceStatus: 'complete', balanceStatusReason: null, warnings: [],
+  accounts: [{
     code: '110505', name: 'Caja, "principal"\nBogotá', type: 'asset', pucClass: 1,
     balance: 123.45, debit: 123.45, credit: 0, level: 6, isAuxiliary: true,
   }],

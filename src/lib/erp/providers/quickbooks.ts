@@ -2,6 +2,9 @@
 // OAuth 2.0 with refresh token flow. SQL-like query language for most endpoints.
 
 import { BaseERPConnector } from '../connector';
+import { connectionKey } from '../session-store';
+import { resolveERPPeriod } from '../period';
+import { statusFromWarnings } from '../trial-balance-status';
 import type {
   ERPProvider,
   ERPCredentials,
@@ -121,10 +124,6 @@ interface QBOReport {
 export class QuickBooksConnector extends BaseERPConnector {
   readonly provider: ERPProvider = 'quickbooks';
 
-  private accessToken: string | null = null;
-  private refreshTokenValue: string | null = null;
-  private tokenExpiry = 0;
-
   private static readonly TOKEN_URL =
     'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
   private static readonly API_BASE = 'https://quickbooks.api.intuit.com/v3/company';
@@ -136,68 +135,73 @@ export class QuickBooksConnector extends BaseERPConnector {
     return `${QuickBooksConnector.API_BASE}/${credentials.companyId}`;
   }
 
-  /** Refresh the OAuth 2.0 access token using the refresh token */
-  private async ensureToken(credentials: ERPCredentials): Promise<string> {
-    if (this.accessToken && Date.now() < this.tokenExpiry) {
-      return this.accessToken;
-    }
+  /**
+   * OAuth 2.0 access token for THESE credentials. The rotated refresh token
+   * is stored under the same connection key, never in an instance field.
+   */
+  private ensureToken(
+    credentials: ERPCredentials,
+    options: { forceRefresh?: boolean } = {},
+  ): Promise<string> {
+    const refreshKey = connectionKey(credentials, 'refresh');
+    return this.sessions.resolve(
+      connectionKey(credentials, 'token'),
+      async () => {
+        const refreshToken =
+          this.sessions.get<string>(refreshKey) ?? credentials.refreshToken ?? '';
+        const body = new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: refreshToken,
+        });
 
-    const refreshToken = this.refreshTokenValue ?? credentials.refreshToken ?? '';
-    const body = new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-    });
+        const authHeader = Buffer.from(
+          `${credentials.clientId}:${credentials.clientSecret}`,
+        ).toString('base64');
 
-    const authHeader = Buffer.from(
-      `${credentials.clientId}:${credentials.clientSecret}`,
-    ).toString('base64');
+        const response = await this.fetchJSON<QBOTokenResponse>(
+          QuickBooksConnector.TOKEN_URL,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              Authorization: `Basic ${authHeader}`,
+            },
+            body: body.toString(),
+          },
+        );
 
-    const response = await this.fetchJSON<QBOTokenResponse>(
-      QuickBooksConnector.TOKEN_URL,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          Authorization: `Basic ${authHeader}`,
-        },
-        body: body.toString(),
+        if (response.refresh_token) {
+          // Refresh tokens de Intuit: vigencia máxima de 100 días.
+          this.sessions.set(refreshKey, response.refresh_token, 100 * 24 * 60 * 60 * 1000);
+        }
+        // Expire 60 seconds early
+        return { value: response.access_token, ttlMs: (response.expires_in - 60) * 1000 };
       },
+      { forceRefresh: options.forceRefresh },
     );
-
-    this.accessToken = response.access_token;
-    this.refreshTokenValue = response.refresh_token;
-    // Expire 60 seconds early
-    this.tokenExpiry = Date.now() + (response.expires_in - 60) * 1000;
-    return this.accessToken;
   }
 
   /** Make an authenticated request with automatic token refresh on 401 */
   private async authenticatedFetch<T>(
     credentials: ERPCredentials,
     path: string,
+    options: { forceRefresh?: boolean } = {},
   ): Promise<T> {
-    const token = await this.ensureToken(credentials);
     const url = `${this.getBaseUrl(credentials)}${path}`;
-
-    try {
-      return await this.fetchJSON<T>(url, {
+    const request = (token: string) =>
+      this.fetchJSON<T>(url, {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/json',
         },
       });
+
+    try {
+      return await request(await this.ensureToken(credentials, options));
     } catch (error) {
       const msg = error instanceof Error ? error.message : '';
       if (msg.includes('401')) {
-        this.accessToken = null;
-        this.tokenExpiry = 0;
-        const newToken = await this.ensureToken(credentials);
-        return this.fetchJSON<T>(url, {
-          headers: {
-            Authorization: `Bearer ${newToken}`,
-            Accept: 'application/json',
-          },
-        });
+        return request(await this.ensureToken(credentials, { forceRefresh: true }));
       }
       throw error;
     }
@@ -304,12 +308,13 @@ export class QuickBooksConnector extends BaseERPConnector {
 
   // ─── Interface Implementation ────────────────────────────────────────────
 
-  /** Test connection by querying a single account */
+  /** Test connection with a freshly refreshed token (never a cached one) */
   async testConnection(credentials: ERPCredentials): Promise<boolean> {
     try {
       await this.authenticatedFetch<QBOQueryResponse<QBOAccount>>(
         credentials,
         `/query?query=${encodeURIComponent('SELECT Id FROM Account MAXRESULTS 1')}`,
+        { forceRefresh: true },
       );
       return true;
     } catch {
@@ -348,10 +353,9 @@ export class QuickBooksConnector extends BaseERPConnector {
     credentials: ERPCredentials,
     period: string,
   ): Promise<ERPTrialBalance> {
-    const [year, month] = period.split('-').map(Number);
-    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-    const lastDay = new Date(year, month, 0).getDate();
-    const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    const resolved = resolveERPPeriod(period);
+    const startDate = resolved.from;
+    const endDate = resolved.to;
 
     // Fetch chart of accounts for type metadata
     const chartOfAccounts = await this.getChartOfAccounts(credentials);
@@ -381,13 +385,16 @@ export class QuickBooksConnector extends BaseERPConnector {
     }
 
     return {
-      period,
+      period: resolved.label,
       companyName: credentials.companyId ?? 'QuickBooks Company',
       currency: 'USD',
       accounts: accounts.sort((a, b) => a.code.localeCompare(b.code)),
       totalDebit,
       totalCredit,
       generatedAt: new Date().toISOString(),
+      // Informe nativo TrialBalance de QBO.
+      ...statusFromWarnings([]),
+      warnings: [],
     };
   }
 
