@@ -365,6 +365,9 @@ export const dict = {
           taxCreditsReason: 'Requiere liquidación fiscal verificada',
           upcomingDeadlinesLabel: 'Vencimientos próximos',
           dianRiskLabel: 'Riesgo DIAN',
+          riskNotDeterminable: 'No determinable',
+          riskNotDeterminableReason:
+            'Sin base gravable en el periodo (F01 = $0): el score de riesgo no tiene qué medir.',
           period: 'Periodo',
         },
       },
@@ -1952,6 +1955,9 @@ export const dict = {
           taxCreditsReason: 'Requires a verified tax computation',
           upcomingDeadlinesLabel: 'Upcoming deadlines',
           dianRiskLabel: 'DIAN risk',
+          riskNotDeterminable: 'Not determinable',
+          riskNotDeterminableReason:
+            'No taxable base for the period (F01 = $0): the risk score has nothing to measure.',
           period: 'Period',
         },
       },
