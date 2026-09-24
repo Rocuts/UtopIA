@@ -61,6 +61,7 @@ ${input.instructions ?? '(sin instrucciones adicionales)'}
   // del Âncora son intocables (auditoría 2026-09, tributario-modulos-04).
   const r = recomputeConciliacion(input.fiscalAnchor, json.data.lineas, json.data.tarifaPct);
   const warnings = [...json.warnings];
+  if (r.avisoTarifa) warnings.push(r.avisoTarifa);
   if (BigInt(r.excesoTope258) > BigInt(0)) {
     warnings.push(
       `Descuentos de los Arts. 255/256/257 exceden el tope conjunto del 25% (Art. 258 E.T.) en ${formatCopFromCents(BigInt(r.excesoTope258))}; el exceso no se descuenta en el año.`,
@@ -73,6 +74,7 @@ ${input.instructions ?? '(sin instrucciones adicionales)'}
     ...json,
     data: {
       ...json.data,
+      tarifaPct: r.tarifaPct,
       uaiContable: r.uaiContable,
       rentaLiquidaGravable: r.rentaLiquidaGravable,
       impuestoBruto: r.impuestoBruto,
