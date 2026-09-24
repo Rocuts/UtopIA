@@ -135,7 +135,7 @@ describe('Renta personas naturales AG 2025 — orden ascendente por dos dígitos
     // El repo publicaba 26-oct-2026 para el último dígito 0 cuando un NIT
     // terminado en 10 vencía el 19-ago: dos meses de extemporaneidad.
     for (let digit = 0; digit <= 9; digit++) {
-      const publicada = fechaDe('Personas Naturales', digit);
+      const publicada = fechaDe('Declaración Renta — Personas Naturales', digit);
       for (let decena = 0; decena <= 9; decena++) {
         const real = rentaPNPorDosDigitos(decena * 10 + digit);
         expect(
@@ -199,7 +199,7 @@ describe('procedencia de las fechas', () => {
     // Las dos fuentes divergían: el cron y el fallback estático devolvían
     // fechas distintas para el mismo NIT según hubiera corrido o no el cron.
     const cron = buildDeadlines2026();
-    for (const obligacion of ['Personas Naturales', 'Exógena']) {
+    for (const obligacion of ['Declaración Renta — Personas Naturales', 'Exógena']) {
       for (let digit = 0; digit <= 9; digit++) {
         const delCron = cron.filter(
           (d) => d.obligation.includes(obligacion) && d.nitDigit === digit,

@@ -158,3 +158,25 @@ describe('documento RAG — Régimen Simple y día cívico', () => {
     expect(DOC).toMatch(/17 de abril de 2026 (es|no)/);
   });
 });
+
+describe('documento RAG — precios de transferencia, patrimonio y activos en el exterior (auditoría 2026-09)', () => {
+  // Decreto 2229 de 2023 (src/data/tax_docs/decreto_2229_2023.md): arts.
+  // 1.6.1.13.2.26, .28, .29 y .53. Deben coincidir con src/data/calendars/nacional-2026.ts.
+  it('declaración informativa y documentación de PT: 7º a 16º día hábil de septiembre (9 al 22-sep-2026)', () => {
+    expect(DOC).not.toMatch(/7-sep a 21-sep-2026/);
+    expect(DOC).toContain('| Declaración Informativa (Form 120) | 9-sep a 22-sep-2026');
+  });
+
+  it('informe país por país: 10º día hábil de diciembre (15-dic-2026), no 31-dic', () => {
+    expect(DOC).toContain('| Reporte País por País (CbC) | 15-dic-2026');
+  });
+
+  it('patrimonio 2ª cuota: fecha única del 10º día hábil de septiembre (14-sep-2026)', () => {
+    expect(DOC).not.toMatch(/\| 2ª cuota \(50%\) \| Septiembre 2026 \| 8-sep a 22-sep-2026 \|/);
+    expect(DOC).toMatch(/\| 2ª cuota \(50%\) \| Septiembre 2026 \| 14-sep-2026/);
+  });
+
+  it('activos en el exterior de grandes contribuyentes en abril', () => {
+    expect(DOC).toMatch(/\*\*Grandes contribuyentes\*\*: 13-abr a 27-abr-2026/);
+  });
+});

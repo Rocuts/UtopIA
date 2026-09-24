@@ -295,10 +295,11 @@ Misma periodicidad mensual y mismas fechas de Retención en la Fuente. Las tarif
 
 ## 9. Activos en el Exterior (Art. 607 ET)
 
-Declaración informativa anual obligatoria para residentes con activos en el exterior > 2.000 UVT.
+Declaración informativa anual obligatoria para residentes con activos en el exterior > 2.000 UVT (art. 1.6.1.13.2.26 DUR 1625/2016, Decreto 2229 de 2023).
 
+- **Grandes contribuyentes**: 13-abr a 27-abr-2026 (7º a 16º día hábil de abril; el 17-abr no es hábil).
 - **Personas jurídicas**: 12-may a 26-may-2026 (mismas fechas que renta PJ).
-- **Personas naturales**: 12-ago a 26-oct-2026 (mismas fechas que renta PN).
+- **Personas naturales**: 12-ago a 26-oct-2026 (por los dos últimos dígitos; misma tabla que renta PN).
 
 ## 10. Impuesto al Patrimonio (Art. 292-3 ET)
 
@@ -307,7 +308,7 @@ Sujetos pasivos: personas naturales con patrimonio líquido ≥ 72.000 UVT al 1-
 | Cuota | Período | Vencimiento |
 |-------|---------|-------------|
 | Declaración + 1ª cuota (50%) | Mayo 2026 | 12-may a 26-may-2026 |
-| 2ª cuota (50%) | Septiembre 2026 | 8-sep a 22-sep-2026 |
+| 2ª cuota (50%) | Septiembre 2026 | 14-sep-2026 (10º día hábil, único para todos los NIT — art. 1.6.1.13.2.53) |
 
 ## 11. GMF (Gravamen a los Movimientos Financieros)
 
@@ -348,10 +349,12 @@ Los anticipos del SIMPLE **no** coinciden con el IVA bimestral: los dos primeros
 
 | Documento | Vencimiento 2026 |
 |-----------|------------------|
-| Declaración Informativa (Form 120) | 7-sep a 21-sep-2026 |
-| Documentación Comprobatoria (Local File) | 7-sep a 21-sep-2026 |
-| Master File (Informe Maestro) | 7-sep a 21-sep-2026 |
-| Reporte País por País (CbC) | 31-dic-2026 |
+| Declaración Informativa (Form 120) | 9-sep a 22-sep-2026 (7º a 16º día hábil, art. 1.6.1.13.2.28) |
+| Documentación Comprobatoria (Local File) | 9-sep a 22-sep-2026 (7º a 16º día hábil, art. 1.6.1.13.2.29 num. 1) |
+| Master File (Informe Maestro) | 9-sep a 22-sep-2026 (mismo plazo que el Informe Local) |
+| Reporte País por País (CbC) | 15-dic-2026 (10º día hábil de diciembre, art. 1.6.1.13.2.29 num. 2) |
+
+> Corregido en la auditoría de septiembre de 2026: la tabla anterior (7 al 21-sep y 31-dic) no seguía la regla del 7º al 16º día hábil del Decreto 2229 de 2023 ni el 10º día hábil de diciembre para el informe país por país.
 
 ## 14. Notas operativas
 

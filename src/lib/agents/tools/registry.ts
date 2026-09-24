@@ -201,7 +201,9 @@ const ASSESS_RISK = tool({
 const GET_TAX_CALENDAR = tool({
   description:
     'Get the Colombian tax filing calendar personalized for a specific NIT. ' +
-    'Returns national and municipal obligations filtered for the NIT last digit.',
+    'Returns national and municipal obligations filtered by the NIT last digit (without the check digit) ' +
+    'and by taxpayer type, plus the national obligations it does NOT cover. Follow the returned ' +
+    '`instruction`: dates not verified against the official table must be presented as estimates.',
   inputSchema: z.object({
     nitLastDigit: z.number().describe('Last digit of the NIT (0-9), BEFORE the check digit.'),
     year: z.number().describe('Year for the tax calendar (e.g., 2026).'),

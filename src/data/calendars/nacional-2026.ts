@@ -101,6 +101,7 @@ function rentaPJ(digit: number, cuota: number, dueDate: string): NationalDeadlin
     notes:
       'Comunicado DIAN 128 del 26-dic-2025 — Plazo entre el 7º y 16º día hábil del mes correspondiente.',
     verified: false,
+    taxpayerTypes: ['persona_juridica'],
   };
 }
 
@@ -123,6 +124,7 @@ function rentaGC(digit: number, cuota: number, dueDate: string): NationalDeadlin
           ? 'Declaración y pago de la segunda cuota.'
           : 'Pago de la tercera cuota.',
     verified: false,
+    taxpayerTypes: ['gran_contribuyente'],
   };
 }
 
@@ -198,6 +200,7 @@ function exogenaGrandesContribuyentes(digit: number): NationalDeadline {
       'Por ÚLTIMO dígito del NIT sin DV, del 28-abr al 13-may-2026. La Res. DIAN ' +
       '000012 del 29-abr-2026 prorrogó los dígitos 1, 2 y 3 al 14, 15 y 19 de mayo.',
     verified: false,
+    taxpayerTypes: ['gran_contribuyente'],
   };
 }
 
@@ -213,20 +216,210 @@ function exogenaPersonasJuridicasYNaturales(digit: number): NationalDeadline {
       '(01-05) al 12-jun-2026 (96-00). Se publica la fecha más temprana compatible ' +
       'con este último dígito; confirme la suya en la tabla de la resolución.',
     verified: false,
+    taxpayerTypes: ['persona_juridica', 'persona_natural'],
   };
 }
 
+/**
+ * Declaración anual de activos en el exterior — art. 1.6.1.13.2.26 DUR 1625/2016
+ * (Decreto 2229/2023): grandes contribuyentes en ABRIL, personas jurídicas en
+ * MAYO (7º–16º día hábil) y personas naturales por los DOS últimos dígitos
+ * entre agosto y octubre (misma tabla que su renta). Antes se publicaba una
+ * sola fila de mayo para todos: a un gran contribuyente se le anunciaba su
+ * plazo un mes DESPUÉS del real. Sólo aplica si los activos en el exterior a
+ * 1-ene superan 2.000 UVT (par. 1).
+ */
+const ACTIVOS_EXTERIOR_BASE = 'Art. 607 E.T.; art. 1.6.1.13.2.26 DUR 1625/2016 (Decreto 2229 de 2023)';
+const ACTIVOS_EXTERIOR_UMBRAL =
+  'Sólo si el valor patrimonial de los activos en el exterior a 1-ene-2026 supera 2.000 UVT (par. 1).';
+
 function activosExterior(digit: number, dueDate: string): NationalDeadline {
   return {
-    obligation: 'Declaración Anual de Activos en el Exterior',
+    obligation: 'Declaración Anual de Activos en el Exterior — Personas Jurídicas',
     period: 'Año gravable 2025',
     nitDigit: digit,
     dueDate,
-    legalBasis: 'Art. 607 E.T., Decreto 2229 de 2023',
-    notes: 'Mismo plazo que la declaración de renta (PJ) — mayo 2026.',
+    legalBasis: ACTIVOS_EXTERIOR_BASE,
+    notes: `Mismo plazo que la declaración de renta (PJ) — mayo 2026. ${ACTIVOS_EXTERIOR_UMBRAL}`,
+    verified: false,
+    taxpayerTypes: ['persona_juridica'],
+  };
+}
+
+function activosExteriorGC(digit: number, dueDate: string): NationalDeadline {
+  return {
+    obligation: 'Declaración Anual de Activos en el Exterior — Grandes Contribuyentes',
+    period: 'Año gravable 2025',
+    nitDigit: digit,
+    dueDate,
+    legalBasis: ACTIVOS_EXTERIOR_BASE,
+    notes: `Abril 2026, 7º a 16º día hábil. ${ACTIVOS_EXTERIOR_UMBRAL}`,
+    verified: false,
+    taxpayerTypes: ['gran_contribuyente'],
+  };
+}
+
+function activosExteriorPN(digit: number): NationalDeadline {
+  return {
+    obligation: 'Declaración Anual de Activos en el Exterior — Personas Naturales',
+    period: 'Año gravable 2025',
+    nitDigit: digit,
+    dueDate: fechaMasTempranaPorUltimoDigito(digit, rentaPNPorDosDigitos),
+    legalBasis: ACTIVOS_EXTERIOR_BASE,
+    notes:
+      'Por los DOS últimos dígitos del NIT (sin DV), agosto a octubre de 2026 (misma tabla que ' +
+      'la renta de personas naturales). Se publica la fecha más temprana compatible con este ' +
+      `último dígito. ${ACTIVOS_EXTERIOR_UMBRAL}`,
+    verified: false,
+    taxpayerTypes: ['persona_natural'],
+  };
+}
+
+// =====================================================
+// Obligaciones que el calendario omitía (auditoría 2026-09, tributario-calc-07)
+// Reglas del Decreto 2229 de 2023 (src/data/tax_docs/decreto_2229_2023.md).
+// =====================================================
+
+/**
+ * SIMPLE — declaración anual consolidada (art. 1.6.1.13.2.50) y declaración
+ * anual consolidada de IVA (art. 1.6.1.13.2.51): por PARES del último dígito,
+ * del 11º al 15º día hábil (abril y febrero, respectivamente).
+ */
+function diaHabilPorPar(digit: number): number {
+  const d = digit === 0 ? 10 : digit;
+  return 11 + Math.floor((d - 1) / 2);
+}
+
+const SIMPLE_NOTA =
+  'Sólo para inscritos en el Régimen Simple de Tributación (Arts. 903 a 916 E.T.).';
+
+function simpleAnual(digit: number): NationalDeadline {
+  return {
+    obligation: 'Régimen SIMPLE — Declaración Anual Consolidada',
+    period: 'Año gravable 2025',
+    nitDigit: digit,
+    dueDate: nthBusinessDay(2026, 4, diaHabilPorPar(digit)),
+    legalBasis: 'Arts. 903-916 E.T.; art. 1.6.1.13.2.50 DUR 1625/2016 (Decreto 2229 de 2023)',
+    notes:
+      `Pares de último dígito 1-2 … 9-0: 11º a 15º día hábil de abril (20 al 24-abr-2026, con el ` +
+      `17-abr no hábil). Incluye ganancia ocasional e INC de comidas y bebidas. ${SIMPLE_NOTA}`,
     verified: false,
   };
 }
+
+function simpleIvaAnual(digit: number): NationalDeadline {
+  return {
+    obligation: 'Régimen SIMPLE — Declaración de IVA Anual Consolidada',
+    period: 'Año gravable 2025',
+    nitDigit: digit,
+    dueDate: nthBusinessDay(2026, 2, diaHabilPorPar(digit)),
+    legalBasis: 'Art. 915 E.T.; art. 1.6.1.13.2.51 DUR 1625/2016 (Decreto 2229 de 2023)',
+    notes: `Contribuyentes del SIMPLE responsables de IVA. 11º a 15º día hábil de febrero por pares de último dígito. ${SIMPLE_NOTA}`,
+    verified: false,
+  };
+}
+
+const BIMESTRES = ['Ene-Feb', 'Mar-Abr', 'May-Jun', 'Jul-Ago', 'Sep-Oct', 'Nov-Dic'] as const;
+
+/** SIMPLE — anticipos bimestrales (art. 1.6.1.13.2.52): NO coinciden con el IVA. */
+function simpleAnticipo(digit: number, periodo: string, dueDate: string): NationalDeadline {
+  return {
+    obligation: 'Régimen SIMPLE — Anticipo Bimestral (recibo electrónico)',
+    period: periodo,
+    nitDigit: digit,
+    dueDate,
+    legalBasis: 'Art. 910 E.T.; art. 1.6.1.13.2.52 DUR 1625/2016 (Decreto 2229 de 2023)',
+    notes:
+      'Obligatorio aunque no haya saldo a pagar. Ene-Feb vence en mayo y Mar-Abr en junio ' +
+      `(no en marzo y mayo como el IVA). ${SIMPLE_NOTA}`,
+    verified: false,
+  };
+}
+
+/** INC bimestral (art. 1.6.1.13.2.32): mismos meses del IVA bimestral. */
+function incBimestral(digit: number, periodo: string, dueDate: string): NationalDeadline {
+  return {
+    obligation: 'Impuesto Nacional al Consumo (INC) — Bimestral',
+    period: periodo,
+    nitDigit: digit,
+    dueDate,
+    legalBasis: 'Arts. 512-1 y ss. E.T.; art. 1.6.1.13.2.32 DUR 1625/2016 (Decreto 2229 de 2023)',
+    notes:
+      'Sólo responsables del INC. Plazo entre el 7º y 16º día hábil del mes siguiente al bimestre. ' +
+      'El INC de comidas y bebidas de los inscritos en el SIMPLE se declara en la anual consolidada.',
+    verified: false,
+  };
+}
+
+const PT_OBLIGADOS =
+  'Obligados al régimen de precios de transferencia con operaciones con vinculados del ' +
+  'exterior o con jurisdicciones no cooperantes (Arts. 260-1 y ss. E.T.).';
+
+function ptInformativa(digit: number, dueDate: string): NationalDeadline {
+  return {
+    obligation: 'Precios de Transferencia — Declaración Informativa',
+    period: 'Año gravable 2025',
+    nitDigit: digit,
+    dueDate,
+    legalBasis: 'Art. 260-9 E.T.; arts. 1.6.1.13.2.27 y .28 DUR 1625/2016 (Decreto 2229 de 2023)',
+    notes: `Septiembre 2026, 7º a 16º día hábil. ${PT_OBLIGADOS}`,
+    verified: false,
+  };
+}
+
+function ptDocumentacion(digit: number, dueDate: string): NationalDeadline {
+  return {
+    obligation: 'Precios de Transferencia — Documentación Comprobatoria (Informe Local y Maestro)',
+    period: 'Año gravable 2025',
+    nitDigit: digit,
+    dueDate,
+    legalBasis: 'Art. 260-5 E.T.; art. 1.6.1.13.2.29 num. 1 DUR 1625/2016 (Decreto 2229 de 2023)',
+    notes: `Septiembre 2026, 7º a 16º día hábil. El Informe Maestro sólo aplica a grupos multinacionales. ${PT_OBLIGADOS}`,
+    verified: false,
+  };
+}
+
+function ptPaisPorPais(digit: number): NationalDeadline {
+  return {
+    obligation: 'Precios de Transferencia — Informe País por País',
+    period: 'Año gravable 2025',
+    nitDigit: digit,
+    dueDate: nthBusinessDay(2026, 12, 10),
+    legalBasis: 'Art. 260-5 num. 2 E.T.; art. 1.6.1.13.2.29 num. 2 DUR 1625/2016 (Decreto 2229 de 2023)',
+    notes:
+      'Plazo único — 10º día hábil de diciembre de 2026, sin importar el dígito del NIT. Sólo ' +
+      'entidades de grupos multinacionales en los supuestos del num. 2 del Art. 260-5 E.T.',
+    verified: false,
+  };
+}
+
+/**
+ * Obligaciones nacionales que este calendario NO modela. La tool las lista
+ * explícitamente para que la ausencia no se lea como "no tiene obligación".
+ */
+export const OBLIGACIONES_NACIONALES_NO_CUBIERTAS_2026: readonly string[] = [
+  'Declaración de ingresos y patrimonio (entidades no contribuyentes obligadas a presentarla)',
+  'Impuesto nacional a la gasolina y al ACPM (art. 1.6.1.13.2.37)',
+  'Impuesto nacional al carbono (art. 1.6.1.13.2.38)',
+  'Gravamen a los movimientos financieros — GMF (agentes retenedores, art. 1.6.1.13.2.39)',
+  'Impuesto nacional sobre productos plásticos de un solo uso (art. 1.6.1.13.2.54)',
+  'Impuestos a bebidas ultraprocesadas azucaradas y productos comestibles ultraprocesados (art. 1.6.1.13.2.55)',
+  'Presencia económica significativa — declaración anual y recaudo bimestral (art. 1.6.1.13.2.14)',
+  'Actualización del Régimen Tributario Especial (art. 1.6.1.13.2.25)',
+  'Plazos exactos por los DOS últimos dígitos (renta y activos en el exterior de personas naturales, exógena PJ/PN): aquí se publica la fecha más temprana del último dígito',
+];
+
+/**
+ * Familias de obligaciones que el snapshot del cron (buildDeadlines2026 en
+ * src/lib/scrapers/dian-scraper.ts) no produce. La tool las toma de este
+ * archivo cuando la fuente verificada no trae ninguna fila de la familia.
+ */
+export const FAMILIAS_SOLO_ESTATICAS_2026: ReadonlyArray<{ familia: RegExp; filas: () => NationalDeadline[] }> = [
+  { familia: /Activos en el Exterior/i, filas: () => NACIONAL_2026.filter((d) => /Activos en el Exterior/i.test(d.obligation)) },
+  { familia: /SIMPLE/i, filas: () => NACIONAL_2026.filter((d) => /SIMPLE/i.test(d.obligation)) },
+  { familia: /Consumo/i, filas: () => NACIONAL_2026.filter((d) => /Consumo/i.test(d.obligation)) },
+  { familia: /Transferencia/i, filas: () => NACIONAL_2026.filter((d) => /Transferencia/i.test(d.obligation)) },
+];
 
 function patrimonioCuota1(digit: number, dueDate: string): NationalDeadline {
   return {
@@ -236,8 +429,10 @@ function patrimonioCuota1(digit: number, dueDate: string): NationalDeadline {
     dueDate,
     legalBasis: 'Art. 292-298 E.T., Ley 2277 de 2022, Decreto 2229 de 2023',
     notes:
-      'Aplica si patrimonio líquido al 1-ene-2026 ≥ 72.000 UVT (≈$3.770.928.000 COP). Plazo entre el 7º y 16º día hábil de mayo 2026.',
+      'Aplica si patrimonio líquido al 1-ene-2026 ≥ 72.000 UVT (≈$3.770.928.000 COP). Plazo entre el 7º y 16º día hábil de mayo 2026. ' +
+      'Sujetos pasivos (Art. 292-3 E.T.): personas naturales y sucesiones ilíquidas, y sociedades o entidades extranjeras no declarantes con bienes en Colombia; las sociedades nacionales no son sujetos pasivos.',
     verified: false,
+    taxpayerTypes: ['persona_natural'],
   };
 }
 
@@ -249,8 +444,10 @@ function patrimonioCuota2(digit: number, dueDate: string): NationalDeadline {
     dueDate,
     legalBasis: 'Art. 292-298 E.T., Ley 2277 de 2022, Decreto 2229 de 2023',
     notes:
-      'Plazo único — 10º día hábil de septiembre 2026 (14-sep-2026) para todos los dígitos NIT.',
+      'Plazo único — 10º día hábil de septiembre 2026 (14-sep-2026) para todos los dígitos NIT. ' +
+      'Sujetos pasivos (Art. 292-3 E.T.): personas naturales y sucesiones ilíquidas, y sociedades o entidades extranjeras no declarantes con bienes en Colombia; las sociedades nacionales no son sujetos pasivos.',
     verified: false,
+    taxpayerTypes: ['persona_natural'],
   };
 }
 
@@ -281,6 +478,7 @@ function rentaPN(digit: number): NationalDeadline {
       '12-ago-2026 (01-02) al 26-oct-2026 (99-00). Se publica la fecha más ' +
       'temprana compatible con este último dígito; confirme la suya en la tabla oficial.',
     verified: false,
+    taxpayerTypes: ['persona_natural'],
   };
 }
 
@@ -363,9 +561,52 @@ export const NACIONAL_2026: NationalDeadline[] = [
   ...Array.from({ length: 10 }, (_, d) => exogenaGrandesContribuyentes(d)),
   ...Array.from({ length: 10 }, (_, d) => exogenaPersonasJuridicasYNaturales(d)),
 
-  // ─── ACTIVOS EN EL EXTERIOR ────────────────────────
-  // Mismo plazo que renta PJ → mayo 12–26
+  // ─── ACTIVOS EN EL EXTERIOR (art. 1.6.1.13.2.26) ─────
+  // Grandes contribuyentes → abril 13–27 (7º-16º día hábil, 17-abr no hábil)
+  ...buildPerDigit(2026, 4, (d, dueDate) => activosExteriorGC(d, dueDate)),
+  // Personas jurídicas → mayo 12–26 (mismo plazo que renta PJ)
   ...buildPerDigit(2026, 5, (d, dueDate) => activosExterior(d, dueDate)),
+  // Personas naturales → agosto a octubre por los dos últimos dígitos
+  ...Array.from({ length: 10 }, (_, d) => activosExteriorPN(d)),
+
+  // ─── RÉGIMEN SIMPLE (arts. 1.6.1.13.2.50 a .52) ─────
+  ...Array.from({ length: 10 }, (_, d) => simpleAnual(d)),
+  ...Array.from({ length: 10 }, (_, d) => simpleIvaAnual(d)),
+  // Anticipos: Nov-Dic 2025 → ene-2026; Ene-Feb → mayo; Mar-Abr → junio;
+  // May-Jun → julio; Jul-Ago → septiembre; Sep-Oct → noviembre; Nov-Dic → ene-2027.
+  ...buildPerDigit(2026, 1, (d, dueDate) => simpleAnticipo(d, 'Nov-Dic 2025', dueDate)),
+  ...(
+    [
+      [0, 5],
+      [1, 6],
+      [2, 7],
+      [3, 9],
+      [4, 11],
+    ] as const
+  ).flatMap(([b, mes]) =>
+    buildPerDigit(2026, mes, (d, dueDate) => simpleAnticipo(d, `${BIMESTRES[b]} 2026`, dueDate)),
+  ),
+  ...buildPerDigit(2027, 1, (d, dueDate) => simpleAnticipo(d, 'Nov-Dic 2026', dueDate)),
+
+  // ─── INC BIMESTRAL (art. 1.6.1.13.2.32) — meses del IVA bimestral ─
+  ...buildPerDigit(2026, 1, (d, dueDate) => incBimestral(d, 'Nov-Dic 2025', dueDate)),
+  ...(
+    [
+      [0, 3],
+      [1, 5],
+      [2, 7],
+      [3, 9],
+      [4, 11],
+    ] as const
+  ).flatMap(([b, mes]) =>
+    buildPerDigit(2026, mes, (d, dueDate) => incBimestral(d, `${BIMESTRES[b]} 2026`, dueDate)),
+  ),
+  ...buildPerDigit(2027, 1, (d, dueDate) => incBimestral(d, 'Nov-Dic 2026', dueDate)),
+
+  // ─── PRECIOS DE TRANSFERENCIA (arts. 1.6.1.13.2.28 y .29) ─
+  ...buildPerDigit(2026, 9, (d, dueDate) => ptInformativa(d, dueDate)),
+  ...buildPerDigit(2026, 9, (d, dueDate) => ptDocumentacion(d, dueDate)),
+  ...Array.from({ length: 10 }, (_, d) => ptPaisPorPais(d)),
 
   // ─── IMPUESTO AL PATRIMONIO ────────────────────────
   // Cuota 1 (Decl + Pago) → mayo 12–26 (días hábiles 7-16)
