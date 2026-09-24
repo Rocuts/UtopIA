@@ -83,20 +83,41 @@ function declaraBorrador(texto: string): boolean {
 
 /**
  * True si la carta menciona o solicita una reducción DE SANCIÓN (lo que L2.4
- * exige soportar): la oración habla de reducir y además de sanción, cuarta
- * parte, mitad, gradualidad, de solicitar / acogerse / aplicar la reducción o
- * cita una norma de reducción. «La reducción de los ingresos obedece a…» es
- * un hecho del caso, no una reducción de sanción (revisión de la fase 2,
- * pendiente #8).
+ * exige soportar): en la misma oración, la palabra de reducción aparece a
+ * poca distancia de «sanción / penalty», «cuarta parte», «mitad»,
+ * «gradualidad», «acogerse a la reducción» o de una norma de reducción. «La
+ * reducción de los ingresos obedece a…» es un hecho del caso (revisión de la
+ * fase 2, pendiente #8), y «solicitamos reducir la adición / el mayor
+ * impuesto» discute la glosa, no la sanción (re-auditoría 2026-09-24, NT-06):
+ * «solicitar / request / aplicar» ya no bastan como contexto. Límite
+ * documentado: una oración que pide reducir la glosa y, lejos en la misma
+ * oración, menciona la sanción no se juzga (se prefiere no bloquear).
  */
-const RE_REDUCCION = /\breduc(?:ci[óo]n(?:es)?|ida|ido|ir|e|en)\b|\breduction\b|\breduced\b/i;
+const RE_REDUCCION = /\breduc(?:ci[óo]n(?:es)?|ida|ido|ir|e|en)\b|\breduction\b|\breduced?\b/gi;
 const RE_CONTEXTO_SANCION =
-  /\bsanci[óo]n(?:es)?\b|\bpenalt(?:y|ies)\b|\bcuarta\s+parte\b|\ba\s+la\s+mitad\b|\bgradualidad\b|\bproporcionalidad\b|\bsolicit|\bacog|\baplic(?:ar|a|ación|acion)\b|\brequest|\bArt(?:[íi]culos?|s)?\.?\s*(?:640|644|709|713|716)\b/i;
+  /\bsanci[óo]n(?:es)?\b|\bpenalt(?:y|ies)\b|\bcuarta\s+parte\b|\ba\s+la\s+mitad\b|\bone[-\s](?:quarter|half)\b|\bgradualidad\b|\bproporcionalidad\b|\bacog\w*\s+a\s+la\s+reducci[óo]n\b|\bArt(?:[íi]culos?|s)?\.?\s*(?:640|644|709|713|716)\b/gi;
+/** Distancia máxima (caracteres) entre la reducción y su objeto sancionatorio. */
+const VENTANA_REDUCCION_SANCION = 80;
+
+function posiciones(re: RegExp, texto: string): Array<{ start: number; end: number }> {
+  return [...texto.matchAll(re)].map((m) => ({ start: m.index ?? 0, end: (m.index ?? 0) + m[0].length }));
+}
 
 function mencionaReduccionDeSancion(texto: string): boolean {
+  // Un punto seguido de un número no cierra la oración («Art. 644 E.T.»).
   return texto
-    .split(/(?<=[.;!?])\s+|\n+/)
-    .some((o) => RE_REDUCCION.test(o) && RE_CONTEXTO_SANCION.test(o));
+    .split(/(?<=[.;!?])\s+(?!\d)|\n+/)
+    .some((o) => {
+      const reducciones = posiciones(RE_REDUCCION, o);
+      if (reducciones.length === 0) return false;
+      const contextos = posiciones(RE_CONTEXTO_SANCION, o);
+      return reducciones.some((r) =>
+        contextos.some((c) => {
+          const distancia = c.start >= r.end ? c.start - r.end : r.start >= c.end ? r.start - c.end : 0;
+          return distancia <= VENTANA_REDUCCION_SANCION;
+        }),
+      );
+    });
 }
 
 const invocaDiferenciaCriterio = (m5: Modulo5DefensaDian) =>

@@ -249,3 +249,47 @@ describe('M3 — prosa honesta del score', () => {
     expect(validateRiskScoreL3({ ...m3, recomendaciones: ['Review the deductions.'] })[0].passed).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Re-auditoría 2026-09-24 — NT-06 (M5.L2.4), NT-07 (M3.L2.3), NT-08 (M6.L2.2):
+// salidas honestas que seguían bloqueando al Agente Fiscal.
+// ---------------------------------------------------------------------------
+
+const erroresDe = (cs: Array<{ passed: boolean; severity: string; name: string }>) =>
+  cs.filter((c) => !c.passed && c.severity === 'error').map((c) => c.name);
+
+describe('NT-06 — M5.L2.4: reducir la adición o el mayor impuesto no es reducir la sanción', () => {
+  const k = classificationFromKind('requerimiento_especial');
+  const carta = (peticion: string) =>
+    [
+      '## Antecedentes', 'Requerimiento especial notificado.',
+      '## Posición jurídica del contribuyente', 'Ingresos declarados (Art. 707 E.T.; Art. 647 E.T.).',
+      '## Soporte documental', 'Facturas.',
+      '## Petición', peticion,
+      '## Firmas', 'Representante legal.',
+      'Borrador para revisión del contador público o abogado.',
+    ].join('\n');
+  const m5e = (peticion: string): Modulo5DefensaDian => ({
+    tipoRequerimiento: k.kind, plazoRespuesta: k.plazoRespuesta, normaPlazo: k.normaPlazo, cartaTexto: carta(peticion), defensaArt647: null,
+  });
+
+  it.each([
+    'Solicitamos reducir la adición de ingresos propuesta a los valores efectivamente soportados.',
+    'Se solicita reducir el mayor impuesto propuesto, pues la glosa no tiene soporte.',
+    'We request that the proposed income adjustment be reduced to the supported amounts.',
+  ])('sin error: %s', (p) => {
+    expect(erroresDe(validateDefensaDian(m5e(p)))).toEqual([]);
+  });
+
+  it.each([
+    'Solicitamos la reducción de la sanción por inexactitud propuesta.',
+    'We request that the inaccuracy penalty be reduced.',
+    'Nos acogemos a la reducción prevista para quien acepta los hechos.',
+  ])('la reducción de la sanción sin norma sigue fallando: %s', (p) => {
+    expect(erroresDe(validateDefensaDian(m5e(p)))).toContain('M5.L2.4_reduccion_cita_norma');
+  });
+
+  it('con la norma disponible (Art. 709 E.T.) pasa', () => {
+    expect(erroresDe(validateDefensaDian(m5e('Aceptamos los hechos y solicitamos la reducción de la sanción a la cuarta parte (Art. 709 E.T.).')))).toEqual([]);
+  });
+});
