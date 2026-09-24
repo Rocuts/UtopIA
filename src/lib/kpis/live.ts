@@ -28,7 +28,8 @@ interface ReportDigest {
   taxScore?: number;
   legalScore?: number;
   findings?: { critico: number; alto: number; medio: number };
-  opinion?: 'favorable' | 'con_salvedades' | 'desfavorable' | 'abstension';
+  /** 'no_emitida' = sin dictamen del Revisor Fiscal (auditoria-calidad-04). */
+  opinion?: 'favorable' | 'con_salvedades' | 'desfavorable' | 'abstension' | 'no_emitida';
 }
 interface LatestReportShape {
   niifAnalysis?: { reconciliation?: { clean?: boolean } };
@@ -90,6 +91,11 @@ export async function getRegulatoryHealth(
     typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 100;
   const validCount = (n: unknown): n is number =>
     typeof n === 'number' && Number.isSafeInteger(n) && n >= 0;
+  if (digest?.opinion === 'no_emitida') {
+    return unavailable(
+      'Dictamen no emitido por el Revisor Fiscal: sin opinión formal no se calcula la salud regulatoria.',
+    );
+  }
   if (!digest || !validScore(digest.niifScore) || !validScore(digest.taxScore) ||
       !validScore(digest.legalScore) || !digest.findings ||
       !(['critico', 'alto', 'medio'] as const).every(key => validCount(digest.findings![key])) ||

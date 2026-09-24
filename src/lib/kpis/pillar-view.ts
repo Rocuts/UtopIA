@@ -16,6 +16,11 @@ import type { getDb } from '@/lib/db/client';
 //                libre.
 //
 // Ausencia de datos o error ⇒ `null` (N/D), nunca '0'.
+//
+// Asientos de cierre (contab-nomina-04): el cierre (source_type 'closing')
+// lleva a cero las clases 4/5/6 y traslada el resultado al patrimonio; su
+// reverso lo deshace. Ninguno es actividad del periodo ⇒ se excluyen, igual
+// que en `pillar_kpis_view` (migración 0022).
 // ---------------------------------------------------------------------------
 
 export interface PillarKpis {
@@ -27,6 +32,14 @@ export interface PillarKpis {
 }
 
 type DbInstance = ReturnType<typeof getDb>;
+
+/** Excluye el asiento de cierre y el reverso de un cierre (alias `je`). */
+const SIN_ASIENTOS_DE_CIERRE = sql`
+        AND je.source_type <> 'closing'
+        AND NOT EXISTS (
+          SELECT 1 FROM journal_entries o
+          WHERE o.id = je.reversal_of_entry_id AND o.source_type = 'closing'
+        )`;
 
 // Helper: extract a numeric string from a raw sql result row.
 function rowToString(
@@ -63,6 +76,7 @@ async function queryResiliencia(
       WHERE je.workspace_id = ${workspaceId}
         AND je.period_id = ${periodId}
         AND je.status = 'posted'
+        ${SIN_ASIENTOS_DE_CIERRE}
         AND coa.code LIKE '24%'
     `);
     return rowToString(result, 'total_provision');
@@ -97,6 +111,7 @@ async function queryValor(
       WHERE je.workspace_id = ${workspaceId}
         AND je.period_id = ${periodId}
         AND je.status = 'posted'
+        ${SIN_ASIENTOS_DE_CIERRE}
         AND coa.code ~ '^[456]'
     `);
     return rowToString(result, 'resultado');
@@ -135,7 +150,9 @@ export async function queryDocumentsVerifiedPct(
 }
 
 // ── Futuro ───────────────────────────────────────────────────────────────────
-// Free cash flow proxy: Cash (1105 Caja + 1110 Bancos) minus Accounts Payable
+// Free cash flow proxy: Cash (1105 Caja + 1110 Bancos, con sus subcuentas —
+// la regla de `pillar_kpis_view`; antes `IN ('1105','1110')` sólo veía la
+// cuenta mayor y los auxiliares 110505… quedaban fuera) minus Accounts Payable
 // (21xxxx — Obligaciones financieras and CxP) for the period.
 // Positive = net cash surplus over short-term payables.
 async function queryFuturo(
@@ -147,7 +164,7 @@ async function queryFuturo(
     const result = await db.execute(sql`
       SELECT
         COALESCE(SUM(
-          CASE WHEN coa.code IN ('1105', '1110') THEN jl.debit - jl.credit ELSE 0 END
+          CASE WHEN coa.code LIKE '1105%' OR coa.code LIKE '1110%' THEN jl.debit - jl.credit ELSE 0 END
         ), 0)
         -
         COALESCE(SUM(
@@ -159,8 +176,10 @@ async function queryFuturo(
       WHERE je.workspace_id = ${workspaceId}
         AND je.period_id = ${periodId}
         AND je.status = 'posted'
+        ${SIN_ASIENTOS_DE_CIERRE}
         AND (
-          coa.code IN ('1105', '1110')
+          coa.code LIKE '1105%'
+          OR coa.code LIKE '1110%'
           OR coa.code LIKE '21%'
         )
     `);
