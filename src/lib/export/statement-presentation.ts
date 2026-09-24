@@ -536,6 +536,86 @@ export function normalizeNiifStatementLabels<T extends LabelledNiifJson>(
   };
 }
 
+/** Nota estructurada mínima (ref libre + cuerpo). */
+interface NumberableNote {
+  ref: string | null;
+  body: string;
+}
+interface NotedNiifJson {
+  balanceSheet: { notes: NumberableNote[] };
+  incomeStatement: { notes: NumberableNote[] };
+  equityChanges: { notes: NumberableNote[] };
+  technicalNotes: NumberableNote[];
+}
+
+/** "Nota 3" o "Nota 3 — Inventarios": número y, si lo hay, el título. */
+const NUMBERED_REF = /^\s*nota\s*(\d+)\b\s*(.*)$/i;
+
+/**
+ * Numeración determinista de las notas del informe NIIF (spec v2.1
+ * Corrección 6; auditoría 2026-09, niif-contrato-19). `ref` es texto libre del
+ * modelo y ninguna regla controlaba saltos ni duplicados; el respaldo del
+ * renderer reiniciaba "Nota 1" en cada estado. Aquí las notas numerables (ref
+ * nulo, "Nota N" o "Nota N — título") reciben un número global secuencial 1..N en el orden
+ * ESF → ERI → ECP → notas técnicas; las marcas no numéricas ("*") se
+ * conservan. Las referencias "Nota X" en los cuerpos se actualizan sólo cuando
+ * el número anterior era único (sin ambigüedad). Pura e idempotente.
+ */
+export function numberStatementNotes<T extends NotedNiifJson>(json: T): { json: T; changed: number } {
+  const lists: NumberableNote[][] = [
+    json.balanceSheet.notes,
+    json.incomeStatement.notes,
+    json.equityChanges.notes,
+    json.technicalNotes,
+  ];
+  const oldNumbers = new Map<string, number>();
+  for (const list of lists) {
+    for (const n of list) {
+      const m = NUMBERED_REF.exec(n.ref ?? '');
+      if (m) oldNumbers.set(m[1], (oldNumbers.get(m[1]) ?? 0) + 1);
+    }
+  }
+  const remap = new Map<string, number>();
+  let next = 0;
+  const numbered = lists.map((list) =>
+    list.map((n) => {
+      const ref = n.ref?.trim() ?? '';
+      const m = NUMBERED_REF.exec(ref);
+      if (ref !== '' && !m) return { note: n, ref: n.ref };
+      next++;
+      if (m && oldNumbers.get(m[1]) === 1) remap.set(String(Number(m[1])), next);
+      const title = m?.[2]?.trim() ?? '';
+      const sep = /^[:.,;)]/.test(title) ? '' : ' ';
+      return { note: n, ref: title ? `Nota ${next}${sep}${title}` : `Nota ${next}` };
+    }),
+  );
+  let changed = 0;
+  const rewrite = (body: string) =>
+    body.replace(/\b(Nota)\s+(\d+)\b/g, (whole, word: string, num: string) => {
+      const target = remap.get(String(Number(num)));
+      return target === undefined ? whole : `${word} ${target}`;
+    });
+  const out = numbered.map((list) =>
+    list.map(({ note, ref }) => {
+      const body = rewrite(note.body);
+      if (ref === note.ref && body === note.body) return note;
+      changed++;
+      return { ...note, ref, body };
+    }),
+  );
+  if (changed === 0) return { json, changed: 0 };
+  return {
+    json: {
+      ...json,
+      balanceSheet: { ...json.balanceSheet, notes: out[0] },
+      incomeStatement: { ...json.incomeStatement, notes: out[1] },
+      equityChanges: { ...json.equityChanges, notes: out[2] },
+      technicalNotes: out[3],
+    },
+    changed,
+  };
+}
+
 export type PeriodoTipo = 'cerrado' | 'parcial' | 'indeterminado';
 
 export interface StatementDateContext {
