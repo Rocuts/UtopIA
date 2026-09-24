@@ -1742,7 +1742,7 @@ export const dict = {
         'Generado desde la versión persistida y autorizada del informe para esta empresa. Las cifras enviadas con la solicitud no sustituyen a las persistidas.',
       unverifiedTitle: 'PROCEDENCIA NO VERIFICADA',
       unverifiedBody:
-        'Generado sin una versión persistida del informe en el servidor. Las cifras se validaron contra el balance de esta solicitud, pero no se puede demostrar que correspondan a una versión autorizada de la empresa.',
+        'Generado sin una versión persistida del informe en el servidor. Las cifras sólo se validaron contra lo enviado en esta solicitud (y contra su balance de prueba, si lo traía): no se puede demostrar que correspondan a una versión autorizada de la empresa.',
       versionLine: 'Versión del informe: {reportId} (persistida el {createdAt})',
       reportHashLine: 'Huella SHA-256 del informe: {hash}',
       sourceHashLine: 'Huella SHA-256 del balance preprocesado: {hash}',
@@ -3455,7 +3455,7 @@ export const dict = {
         'Generated from the persisted, authorized version of this company report. Figures sent with the request do not replace the persisted ones.',
       unverifiedTitle: 'UNVERIFIED PROVENANCE',
       unverifiedBody:
-        'Generated without a persisted version of the report on the server. Figures were validated against the trial balance in this request, but they cannot be shown to match an authorized version for the company.',
+        'Generated without a persisted version of the report on the server. Figures were only validated against what this request sent (and against its trial balance, if it included one): they cannot be shown to match an authorized version for the company.',
       versionLine: 'Report version: {reportId} (persisted {createdAt})',
       reportHashLine: 'Report SHA-256 fingerprint: {hash}',
       sourceHashLine: 'Preprocessed trial balance SHA-256 fingerprint: {hash}',

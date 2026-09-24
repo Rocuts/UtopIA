@@ -289,3 +289,14 @@ describe('sello de procedencia en los artefactos', () => {
     expect(provenanceHeaders(UNVERIFIED)).toEqual({ 'X-Report-Provenance': 'unverified' });
   });
 });
+
+describe('sello "procedencia no verificada"', () => {
+  it('no afirma una validación contra el balance que la solicitud pudo no traer', async () => {
+    const { provenanceLines } = await import('../provenance-stamp');
+    for (const lang of ['es', 'en'] as const) {
+      const [, body] = provenanceLines({ kind: 'unverified' }, lang);
+      // Sin `preprocessed` ni `rawData` el gate sólo prueba coherencia interna.
+      expect(body).toMatch(lang === 'es' ? /si lo traía/ : /if it included one/);
+    }
+  });
+});
