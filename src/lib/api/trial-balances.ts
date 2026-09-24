@@ -36,8 +36,13 @@ import { TrialBalanceCreateSchema, type RawRowInput } from './schemas';
  * origen (antes del Cierre Virtual R8); `rows` pasa por la misma normalización
  * de signos que `csv`; saldo inicial ≠ saldo del periodo; importes con más de
  * dos decimales ya no se leen como miles; hojas estructurales.
+ * tb-2026-09-24.2: `status = unbalanced` también con bloqueos del curador
+ * post-R8 (CUR-R12…) o importes fuera del rango de precisión, en cualquier
+ * periodo (coherente con /niif); una unidad declarada "en miles/millones" sin
+ * confirmar es un motivo de integridad; el riesgo de liquidez (AC < PC) ya no
+ * es motivo bloqueante.
  */
-export const PREPROCESSOR_CONTRACT_VERSION = 'tb-2026-09-24';
+export const PREPROCESSOR_CONTRACT_VERSION = 'tb-2026-09-24.2';
 
 export interface Money {
   amount: string;
@@ -155,6 +160,11 @@ export function preprocessBuiltRows(
 // ---------------------------------------------------------------------------
 
 export interface TrialBalanceSummary {
+  /**
+   * `balanced` sólo si `equation_delta = 0` y ningún periodo trae motivos
+   * persistentes (integridad de la lectura, precisión monetaria, bloqueos del
+   * curador post-R8 como CUR-R12): el mismo criterio del gate 422 de /niif.
+   */
   status: 'balanced' | 'unbalanced';
   period_label: string;
   row_count: number;
@@ -224,6 +234,22 @@ function sourceEquationDeltaCents(pre: PreprocessedBalance): bigint {
   return pesosToCents(primary.summary.equationBalance);
 }
 
+/**
+ * `true` si algún periodo trae motivos que /niif nunca levanta: integridad de
+ * los datos leídos (`validation.integrityReasons`, incluido el rango de
+ * precisión monetaria) o bloqueos del curador posteriores a R8
+ * (`validation.curatorBlockingReasons`). Con ellos el API no publica
+ * 'balanced' aunque la ecuación del archivo cuadre (recalculo-final-04).
+ */
+export function hasPersistentBlockingReasons(pre: PreprocessedBalance): boolean {
+  const periods = pre.periods.length > 0 ? pre.periods : [pre.primary];
+  return periods.some(
+    (s) =>
+      (s.validation.integrityReasons?.length ?? 0) > 0 ||
+      (s.validation.curatorBlockingReasons?.length ?? 0) > 0,
+  );
+}
+
 export function summarize(
   pre: PreprocessedBalance,
   meta: { signConvention?: SignConvention | null } = {},
@@ -240,9 +266,13 @@ export function summarize(
   const delta = sourceEquationDeltaCents(pre);
   const vca = primary.virtualCloseAdjustment;
 
-  // Un importe ilegible, una columna ambigua o un código que no es cuenta PUC
-  // impiden certificar la cuadratura aunque la ecuación calculada dé 0.
-  const hasIntegrityIssues = (primary.validation.integrityReasons?.length ?? 0) > 0;
+  // Un importe ilegible, una columna ambigua, un código que no es cuenta PUC o
+  // un importe fuera del rango de precisión impiden certificar la cuadratura
+  // aunque la ecuación calculada dé 0. Mismos motivos PERSISTENTES que hacen
+  // responder 422 a /niif (deriveValidation del orquestador): integridad de la
+  // lectura y bloqueos post-R8 del curador (CUR-R8, CUR-R5, CUR-R12), en
+  // cualquier periodo del archivo (recalculo-final-04).
+  const hasIntegrityIssues = hasPersistentBlockingReasons(pre);
 
   // Nota: preprocessTrialBalance inyecta los findings del curator también en
   // `discrepancies` — el conteo de discrepancies ya los incluye; `curator`
