@@ -32,6 +32,8 @@
 import {
   detectYearFromString,
   parseTrialBalanceCSV,
+  preprocessTrialBalance,
+  type PreprocessedBalance,
   type RawAccountRow,
 } from './trial-balance';
 
@@ -476,4 +478,42 @@ export function looksLikeTabularTrialBalance(text: string): boolean {
     }
   }
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// Texto de balance → preprocesado (superficies que reciben `rawData`)
+// ---------------------------------------------------------------------------
+
+export type UploadedTrialBalancePreprocess =
+  /** Filas leídas y preprocesadas con la misma regla que /upload y /niif. */
+  | { kind: 'ok'; preprocessed: PreprocessedBalance; warnings: string[] }
+  /**
+   * Sin filas contables. `tabular` indica si el texto tiene forma de balance
+   * de prueba (códigos PUC por campos): en ese caso no puede continuar como si
+   * no hubiera balance (Stage 0 responde 422).
+   */
+  | { kind: 'empty'; tabular: boolean }
+  /** Hojas/periodos incompatibles (`TrialBalanceIngestError`). */
+  | { kind: 'rejected'; reasons: string[] };
+
+/**
+ * Lee y preprocesa el `rawData` que envía la UI (CSV, bloques XLSX
+ * `[period=…]`, con o sin el informe de /api/upload antepuesto) con el MISMO
+ * helper que /upload, /niif y `prepareFinancialContext`. Lo usan /export y la
+ * ruta legacy, que antes parseaban el texto con `parseTrialBalanceCSV` y
+ * obtenían 0 filas para un XLSX (ingesta-01, pipeline-flujo-06/07).
+ */
+export function preprocessUploadedTrialBalanceText(text: string): UploadedTrialBalancePreprocess {
+  let rows: RawAccountRow[];
+  let warnings: string[];
+  try {
+    const parsed = parseUploadedTrialBalanceText(text);
+    rows = parsed.rows;
+    warnings = parsed.warnings;
+  } catch (err) {
+    if (err instanceof TrialBalanceIngestError) return { kind: 'rejected', reasons: err.reasons };
+    throw err;
+  }
+  if (rows.length === 0) return { kind: 'empty', tabular: looksLikeTabularTrialBalance(text) };
+  return { kind: 'ok', preprocessed: preprocessTrialBalance(rows), warnings };
 }

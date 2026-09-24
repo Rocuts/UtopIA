@@ -5,11 +5,8 @@ import {
   orchestrateFinancialReport,
   BalanceValidationError,
 } from '@/lib/agents/financial/orchestrator';
-import {
-  parseTrialBalanceCSV,
-  preprocessTrialBalance,
-  type PreprocessedBalance,
-} from '@/lib/preprocessing/trial-balance';
+import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
+import { preprocessUploadedTrialBalanceText } from '@/lib/preprocessing/raw-data';
 import type { FinancialProgressEvent } from '@/lib/agents/financial/types';
 import type {
   AdjustmentLedger,
@@ -145,8 +142,22 @@ export async function POST(req: Request) {
       }
       preprocessed = revived;
     } else {
-      const rows = parseTrialBalanceCSV(rawData);
-      preprocessed = rows.length > 0 ? preprocessTrialBalance(rows) : undefined;
+      // Mismo helper que /upload, /niif y /export (ingesta-01): CSV, bloques
+      // XLSX `[period=…]` y texto con el informe de validación antepuesto.
+      // Sin filas, el orquestador decide (balance tabular ilegible → 422).
+      const read = preprocessUploadedTrialBalanceText(rawData);
+      if (read.kind === 'rejected') {
+        return NextResponse.json(
+          {
+            error: 'El balance de prueba tiene inconsistencias criticas.',
+            code: 'BALANCE_VALIDATION_FAILED',
+            reasons: read.reasons,
+            suggestedAccounts: [],
+          },
+          { status: 422 },
+        );
+      }
+      preprocessed = read.kind === 'ok' ? read.preprocessed : undefined;
     }
 
     // Enhance data with validation report and clean auxiliary data
