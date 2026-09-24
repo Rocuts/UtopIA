@@ -16,6 +16,7 @@ import { echarts } from '@/lib/charts/setup';
 import { getTokens } from '@/lib/charts/echarts-theme';
 import { useChartTheme } from '@/lib/charts/use-theme';
 import { ChartContainer } from '@/components/charts/ChartContainer';
+import { formatPct } from '@/lib/charts/format';
 import type { MonteCarloResult } from '@/lib/pillars/types';
 
 // ─── Props ───────────────────────────────────────────────────────────────────
@@ -34,8 +35,12 @@ const COLOR_MEDIAN = '#10b981';    // emerald-500
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function pctStr(v: number): string {
-  return `${(v * 100).toFixed(1)}%`;
+/**
+ * Porcentaje con el separador decimal del idioma (`12,5%` / `12.5%`), no
+ * `toFixed(1)`, que en español mostraba punto decimal (ratios-kpis-27).
+ */
+export function monteCarloPct(v: number, language: 'es' | 'en'): string {
+  return formatPct(v, 1, language);
 }
 
 function quiebreColor(prob: number): string {
@@ -92,15 +97,12 @@ export function MonteCarloHistogram({ result, language, density }: MonteCarloHis
   const option = useMemo(() => {
     if (!roi || bins.length === 0) return null;
 
-    const labels = bins.map((b) => pctStr((b.from + b.to) / 2));
+    const labels = bins.map((b) => monteCarloPct((b.from + b.to) / 2, language));
     const heights = bins.map((b) => b.count);
     const binLabelOf = (v: number) => {
       const idx = bins.findIndex((b) => v >= b.from && v <= b.to);
       return labels[idx === -1 ? (v < bins[0].from ? 0 : bins.length - 1) : idx];
     };
-
-    const p50Pct = roi.p50 * 100;
-    const meanPct = roi.mean * 100;
 
     return {
       tooltip: {
@@ -113,8 +115,8 @@ export function MonteCarloHistogram({ result, language, density }: MonteCarloHis
           const bin = bins[idx];
           if (!bin) return '';
           return [
-            `<strong>ROI: ${pctStr(bin.from)} – ${pctStr(bin.to)}</strong>`,
-            `<span style="font-size:10px;color:${tokens.textSecondary}">${isEs ? 'Simulaciones' : 'Simulations'}: ${bin.count} (${((bin.count / result.iterations) * 100).toFixed(1)}%)</span>`,
+            `<strong>ROI: ${monteCarloPct(bin.from, language)} – ${monteCarloPct(bin.to, language)}</strong>`,
+            `<span style="font-size:10px;color:${tokens.textSecondary}">${isEs ? 'Simulaciones' : 'Simulations'}: ${bin.count} (${monteCarloPct(bin.count / result.iterations, language)})</span>`,
           ].join('<br/>');
         },
       },
@@ -175,7 +177,7 @@ export function MonteCarloHistogram({ result, language, density }: MonteCarloHis
                   position: 'insideEndTop',
                   color: COLOR_MEAN,
                   fontSize: 9,
-                  formatter: `μ ${meanPct.toFixed(1)}%`,
+                  formatter: `μ ${monteCarloPct(roi.mean, language)}`,
                 },
               },
               // Línea verde sólida en p50
@@ -188,7 +190,7 @@ export function MonteCarloHistogram({ result, language, density }: MonteCarloHis
                   position: 'insideEndBottom',
                   color: COLOR_MEDIAN,
                   fontSize: 9,
-                  formatter: `P50 ${p50Pct.toFixed(1)}%`,
+                  formatter: `P50 ${monteCarloPct(roi.p50, language)}`,
                 },
               },
             ],
@@ -198,7 +200,7 @@ export function MonteCarloHistogram({ result, language, density }: MonteCarloHis
         },
       ],
     };
-  }, [roi, bins, tokens, isEs, result.iterations]);
+  }, [roi, bins, tokens, isEs, language, result.iterations]);
 
   // ── Textos ───────────────────────────────────────────────────────────────────
   const nFmt = result.iterations.toLocaleString(isEs ? 'es-CO' : 'en-US');
@@ -211,8 +213,8 @@ export function MonteCarloHistogram({ result, language, density }: MonteCarloHis
     : `Assumptions: i.i.d. normal monthly revenue, σ ${(sup.ingresoSigmaMensual * 100).toFixed(0)}%, ${sup.horizonteMeses}-month horizon, N = ${nFmt}, seed ${sup.semilla}. ${sup.exclusionesEn}`;
 
   const quiebreLabel = isEs
-    ? `Probabilidad de quiebre en 12m: ${pctStr(prob)}`
-    : `Break probability in 12m: ${pctStr(prob)}`;
+    ? `Probabilidad de quiebre en 12m: ${monteCarloPct(prob, language)}`
+    : `Break probability in 12m: ${monteCarloPct(prob, language)}`;
 
   const noPpeLabel = isEs
     ? 'N/D — sin propiedad, planta y equipo (grupo 15) para medir el retorno.'
@@ -259,17 +261,17 @@ export function MonteCarloHistogram({ result, language, density }: MonteCarloHis
           <div className="flex flex-wrap gap-2">
             <MiniCard
               label="P10"
-              value={pctStr(roi.p10)}
+              value={monteCarloPct(roi.p10, language)}
               color="#ef4444"
             />
             <MiniCard
               label={isEs ? 'P50 (Mediana)' : 'P50 (Median)'}
-              value={pctStr(roi.p50)}
+              value={monteCarloPct(roi.p50, language)}
               color={COLOR_MEDIAN}
             />
             <MiniCard
               label="P90"
-              value={pctStr(roi.p90)}
+              value={monteCarloPct(roi.p90, language)}
               color="#8b5cf6"
             />
           </div>

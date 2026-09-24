@@ -49,6 +49,8 @@ import { FuturoMicroDashboard, runwayScenarioSubtitle } from '../FuturoMicroDash
 import { ValorTrendBars } from '../ValorTrendBars';
 import { EscudoTrendBars, formatEscudoAxis, formatEscudoValue } from '../EscudoTrendBars';
 import { CapexEventsModal } from '../CapexEventsModal';
+import { MonteCarloHistogram, monteCarloPct } from '../MonteCarloHistogram';
+import type { MonteCarloResult } from '@/lib/pillars/types';
 import { MOCK_ESCUDO_TREND, MOCK_PILLARS, MOCK_RUNWAY, MOCK_VALOR_TREND } from '../mock-data';
 
 function text(node: ReactNode): string {
@@ -128,6 +130,60 @@ describe('(b) formato por idioma en ValorTrendBars y EscudoTrendBars (ratios-kpi
     expect(formatEscudoAxis(1.5, 'solvencia', 'es')).toBe('1,50');
     expect(formatEscudoAxis(1_300_000_000, 'efectivo', 'en')).toBe('$1.3B');
     expect(formatEscudoValue(1_300_000, 'efectivo', 'es')).toBe('$1.300.000');
+  });
+});
+
+describe('(b) MonteCarloHistogram: porcentajes con el separador del idioma (ratios-kpis-27)', () => {
+  const dist = { p10: -0.041, p50: 0.125, p90: 0.3, mean: 0.131, stdev: 0.1 };
+  const result: MonteCarloResult = {
+    iterations: 1000,
+    cajaFinal: dist,
+    utilidadAcumulada: dist,
+    roiProbabilistico: dist,
+    roiHistograma: [
+      { from: -0.1, to: 0.1, count: 400 },
+      { from: 0.1, to: 0.3, count: 600 },
+    ],
+    probabilidadQuiebre12m: 0.125,
+    mesQuiebreMediano: null,
+    inversionPPE: 1_000_000,
+    seed: 42,
+    supuestos: {
+      distribucion: 'normal-iid-mensual',
+      variable: 'ingresos',
+      ingresoSigmaMensual: 0.15,
+      horizonteMeses: 12,
+      iteraciones: 1000,
+      semilla: 42,
+      mesesBase: 12,
+      exclusionesEs: '',
+      exclusionesEn: '',
+    },
+    generatedAt: '2026-09-24T00:00:00Z',
+  };
+
+  it('helper: coma decimal en español, punto en inglés', () => {
+    expect(monteCarloPct(0.125, 'es')).toBe('12,5%');
+    expect(monteCarloPct(-0.041, 'es')).toBe('-4,1%');
+    expect(monteCarloPct(0.125, 'en')).toBe('12.5%');
+  });
+
+  it('tarjetas, probabilidad de quiebre, eje, tooltip y marcas usan el idioma', () => {
+    const es = text(<MonteCarloHistogram result={result} language="es" />);
+    expect(es).toContain('Probabilidad de quiebre en 12m: 12,5%');
+    expect(es).toContain('-4,1%');
+    expect(es).not.toMatch(/\d\.\d%/);
+    const opt = lastOption() as unknown as {
+      xAxis: { data: string[] };
+      tooltip: { formatter: (p: unknown) => string };
+      series: Array<{ markLine: { data: Array<{ label: { formatter: string } }> } }>;
+    };
+    expect(opt.xAxis.data).toEqual(['0,0%', '20,0%']);
+    expect(opt.tooltip.formatter([{ dataIndex: 1 }])).toContain('10,0% – 30,0%');
+    expect(opt.tooltip.formatter([{ dataIndex: 1 }])).toContain('(60,0%)');
+    expect(opt.series[0].markLine.data.map((d) => d.label.formatter)).toEqual(['μ 13,1%', 'P50 12,5%']);
+    const en = text(<MonteCarloHistogram result={result} language="en" />);
+    expect(en).toContain('Break probability in 12m: 12.5%');
   });
 });
 
