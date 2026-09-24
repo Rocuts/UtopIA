@@ -160,8 +160,8 @@ const ABBREVIATION_SCALE: Array<[RegExp, number]> = [
 
 /** Escalas en palabra que marcan un monto aunque no lleve "$" ("900 millones de pesos"). */
 const SCALE_WORD_RE = /^(?:millones|mil\s+millones|billones|MM|mil\s+MM?)$/;
-/** "2 millones de acciones": la escala cuenta otra cosa, no pesos. */
-const NOT_PESOS_AFTER = /^\s+de\s+(?!pesos\b)\p{L}/u;
+/** "2 millones de acciones": la escala cuenta otra cosa, no pesos ("900 millones de COP" sí es monto). */
+const NOT_PESOS_AFTER = /^\s+de\s+(?!pesos\b|COP\b)\p{L}/u;
 
 /** Tokeniza los montos COP de un texto (ver el comentario del bloque). */
 export function extractCopTokens(text: string): CopToken[] {
