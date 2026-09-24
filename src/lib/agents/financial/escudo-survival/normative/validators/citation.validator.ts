@@ -483,13 +483,15 @@ const ABREVIATURA_ANTES_DE = /\b(?:Arts?|par|num|núm|lit|inc|No|Nro|Dr|Sr|Sra|p
  * Un punto cierra la frase si le sigue espacio y luego fin de texto o una
  * mayúscula / signo de apertura, y no es una abreviatura que precede a un
  * número o nombre. «E.T. La…» cierra; «Art. 36-3», «E.T. y …» y «1.2.4» no.
+ * Un paréntesis tampoco abre frase: «Art. 36-3 E.T. (derogado por …)» es una
+ * sola frase (revisión I4-escudo 3b).
  */
 function esFinDeFrase(text: string, i: number): boolean {
   if (text[i] !== '.') return false;
   if (!/\s/.test(text[i + 1] ?? ' ')) return false;
   const siguiente = text.slice(i + 1).match(/\S/)?.[0];
   if (siguiente === undefined) return true;
-  if (!/[A-ZÁÉÍÓÚÑ¿¡("«“]/.test(siguiente)) return false;
+  if (!/[A-ZÁÉÍÓÚÑ¿¡"«“]/.test(siguiente)) return false;
   return !ABREVIATURA_ANTES_DE.test(text.slice(Math.max(0, i - 6), i));
 }
 
@@ -505,11 +507,23 @@ export function fraseDeLaCita(text: string, position: { start: number; end: numb
 }
 
 // `\b` de JS es ASCII: tras «ó» no hay frontera de palabra, por eso «derogó»
-// usa un lookahead en vez de `\b`.
+// usa un lookahead en vez de `\b`. «derogatoria» y el sustantivo «repeal»
+// («tras la derogatoria del…», «the repeal of…») también afirman la derogación.
 const AFIRMA_DEROGACION =
-  /\bderogad[oa]s?\b|\bderog[óo](?![a-záéíóúñ])|\bderogaci[óo]n\b|\brepealed\b/i;
-const NIEGA_DEROGACION =
-  /\bno\s+(?:ha\s+sido\s+|fue\s+|est[áa]\s+|se\s+encuentra\s+|qued[óo]\s+)?derogad|\bsin\s+derogar\b|\bnot\s+(?:been\s+)?repealed\b|\bnever\s+repealed\b/i;
+  /\bderogad[oa]s?\b|\bderog[óo](?![a-záéíóúñ])|\bderogaci[óo]n\b|\bderogatori[ao]s?\b|\brepeal(?:ed)?\b/i;
+// Negación de la derogación (revisión I4-escudo 3b): «no / nunca / jamás /
+// tampoco» seguidos sólo de auxiliares («fue», «ha sido», «se ha», «fue objeto
+// de», «quedó»…) antes de «derog…»; «sin (que haya sido) derogar(se)»;
+// «not / never / n't (been) repealed». «No aplica porque fue derogado» no es
+// negación: entre «no» y «derog…» hay palabras que no son auxiliares.
+const AUXILIAR_ES =
+  '(?:ha|han|haya|hayan|haber|fue|fueron|sido|est[áa]n?|se|encuentra|encuentran|qued[óo]|quedaron|resulta|result[óo]|objeto|de)';
+const NIEGA_DEROGACION = new RegExp(
+  `(?:\\b(?:no|nunca|tampoco)|\\bjam[áa]s)\\s+(?:${AUXILIAR_ES}\\s+){0,3}derog` +
+    `|\\bsin\\s+(?:que\\s+)?(?:${AUXILIAR_ES}\\s+){0,3}derog` +
+    `|(?:\\bnot|\\bnever|n't)\\s+(?:(?:been|be|was|were|is|has|have|had)\\s+){0,2}repealed\\b`,
+  'i',
+);
 const AFIRMA_VIGENCIA =
   /(?<!\bno\s)\b(?:sigue|contin[úu]a|permanece|est[áa]|es)\s+vigente\b|\b(?:remains|still|is)\s+in\s+force\b/i;
 
