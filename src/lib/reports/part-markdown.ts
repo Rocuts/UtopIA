@@ -185,7 +185,7 @@ export function renderNiifPart(
       fullContent: seal,
     };
   }
-  const r = toNiifAnalysisResult(json);
+  const r = toNiifAnalysisResult(json, { language });
   const out: NiifAnalysisResult = {
     ...niif,
     balanceSheet: r.balanceSheet,

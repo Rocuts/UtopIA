@@ -388,7 +388,7 @@ function addCashFlowAndEquitySheets(
   layout: PeriodLayout | null,
   language: 'es' | 'en' = 'es',
 ): void {
-  const json = presentableJson(report, layout)!;
+  const json = presentableJson(report, layout, language)!;
   const fp = json.company.fiscalPeriod;
   const cp = json.company.comparativePeriod;
   // Columna comparativa del EFE y ECP del periodo comparativo (auditoría
@@ -538,7 +538,7 @@ function addBalanceSheet(
 
   let row = 6;
 
-  const json = presentableJson(report, layout);
+  const json = presentableJson(report, layout, language);
 
   if (json) {
     // ── Fuente canónica: JSON-strict validado del NIIF Analyst ──────────────
@@ -1006,7 +1006,7 @@ function addIncomeStatement(
 
   let row = 6;
 
-  const json = presentableJson(report, layout);
+  const json = presentableJson(report, layout, language);
 
   // Banner de Advertencia R7 (costo presunto) — vive en el preprocesado y es
   // independiente de la fuente de las cifras, así que se pinta en ambas ramas.
@@ -1777,7 +1777,11 @@ function reportIdentity(report: FinancialReport): { name: string; nit: string; f
  * filas del ECP con el periodo del informe y el calificativo del resultado
  * según su signo. Misma función que el PDF y el orquestador.
  */
-function presentableJson(report: FinancialReport, layout: PeriodLayout | null): NiifReportJson | undefined {
+function presentableJson(
+  report: FinancialReport,
+  layout: PeriodLayout | null,
+  language: 'es' | 'en' = 'es',
+): NiifReportJson | undefined {
   const json = report.niifAnalysis?.json;
   if (!json) return undefined;
   const tipos = resolvePeriodoTipos(
@@ -1786,7 +1790,7 @@ function presentableJson(report: FinancialReport, layout: PeriodLayout | null): 
     layout?.primary ?? null,
     layout?.comparative ?? null,
   );
-  return normalizeNiifStatementLabels(json, { primaryPeriodoTipo: tipos.primaryPeriodoTipo }).json;
+  return normalizeNiifStatementLabels(json, { primaryPeriodoTipo: tipos.primaryPeriodoTipo, language }).json;
 }
 
 function statementDate(

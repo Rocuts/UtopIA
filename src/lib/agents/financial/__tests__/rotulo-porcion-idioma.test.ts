@@ -154,3 +154,25 @@ describe('ruta real — informe en inglés', () => {
     expect(phase.niif.balanceSheet).not.toMatch(/porción (?:no )?corriente/);
   });
 });
+
+// Integración de la ronda 5: el Excel, el PDF y el re-render del servidor
+// normalizaban sin idioma, así que un grupo partido en español (p. ej. el que
+// parte el orquestador desde el comparativo) seguía en español en el informe
+// en inglés.
+describe('superficies — el idioma del informe llega al rótulo del grupo partido', () => {
+  it('PDF y Excel en inglés reescriben el sufijo en español; en español lo conservan', async () => {
+    const { composeEditorialReport } = await import('@/lib/export/pdf-elite-react/compose');
+    const { makeExportableReport } = await import('@/lib/agents/financial/__fixtures__/coherent-niif-report');
+    const report = makeExportableReport();
+    report.niifAnalysis.json = normalizeNiifStatementLabels(esfPartido(preprocesar())).json;
+    const en = JSON.stringify(
+      composeEditorialReport({ report, preprocessed: null, pillars: null, language: 'en' }).statements.balance,
+    );
+    expect(en).toContain('Inversiones — non-current portion');
+    expect(en).not.toMatch(/porción (?:no )?corriente/);
+    const es = JSON.stringify(
+      composeEditorialReport({ report, preprocessed: null, pillars: null, language: 'es' }).statements.balance,
+    );
+    expect(es).toContain('Inversiones — porción no corriente');
+  });
+});

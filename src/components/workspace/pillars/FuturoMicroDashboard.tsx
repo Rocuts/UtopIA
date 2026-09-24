@@ -123,6 +123,7 @@ export function FuturoMicroDashboard({
         <RunwayProjection
           months={runway}
           density={density}
+          language={language}
           title={isEs ? 'Runway de Caja · 36 meses' : 'Cash Runway · 36 months'}
           subtitle={runwayScenarioSubtitle(language)}
         />

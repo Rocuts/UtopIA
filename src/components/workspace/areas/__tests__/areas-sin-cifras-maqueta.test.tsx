@@ -115,7 +115,7 @@ describe('ValorArea', () => {
     expect(t).toMatch(/Valor de salida \(patrimonio\)\s+N\/D/);
     expect(t).toContain('EBIT operacional');
     // Formato es-CO de @/lib/charts/format (formatBigCop), no el «$100.00M COP»
-    // con punto decimal del formatCop deprecado de exit-value (I4-escudo 6).
+    // con punto decimal del formateador heredado de exit-value, ya retirado (I4-escudo 6, I5-niif 6).
     expect(t).toContain('$100 M'); // A09
     expect(t).toContain('EV/EBIT 6× (heurístico)');
     expect(t).toContain('$600 M'); // EV de referencia

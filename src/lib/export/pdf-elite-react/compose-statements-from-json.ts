@@ -44,6 +44,8 @@ export interface StatementTableContext {
    * comparativo se presenta N/D (no $0) y sin variaciones de resultados.
    */
   comparativeSaldosDeApertura?: boolean;
+  /** Idioma del informe: sufijo de porción de un grupo partido por plazo (I5-niif 4). */
+  language?: 'es' | 'en';
 }
 
 /** Celda del P&G comparativo cuando el comparativo es un saldo de apertura. */
@@ -189,7 +191,10 @@ function totalCells(
  * llega del cliente.
  */
 function presentable(json: NiifReportJson, ctx: StatementTableContext | undefined): NiifReportJson {
-  return normalizeNiifStatementLabels(json, { primaryPeriodoTipo: ctx?.primaryPeriodoTipo }).json;
+  return normalizeNiifStatementLabels(json, {
+    primaryPeriodoTipo: ctx?.primaryPeriodoTipo,
+    ...(ctx?.language ? { language: ctx.language } : {}),
+  }).json;
 }
 
 // ---------------------------------------------------------------------------

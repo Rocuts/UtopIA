@@ -1243,7 +1243,10 @@ function buildStatements(
   // del refactor (e.g. reportes históricos en DB / fixtures viejos).
   const json = report.niifAnalysis?.json;
   if (json) {
-    const ctx = statementContext(json.company.fiscalPeriod, json.company.comparativePeriod, preprocessed);
+    const ctx = {
+      ...statementContext(json.company.fiscalPeriod, json.company.comparativePeriod, preprocessed),
+      language,
+    };
     return {
       balance: labelLlmStatementNotes(niifJsonToBalanceTable(json, ctx), json.balanceSheet?.notes, language),
       income: labelLlmStatementNotes(niifJsonToIncomeTable(json, ctx), json.incomeStatement?.notes, language),

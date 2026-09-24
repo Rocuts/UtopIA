@@ -2395,12 +2395,13 @@ export async function runNiifPhase(
       );
       const { json: rotulado, changed } = normalizeNiifStatementLabels(json, {
         primaryPeriodoTipo: tipos.primaryPeriodoTipo,
+        language,
       });
       if (changed > 0) json = rotulado;
     }
 
     if (json !== niif.json) {
-      const rerendered = toNiifAnalysisResult(json);
+      const rerendered = toNiifAnalysisResult(json, { language });
       // El sello del analista vive en el CUERPO del Markdown, así que un
       // re-render lo borraría y dejaría un informe con salvedades sin la
       // portada que las declara. Se reconstruye desde la misma reconciliación

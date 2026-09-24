@@ -92,7 +92,7 @@ export function ValorArea({ compact = false, className }: ValorAreaProps) {
   // Sólo campos de AncoraView; null ⇒ N/D (nunca una cifra del mockup).
   const nd = ds.notAvailable;
   // Formato compacto es-CO / en del helper común (coma decimal, «mil M»,
-  // negativos entre paréntesis), no el formatCop deprecado de exit-value.
+  // negativos entre paréntesis); el formateador heredado de exit-value se retiró.
   const fmt = (n: number | null | undefined) =>
     view.hasData && n != null && Number.isFinite(n) ? formatBigCop(n, language) : nd;
   const heroValue = fmt(v.ponderado);
