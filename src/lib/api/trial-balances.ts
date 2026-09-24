@@ -13,8 +13,9 @@ import { and, desc, eq, lt, or } from 'drizzle-orm';
 
 import { getDb } from '@/lib/db/client';
 import { apiTrialBalances } from '@/lib/db/schema';
+import { normalizeSignConvention, type SignConvention } from '@/lib/preprocessing/sign-convention';
 import {
-  parseTrialBalanceCSV,
+  parseTrialBalanceCSVWithMeta,
   preprocessTrialBalance,
   type PreprocessedBalance,
   type RawAccountRow,
@@ -30,8 +31,13 @@ import { TrialBalanceCreateSchema, type RawRowInput } from './schemas';
 /**
  * Versión del contrato de preprocesamiento que viaja en cada respuesta.
  * Subirla cuando cambie el preprocesador de forma observable por el cliente.
+ *
+ * tb-2026-09-24: status/equation_delta reflejan la cuadratura del archivo de
+ * origen (antes del Cierre Virtual R8); `rows` pasa por la misma normalización
+ * de signos que `csv`; saldo inicial ≠ saldo del periodo; importes con más de
+ * dos decimales ya no se leen como miles; hojas estructurales.
  */
-export const PREPROCESSOR_CONTRACT_VERSION = 'tb-2026-08-19';
+export const PREPROCESSOR_CONTRACT_VERSION = 'tb-2026-09-24';
 
 export interface Money {
   amount: string;
@@ -54,23 +60,41 @@ function pesosToCents(pesos: number): bigint {
 // ---------------------------------------------------------------------------
 
 export type BuildRowsResult =
-  | { ok: true; rows: RawAccountRow[]; source: 'csv' | 'rows' }
+  | {
+      ok: true;
+      /** Filas ya normalizadas a la convención natural de signos. */
+      rows: RawAccountRow[];
+      source: 'csv' | 'rows';
+      /** Convención de signos detectada en la entrada (antes de normalizar). */
+      signConvention: SignConvention;
+    }
   | { ok: false; code: 'empty_trial_balance' };
 
+/**
+ * `csv` y `rows` pasan por la MISMA normalización determinista de signos
+ * (`normalizeSignConvention`, ingesta-10): la misma data por cualquiera de las
+ * dos entradas da los mismos totales. Antes sólo el CSV se normalizaba y unas
+ * filas en convención algebraica llegaban con pasivo negativo que R8 tapaba.
+ */
 export function buildRawRowsFromInput(input: {
   csv?: string;
   rows?: RawRowInput[];
   period_label?: string;
 }): BuildRowsResult {
   if (input.csv) {
-    const parsed = parseTrialBalanceCSV(input.csv, {
+    const parsed = parseTrialBalanceCSVWithMeta(input.csv, {
       currentYear: input.period_label,
     });
-    if (parsed.length === 0) return { ok: false, code: 'empty_trial_balance' };
-    return { ok: true, rows: parsed, source: 'csv' };
+    if (parsed.rows.length === 0) return { ok: false, code: 'empty_trial_balance' };
+    return {
+      ok: true,
+      rows: parsed.rows,
+      source: 'csv',
+      signConvention: parsed.signConvention?.convention ?? 'natural',
+    };
   }
 
-  const rows = (input.rows ?? []).map(
+  const mapped = (input.rows ?? []).map(
     (r): RawAccountRow => ({
       code: r.code.replace(/[.\-\s]/g, ''),
       name: r.name,
@@ -79,8 +103,14 @@ export function buildRawRowsFromInput(input: {
       balancesByPeriod: r.balances_by_period,
     }),
   );
-  if (rows.length === 0) return { ok: false, code: 'empty_trial_balance' };
-  return { ok: true, rows, source: 'rows' };
+  if (mapped.length === 0) return { ok: false, code: 'empty_trial_balance' };
+  const normalized = normalizeSignConvention(mapped);
+  return {
+    ok: true,
+    rows: normalized.rows,
+    source: 'rows',
+    signConvention: normalized.detection.convention,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -91,17 +121,58 @@ export interface TrialBalanceSummary {
   status: 'balanced' | 'unbalanced';
   period_label: string;
   row_count: number;
+  /**
+   * Convención de signos detectada en la entrada (`rows` y `csv` se normalizan
+   * igual). `null` si no se conoce. Los campos añadidos en tb-2026-09-24 no
+   * existen en los summaries persistidos antes de esa versión (el listado los
+   * devuelve tal como se guardaron; el detalle los recalcula).
+   */
+  sign_convention: SignConvention | null;
   control_totals: {
     activo: Money;
     pasivo: Money;
     patrimonio: Money;
     ingresos_netos: Money;
+    /**
+     * Descuadre del ARCHIVO DE ORIGEN, antes de los ajustes virtuales del
+     * curador: A − P − (K sin 3605) − resultado del ejercicio. `patrimonio`
+     * ya incluye esos ajustes (3605VC/3710VC), así que A − P − K publicado
+     * puede valer 0 aunque el archivo no cuadre.
+     */
     equation_delta: Money;
+    /** Monto que el Cierre Virtual (R8) absorbió en la cuenta virtual 3710VC. */
+    virtual_close_adjustment: Money;
+    /** Parte del monto anterior que es un 3605 de ejercicio anterior reclasificado. */
+    reclassified_from_3605: Money;
+    /** Brecha que R5 absorbió al anclar el patrimonio al desglose del ECP. */
+    equity_anchor_adjustment: Money;
   };
   findings: { discrepancies: number; curator: number };
 }
 
-export function summarize(pre: PreprocessedBalance): TrialBalanceSummary {
+/**
+ * Descuadre del archivo de origen en centavos (niif-preproceso-07).
+ *
+ * R8 (Cierre Virtual) reemplaza 3605 por la utilidad dinámica y absorbe el
+ * residual `A − P − K` en 3710VC, de modo que la ecuación post-curator cuadra
+ * siempre que haya P&G. Ese residual, menos el 3605 de un ejercicio anterior
+ * que R8 reclasifica (no es descuadre), es la cuadratura real del archivo.
+ * Sin P&G R8 no actúa y `summary.equationBalance` conserva la ecuación del
+ * archivo (R5 sólo muta `controlTotals.patrimonio`).
+ */
+function sourceEquationDeltaCents(pre: PreprocessedBalance): bigint {
+  const primary = pre.primary;
+  const vca = primary.virtualCloseAdjustment;
+  if (vca) {
+    return pesosToCents(vca.residualGapBeforeCents) - pesosToCents(vca.reclassifiedAmount);
+  }
+  return pesosToCents(primary.summary.equationBalance);
+}
+
+export function summarize(
+  pre: PreprocessedBalance,
+  meta: { signConvention?: SignConvention | null } = {},
+): TrialBalanceSummary {
   const primary = pre.primary;
   const cents = primary.controlTotals.cents;
 
@@ -111,21 +182,30 @@ export function summarize(pre: PreprocessedBalance): TrialBalanceSummary {
     cents?.patrimonio ?? pesosToCents(primary.controlTotals.patrimonio);
   const ingresosNetos =
     cents?.ingresosNetos ?? pesosToCents(primary.controlTotals.ingresos);
-  const delta = activo - pasivo - patrimonio;
+  const delta = sourceEquationDeltaCents(pre);
+  const vca = primary.virtualCloseAdjustment;
+
+  // Un importe ilegible, una columna ambigua o un código que no es cuenta PUC
+  // impiden certificar la cuadratura aunque la ecuación calculada dé 0.
+  const hasIntegrityIssues = (primary.validation.integrityReasons?.length ?? 0) > 0;
 
   // Nota: preprocessTrialBalance inyecta los findings del curator también en
   // `discrepancies` — el conteo de discrepancies ya los incluye; `curator`
   // reporta cuántos de ellos vienen del curator NIIF.
   return {
-    status: delta === BigInt(0) ? 'balanced' : 'unbalanced',
+    status: delta === BigInt(0) && !hasIntegrityIssues ? 'balanced' : 'unbalanced',
     period_label: primary.period,
     row_count: pre.rawRows.length,
+    sign_convention: meta.signConvention ?? null,
     control_totals: {
       activo: centsToMoney(activo),
       pasivo: centsToMoney(pasivo),
       patrimonio: centsToMoney(patrimonio),
       ingresos_netos: centsToMoney(ingresosNetos),
       equation_delta: centsToMoney(delta),
+      virtual_close_adjustment: centsToMoney(pesosToCents(vca?.centsAdjustment ?? 0)),
+      reclassified_from_3605: centsToMoney(pesosToCents(vca?.reclassifiedAmount ?? 0)),
+      equity_anchor_adjustment: centsToMoney(pesosToCents(primary.equityAnchorAdjustment ?? 0)),
     },
     findings: {
       discrepancies: primary.discrepancies.length,
@@ -148,6 +228,7 @@ export function serializeTrialBalance(
     status: row.summary.status,
     period_label: row.summary.period_label,
     row_count: row.summary.row_count,
+    sign_convention: row.summary.sign_convention ?? null,
     control_totals: row.summary.control_totals,
     findings: row.summary.findings,
     preprocessor_version: row.preprocessorVersion,
@@ -163,6 +244,10 @@ export function serializeTrialBalanceDetail(
   const primary = pre.primary;
   return {
     ...base,
+    // Motivos bloqueantes del preprocesador (importes ilegibles, columnas
+    // ambiguas, códigos que no son cuentas PUC, descuadres): sin ellos el
+    // cliente no sabría por qué la remisión no es certificable.
+    validation_reasons: [...primary.validation.reasons],
     discrepancies: primary.discrepancies.map((d) => ({
       location: d.location,
       reported: d.reported,
@@ -216,7 +301,7 @@ export async function createTrialBalance(
   const pre = preprocessTrialBalance(built.rows, {
     defaultPeriod: parsed.data.period_label,
   });
-  const summary = summarize(pre);
+  const summary = summarize(pre, { signConvention: built.signConvention });
 
   const { id: publicId, uuid } = newTypeId(ID_PREFIXES.trialBalance);
   await db.insert(apiTrialBalances).values({
@@ -264,10 +349,18 @@ export async function getTrialBalanceDetail(
   const row = rows[0];
   if (!row) return null;
 
-  // Recompute-on-read: cero desync con el preprocesador vigente.
+  // Recompute-on-read: cero desync con el preprocesador vigente. Las filas
+  // `rows` persistidas antes de tb-2026-09-24 no estaban normalizadas; la
+  // normalización es idempotente sobre filas ya naturales (ingesta-10).
   const rawRows = JSON.parse(decryptSecret(row.rawRowsEncrypted)) as RawAccountRow[];
-  const pre = preprocessTrialBalance(rawRows, { defaultPeriod: row.periodLabel });
-  const summary = summarize(pre);
+  const normalized = normalizeSignConvention(rawRows);
+  const pre = preprocessTrialBalance(normalized.rows, { defaultPeriod: row.periodLabel });
+  const persisted = row.summary as Partial<TrialBalanceSummary> | null;
+  const summary = summarize(pre, {
+    signConvention:
+      persisted?.sign_convention ??
+      (normalized.detection.convention === 'algebraica' ? 'algebraica' : null),
+  });
 
   const base = serializeTrialBalance(publicId, {
     createdAt: row.createdAt,

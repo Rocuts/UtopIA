@@ -28,7 +28,7 @@
 // ---------------------------------------------------------------------------
 
 import { runCurator } from './balance-curator';
-import { normalizeSignConvention } from './sign-convention';
+import { normalizeSignConvention, type SignConventionDetection } from './sign-convention';
 import type {
   CashFlowStatement,
   Class18ClassificationAudit,
@@ -57,6 +57,22 @@ export interface RawAccountRow {
    * año detectado se usa la etiqueta provista (default `'current'`).
    */
   balancesByPeriod: Record<string, number>;
+  /**
+   * Problemas de lectura detectados por el parser: celda de saldo no vacía que
+   * no es un importe legible, o columnas de saldo que no se pueden asignar a
+   * un periodo sin adivinar. `buildSnapshotForPeriod` los convierte en motivos
+   * de validación bloqueantes: un valor ilegible nunca desaparece en silencio
+   * (niif-preproceso-05, ingesta-06). Ausente cuando no hubo problemas.
+   */
+  parseIssues?: RawRowParseIssue[];
+}
+
+/** Problema de lectura de una fila (o del archivo completo) del balance. */
+export interface RawRowParseIssue {
+  /** Periodo afectado; `null` = todos los periodos del archivo. */
+  period: string | null;
+  /** Descripción legible, con la cuenta y la columna cuando aplica. */
+  message: string;
 }
 
 export interface ValidatedAccount {
@@ -130,16 +146,18 @@ export interface ControlTotalsCents {
   /** Ingresos netos = |ingresos bruto Clase 4| − totalDevoluciones, en cents. */
   ingresosNetos: bigint;
   /**
-   * Saldo a favor del impuesto de renta (Pulido NIIF PYME Grupo 2).
-   * Detector cents:
-   *   1. Si grupo 5404 acreedor (saldo crédito) → magnitud absoluta del crédito.
-   *   2. Si 5404 ausente y 1805 (Impuesto corriente activo) > 0 → saldo de 1805.
-   *   3. Si 1355 (Anticipo de impuestos) > 0 sin 1805 ni 5404 → ese saldo.
+   * Saldo a favor del impuesto de renta (niif-preproceso-19).
+   * Créditos de renta − pasivo 2404, sólo si el resultado es positivo:
+   *   - 1355: sólo 135505 (anticipo de renta), 135515 (retención en la
+   *     fuente) y 135595 cuando el nombre es de renta. ICA, IVA retenido,
+   *     sobrantes, contribuciones e impuestos descontables no cuentan.
+   *   - 1805 ("Bienes de arte y cultura" en el PUC oficial) sólo cuando el
+   *     nombre de la cuenta indica un crédito de impuesto (catálogo propio).
    *   0n cuando no hay saldo a favor identificable.
    * Why: el Art. 850 E.T. exige que un saldo a favor de renta se presente como
-   * activo (1355 / 1805), nunca neteado contra el gasto (clase 54). V13 lee este
-   * campo para validar que el reporte declara el saldo a favor en cuenta de
-   * activo y NO compensa contra gasto en P&L.
+   * activo, nunca neteado contra el gasto (clase 54). V13 lee este campo para
+   * validar que el reporte declara el saldo a favor en cuenta de activo y NO
+   * compensa contra gasto en P&L.
    */
   saldoAFavorImpuesto: bigint;
 }
@@ -376,6 +394,14 @@ export interface ValidationResult {
   suggestedAccounts: string[];
   /** Ajustes aplicados al vuelo (informativos, no bloquean). */
   adjustments: string[];
+  /**
+   * Subconjunto de `reasons` sobre la INTEGRIDAD de los datos leídos (importes
+   * ilegibles, columnas de saldo ambiguas, filas con saldos desplazados,
+   * códigos que no son cuentas PUC). A diferencia de un descuadre, ningún
+   * ajuste del curador los resuelve: el Bridge de Cuadratura no debe
+   * degradarlos a informativos. Opcional por retrocompatibilidad.
+   */
+  integrityReasons?: string[];
 }
 
 /** Desglose del patrimonio (Clase 3). */
@@ -618,13 +644,29 @@ export const DEFAULT_PERIOD = 'current';
 const YEAR_REGEX = /\b(20\d{2})\b/;
 
 /**
+ * Mes (abreviado o completo) + año de dos dígitos con separador explícito:
+ * "Dic-24", "dic/25", "Dic'24", "Diciembre-24". Sin separador ("Nov 30") no se
+ * interpreta: podría ser un día del mes.
+ */
+const MONTH_SHORT_YEAR_REGEX =
+  /\b(?:ene(?:ro)?|feb(?:rero|ruary)?|mar(?:zo|ch)?|abr(?:il)?|apr(?:il)?|may(?:o)?|jun(?:io|e)?|jul(?:io|y)?|ago(?:sto)?|aug(?:ust)?|sep(?:tiembre|tember)?|set(?:iembre)?|oct(?:ubre|ober)?|nov(?:iembre|ember)?|dic(?:iembre)?|dec(?:ember)?)\s?[-/.'’]\s?(\d{2})\b/i;
+
+/** Fecha corta dd/mm/aa (o con guion / punto). */
+const SHORT_DATE_YEAR_REGEX = /\b\d{1,2}[-/.]\d{1,2}[-/.](\d{2})\b/;
+
+/**
  * Detecta el año embebido en un string (header de columna o nombre de hoja
  * Excel). Devuelve el año como string ("2024") o `null` si no hay año.
+ * Acepta años de dos dígitos sólo junto a un mes o dentro de una fecha
+ * ("Saldo Dic-24" → "2024", "31/12/24" → "2024"), ingesta-06.
  */
 export function detectYearFromString(value: string | undefined | null): string | null {
   if (!value) return null;
-  const m = String(value).match(YEAR_REGEX);
-  return m ? m[1] : null;
+  const s = String(value);
+  const m = s.match(YEAR_REGEX);
+  if (m) return m[1];
+  const short = s.match(MONTH_SHORT_YEAR_REGEX) ?? s.match(SHORT_DATE_YEAR_REGEX);
+  return short ? `20${short[1]}` : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -677,25 +719,90 @@ export function inferPeriodoTipo(
   return 'indeterminado';
 }
 
+// ---------------------------------------------------------------------------
+// Normalización de encabezados (ingesta-07, ingesta-08)
+// ---------------------------------------------------------------------------
+// Los encabezados se comparan sin tildes, en minúsculas y con espacios/guiones
+// bajos colapsados, como hace `normalizeHeader` del parser bancario. Un CSV
+// Windows-1252 decodificado como UTF-8 llega con U+FFFD en lugar de la vocal
+// acentuada ("C�digo"): se prueban las variantes con cada vocal (o ñ)
+// en su lugar, así "C�digo" casa con "codigo" sin adivinar el archivo.
+// ---------------------------------------------------------------------------
+
+function normalizeHeaderText(header: string | undefined | null): string {
+  return String(header ?? '')
+    .replace(/^﻿/, '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[_\s]+/g, ' ')
+    .trim();
+}
+
+const REPLACEMENT_CHAR = '�';
+const REPLACEMENT_GUESSES = ['o', 'e', 'i', 'a', 'u', 'n'];
+const MAX_REPLACEMENT_CHARS = 3;
+
+/** Variantes de un encabezado normalizado con cada U+FFFD sustituido. */
+function headerVariants(normalized: string): string[] {
+  const count = normalized.split(REPLACEMENT_CHAR).length - 1;
+  if (count === 0) return [normalized];
+  if (count > MAX_REPLACEMENT_CHARS) return [normalized.split(REPLACEMENT_CHAR).join('')];
+  let out = [''];
+  for (const ch of normalized) {
+    out =
+      ch === REPLACEMENT_CHAR
+        ? out.flatMap((prefix) => REPLACEMENT_GUESSES.map((g) => prefix + g))
+        : out.map((prefix) => prefix + ch);
+  }
+  return out;
+}
+
+const DEBIT_WORD = /\b(debitos?|debits?|debe|deb|db|deudor(?:es)?)\b/;
+const CREDIT_WORD = /\b(creditos?|credits?|haber|cred|cr|acreedor(?:es)?)\b/;
+const SALDO_WORD = /\bsaldos?\b/;
+const BALANCE_WORD = /\b(saldos?|balance|neto)\b/;
+/** "Movimiento neto" / "Variación" describen el periodo, no un saldo. */
+const MOVEMENT_WORD = /\b(movimientos?|variacion(?:es)?)\b/;
+/** Comparativo explícito del periodo anterior. */
+const PRIOR_WORD = /\b(comparativo|previous|prior)\b/;
+/** Saldo de apertura del periodo reportado. */
+const OPENING_WORD = /\b(inicial(?:es)?|anterior(?:es)?|apertura|previo|opening|beginning|initial)\b/;
+/** Saldo de cierre del periodo reportado. */
+const CLOSING_WORD = /\b(final(?:es)?|actual(?:es)?|nuevo|cierre|closing|ending|current)\b/;
+
+/** Tipo de una columna de saldo según su encabezado. */
+export type BalanceColumnKind = 'closing' | 'opening' | 'prior' | 'neutral';
+
 /**
  * Determina si un header pertenece a una columna de saldo (final, neto o
- * balance). Acepta variantes con espacios, guiones bajos y mayusculas.
+ * balance). Las columnas de movimiento (débito/crédito, "movimiento neto")
+ * quedan fuera; el par "saldo débito / saldo crédito" se detecta aparte.
  */
 function isBalanceHeader(header: string): boolean {
-  const lower = header.toLowerCase();
-  // Excluye columnas de movimientos (debito/credito)
-  if (/\b(debito|debit|credito|credit|debe|haber)\b/.test(lower)) return false;
-  return /\b(saldo|balance|neto|saldos)\b/.test(lower);
+  return headerVariants(normalizeHeaderText(header)).some((h) => {
+    if (DEBIT_WORD.test(h) || CREDIT_WORD.test(h)) return false;
+    if (MOVEMENT_WORD.test(h) && !SALDO_WORD.test(h)) return false;
+    return BALANCE_WORD.test(h);
+  });
 }
 
 /**
- * Determina si un header es explicitamente "saldo anterior" / comparativo,
- * SIN año explicito. Cuando se usa, el caller debe inferir el año restando 1
- * al periodo principal.
+ * Clasifica un encabezado de saldo: apertura ("saldo inicial", "saldo
+ * anterior"), comparativo explícito, cierre ("saldo final", "nuevo saldo",
+ * "saldo actual") o neutro ("saldo"). Apertura/comparativo se evalúan
+ * primero: "saldo final año anterior" es el cierre del periodo previo.
+ * (Sustituye al antiguo `isPreviousBalanceHeader`, que no reconocía "saldo
+ * inicial" y dejaba la apertura como cifra del periodo — ingesta-06.)
  */
-function isPreviousBalanceHeader(header: string): boolean {
-  const lower = header.toLowerCase();
-  return /\b(saldo[ _]?anterior|previous|comparativo|prior)\b/.test(lower);
+function classifyBalanceHeader(header: string): BalanceColumnKind {
+  let kind: BalanceColumnKind = 'neutral';
+  for (const h of headerVariants(normalizeHeaderText(header))) {
+    if (PRIOR_WORD.test(h)) return 'prior';
+    if (OPENING_WORD.test(h)) return 'opening';
+    if (CLOSING_WORD.test(h)) kind = 'closing';
+  }
+  return kind;
 }
 
 // ---------------------------------------------------------------------------
@@ -734,9 +841,33 @@ export interface ParseTrialBalanceOptions {
 }
 
 interface BalanceColumn {
+  /** Índice de la columna (o de la columna débito en un par saldo débito/crédito). */
   index: number;
-  period: string | null; // null = "saldo anterior" sin año todavia conocido
-  isPrevious: boolean;
+  /** Índice de la columna crédito cuando el saldo viene partido por naturaleza. */
+  creditIndex?: number;
+  period: string;
+  kind: BalanceColumnKind;
+  /** Encabezado original, para los mensajes de validación. */
+  header: string;
+}
+
+interface BalanceColumnDetection {
+  columns: BalanceColumn[];
+  /** Índices que forman pares "saldo débito / saldo crédito" (no son movimientos). */
+  pairIndices: Set<number>;
+  /** Problemas del archivo completo (columnas que no se pueden asignar sin adivinar). */
+  issues: string[];
+}
+
+/** Resultado detallado del parser, para callers que necesitan los metadatos. */
+export interface ParsedTrialBalance {
+  rows: RawAccountRow[];
+  /** Columnas de saldo usadas, en orden del archivo, con su periodo y tipo. */
+  balanceColumns: Array<{ header: string; period: string; kind: BalanceColumnKind }>;
+  /** Índice (sobre las líneas no vacías) de la fila de encabezados; -1 sin datos. */
+  headerLineIndex: number;
+  /** Convención de signos detectada; `null` si `normalizeSignConvention === false`. */
+  signConvention: SignConventionDetection | null;
 }
 
 /**
@@ -747,84 +878,291 @@ export function parseTrialBalanceCSV(
   csvText: string,
   options: ParseTrialBalanceOptions = {},
 ): RawAccountRow[] {
+  return parseTrialBalanceCSVWithMeta(csvText, options).rows;
+}
+
+/**
+ * Filas de preámbulo (razón social, NIT, rango de fechas) que se revisan
+ * buscando la cabecera. Los ERP colombianos anteponen 3 a 10 (ingesta-08).
+ */
+const MAX_HEADER_SCAN_LINES = 30;
+
+/** Encabezados que describen la cuenta, nunca su código. */
+const NAME_LIKE_HEADER = /\b(nombre|descripcion|name|description|detalle|concepto)\b/;
+
+interface HeaderLayout {
+  lineIndex: number;
+  separator: string;
+  rawHeaders: string[];
+  codeIdx: number;
+  nameIdx: number;
+  levelIdx: number;
+  transIdx: number;
+  debitIdx: number;
+  creditIdx: number;
+  balance: BalanceColumnDetection;
+}
+
+/** Separador de la línea, ignorando lo que va entre comillas ("nombre; x"). */
+function detectSeparator(line: string): string {
+  const unquoted = line.replace(/"[^"]*"/g, '');
+  return unquoted.includes('\t') ? '\t' : unquoted.includes(';') ? ';' : ',';
+}
+
+function detectHeaderLayout(
+  line: string,
+  lineIndex: number,
+  options: ParseTrialBalanceOptions,
+): HeaderLayout | null {
+  const separator = detectSeparator(line);
+  const rawHeaders = parseLine(line, separator).map((h) => h.trim());
+  if (rawHeaders.length < 2) return null;
+  const headers = rawHeaders.map((h) => headerVariants(normalizeHeaderText(h)));
+
+  const balance = detectBalanceColumns(rawHeaders, options);
+  const balanceIdx = new Set<number>(balance.pairIndices);
+  rawHeaders.forEach((h, i) => {
+    if (isBalanceHeader(h)) balanceIdx.add(i);
+  });
+
+  const codeIdx = findColumnIndex(
+    headers,
+    ['codigo', 'code', 'cuenta', 'account', 'cta', 'cod'],
+    (i, h) => balanceIdx.has(i) || NAME_LIKE_HEADER.test(h),
+  );
+  const nameIdx = findColumnIndex(
+    headers,
+    ['nombre', 'name', 'descripcion', 'description', 'concepto', 'detalle'],
+    (i) => i === codeIdx || balanceIdx.has(i),
+  );
+  // "Naturaleza" (D/C) no es el nivel de la cuenta: tomarla como nivel dejaba
+  // todas las filas sin nivel reconocible (niif-preproceso-10).
+  const levelIdx = findColumnIndex(
+    headers,
+    ['nivel', 'level', 'tipo', 'type'],
+    (i) => i === codeIdx || i === nameIdx || balanceIdx.has(i),
+  );
+  const transIdx = findColumnIndex(
+    headers,
+    ['transaccional', 'transactional', 'auxiliar', 'movimiento'],
+    (i, h) =>
+      i === codeIdx ||
+      i === nameIdx ||
+      balanceIdx.has(i) ||
+      DEBIT_WORD.test(h) ||
+      CREDIT_WORD.test(h) ||
+      BALANCE_WORD.test(h),
+  );
+  const debitIdx = findColumnIndex(
+    headers,
+    ['debito', 'debitos', 'debit', 'debe', 'db'],
+    (i) => i === codeIdx || i === nameIdx || balanceIdx.has(i),
+  );
+  const creditIdx = findColumnIndex(
+    headers,
+    ['credito', 'creditos', 'credit', 'haber', 'cr'],
+    (i) => i === codeIdx || i === nameIdx || balanceIdx.has(i),
+  );
+
+  return {
+    lineIndex,
+    separator,
+    rawHeaders,
+    codeIdx,
+    nameIdx,
+    levelIdx,
+    transIdx,
+    debitIdx,
+    creditIdx,
+    balance,
+  };
+}
+
+function isUsableHeader(layout: HeaderLayout): boolean {
+  return (
+    layout.codeIdx !== -1 &&
+    (layout.balance.columns.length > 0 || layout.debitIdx !== -1 || layout.creditIdx !== -1)
+  );
+}
+
+const CANONICAL_LEVELS = new Set(['Clase', 'Grupo', 'Cuenta', 'Subcuenta', 'Auxiliar']);
+
+/** Clases PUC de naturaleza débito (el resto se deriva crédito − débito). */
+const DEBIT_NATURE_CLASSES = [1, 5, 6, 7];
+
+function natureBalance(classCode: number, debit: number, credit: number): number {
+  const value = DEBIT_NATURE_CLASSES.includes(classCode) ? debit - credit : credit - debit;
+  return value === 0 ? 0 : value;
+}
+
+function readBalanceCell(cols: string[], col: BalanceColumn, classCode: number): AmountCell {
+  const first = parseAmountCell(cols[col.index]);
+  if (col.creditIndex === undefined) return first;
+  const credit = parseAmountCell(cols[col.creditIndex]);
+  if (first.kind === 'unreadable') return first;
+  if (credit.kind === 'unreadable') return credit;
+  if (first.kind === 'empty' && credit.kind === 'empty') return first;
+  const d = first.kind === 'number' ? first.value : 0;
+  const c = credit.kind === 'number' ? credit.value : 0;
+  return { kind: 'number', value: natureBalance(classCode, d, c) };
+}
+
+function unreadableMessage(code: string, header: string, cell: UnreadableCell): string {
+  const shown = cell.raw.length > 40 ? `${cell.raw.slice(0, 40)}…` : cell.raw;
+  return cell.scientific
+    ? `Cuenta ${code}: el saldo "${shown}" de la columna "${header}" está en notación científica ` +
+        'y perdió precisión al exportarse; exporte el importe completo.'
+    : `Cuenta ${code}: valor ilegible "${shown}" en la columna "${header}"; ` +
+        'no se puede sumar sin adivinar el importe.';
+}
+
+/**
+ * Variante detallada de `parseTrialBalanceCSV`: además de las filas devuelve
+ * las columnas de saldo detectadas (periodo y tipo apertura/cierre), la fila
+ * de encabezados y la convención de signos detectada.
+ */
+export function parseTrialBalanceCSVWithMeta(
+  csvText: string,
+  options: ParseTrialBalanceOptions = {},
+): ParsedTrialBalance {
+  const empty: ParsedTrialBalance = {
+    rows: [],
+    balanceColumns: [],
+    headerLineIndex: -1,
+    signConvention: null,
+  };
   const lines = csvText.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
-  if (lines.length < 2) return [];
-
-  const firstLine = lines[0];
-  const separator = firstLine.includes('\t') ? '\t' : firstLine.includes(';') ? ';' : ',';
-
-  // Headers: conservamos tanto el original (para detectYearFromString, que es
-  // case-insensitive pero no requiere mucho) como el lowercase (para findColumnIndex).
-  const rawHeaders = parseLine(firstLine, separator).map((h) => h.trim());
-  const headers = rawHeaders.map((h) => h.toLowerCase());
-
-  const codeIdx = findColumnIndex(headers, ['codigo', 'code', 'cuenta', 'account', 'cta', 'cod']);
-  const nameIdx = findColumnIndex(headers, ['nombre', 'name', 'descripcion', 'description', 'concepto']);
-  const levelIdx = findColumnIndex(headers, ['nivel', 'level', 'tipo', 'type', 'naturaleza']);
-  const transIdx = findColumnIndex(headers, ['transaccional', 'transactional', 'auxiliar', 'movimiento']);
-  const debitIdx = findColumnIndex(headers, ['debito', 'debit', 'debitos', 'debe', 'db']);
-  const creditIdx = findColumnIndex(headers, ['credito', 'credit', 'creditos', 'haber', 'cr']);
-
-  if (codeIdx === -1) return [];
+  if (lines.length < 2) return empty;
 
   // -------------------------------------------------------------------------
-  // Detectar TODAS las columnas de saldo y mapearlas a periodos.
+  // Cabecera: primera fila (de las primeras 30) con columna de código y
+  // columna de saldo o débito/crédito. Sin candidata se conserva el contrato
+  // previo (primera línea), que no produce filas.
   // -------------------------------------------------------------------------
-  const balanceColumns = detectBalanceColumns(rawHeaders, options);
+  let layout: HeaderLayout | null = null;
+  const scanLimit = Math.min(lines.length - 1, MAX_HEADER_SCAN_LINES);
+  for (let i = 0; i < scanLimit; i++) {
+    const candidate = detectHeaderLayout(lines[i], i, options);
+    if (candidate && isUsableHeader(candidate)) {
+      layout = candidate;
+      break;
+    }
+  }
+  layout ??= detectHeaderLayout(lines[0], 0, options);
+  if (!layout || layout.codeIdx === -1) return empty;
+
+  const { separator, rawHeaders, codeIdx, nameIdx, levelIdx, transIdx, debitIdx, creditIdx } = layout;
+  const balanceColumns = layout.balance.columns;
+  const dcPeriod = options.forcePeriod ?? options.currentYear ?? DEFAULT_PERIOD;
 
   const rows: RawAccountRow[] = [];
+  const numericPeriods = new Set<string>();
 
-  for (let i = 1; i < lines.length; i++) {
+  for (let i = layout.lineIndex + 1; i < lines.length; i++) {
     const cols = parseLine(lines[i], separator);
     const rawCode = (cols[codeIdx] || '').trim().replace(/['"]/g, '');
     const code = rawCode.replace(/[.\-\s]/g, '');
     if (!code || !/^\d/.test(code)) continue;
 
-    const debit = safeNumber(parseNumber(cols[debitIdx]));
-    const credit = safeNumber(parseNumber(cols[creditIdx]));
-
-    let level = levelIdx !== -1 ? (cols[levelIdx] || '').trim() : inferLevel(code);
-    level = normalizeLevel(level);
+    let level = inferLevel(code);
+    if (levelIdx !== -1) {
+      const declared = normalizeLevel((cols[levelIdx] || '').trim());
+      if (CANONICAL_LEVELS.has(declared)) level = declared;
+    }
 
     let transactional = false;
     if (transIdx !== -1) {
-      const val = (cols[transIdx] || '').trim().toLowerCase();
-      transactional = val === 'si' || val === 'sí' || val === 'yes' || val === '1' || val === 'true';
+      const val = normalizeHeaderText(cols[transIdx]);
+      transactional = val === 'si' || val === 'yes' || val === '1' || val === 'true';
     } else {
       transactional = level === 'Auxiliar';
     }
 
     const classCode = parseInt(code[0], 10);
     const balancesByPeriod: Record<string, number> = {};
+    const rowIssues: RawRowParseIssue[] = [];
+    const name = (cols[nameIdx] || '').trim().replace(/['"]/g, '');
+
+    // Más celdas con contenido que encabezados: un separador sin comillas
+    // (p. ej. "Retención en la fuente 2,5%" en un CSV con comas) desplazó los
+    // saldos a la columna vecina, y la cifra leída es la de otra columna. Se
+    // declara como problema bloqueante de todos los periodos; la corrección
+    // de fondo es entrecomillar en el productor del CSV (ingesta-05).
+    if (cols.slice(rawHeaders.length).some((c) => c.trim().length > 0)) {
+      rowIssues.push({
+        period: null,
+        message:
+          `Cuenta ${code}: la fila tiene ${cols.length} columnas y la cabecera ${rawHeaders.length}; ` +
+          'un separador sin comillas (por ejemplo una coma en el nombre) desplazó los saldos y ' +
+          'las cifras de esta fila no son confiables.',
+      });
+    }
 
     if (balanceColumns.length > 0) {
       // Caso normal: hay columnas de saldo identificadas. Cada columna
       // alimenta su periodo correspondiente.
       for (const col of balanceColumns) {
-        const raw = parseNumber(cols[col.index]);
-        if (Number.isNaN(raw)) continue;
-        const period = col.period ?? options.forcePeriod ?? options.currentYear ?? DEFAULT_PERIOD;
-        balancesByPeriod[period] = raw;
+        const cell = readBalanceCell(cols, col, classCode);
+        if (cell.kind === 'number') {
+          balancesByPeriod[col.period] = cell.value;
+          numericPeriods.add(col.period);
+        } else if (cell.kind === 'unreadable') {
+          rowIssues.push({ period: col.period, message: unreadableMessage(code, col.header, cell) });
+        }
       }
     } else if (debitIdx !== -1 || creditIdx !== -1) {
       // Solo hay debito/credito: derivamos el balance segun naturaleza PUC.
-      const computed =
-        [1, 5, 6, 7].includes(classCode) ? debit - credit : credit - debit;
-      const period = options.forcePeriod ?? options.currentYear ?? DEFAULT_PERIOD;
-      balancesByPeriod[period] = computed;
+      // Un débito o crédito ilegible NO se vuelve 0 (niif-preproceso-05).
+      const debit = debitIdx !== -1 ? parseAmountCell(cols[debitIdx]) : EMPTY_CELL;
+      const credit = creditIdx !== -1 ? parseAmountCell(cols[creditIdx]) : EMPTY_CELL;
+      if (debit.kind === 'unreadable') {
+        rowIssues.push({ period: dcPeriod, message: unreadableMessage(code, rawHeaders[debitIdx], debit) });
+      }
+      if (credit.kind === 'unreadable') {
+        rowIssues.push({ period: dcPeriod, message: unreadableMessage(code, rawHeaders[creditIdx], credit) });
+      }
+      if (debit.kind !== 'unreadable' && credit.kind !== 'unreadable') {
+        balancesByPeriod[dcPeriod] = natureBalance(
+          classCode,
+          debit.kind === 'number' ? debit.value : 0,
+          credit.kind === 'number' ? credit.value : 0,
+        );
+        numericPeriods.add(dcPeriod);
+      }
     }
 
-    // Si no se detecto ningun balance para esta fila, la saltamos.
-    if (Object.keys(balancesByPeriod).length === 0) continue;
+    // Sin saldo ni problema de lectura (celdas vacías): la fila no aporta.
+    if (Object.keys(balancesByPeriod).length === 0 && rowIssues.length === 0) continue;
 
-    rows.push({
+    const row: RawAccountRow = {
       code,
-      name: (cols[nameIdx] || '').trim().replace(/['"]/g, ''),
+      name,
       level,
       transactional,
       balancesByPeriod,
-    });
+    };
+    if (rowIssues.length > 0) row.parseIssues = rowIssues;
+    rows.push(row);
   }
+
+  // Una columna sin ningún importe legible no genera snapshot propio: sus
+  // problemas pasan a aplicar a todos los periodos para que no se pierdan.
+  // Las ambigüedades de columnas afectan al archivo completo.
+  const fileIssues: RawRowParseIssue[] = layout.balance.issues.map((message) => ({
+    period: null,
+    message,
+  }));
+  for (const row of rows) {
+    for (const issue of row.parseIssues ?? []) {
+      if (issue.period !== null && !numericPeriods.has(issue.period)) issue.period = null;
+    }
+    if (fileIssues.length > 0) row.parseIssues = [...(row.parseIssues ?? []), ...fileIssues];
+  }
+
+  const meta = {
+    balanceColumns: balanceColumns.map((c) => ({ header: c.header, period: c.period, kind: c.kind })),
+    headerLineIndex: layout.lineIndex,
+  };
 
   // -------------------------------------------------------------------------
   // Normalizacion de la convencion de signos (FASE 0, 2026-08).
@@ -837,116 +1175,163 @@ export function parseTrialBalanceCSV(
   // las clases 2/3/4 para que el resto del pipeline reciba magnitudes de su
   // naturaleza, que es lo que `netIncome = totalRevenue - gastos` y
   // `equationBalance = activo - pasivo - patrimonio` asumen.
-  if (options.normalizeSignConvention === false) return rows;
-  return normalizeSignConvention(rows).rows;
+  if (options.normalizeSignConvention === false) {
+    return { rows, ...meta, signConvention: null };
+  }
+  const normalized = normalizeSignConvention(rows);
+  return { rows: normalized.rows, ...meta, signConvention: normalized.detection };
 }
+
+/** Periodo explícito del encabezado: `saldo [2025-06]` o un año reconocible. */
+function explicitPeriodOf(header: string): string | null {
+  const bracket = header
+    .trim()
+    .match(/^saldo\s*\[(\d{4}(?:-(?:0[1-9]|1[0-2]|Q[1-4]))?|\d{4}-\d{2}-\d{2}\.\.\d{4}-\d{2}-\d{2})\]$/i)?.[1];
+  return bracket ?? detectYearFromString(header);
+}
+
+const BALANCE_KIND_PRIORITY: Record<BalanceColumnKind, number> = {
+  closing: 0,
+  neutral: 1,
+  prior: 2,
+  opening: 3,
+};
 
 /**
  * Detecta las columnas de saldo del header y las mapea a periodos.
  *
- * Reglas:
- *  1. Cualquier header que matchee `isBalanceHeader` y contenga un año
- *     `20\d{2}` es columna de un periodo explicito.
- *  2. Header con "saldo anterior"/"comparativo" sin año -> columna previa,
- *     periodo a inferir como `currentYear - 1`.
- *  3. Header con "saldo"/"balance" sin año y sin "anterior" -> usa
- *     `options.currentYear` o `DEFAULT_PERIOD`.
- *  4. Si tras (1)/(2)/(3) hay ambiguedad por multiples columnas sin año,
- *     se desempata: la primera es "current", la segunda es "previous"
- *     (heuristica: muchos ERPs colombianos exportan "Saldo Final | Saldo Anterior").
+ * Reglas (ingesta-06, ingesta-07, niif-preproceso-02):
+ *  1. "Saldo débito / saldo crédito" (o deudor / acreedor) con el mismo resto
+ *     de encabezado forman UNA columna neta por naturaleza PUC.
+ *  2. Un encabezado con año (`20\d{2}`, "Dic-24", `saldo [2025-06]`) es de ese
+ *     periodo, también bajo `forcePeriod`. Si la apertura y el cierre traen el
+ *     mismo año ("Saldo Inicial 2025 | Saldo Final 2025"), la apertura es el
+ *     cierre del año anterior.
+ *  3. Sin año, el cierre ("saldo final", "nuevo saldo", "saldo actual") o el
+ *     saldo neutro ("saldo") es el periodo actual (`forcePeriod`,
+ *     `currentYear` o `DEFAULT_PERIOD`); la apertura ("saldo inicial", "saldo
+ *     anterior") o el comparativo es el periodo previo (año − 1 o
+ *     `current_anterior`). Bajo `forcePeriod` (una hoja = un periodo) la
+ *     apertura sin año no crea un periodo nuevo.
+ *  4. Dos columnas que caen en el mismo periodo NO se deduplican en silencio:
+ *     se conserva la de cierre y se reporta un problema bloqueante. Ya no hay
+ *     heurística posicional.
  */
 function detectBalanceColumns(
   rawHeaders: string[],
   options: ParseTrialBalanceOptions,
-): BalanceColumn[] {
-  const candidates: Array<BalanceColumn & { rawHeader: string }> = [];
+): BalanceColumnDetection {
+  type Candidate = {
+    index: number;
+    creditIndex?: number;
+    header: string;
+    kind: BalanceColumnKind;
+    year: string | null;
+  };
+  const candidates: Candidate[] = [];
+  const pairIndices = new Set<number>();
 
-  rawHeaders.forEach((header, index) => {
-    if (!isBalanceHeader(header)) return;
-    const explicitPeriod = header.match(/^saldo\s*\[(\d{4}(?:-(?:0[1-9]|1[0-2]|Q[1-4]))?|\d{4}-\d{2}-\d{2}\.\.\d{4}-\d{2}-\d{2})\]$/i)?.[1];
-    const year = explicitPeriod ?? detectYearFromString(header);
-    const prev = isPreviousBalanceHeader(header);
+  // 1. Pares "saldo débito / saldo crédito".
+  const debitSide = new Map<string, number>();
+  const creditSide = new Map<string, number>();
+  rawHeaders.forEach((raw, index) => {
+    for (const h of headerVariants(normalizeHeaderText(raw))) {
+      if (!SALDO_WORD.test(h)) continue;
+      const isDebit = DEBIT_WORD.test(h);
+      if (isDebit === CREDIT_WORD.test(h)) continue;
+      const word = new RegExp((isDebit ? DEBIT_WORD : CREDIT_WORD).source, 'g');
+      const key = h.replace(word, ' ').replace(/\s+/g, ' ').trim();
+      const side = isDebit ? debitSide : creditSide;
+      if (!side.has(key)) side.set(key, index);
+      break;
+    }
+  });
+  for (const [key, debitIndex] of debitSide) {
+    const creditIndex = creditSide.get(key);
+    if (creditIndex === undefined) continue;
+    pairIndices.add(debitIndex);
+    pairIndices.add(creditIndex);
+    candidates.push({
+      index: debitIndex,
+      creditIndex,
+      header: `${rawHeaders[debitIndex]} / ${rawHeaders[creditIndex]}`,
+      kind: classifyBalanceHeader(key),
+      year: explicitPeriodOf(rawHeaders[debitIndex]) ?? explicitPeriodOf(rawHeaders[creditIndex]),
+    });
+  }
+
+  // 2. Columnas de saldo simples.
+  rawHeaders.forEach((raw, index) => {
+    if (pairIndices.has(index) || !isBalanceHeader(raw)) return;
     candidates.push({
       index,
-      period: year, // si null, se resuelve mas abajo
-      isPrevious: prev,
-      rawHeader: header,
+      header: raw,
+      kind: classifyBalanceHeader(raw),
+      year: explicitPeriodOf(raw),
     });
   });
+  candidates.sort((a, b) => a.index - b.index);
+  if (candidates.length === 0) return { columns: [], pairIndices, issues: [] };
 
-  if (candidates.length === 0) return [];
+  // 3. Periodo de cada columna.
+  const forced = options.forcePeriod;
+  const isYear = (p: string | null | undefined): p is string => !!p && /^\d{4}$/.test(p);
+  const isOpeningKind = (k: BalanceColumnKind) => k === 'opening' || k === 'prior';
+  const explicitCurrentYears = candidates
+    .filter((c) => isYear(c.year) && !isOpeningKind(c.kind))
+    .map((c) => parseInt(c.year!, 10));
+  const contextYear = parseInt(forced ?? options.currentYear ?? '', 10);
+  const baseYear = !Number.isNaN(contextYear)
+    ? contextYear
+    : explicitCurrentYears.length > 0
+      ? Math.max(...explicitCurrentYears)
+      : NaN;
+  const currentLabel = forced ?? options.currentYear ?? DEFAULT_PERIOD;
+  const previousLabel = !Number.isNaN(baseYear)
+    ? String(baseYear - 1)
+    : `${forced ?? DEFAULT_PERIOD}_anterior`;
+  const hasCurrentColumn = candidates.some((c) => c.year !== null || !isOpeningKind(c.kind));
 
-  // Si forcePeriod esta seteado, todas las columnas van al mismo periodo.
-  if (options.forcePeriod) {
-    return candidates.map((c) => ({
-      index: c.index,
-      period: options.forcePeriod!,
-      isPrevious: false,
-    }));
-  }
-
-  // Resolucion para columnas sin año:
-  // - currentYear contextual
-  const currentYear = options.currentYear;
-  const currentYearNum = currentYear ? parseInt(currentYear, 10) : NaN;
-  const prevYear =
-    !Number.isNaN(currentYearNum) ? String(currentYearNum - 1) : null;
-
-  // Si tenemos UNA columna explicita "saldo anterior" sin año, le asignamos prevYear.
-  // Si tenemos UNA columna "saldo" sin año, le asignamos currentYear.
-  // Si tenemos DOS columnas sin año (heuristica clasica saldo + saldo anterior):
-  //   la marcada como "previous" -> prevYear; la otra -> currentYear.
   const resolved: BalanceColumn[] = [];
-  const unlabeled = candidates.filter((c) => !c.period);
-
   for (const c of candidates) {
-    if (c.period) {
-      resolved.push({ index: c.index, period: c.period, isPrevious: c.isPrevious });
-      continue;
-    }
-    // sin año: decidir por flag isPrevious
-    if (c.isPrevious) {
-      resolved.push({
-        index: c.index,
-        period: prevYear ?? `${DEFAULT_PERIOD}_anterior`,
-        isPrevious: true,
-      });
-    } else {
-      // Si hay un "saldo anterior" desambiguado y este NO lo es, asume currentYear
-      resolved.push({
-        index: c.index,
-        period: currentYear ?? DEFAULT_PERIOD,
-        isPrevious: false,
-      });
-    }
+    let period: string;
+    if (c.year) period = c.year;
+    else if (!isOpeningKind(c.kind)) period = currentLabel;
+    else if (forced && hasCurrentColumn) continue;
+    else if (forced) period = forced;
+    else period = previousLabel;
+    resolved.push({ index: c.index, creditIndex: c.creditIndex, period, kind: c.kind, header: c.header });
   }
 
-  // Edge case: si tras la resolucion todas terminaron con el mismo periodo
-  // (porque no habia year context) y son 2 columnas, la heuristica del par
-  // saldo/saldo_anterior aplica: marcar la segunda como anterior.
-  if (
-    !currentYear &&
-    unlabeled.length === 2 &&
-    resolved.length === 2 &&
-    resolved[0].period === resolved[1].period
-  ) {
-    resolved[1] = {
-      index: resolved[1].index,
-      period: `${DEFAULT_PERIOD}_anterior`,
-      isPrevious: true,
-    };
-  }
-
-  // Dedupe por periodo: si dos columnas terminan apuntando al mismo periodo
-  // (caso raro de archivos con headers duplicados), prefiere la primera.
-  const seen = new Set<string>();
-  const dedup: BalanceColumn[] = [];
+  // "Saldo Inicial 2025 | Saldo Final 2025": la apertura de 2025 es el cierre 2024.
   for (const r of resolved) {
-    if (seen.has(r.period!)) continue;
-    seen.add(r.period!);
-    dedup.push(r);
+    if (r.kind !== 'opening' || !isYear(r.period)) continue;
+    const clash = resolved.some(
+      (o) => o !== r && o.period === r.period && !isOpeningKind(o.kind),
+    );
+    if (clash) r.period = String(parseInt(r.period, 10) - 1);
   }
-  return dedup;
+
+  // 4. Colisiones: una columna por periodo, y la ambigüedad se reporta.
+  const byPeriod = new Map<string, BalanceColumn[]>();
+  for (const r of resolved) byPeriod.set(r.period, [...(byPeriod.get(r.period) ?? []), r]);
+  const columns: BalanceColumn[] = [];
+  const issues: string[] = [];
+  for (const [period, cols] of byPeriod) {
+    const sorted = [...cols].sort(
+      (a, b) => BALANCE_KIND_PRIORITY[a.kind] - BALANCE_KIND_PRIORITY[b.kind] || a.index - b.index,
+    );
+    columns.push(sorted[0]);
+    if (cols.length > 1) {
+      issues.push(
+        `Las columnas de saldo ${cols.map((c) => `"${c.header}"`).join(', ')} corresponden al mismo ` +
+          `periodo (${period}); no es posible determinar cuál es el saldo del periodo sin adivinar. ` +
+          'Identifique cada columna con su año o como saldo inicial / saldo final.',
+      );
+    }
+  }
+  columns.sort((a, b) => a.index - b.index);
+  return { columns, pairIndices, issues };
 }
 
 // ---------------------------------------------------------------------------
@@ -1274,24 +1659,11 @@ function buildSnapshotForPeriod(
   }));
 
   // -------------------------------------------------------------------------
-  // 1. Leaf rows: aux + subcuentas huerfanas
+  // 1. Leaf rows estructurales (recalculo-07) sin códigos que no son cuentas
+  //    PUC (ingesta-11). Ver `selectLeafRows`.
   // -------------------------------------------------------------------------
-  const auxiliarRows = view.filter((r) => r.transactional || r.level === 'Auxiliar');
-  const subcuentaRows = view.filter((r) => r.level === 'Subcuenta');
-
-  const orphanSubcuentas: typeof view = [];
-  for (const sub of subcuentaRows) {
-    const hasAuxiliarDescendant = auxiliarRows.some(
-      (aux) => aux.code !== sub.code && aux.code.startsWith(sub.code),
-    );
-    if (!hasAuxiliarDescendant) orphanSubcuentas.push(sub);
-  }
-
-  const auxiliarCodes = new Set(auxiliarRows.map((r) => r.code));
-  const leafRows = [
-    ...auxiliarRows,
-    ...orphanSubcuentas.filter((r) => !auxiliarCodes.has(r.code)),
-  ];
+  const leafSelection = selectLeafRows(view, period);
+  const leafRows = leafSelection.leafRows;
 
   const classRows = view.filter((r) => r.level === 'Clase');
 
@@ -1430,7 +1802,11 @@ function buildSnapshotForPeriod(
   // y `equityBreakdown.utilidadEjercicio` (ambos sincronizados por R8).
   // -------------------------------------------------------------------------
   const adjustments: string[] = [];
-  const validationReasons: string[] = [];
+  const integrityReasons = [
+    ...leafSelection.reasons,
+    ...collectParseIssueReasons(allRows, period),
+  ];
+  const validationReasons: string[] = [...integrityReasons];
   // The current input contract uses JS numbers. BigInt after rounding cannot
   // recover cents already lost by parsing or by an unsafe aggregate.
   const monetaryValues = [
@@ -1481,32 +1857,27 @@ function buildSnapshotForPeriod(
   const utilidadAntesImpuestos = ingresosNetos - (gastosTotales - impuestoCausadoPeriodo);
 
   // -------------------------------------------------------------------------
-  // Saldo a favor del impuesto de renta (Pulido NIIF PYME Grupo 2).
-  // Detector cents:
-  //   1. Si grupo 5404 acreedor (saldo crédito → balance < 0 en clase 5
-  //      cuya naturaleza es deudora) → magnitud absoluta del crédito.
-  //   2. Si 5404 ausente y 1805 (Impuesto corriente activo) > 0 → ese saldo.
-  //   3. Si 1355 (Anticipo de impuestos) > 0 sin 1805 ni 5404 → ese saldo.
-  //   0 cuando no hay saldo a favor identificable.
+  // Saldo a favor del impuesto de renta (niif-preproceso-19, decisión fase 3).
+  //   Créditos de renta = 135505 (anticipo de renta) + 135515 (retención en
+  //   la fuente) + 135595 con nombre de renta + 1805 cuyo NOMBRE indica un
+  //   crédito de impuesto (en el PUC oficial 1805 es "Bienes de arte y
+  //   cultura"). ICA, IVA retenido, sobrantes, contribuciones e impuestos
+  //   descontables no son renta. 5404 no existe en el PUC (grupo 54 = 5405).
+  //   Saldo a favor = créditos de renta − pasivo 2404, sólo si es positivo.
   // Why: el Art. 850 E.T. exige que un saldo a favor de renta se presente
-  // como activo (1355 / 1805), nunca neteado contra el gasto (clase 54).
+  // como activo, nunca neteado contra el gasto (clase 54); presentar como
+  // "saldo a favor" una obra de arte o un anticipo de ICA es una cifra falsa.
   // -------------------------------------------------------------------------
-  // ITEM 1 — cent-exact: estos saldos se restan/comparan contra
-  // controlTotals al centavo (R16, art. 850 E.T.). Acumular en cents
-  // garantiza que el "Neto a Pagar" cuadre exactamente.
-  const saldo5404 = sumLeavesPrecise(leafRows.filter((r) => r.code.startsWith('5404')));
-  const saldo1805 = sumLeavesPrecise(leafRows.filter((r) => r.code.startsWith('1805')));
-  const saldo1355 = sumLeavesPrecise(leafRows.filter((r) => r.code.startsWith('1355')));
-
-  let saldoAFavorImpuesto = 0;
-  if (saldo5404 < 0) {
-    // 5404 acreedor: clase 5 con saldo negativo es crédito (Art. 850 E.T.).
-    saldoAFavorImpuesto = Math.abs(saldo5404);
-  } else if (saldo1805 > 0) {
-    saldoAFavorImpuesto = saldo1805;
-  } else if (saldo1355 > 0) {
-    saldoAFavorImpuesto = saldo1355;
-  }
+  // ITEM 1 — cent-exact: créditos y pasivo se netean en centavos.
+  const creditosRentaCents = toCents(
+    sumLeavesPrecise(leafRows.filter((r) => isRentaCreditAccount(r.code, r.name))),
+  );
+  const pasivoRenta2404Cents = toCents(
+    sumLeavesPrecise(leafRows.filter((r) => r.code.startsWith('2404'))),
+  );
+  const saldoAFavorCents = creditosRentaCents - pasivoRenta2404Cents;
+  const saldoAFavorImpuesto =
+    saldoAFavorCents > BigInt(0) ? Number(saldoAFavorCents) / 100 : 0;
 
   // -------------------------------------------------------------------------
   // Wave 2.F4 — Devoluciones 4175 (Parte 1.3 spec v2.0).
@@ -1797,6 +2168,7 @@ function buildSnapshotForPeriod(
     reasons: validationReasons,
     suggestedAccounts: Array.from(new Set(suggestedAccounts)),
     adjustments,
+    integrityReasons,
   };
 
   return {
@@ -2262,74 +2634,147 @@ function parseLine(line: string, separator: string): string[] {
   return result;
 }
 
+// ---------------------------------------------------------------------------
+// Importes (ingesta-02, niif-preproceso-05)
+// ---------------------------------------------------------------------------
+// Regla MORFOLÓGICA, no posicional (misma idea que `parseMoneyAmount` del
+// parser bancario):
+//   - Un único tipo de separador es de MILES sólo si la cadena casa
+//     ^[1-9]\d{0,2}([.,]\d{3})+$ — "1.234" = 1234, "1.234.567", "1,234,567".
+//     En formato CO el primer grupo tiene 1-3 dígitos y no empieza por 0, así
+//     que "1234.567" o "0.125" no pueden ser miles.
+//   - Un único separador que no casa la agrupación es DECIMAL: "1234.567",
+//     "300.29999999999995" (valor crudo de una fórmula de Excel), "1234,5".
+//   - Con ambos separadores el último es el decimal y la parte entera debe
+//     estar bien agrupada ("1.234.567,89", "1,234,567.89").
+//   - Varios separadores iguales sin agrupación válida ("1.23.456") o una
+//     parte entera mal agrupada son ambiguos → ilegible.
+//   - Notación científica: el ruido sub-centavo de una resta en Excel
+//     (String(n) de |n| < 1e-6, p. ej. "1.4551915228366852e-11") vale 0; una
+//     magnitud material ("1.23457E+11") perdió precisión al exportar desde
+//     Excel → ilegible, nunca un importe aproximado.
+//   - U+2212 y los guiones tipográficos son signo menos; el guion solo ("-")
+//     es el cero del formato contable de Excel y cuenta como celda vacía.
+// Ambigüedad residual irreducible: String(1.234) === "1.234" (un valor < 1.000
+// con exactamente 3 decimales) se lee como mil doscientos treinta y cuatro. Se
+// resuelve en el PRODUCTOR del CSV (nunca más de 2 decimales), no aquí.
+// ---------------------------------------------------------------------------
+
+type UnreadableCell = { kind: 'unreadable'; raw: string; scientific: boolean };
+type AmountCell = { kind: 'empty' } | { kind: 'number'; value: number } | UnreadableCell;
+
+const EMPTY_CELL: AmountCell = { kind: 'empty' };
+const SUB_CENT = 0.005;
+const GROUPED_DOT = /^[1-9]\d{0,2}(\.\d{3})+$/;
+const GROUPED_COMMA = /^[1-9]\d{0,2}(,\d{3})+$/;
+
+function parseAmountCell(val: string | undefined | null): AmountCell {
+  if (val === undefined || val === null) return EMPTY_CELL;
+  const original = String(val).trim();
+  const unreadable = (scientific = false): AmountCell => ({ kind: 'unreadable', raw: original, scientific });
+
+  let s = original
+    .replace(/[−‒–—﹣－]/g, '-')
+    .replace(/\b(COP|USD|EUR)\b/gi, '')
+    .replace(/[$€£"\s]/g, '')
+    // Apóstrofo inicial = prefijo de texto de Excel; interior = separador de
+    // millones latinoamericano ("1'234.567"), equivalente al punto de miles.
+    .replace(/^['’`´]/, '')
+    .replace(/['’`´]/g, '.');
+  if (s.length === 0 || /^-+$/.test(s)) return EMPTY_CELL;
+
+  let negative = false;
+  const paren = s.match(/^\((.*)\)$/);
+  if (paren) {
+    negative = true;
+    s = paren[1];
+  }
+  if (s.endsWith('-')) {
+    negative = !negative;
+    s = s.slice(0, -1);
+  }
+  if (s.startsWith('-')) {
+    negative = !negative;
+    s = s.slice(1);
+  }
+  if (s.startsWith('+')) s = s.slice(1);
+  if (s.length === 0) return EMPTY_CELL;
+
+  const sci = s.match(/^(\d+(?:[.,]\d+)?)[eE]([-+]?\d+)$/);
+  if (sci) {
+    const value = Number(`${sci[1].replace(',', '.')}e${sci[2]}`);
+    return Number.isFinite(value) && Math.abs(value) < SUB_CENT
+      ? { kind: 'number', value: 0 }
+      : unreadable(true);
+  }
+
+  if (!/^[\d.,]+$/.test(s) || !/\d/.test(s)) return unreadable();
+
+  const dots = (s.match(/\./g) ?? []).length;
+  const commas = (s.match(/,/g) ?? []).length;
+  let normalized: string;
+  if (dots > 0 && commas > 0) {
+    const decimalSep = s.lastIndexOf(',') > s.lastIndexOf('.') ? ',' : '.';
+    const parts = s.split(decimalSep);
+    if (parts.length !== 2) return unreadable();
+    const [intPart, fraction] = parts;
+    const grouped = decimalSep === ',' ? GROUPED_DOT : GROUPED_COMMA;
+    if (!grouped.test(intPart) || !/^\d*$/.test(fraction)) return unreadable();
+    normalized = `${intPart.replace(/[.,]/g, '')}.${fraction}`;
+  } else if (dots === 0 && commas === 0) {
+    normalized = s;
+  } else {
+    const sep = dots > 0 ? '.' : ',';
+    if ((sep === '.' ? GROUPED_DOT : GROUPED_COMMA).test(s)) {
+      normalized = s.split(sep).join('');
+    } else if (dots + commas === 1) {
+      normalized = s.replace(sep, '.');
+    } else {
+      return unreadable();
+    }
+  }
+
+  const n = Number(normalized);
+  if (!Number.isFinite(n) || !/\d/.test(normalized)) return unreadable();
+  if (n === 0) return { kind: 'number', value: 0 };
+  return { kind: 'number', value: negative ? -n : n };
+}
+
 /**
- * parseNumber — robusto contra formatos diversos de ERP colombianos.
+ * parseNumber — importe de un balance en formato CO, EN-US o `String(number)`
+ * de JS. Devuelve `NaN` para celdas vacías y para cadenas ambiguas o
+ * ilegibles; el parser del balance distingue ambos casos y registra las
+ * ilegibles como motivo de validación.
  */
 export function parseNumber(val: string | undefined): number {
-  if (val === undefined || val === null) return NaN;
-  let cleaned = String(val).trim();
-  if (cleaned.length === 0) return NaN;
-
-  cleaned = cleaned
-    .replace(/\b(COP|USD|EUR)\b/gi, '')
-    .replace(/[$€£'"\s]/g, '')
-    .trim();
-  if (cleaned.length === 0) return NaN;
-
-  let isNegative = false;
-  if (/^\(.*\)$/.test(cleaned)) {
-    isNegative = true;
-    cleaned = cleaned.slice(1, -1).trim();
-  }
-
-  if (cleaned.endsWith('-')) {
-    isNegative = !isNegative;
-    cleaned = cleaned.slice(0, -1).trim();
-  }
-  if (cleaned.startsWith('-')) {
-    isNegative = !isNegative;
-    cleaned = cleaned.slice(1).trim();
-  }
-  if (cleaned.startsWith('+')) cleaned = cleaned.slice(1).trim();
-
-  if (cleaned.length === 0) return NaN;
-  if (!/^[\d.,]+$/.test(cleaned)) return NaN;
-
-  const hasDot = cleaned.includes('.');
-  const hasComma = cleaned.includes(',');
-  const lastDot = cleaned.lastIndexOf('.');
-  const lastComma = cleaned.lastIndexOf(',');
-
-  let normalized: string;
-  if (hasDot && hasComma) {
-    if (lastComma > lastDot) normalized = cleaned.replace(/\./g, '').replace(',', '.');
-    else normalized = cleaned.replace(/,/g, '');
-  } else if (hasDot) {
-    const digitsAfter = cleaned.length - lastDot - 1;
-    const occurrences = (cleaned.match(/\./g) || []).length;
-    if (occurrences === 1 && digitsAfter <= 2) normalized = cleaned;
-    else normalized = cleaned.replace(/\./g, '');
-  } else if (hasComma) {
-    const digitsAfter = cleaned.length - lastComma - 1;
-    const occurrences = (cleaned.match(/,/g) || []).length;
-    if (occurrences === 1 && digitsAfter <= 2) normalized = cleaned.replace(',', '.');
-    else normalized = cleaned.replace(/,/g, '');
-  } else {
-    normalized = cleaned;
-  }
-
-  const num = parseFloat(normalized);
-  if (Number.isNaN(num)) return NaN;
-  return isNegative ? -num : num;
+  const cell = parseAmountCell(val);
+  return cell.kind === 'number' ? cell.value : NaN;
 }
 
-function safeNumber(val: number): number {
-  return Number.isNaN(val) ? 0 : val;
-}
-
-function findColumnIndex(headers: string[], candidates: string[]): number {
+/**
+ * Busca la columna cuyo encabezado (normalizado, con sus variantes U+FFFD)
+ * coincide con un candidato. Primero coincidencia exacta; después contención
+ * para candidatos de más de 3 letras y palabra completa para los cortos
+ * ("cr", "db", "cod", "cta"): "descripcion" ya no casa con "cr".
+ */
+function findColumnIndex(
+  headers: string[][],
+  candidates: string[],
+  exclude: (index: number, header: string) => boolean = () => false,
+): number {
+  const allowed = (i: number) => !headers[i].some((h) => exclude(i, h));
   for (const candidate of candidates) {
-    const idx = headers.findIndex((h) => h.includes(candidate));
+    const idx = headers.findIndex((variants, i) => allowed(i) && variants.includes(candidate));
+    if (idx !== -1) return idx;
+  }
+  for (const candidate of candidates) {
+    const idx = headers.findIndex(
+      (variants, i) =>
+        allowed(i) &&
+        variants.some((h) =>
+          candidate.length > 3 ? h.includes(candidate) : h.split(/[^a-z0-9]+/).includes(candidate),
+        ),
+    );
     if (idx !== -1) return idx;
   }
   return -1;
@@ -2352,6 +2797,163 @@ function normalizeLevel(level: string): string {
   if (l.includes('auxiliar') || l.includes('aux') || l.includes('detalle')) return 'Auxiliar';
   if (l.includes('cuenta') || l === 'account') return 'Cuenta';
   return level;
+}
+
+// ---------------------------------------------------------------------------
+// Selección de hojas (recalculo-07) y códigos que no son cuentas (ingesta-11)
+// ---------------------------------------------------------------------------
+// Hoja = fila cuyo código no es prefijo de ningún otro código del archivo,
+// cualquiera que sea el nivel declarado. Antes sólo eran hoja las filas
+// Auxiliar/transaccionales y las Subcuenta sin auxiliares: un balance
+// exportado a nivel Cuenta (4 dígitos) quedaba en $0 y una cuenta sin
+// descendientes en un archivo mixto se omitía; una fila marcada transaccional
+// con subcuentas se sumaba dos veces.
+//
+// Identificaciones de tercero en la columna código (cédula 79123456, NIT
+// 1020304050) no son cuentas: sin cuenta padre en el archivo y con un grupo
+// que no existe en el PUC (x0, 0x, 63-69, 75-79) se excluyen de los totales y
+// bloquean. En un archivo jerárquico, un código largo sin ninguna cuenta padre
+// también bloquea (se conserva: puede ser una cuenta sin mayor exportado).
+// ---------------------------------------------------------------------------
+
+interface LeafCandidate {
+  code: string;
+  name: string;
+  level: string;
+  transactional: boolean;
+  balance: number;
+}
+
+const MAX_LISTED_CODES = 10;
+/** Fracción mínima de códigos largos con cuenta padre para tratar el archivo como jerárquico. */
+const HIERARCHICAL_MIN_SHARE = 0.8;
+const HIERARCHICAL_MIN_LONG_CODES = 5;
+
+function isImplausiblePucGroup(code: string): boolean {
+  const cls = code[0];
+  const grp = code[1];
+  if (cls === '0' || grp === '0') return true;
+  if (cls === '6' && grp >= '3') return true;
+  if (cls === '7' && grp >= '5') return true;
+  return false;
+}
+
+function listCodes(rows: LeafCandidate[]): string {
+  const shown = rows
+    .slice(0, MAX_LISTED_CODES)
+    .map((r) => `${r.code} ${r.name} ($${formatCOP(r.balance)})`)
+    .join(', ');
+  return rows.length > MAX_LISTED_CODES ? `${shown} y ${rows.length - MAX_LISTED_CODES} más` : shown;
+}
+
+function selectLeafRows<T extends LeafCandidate>(
+  view: T[],
+  period: string,
+): { leafRows: T[]; reasons: string[] } {
+  const codeSet = new Set(view.map((r) => r.code));
+  const hasAncestor = (code: string): boolean => {
+    for (let k = code.length - 1; k >= 4; k--) {
+      if (codeSet.has(code.slice(0, k))) return true;
+    }
+    return false;
+  };
+
+  const notAccounts = view.filter(
+    (r) => r.code.length >= 8 && !hasAncestor(r.code) && isImplausiblePucGroup(r.code),
+  );
+  const excluded = new Set<T>(notAccounts);
+  const accounts = view.filter((r) => !excluded.has(r));
+
+  const prefixes = new Set<string>();
+  for (const r of accounts) {
+    for (let k = 1; k < r.code.length; k++) prefixes.add(r.code.slice(0, k));
+  }
+  const structural = accounts.filter((r) => !prefixes.has(r.code));
+
+  // Código repetido con niveles distintos (fila de mayor + fila auxiliar con
+  // el mismo código): se suman sólo las auxiliares/transaccionales, como antes.
+  const isAux = (r: T) => r.transactional || r.level === 'Auxiliar';
+  const codesWithAux = new Set(structural.filter(isAux).map((r) => r.code));
+  const leafRows = structural.filter((r) => isAux(r) || !codesWithAux.has(r.code));
+
+  const reasons: string[] = [];
+  const flaggedNotAccounts = notAccounts.filter((r) => r.balance !== 0);
+  if (flaggedNotAccounts.length > 0) {
+    reasons.push(
+      `[${period}] Códigos que no corresponden a un grupo PUC ni tienen cuenta padre en el archivo ` +
+        `(posible NIT o cédula de tercero en la columna código): ${listCodes(flaggedNotAccounts)}. ` +
+        'Se excluyeron de los totales; revise el archivo.',
+    );
+  }
+
+  const longCodes = accounts.filter((r) => r.code.length >= 8);
+  const uniqueLong = new Set(longCodes.map((r) => r.code));
+  const withAncestor = [...uniqueLong].filter(hasAncestor).length;
+  if (
+    uniqueLong.size >= HIERARCHICAL_MIN_LONG_CODES &&
+    withAncestor / uniqueLong.size >= HIERARCHICAL_MIN_SHARE
+  ) {
+    const orphans = longCodes.filter((r) => !hasAncestor(r.code) && r.balance !== 0);
+    if (orphans.length > 0) {
+      reasons.push(
+        `[${period}] Códigos sin cuenta padre en un archivo jerárquico (posible identificación de ` +
+          `tercero o cuenta sin mayor exportado): ${listCodes(orphans)}. Se sumaron como auxiliares; ` +
+          'confirme que son cuentas del catálogo.',
+      );
+    }
+  }
+
+  return { leafRows, reasons };
+}
+
+/** Máximo de valores ilegibles citados uno a uno por periodo. */
+const MAX_PARSE_ISSUE_REASONS = 10;
+
+/**
+ * Motivos de validación del periodo a partir de los problemas de lectura del
+ * parser (niif-preproceso-05, ingesta-06). `period === null` aplica a todos.
+ */
+function collectParseIssueReasons(rows: RawAccountRow[], period: string): string[] {
+  const messages = new Set<string>();
+  for (const row of rows) {
+    for (const issue of row.parseIssues ?? []) {
+      if (issue.period === null || issue.period === period) messages.add(issue.message);
+    }
+  }
+  const all = [...messages];
+  const reasons = all.slice(0, MAX_PARSE_ISSUE_REASONS).map((m) => `[${period}] ${m}`);
+  if (all.length > MAX_PARSE_ISSUE_REASONS) {
+    reasons.push(
+      `[${period}] … y ${all.length - MAX_PARSE_ISSUE_REASONS} problemas de lectura más en el archivo.`,
+    );
+  }
+  return reasons;
+}
+
+// ---------------------------------------------------------------------------
+// Créditos del impuesto de renta (niif-preproceso-19, decisión fase 3)
+// ---------------------------------------------------------------------------
+const TAX_CREDIT_NAME =
+  /\b(impuestos?|anticipos?|retencion(?:es)?|autorretencion(?:es)?|saldos? a favor|sobrantes?)\b/;
+const RENTA_NAME = /\b(renta|retencion en la fuente|autorretencion(?:es)?)\b/;
+const NON_RENTA_TAX_NAME =
+  /\b(ica|reteica|industria y comercio|iva|reteiva|impuestos? (?:a|sobre) las ventas|descontables?|contribucion(?:es)?|timbre|predial|gmf)\b/;
+
+/**
+ * ¿La cuenta es un crédito del impuesto de renta (anticipo, retención en la
+ * fuente, autorretención) según la decisión de catálogo de la fase 3?
+ * Exportada para que otros detectores (p. ej. `repair/adjustments.ts`) usen
+ * la misma regla en lugar de duplicarla.
+ */
+export function isRentaCreditAccount(code: string, name: string): boolean {
+  const n = normalizeHeaderText(name);
+  if (NON_RENTA_TAX_NAME.test(n)) return false;
+  if (code.startsWith('1805')) return TAX_CREDIT_NAME.test(n);
+  if (!code.startsWith('1355')) return false;
+  const subcuenta = code.slice(0, 6);
+  if (subcuenta === '135505' || subcuenta === '135515') return true;
+  if (subcuenta === '135595' || code.length < 6) return RENTA_NAME.test(n);
+  return false;
 }
 
 function findMissingAccountsForClass(
@@ -2506,14 +3108,32 @@ function curatorFindingToDiscrepancy(
 }
 
 /**
- * Ordena periodos ascendentemente. Periodos numericos (años) se ordenan
- * naturalmente; etiquetas no numericas (DEFAULT_PERIOD, etc.) van al final.
+ * Clave cronológica (AAAAMM) de una etiqueta de periodo: "2025" es el cierre
+ * 2025-12, "2025-06" junio, "2025-Q2" el cierre del trimestre y un rango
+ * "AAAA-MM-DD..AAAA-MM-DD" su fecha final. `null` si no es una fecha.
+ */
+function periodSortKey(period: string): number | null {
+  let m = period.match(/^(20\d{2})$/);
+  if (m) return parseInt(m[1], 10) * 100 + 12;
+  m = period.match(/^(20\d{2})-(0[1-9]|1[0-2])$/);
+  if (m) return parseInt(m[1], 10) * 100 + parseInt(m[2], 10);
+  m = period.match(/^(20\d{2})-Q([1-4])$/i);
+  if (m) return parseInt(m[1], 10) * 100 + parseInt(m[2], 10) * 3;
+  m = period.match(/^\d{4}-\d{2}-\d{2}\.\.(20\d{2})-(0[1-9]|1[0-2])-\d{2}$/);
+  if (m) return parseInt(m[1], 10) * 100 + parseInt(m[2], 10);
+  return null;
+}
+
+/**
+ * Ordena periodos ascendentemente. Etiquetas con fecha ("2024", "2025-06",
+ * "2025-Q2", rangos) se ordenan cronológicamente entre sí; etiquetas sin
+ * fecha (DEFAULT_PERIOD, nombres de hoja) van al final.
  */
 function sortPeriodsAscending(periods: string[]): string[] {
   return [...periods].sort((a, b) => {
-    const ay = /^20\d{2}$/.test(a) ? parseInt(a, 10) : null;
-    const by = /^20\d{2}$/.test(b) ? parseInt(b, 10) : null;
-    if (ay !== null && by !== null) return ay - by;
+    const ay = periodSortKey(a);
+    const by = periodSortKey(b);
+    if (ay !== null && by !== null) return ay - by || a.localeCompare(b);
     if (ay !== null) return -1;
     if (by !== null) return 1;
     // Heuristica: "*_anterior" < "current"
