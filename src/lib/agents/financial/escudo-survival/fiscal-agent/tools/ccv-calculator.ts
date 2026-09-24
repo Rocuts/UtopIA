@@ -18,8 +18,12 @@ const CIEN = BigInt(100);
 
 export const TTD_UNAVAILABLE_REASON = 'TTD no determinable: faltan impuesto depurado (ID), utilidad depurada (UD) y verificación del ámbito del Art. 240 par. 6 E.T. F09 es una razón contable, no la TTD.';
 
-/** The accounting anchor has neither ID nor UD. Never substitute UAI for UD.
- * Source: DIAN Concepto 4228 de 2026, paragraph 4.
+/**
+ * El Âncora contable no trae impuesto depurado (ID) ni utilidad depurada (UD):
+ * la TTD del parágrafo 6 del Art. 240 E.T. se define como ID / UD con sus
+ * depuraciones (texto del parágrafo en ley_2277_2022.md), así que la alerta
+ * queda N/D. Nunca se sustituye la UD por la UAI ni el ID por el impuesto
+ * contable.
  */
 export function buildAlertaTasaMinima(anchor: FiscalAnchorBlock): CcvAlertaTasaMinima {
   return {
