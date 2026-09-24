@@ -54,6 +54,7 @@ import {
 import type { PeriodSnapshot } from '@/lib/preprocessing/trial-balance';
 import type { NiifReportJson } from '../contracts/niif-report';
 import { esfTermSubtotalMismatches } from '../validators/niif-json-validator';
+import { balanceTermOfLabel } from '@/lib/export/statement-presentation';
 
 /**
  * Lo mínimo que necesita el reconciliador. Se define estructuralmente para que
@@ -554,6 +555,48 @@ function projectSection(
 }
 
 /**
+ * `true` si el rótulo nombra un plazo ("no corriente", "corto plazo",
+ * "non-current", "long-term"…): no puede acompañar al grupo en el otro bloque.
+ */
+function namesBalanceTerm(label: string): boolean {
+  const t = label.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return /\bcorrientes?\b|\b(?:corto|largo|mediano)\s+plazo\b|\b(?:non)?current\b|\b(?:short|long)[-\s]term\b/.test(t);
+}
+
+/**
+ * Plazo con que el MODELO presentó cada renglón con código de su sección: el
+ * del subtotal que cierra su bloque o, sin él, el del encabezado que lo abre
+ * (la misma lectura que E27 y la desambiguación de grupos partidos, en
+ * español o inglés). `null` para renglones sin código o fuera de un bloque.
+ */
+function termsOfModelRows(
+  section: 'assets' | 'liabilities',
+  lines: ReadonlyArray<{ account: string | null; label: string }>,
+): Array<BalanceTerm | null> {
+  const terms: Array<BalanceTerm | null> = lines.map(() => null);
+  let header: BalanceTerm | null = null;
+  let pending: number[] = [];
+  lines.forEach((l, i) => {
+    if (l.account !== null && l.account.trim() !== '') {
+      terms[i] = header;
+      pending.push(i);
+      return;
+    }
+    const kind = balanceTermOfLabel(section, l.label);
+    if (!kind) return;
+    if (kind.header) {
+      header = kind.term;
+      pending = [];
+      return;
+    }
+    for (const j of pending) terms[j] = kind.term;
+    pending = [];
+    header = null;
+  });
+  return terms;
+}
+
+/**
  * Ordena renglones de grupo PUC de dos dígitos en bloques corriente / no
  * corriente con su subtotal (level 3, sin código), según el plazo de cada
  * renglón. Auditoría 2026-09 (niif-contrato-07): NIIF PYMES 4.4 exige
@@ -680,6 +723,32 @@ export function projectSectionsFromSnapshot<T extends ReconcilableReport>(
     const labelByAccount = new Map(
       previous.filter((l) => l.account).map((l) => [l.account as string, l.label]),
     );
+    // Rótulo del modelo por grupo Y plazo (revisión I5-niif). Con la
+    // sustitución por E27 un grupo cambia de bloque justamente porque el
+    // modelo lo ubicó mal, y su rótulo puede nombrar ese plazo ("Otros pasivos
+    // no corrientes" bajo "Total pasivo corriente"). El rótulo que el modelo
+    // escribió para un bloque se usa en ese bloque; en el otro sólo si no
+    // nombra un plazo (si lo nombra, rige el del catálogo). Sin plazo
+    // reconocible en la sección del modelo, el de su código, como antes.
+    const modelTerms = byTerm && section !== 'equity' ? termsOfModelRows(section, previous) : null;
+    const labelByKey = new Map<string, string>();
+    const termedAccounts = new Set<string>();
+    if (modelTerms) {
+      previous.forEach((l, i) => {
+        const term = modelTerms[i];
+        if (!l.account || term === null) return;
+        termedAccounts.add(l.account);
+        const key = projectionKey(l.account, term);
+        if (!labelByKey.has(key)) labelByKey.set(key, l.label);
+      });
+    }
+    const modelLabel = (account: string, term: BalanceTerm | null): string | undefined => {
+      if (term === null || !termedAccounts.has(account)) return labelByAccount.get(account);
+      const own = labelByKey.get(projectionKey(account, term));
+      if (own !== undefined) return own;
+      const other = labelByKey.get(projectionKey(account, term === 'current' ? 'nonCurrent' : 'current'));
+      return other !== undefined && !namesBalanceTerm(other) ? other : undefined;
+    };
     // Cifra comparativa del MISMO grupo PUC y plazo, por la misma proyección
     // determinista. Ver la nota de `fillComparativeBreakdownFromSnapshot`.
     const comparativeByKey = buildComparativeCentsByKey(comparativeSnapshot, section, byTerm);
@@ -690,7 +759,7 @@ export function projectSectionsFromSnapshot<T extends ReconcilableReport>(
         term: row.term,
         line: {
           account: row.account,
-          label: labelByAccount.get(row.account) ?? row.label,
+          label: modelLabel(row.account, row.term) ?? row.label,
           amountPrimary: serializeMoneyCop(row.cents),
           amountComparative: cmp ? serializeMoneyCop(cmp.cents) : null,
           level: 2,
