@@ -198,6 +198,10 @@ export function narrativeSourcesFromPreprocessed(
 /** Verbos que introducen el monto de un saldo en prosa ("asciende a", "es de"). */
 const AMOUNT_VERBS = String.raw`(?:asciende|ascendi[oó]|ascender[aá]|es\s+de|fue\s+de|cerr[oó]\s+en|totaliza|totaliz[oó]|suma|sum[oó])`;
 
+/** Mención de ingresos con monto (prosa) y rótulo de fila de tabla. */
+const INGRESOS_RE = /\bingresos\s+(?:operacionales\s+netos|operacionales|netos|totales|de\s+actividades\s+ordinarias)\b/gi;
+const INGRESOS_ROW_RE = /^ingresos(?:\s+(?:operacionales(?:\s+netos)?|netos|totales|de actividades ordinarias))?$/i;
+
 const ND_PREPROCESSOR = {
   es: 'el preprocesador lo publica N/D (sin base verificable)',
   en: 'the preprocessor publishes it as N/A (no verifiable base)',
@@ -264,9 +268,12 @@ export function buildNarrativeConcepts(sources: NarrativeAnchorSources): Narrati
       // "Total patrimonio", "el patrimonio al cierre", "el patrimonio al 31 de
       // diciembre de 2025" (e2e-niif-10) y "el patrimonio asciende a" (notas
       // de Gobierno). "El patrimonio está compuesto por capital de $X" NO es
-      // el total: sin verbo de saldo no se juzga.
+      // el total: sin verbo de saldo no se juzga. "El total de pasivos y
+      // patrimonio asciende a $X" tampoco: X es pasivo + patrimonio (= el
+      // activo), no el patrimonio (revisión I5-3; frase habitual de las notas
+      // de la Parte I).
       re: new RegExp(
-        String.raw`\b(?:total\s+(?:del?\s+)?patrimonio|patrimonio\s+(?:total|al\s+cierre|al\s+31\s+de\s+diciembre(?:\s+(?:de|del)\s+\d{4})?)|patrimonio(?:\s+(?:neto|total))?(?:\s+de\s+la\s+(?:sociedad|compa[nñ][ií]a|empresa|entidad))?\s+${AMOUNT_VERBS})\b`,
+        String.raw`(?<!\bpasivos?\s*(?:y|\+|m[aá]s)\s*(?:el\s+)?)\b(?:total\s+(?:del?\s+)?patrimonio|patrimonio\s+(?:total|al\s+cierre|al\s+31\s+de\s+diciembre(?:\s+(?:de|del)\s+\d{4})?)|patrimonio(?:\s+(?:neto|total))?(?:\s+de\s+la\s+(?:sociedad|compa[nñ][ií]a|empresa|entidad))?\s+${AMOUNT_VERBS})\b`,
         'gi',
       ),
       values: vals(
@@ -317,8 +324,8 @@ export function buildNarrativeConcepts(sources: NarrativeAnchorSources): Narrati
       concepts.push({
         key: 'ingresos',
         label: 'Ingresos',
-        re: /\bingresos\s+(?:operacionales\s+netos|operacionales|netos|totales|de\s+actividades\s+ordinarias)\b/gi,
-        rowLabelOnly: /^ingresos(?:\s+(?:operacionales(?:\s+netos)?|netos|totales|de actividades ordinarias))?$/i,
+        re: INGRESOS_RE,
+        rowLabelOnly: INGRESOS_ROW_RE,
         values: revenue,
         nd: false,
       });
@@ -769,6 +776,147 @@ export function strategyNarrativeUnits(json: StrategyReportJson, language: 'es' 
     out.push(...unit(p.body, `${en ? 'Preparer note' : 'Nota del preparador'} ${i + 1}`));
   });
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Prosa del JSON NIIF (Parte I, I5-3)
+// ---------------------------------------------------------------------------
+// Las notas de los estados (ESF, ERI, ECP), la nota de método del EFE y las
+// notas técnicas son texto del modelo que el Markdown, el PDF y el Excel
+// imprimen tal cual: una "utilidad neta de $X" falsa en una nota técnica salía
+// "procedencia verificada" aunque las cifras de las tablas cuadraran al
+// centavo. Se cruzan los conceptos con ancla de la Parte I —utilidad/pérdida
+// neta, efectivo, patrimonio, activos, pasivos e ingresos— con las mismas
+// reglas que la prosa de las Partes II y III. No se juzgan aquí EBITDA, ROE ni
+// años de corte: no son conceptos de los estados y las notas técnicas citan
+// cortes de apertura y comparativos por diseño.
+// ---------------------------------------------------------------------------
+
+const NIIF_NARRATIVE_KEYS: ReadonlySet<NarrativeConceptKey> = new Set([
+  'utilidadNeta',
+  'efectivo',
+  'patrimonio',
+  'activo',
+  'pasivo',
+  'ingresos',
+]);
+
+/** Prosa del JSON NIIF que llega al entregable (notas de los estados y notas técnicas). */
+export function niifNarrativeUnits(json: NiifReportJson, language: 'es' | 'en' = 'es'): NarrativeUnit[] {
+  const en = language === 'en';
+  const noteWord = en ? 'Note' : 'Nota';
+  const out: NarrativeUnit[] = [];
+  const notes = (list: NiifReportJson['balanceSheet']['notes'] | undefined, section: string) => {
+    (list ?? []).forEach((n, i) => {
+      const ref = typeof n.ref === 'string' && n.ref.trim() && n.ref.trim() !== '*' ? n.ref.trim() : `${noteWord} ${i + 1}`;
+      out.push(...unit(n.body, `${section} — ${ref}`));
+    });
+  };
+  notes(json.balanceSheet?.notes, en ? 'Statement of financial position' : 'Estado de situación financiera');
+  notes(json.incomeStatement?.notes, en ? 'Statement of comprehensive income' : 'Estado de resultados integral');
+  out.push(...unit(json.cashFlow?.methodNote, en ? 'Statement of cash flows — method' : 'Estado de flujos de efectivo — método'));
+  notes(json.equityChanges?.notes, en ? 'Statement of changes in equity' : 'Estado de cambios en el patrimonio');
+  notes(json.technicalNotes, en ? 'Technical notes' : 'Notas técnicas');
+  return out;
+}
+
+/**
+ * Conceptos de la Parte I. Los ingresos admiten además los renglones de
+ * ingresos del propio ERI (ya cruzados contra el balance por el validador del
+ * JSON NIIF): una nota que cita los ingresos brutos o la línea de otros
+ * ingresos con su cifra es honesta.
+ *
+ * El efectivo y el patrimonio admiten también los saldos que imprimen el EFE y
+ * el ECP del propio informe, incluidos los del periodo comparativo (revisión
+ * I5-3): con tres cortes, el EFE y el ECP comparativos abren con el corte
+ * anterior al comparativo (p. ej. 2023 en un informe 2025/2024), que no es
+ * ninguno de los dos snapshots, y la nota que cita ese saldo de apertura es
+ * honesta. Esos saldos los calcula el código y el validador del JSON NIIF los
+ * cruza contra el balance (E2/E3/E18/E23 del EFE comparativo; E4/E7 del ECP).
+ */
+function niifNarrativeConcepts(json: NiifReportJson, sources: NarrativeAnchorSources): NarrativeConcept[] {
+  const concepts = buildNarrativeConcepts({ ...sources, niif: json, acta: null, actaConcepts: false }).filter((c) =>
+    NIIF_NARRATIVE_KEYS.has(c.key),
+  );
+  const cf = json.cashFlow;
+  const statementValues: Partial<Record<NarrativeConceptKey, number[]>> = {
+    efectivo: vals(
+      centsToPesos(cf?.cashOpeningComparative),
+      centsToPesos(cf?.cashClosingComparative),
+    ),
+    patrimonio: vals(
+      ...[...(json.equityChanges?.rows ?? []), ...(json.equityChanges?.comparativeRows ?? [])]
+        .filter((r) => r.kind === 'opening_balance' || r.kind === 'closing_balance')
+        .map((r) => centsToPesos(r.total)),
+    ),
+  };
+  for (const concept of concepts) {
+    const extra = statementValues[concept.key];
+    if (extra && extra.length > 0) concept.values = vals(...concept.values, ...extra);
+  }
+  const revenueLines = vals(
+    ...(json.incomeStatement?.lines ?? [])
+      .filter((l) => /ingres|venta/i.test(l.label) && !/costo|gasto/i.test(l.label))
+      .flatMap((l) => [centsToPesos(l.amountPrimary), centsToPesos(l.amountComparative)]),
+  );
+  if (revenueLines.length === 0) return concepts;
+  const ingresos = concepts.find((c) => c.key === 'ingresos');
+  if (ingresos) {
+    ingresos.values = vals(...ingresos.values, ...revenueLines);
+    return concepts;
+  }
+  return [
+    ...concepts,
+    { key: 'ingresos', label: 'Ingresos', re: INGRESOS_RE, rowLabelOnly: INGRESOS_ROW_RE, values: revenueLines, nd: false },
+  ];
+}
+
+/**
+ * Parte I: montos de conceptos anclados en las notas de los estados y en las
+ * notas técnicas contra el propio JSON NIIF (totales, EFE) y el balance
+ * preprocesado. La usan `runNiifPhase` (orchestrator.ts) y el servidor
+ * (`serverNiifIntegrity`, src/lib/reports/part-verdicts.ts) con las mismas
+ * fuentes: paridad fase ↔ servidor.
+ */
+export function checkNiifNarrative(
+  json: NiifReportJson,
+  sources: NarrativeAnchorSources,
+  language: 'es' | 'en' = 'es',
+): NarrativeCheckResult {
+  const primaryYear = yearOf(json.company?.fiscalPeriod) ?? yearOf(sources.primary?.period);
+  const options: NarrativeCheckOptions = {
+    language,
+    subject: { es: 'la nota', en: 'the note' },
+    requireCurrency: true,
+    skipForwardLooking: true,
+    lenientProse: true,
+    primaryYear,
+  };
+  const money = checkNarrativeUnits(niifNarrativeUnits(json, language), niifNarrativeConcepts(json, sources), options);
+  return {
+    findings: money.findings,
+    checked: money.checked,
+    motivos: money.findings.map((f) => (f.where ? `${f.where} · ${f.detail}` : f.detail)),
+  };
+}
+
+/** Sello de la Parte I por cifras en las notas sin respaldo (texto; el veredicto lo fija el llamador). */
+export function buildNiifNarrativeSeal(motivos: readonly string[], language: 'es' | 'en' = 'es'): string {
+  const en = language === 'en';
+  return [
+    en
+      ? '> ## REPORT WITH QUALIFICATIONS — FIGURES IN NOTES WITHOUT SUPPORT'
+      : '> ## REPORTE CON SALVEDADES — CIFRAS EN NOTAS SIN RESPALDO',
+    '>',
+    en
+      ? '> Figures quoted in the notes to the statements or in the technical notes contradict the statements ' +
+        'or the trial balance. This report is NOT signable as issued:'
+      : '> Cifras citadas en las notas de los estados o en las notas técnicas contradicen los estados o el ' +
+        'balance. Este informe NO es firmable tal como está:',
+    '>',
+    ...motivos.map((m) => `> - ${m}`),
+    '',
+  ].join('\n');
 }
 
 // ---------------------------------------------------------------------------

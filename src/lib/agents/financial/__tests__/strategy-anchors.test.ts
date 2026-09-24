@@ -18,6 +18,8 @@ vi.mock('@/lib/macro/prompt-snapshot', () => ({ getMacroSnapshotForPrompts: vi.f
 
 import { runStrategyPhase } from '@/lib/agents/financial/orchestrator';
 import {
+  buildStrategyQualificationSeal,
+  buildStrategyVerificationNote,
   deterministicTrends,
   fmtTrendPct,
   reconcileStrategyAnchors,
@@ -218,6 +220,11 @@ describe('runStrategyPhase — sella la Parte II ante desviaciones', () => {
     expect(out.strategyQualifications?.clean).toBe(false);
     expect(out.kpiDashboard).toContain('ANÁLISIS ESTRATÉGICO CON SALVEDADES');
     expect(out.fullContent).toContain('ANÁLISIS ESTRATÉGICO CON SALVEDADES');
+    // I5-7 — paridad: el sello de la fase es el de `buildStrategyQualificationSeal`,
+    // la misma función que usa el re-render del servidor (part-markdown.ts).
+    const seal = buildStrategyQualificationSeal(out.strategyQualifications!.motivos, 'es');
+    expect(out.kpiDashboard.startsWith(seal)).toBe(true);
+    expect(out.fullContent.startsWith(seal)).toBe(true);
     expect(events.some((e) => e.type === 'warning')).toBe(true);
     // El veredicto sobrevive al viaje por JSON (cliente → /export).
     expect(readStrategyQualifications(JSON.parse(JSON.stringify(out)))?.clean).toBe(false);
@@ -232,6 +239,10 @@ describe('runStrategyPhase — sella la Parte II ante desviaciones', () => {
     expect(out.strategyQualifications?.clean).toBe(true);
     expect(out.fullContent).not.toContain('CON SALVEDADES');
     expect(out.fullContent).toContain('Verificación determinista de la Parte II');
+    // I5-7 — paridad de la nota de verificación con la del servidor.
+    const q = out.strategyQualifications!;
+    const verified = reconcileStrategyAnchors(nextJson as StrategyReportJson, strategyAnchorSources(pp, NIIF.json)).verifiedCount;
+    expect(out.fullContent.endsWith(`\n${buildStrategyVerificationNote(verified, q.noVerificables, 'es')}`)).toBe(true);
   });
 });
 

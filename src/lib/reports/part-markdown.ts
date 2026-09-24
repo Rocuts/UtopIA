@@ -19,10 +19,19 @@ import {
   strategyDegradationNotice,
 } from '@/lib/agents/financial/agents/strategy-director';
 import {
+  actaArithmeticSeal,
   governanceDegradationNotice,
   renderGovernanceResult,
 } from '@/lib/agents/financial/agents/governance-specialist';
-import { sellarConSalvedades } from '@/lib/agents/financial/orchestrator';
+import {
+  buildAdjustmentsAuditSection,
+  deriveReportSidecars,
+  sellarConSalvedades,
+  sellarProsaNiif,
+} from '@/lib/agents/financial/orchestrator';
+import { ancoraOrNull } from '@/lib/agents/financial/ancora/build-ancora';
+import type { applyAdjustments } from '@/lib/agents/repair/adjustments';
+import type { Adjustment } from '@/lib/agents/repair/types';
 import { sealGovernanceNarrative } from '@/lib/agents/financial/validators/narrative-anchors';
 import {
   buildStrategyQualificationSeal,
@@ -121,6 +130,26 @@ function unverifiableSeal(part: 'I' | 'II' | 'III', motivo: string, language: 'e
   ].join('\n');
 }
 
+/**
+ * Sello de identidad (I5-2): la Parte II/III declara una empresa, un NIT o un
+ * periodo distintos de los de los estados financieros.
+ */
+function identitySeal(part: 'II' | 'III', motivos: readonly string[], language: 'es' | 'en'): string {
+  const en = language === 'en';
+  return [
+    en ? `> ## PART ${part} WITH QUALIFICATIONS — IDENTITY` : `> ## PARTE ${part} CON SALVEDADES — IDENTIDAD`,
+    '>',
+    en
+      ? '> The company or the period of this section do not match those of the financial statements. ' +
+        'This section is NOT issuable as is:'
+      : '> La empresa o el periodo de esta sección no coinciden con los de los estados financieros. ' +
+        'Esta sección NO es emitible tal como está:',
+    '>',
+    ...motivos.map((m) => `> - ${m}`),
+    '',
+  ].join('\n');
+}
+
 // ---------------------------------------------------------------------------
 // Parte I
 // ---------------------------------------------------------------------------
@@ -183,6 +212,7 @@ export function renderNiifPart(
   const reconciliation = out.reconciliation;
   if (integrity?.jsonErrors.length) sellarConSalvedades(out, integrity.jsonErrors, language);
   if (integrity?.efeViolations.length) sellarConSalvedades(out, integrity.efeViolations, language);
+  if (integrity?.narrative.length) sellarProsaNiif(out, integrity.narrative, language);
   // El veredicto lo fija `applyServerPartVerdicts`; el render sólo escribe texto.
   out.reconciliation = reconciliation;
   return out;
@@ -232,8 +262,17 @@ export function renderStrategyPart(
     fullContent = `${notice}\n${fullContent}`;
   }
   const verdict = readStrategyQualifications(strategic);
-  if (verdict && !verdict.clean) {
-    const seal = buildStrategyQualificationSeal(verdict.motivos, language);
+  // La identidad (I5-2) lleva su propio sello; el de cifras sólo lista las
+  // demás salvedades (el texto de la fase, que no cruza identidad).
+  const identity = checks.identity?.strategy ?? [];
+  const figureMotivos = (verdict?.motivos ?? []).filter((m) => !identity.includes(m));
+  if (verdict && !verdict.clean && figureMotivos.length > 0) {
+    const seal = buildStrategyQualificationSeal(figureMotivos, language);
+    kpiDashboard = `${seal}\n${kpiDashboard}`;
+    fullContent = `${seal}\n${fullContent}`;
+  }
+  if (identity.length > 0) {
+    const seal = identitySeal('II', identity, language);
     kpiDashboard = `${seal}\n${kpiDashboard}`;
     fullContent = `${seal}\n${fullContent}`;
   }
@@ -256,38 +295,6 @@ export function renderStrategyPart(
 // ---------------------------------------------------------------------------
 // Parte III
 // ---------------------------------------------------------------------------
-
-/** Sello aritmético del acta: mismo texto que `runGovernancePhase`. */
-function actaArithmeticSeal(motivos: readonly string[], anchored: boolean, language: 'es' | 'en'): string {
-  const es = language === 'es';
-  if (anchored) {
-    return [
-      es ? '> ## ACTA CON SALVEDADES — INTEGRIDAD ARITMÉTICA' : '> ## MINUTES WITH QUALIFICATIONS — ARITHMETIC INTEGRITY',
-      '>',
-      es
-        ? '> Las cifras del acta no coinciden con la aritmética determinista sobre la ' +
-          'utilidad del ejercicio. Este documento NO es firmable ni inscribible tal como está:'
-        : '> The minutes figures do not match the deterministic arithmetic over the ' +
-          'period result. This document is NOT signable as issued:',
-      '>',
-      ...motivos.map((m) => `> - ${m}`),
-      '',
-    ].join('\n');
-  }
-  return [
-    es ? '> ## ACTA CON SALVEDADES — CIFRAS SIN VERIFICAR' : '> ## MINUTES WITH QUALIFICATIONS — UNVERIFIED FIGURES',
-    '>',
-    es
-      ? '> El acta propone cifras de destinación que no pudieron contrastarse con una ' +
-        'aritmética determinista sobre la utilidad del ejercicio. Este documento NO es firmable ' +
-        'ni inscribible tal como está:'
-      : '> The minutes propose allocation figures that could not be checked against ' +
-        'deterministic arithmetic over the period result. This document is NOT signable as issued:',
-    '>',
-    ...motivos.map((m) => `> - ${m}`),
-    '',
-  ].join('\n');
-}
 
 /** Sello de la Parte III cuando su veredicto no es limpio y ningún cruce del servidor lo explica. */
 function governanceGenericSeal(motivos: readonly string[], language: 'es' | 'en'): string {
@@ -346,8 +353,17 @@ export function renderGovernancePart(
   // toca como efecto): se restituye el endurecido.
   out.actaQualifications = governance.actaQualifications;
   const verdict = governance.actaQualifications;
-  if (!sealed && verdict?.clean === false) {
-    const seal = governanceGenericSeal(Array.isArray(verdict.motivos) ? verdict.motivos : [], language);
+  // La identidad (I5-2) lleva su propio sello; el genérico sólo lista las
+  // demás salvedades que ningún cruce del servidor explica.
+  const identity = checks.identity?.governance ?? [];
+  const otherMotivos = (Array.isArray(verdict?.motivos) ? verdict.motivos : []).filter((m) => !identity.includes(m));
+  if (!sealed && verdict?.clean === false && (otherMotivos.length > 0 || identity.length === 0)) {
+    const seal = governanceGenericSeal(otherMotivos, language);
+    out.shareholderMinutes = `${seal}\n${out.shareholderMinutes}`;
+    out.fullContent = `${seal}\n${out.fullContent}`;
+  }
+  if (identity.length > 0) {
+    const seal = identitySeal('III', identity, language);
     out.shareholderMinutes = `${seal}\n${out.shareholderMinutes}`;
     out.fullContent = `${seal}\n${out.fullContent}`;
   }
@@ -591,6 +607,95 @@ export function withServerRenderedPersisted(
   };
 }
 
+/** Fuentes re-derivadas en el servidor para reconstruir el texto de un informe recibido. */
+export interface ServerReportTextSource {
+  preprocessed: PreprocessedBalance | null | undefined;
+  /** Ajustes confirmados aplicados y su detalle (traza de ajustes del consolidado). */
+  adjustments?: { applied: Adjustment[]; affected: ReturnType<typeof applyAdjustments>['affected'] } | null;
+  /** `rawData` efectivo de la petición (metadata del archivo para el gate), si lo trae. */
+  rawData?: string | null;
+}
+
+/**
+ * Informe RECIBIDO de un cliente (sin versión persistida) con el texto que
+ * produce el servidor: Partes I–III re-renderizadas desde su JSON
+ * (`withServerRenderedParts`) y consolidado reconstruido entero con la misma
+ * función que /consolidate (`buildServerConsolidatedReport`, con la traza de
+ * ajustes del ledger de la petición); su validación y emitibilidad se pliegan
+ * sobre las recibidas (sólo endurecen). Lo usan /export sin referencia y las
+ * Partes IV/V (/api/financial-audit, /api/financial-quality,
+ * /api/fiscal-audit-opinion), cuyos LLM leen `consolidatedReport` (I5-1).
+ * `null` si el informe no trae las tres Partes: su texto no puede producirse
+ * en el servidor.
+ */
+export function withServerRenderedClientReport(
+  input: FinancialReport,
+  source: ServerReportTextSource,
+  language: 'es' | 'en',
+): FinancialReport | null {
+  if (!input?.niifAnalysis || !input.strategicAnalysis || !input.governance) return null;
+  const report = withServerSidecars(input, source);
+  const rendered = withServerRenderedParts(report, source.preprocessed, language);
+  const rebuilt = buildServerConsolidatedReport({
+    report: rendered,
+    preprocessed: source.preprocessed,
+    language,
+    clientConsolidated: report.consolidatedReport,
+    adjustmentsSection: source.adjustments
+      ? buildAdjustmentsAuditSection(source.adjustments.applied, source.adjustments.affected, language)
+      : null,
+    rawData: source.rawData,
+  });
+  // El gate de emisión (V1–V15) y la validación post-render corren sobre el
+  // texto reconstruido, como en /consolidate: una emitibilidad "limpia" que
+  // el cliente declaró para OTRO texto no levanta los bloqueantes del que se
+  // usa (revisión I3).
+  return {
+    ...rendered,
+    consolidatedReport: rebuilt.consolidatedReport,
+    // I5-4: un informe recibido pliega TODOS los bloqueantes del gate
+    // recalculado sobre el balance re-derivado (V1–V15), no sólo los de texto.
+    ...foldServerEmittability(report, rebuilt, source.preprocessed, {
+      scope: 'all',
+      hasRawData: typeof source.rawData === 'string' && source.rawData.trim().length > 0,
+    }),
+  };
+}
+
+/**
+ * Campos del informe que no son Partes y que el cliente reenvía (I5-4):
+ *   - `fiscalSnapshot` y `ancora` se recalculan desde el balance re-derivado
+ *     con la misma función que /niif y /consolidate (`deriveReportSidecars`);
+ *     sin balance no se conservan los del cuerpo;
+ *   - `generatedAt` inválido o futuro (fecha del encabezado del consolidado)
+ *     se sustituye por la hora del servidor.
+ * `company` se cruza con el JSON NIIF en el gate (`identityBlockers`) y la
+ * identidad de las Partes II/III en `serverPartChecks` (I5-2).
+ */
+function withServerSidecars(report: FinancialReport, source: ServerReportTextSource): FinancialReport {
+  const { fiscalSnapshot: _clientSnapshot, ancora: _clientAncora, ...rest } = report;
+  void _clientSnapshot;
+  void _clientAncora;
+  const now = new Date();
+  const generated = new Date(typeof report.generatedAt === 'string' ? report.generatedAt : NaN);
+  const generatedAt =
+    Number.isNaN(generated.getTime()) || generated.getTime() > now.getTime() ? now.toISOString() : report.generatedAt;
+  if (!source.preprocessed?.primary) return { ...rest, generatedAt };
+  const sidecars = deriveReportSidecars({
+    preprocessed: source.preprocessed,
+    company: report.company,
+    rawData: source.rawData ?? null,
+    hoy: now,
+  });
+  const ancora = ancoraOrNull(sidecars.ancora);
+  return {
+    ...rest,
+    generatedAt,
+    ...(sidecars.fiscalSnapshot ? { fiscalSnapshot: sidecars.fiscalSnapshot } : {}),
+    ...(ancora ? { ancora } : {}),
+  };
+}
+
 /** Razón declarada en el sello BORRADOR de un consolidado (texto del usuario). */
 export function provisionalReasonOf(consolidated: unknown): string {
   if (typeof consolidated !== 'string') return '';
@@ -650,6 +755,27 @@ export function buildServerConsolidatedReport(input: {
 const TEXT_GATE_CODES = new Set(['V8', 'V9', 'V10', 'V15']);
 
 /**
+ * Bloqueantes que dependen de la identidad leída del ARCHIVO del balance
+ * (`rawData`): V5 (razón social y NIT extraídos del encabezado) y V6 (DV del
+ * NIT del archivo). Sin `rawData` en la petición el gate no puede evaluarlos
+ * (los daría por ausentes): no se pliegan.
+ */
+const FILE_IDENTITY_GATE_CODES = new Set(['V5', 'V6']);
+
+export interface FoldEmittabilityOptions {
+  /**
+   * `'text'` (default; versión persistida, cuya emitibilidad calculó el
+   * servidor en /consolidate): sólo V8/V9/V10/V15, que cambian con el
+   * re-render. `'all'` (informe RECIBIDO de un cliente, I5-4): todos los
+   * bloqueantes del gate recalculado sobre el balance re-derivado —V1–V7 y
+   * V11–V14 además de los de texto—; V5/V6 sólo si hay `rawData`.
+   */
+  scope?: 'text' | 'all';
+  /** La petición trae el `rawData` del que se re-derivó el balance. */
+  hasRawData?: boolean;
+}
+
+/**
  * Validación y emitibilidad de una exportación SIN referencia, plegadas con
  * las del texto que el servidor acaba de reconstruir
  * (`buildServerConsolidatedReport`, el mismo gate que /consolidate). Las del
@@ -667,7 +793,12 @@ export function foldServerEmittability(
   report: FinancialReport,
   server: SplitConsolidationResult,
   preprocessed: PreprocessedBalance | null | undefined,
+  options: FoldEmittabilityOptions = {},
 ): Pick<FinancialReport, 'validation' | 'emittability'> {
+  const folds = (code: string): boolean =>
+    options.scope === 'all'
+      ? !FILE_IDENTITY_GATE_CODES.has(code) || options.hasRawData === true
+      : TEXT_GATE_CODES.has(code);
   const client = report.emittability;
   const sanitized =
     client?.kind === 'emittable' ? { ...client, blockers: [], suggestedAdjustments: [] } : client;
@@ -681,7 +812,7 @@ export function foldServerEmittability(
   const received = client?.kind === 'no-emitible' ? client.blockers : [];
   const seen = new Set(received.map((b) => `${b.code}\u0000${b.message}`));
   const textBlockers = server.emittability.blockers.filter(
-    (b) => TEXT_GATE_CODES.has(b.code) && !seen.has(`${b.code}\u0000${b.message}`),
+    (b) => folds(b.code) && !seen.has(`${b.code}\u0000${b.message}`),
   );
   if (textBlockers.length === 0) return { validation, ...(sanitized ? { emittability: sanitized } : {}) };
   return {

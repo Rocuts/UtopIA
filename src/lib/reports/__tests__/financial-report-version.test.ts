@@ -285,8 +285,45 @@ describe('sello de procedencia en los artefactos', () => {
       'X-Report-Provenance': 'verified',
       'X-Report-Id': PROVENANCE.reportId,
       'X-Report-Hash': PROVENANCE.reportHash,
+      'X-Report-Contract': FINANCIAL_REPORT_CONTRACT_VERSION,
+      'X-Report-Rendered-Contract': FINANCIAL_REPORT_CONTRACT_VERSION,
     });
     expect(provenanceHeaders(UNVERIFIED)).toEqual({ 'X-Report-Provenance': 'unverified' });
+  });
+});
+
+describe('I5-5 — versión del contrato persistida y reglas con que se re-renderizó', () => {
+  // /export y /html por referencia re-renderizan la versión persistida con las
+  // reglas VIGENTES (I3): el sello dice con qué contrato se persistió y con
+  // cuál se produjo el artefacto, en Excel, PDF, HTML y cabeceras.
+  const OLD: ArtifactProvenance = {
+    kind: 'verified',
+    provenance: { ...PROVENANCE, contractVersion: 'informe-niif-2026-09-24.1' },
+  };
+
+  it('Excel y PDF: la línea de reglas nombra las dos versiones (es/en)', () => {
+    const es = provenanceLines(OLD, 'es').join('\n');
+    expect(es).toContain(
+      `versión persistida con el contrato informe-niif-2026-09-24.1, re-renderizada con ${FINANCIAL_REPORT_CONTRACT_VERSION}`,
+    );
+    const en = provenanceLines(OLD, 'en').join('\n');
+    expect(en).toContain(
+      `version persisted under contract informe-niif-2026-09-24.1, re-rendered with ${FINANCIAL_REPORT_CONTRACT_VERSION}`,
+    );
+    expect(withExcelProvenance(makeExportableReport(), OLD, 'es').consolidatedReport).toContain('re-renderizada con');
+    const doc: { appendix?: { validationWarnings?: string[] } } = {};
+    appendPdfProvenance(doc, OLD, 'es');
+    expect(doc.appendix?.validationWarnings?.[0]).toContain('informe-niif-2026-09-24.1, re-renderizada con');
+  });
+
+  it('HTML y cabeceras: contrato persistido y contrato del re-render', () => {
+    const out = stampHtmlProvenance('<html><head></head><body></body></html>', OLD, 'es');
+    expect(out).toContain(`contract=informe-niif-2026-09-24.1; rendered=${FINANCIAL_REPORT_CONTRACT_VERSION}`);
+    expect(out).toContain('re-renderizada con');
+    expect(provenanceHeaders(OLD)).toMatchObject({
+      'X-Report-Contract': 'informe-niif-2026-09-24.1',
+      'X-Report-Rendered-Contract': FINANCIAL_REPORT_CONTRACT_VERSION,
+    });
   });
 });
 

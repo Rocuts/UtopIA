@@ -4,6 +4,7 @@ import { financialAuditRequestSchema } from '@/lib/validation/schemas';
 import { orchestrateAudit } from '@/lib/agents/financial/audit/orchestrator';
 import { deriveReportIntegrity } from '@/lib/agents/financial/audit/integrity';
 import { resolveClientPreprocessed } from '@/lib/reports/client-preprocessed';
+import { resolveAuditedReport } from '@/lib/reports/audited-report';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import type { FinancialReport } from '@/lib/agents/financial/types';
 import type { AuditIntegrity, AuditProgressEvent } from '@/lib/agents/financial/audit/types';
@@ -47,7 +48,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { report, language, auditFocus } = parsed.data;
+    const { language, auditFocus } = parsed.data;
 
     const rawBody = body as { preprocessed?: unknown; report?: unknown; adjustmentLedger?: unknown };
     // Cross-dep P1: el preprocesado de /niif se re-deriva desde sus filas con
@@ -55,15 +56,22 @@ export async function POST(req: Request) {
     const client = resolveClientPreprocessed(rawBody.preprocessed, rawBody.adjustmentLedger);
     if (!client.ok) return client.response;
     const preprocessed: PreprocessedBalance | undefined = client.preprocessed;
-    const integrity = deriveReportIntegrity(rawBody.report, preprocessed);
+    // I5-1: los auditores leen el consolidado que produce el servidor desde el
+    // JSON de las Partes I–III (con sus veredictos y el preprocesado
+    // re-derivado), no el Markdown recibido; las banderas de integridad salen
+    // de ese mismo informe (sólo endurecen las del cliente).
+    const audited = resolveAuditedReport(
+      { ...(rawBody.report as object), company: parsed.data.report.company },
+      client,
+      language,
+    );
+    if (!audited.ok) return audited.response;
+    const typedReport: FinancialReport = audited.report;
+    const integrity = deriveReportIntegrity(typedReport, preprocessed);
 
     const stream =
       req.headers.get('X-Stream') === 'true' ||
       new URL(req.url).searchParams.get('stream') === '1';
-
-    // Cast the Zod-validated report to the full FinancialReport type.
-    // The schema validates the minimal fields needed; downstream code only uses consolidatedReport + company.
-    const typedReport = report as unknown as FinancialReport;
 
     if (stream) {
       return handleStreaming(typedReport, language, auditFocus, preprocessed, integrity);

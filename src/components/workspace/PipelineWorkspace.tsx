@@ -907,18 +907,25 @@ function appliedLedgerOrNull(ledger: AdjustmentLedger | null | undefined): Adjus
 /**
  * Guarda el ledger de la corrida que acaba de escribir el checkpoint NIIF
  * (`null` = corrida sin ajustes: se guarda igual, para distinguirla de un
- * checkpoint sin registro).
+ * checkpoint sin registro) y, desde I5-6, sus opciones (`run`: provisional,
+ * instrucciones y hechos excluidos) para que una reanudación tras recargar use
+ * las de ESA corrida.
  */
 export function saveCheckpointLedger(
   conversationId: string,
   adjustmentLedger: AdjustmentLedger | null | undefined,
   storage: Storage | null = localStorageOrNull(),
+  run?: CheckpointRunOptions | null,
 ): boolean {
   if (!storage || !conversationId) return false;
   try {
     storage.setItem(
       NIIF_CHECKPOINT_LEDGER_KEY,
-      JSON.stringify({ conversationId, adjustmentLedger: appliedLedgerOrNull(adjustmentLedger) }),
+      JSON.stringify({
+        conversationId,
+        adjustmentLedger: appliedLedgerOrNull(adjustmentLedger),
+        ...(run ? { run } : {}),
+      }),
     );
     return true;
   } catch {
@@ -997,6 +1004,80 @@ export function resolveRunSources(
   };
 }
 
+// ─── Opciones de la corrida del checkpoint (I5-6) ────────────────────────────
+// Además del balance y el ledger (I3-3), una reanudación reenvía a /strategy y
+// /governance las instrucciones del usuario y los hechos excluidos, y a
+// /consolidate el override "Continuar de todas formas" (`provisional`, sello
+// BORRADOR). Salían del intake vigente: tras una regeneración que falló en
+// /niif, la reanudación del checkpoint anterior recibía las instrucciones y
+// exclusiones de OTRA corrida, y su consolidado perdía (o ganaba) el BORRADOR.
+// Viajan con el checkpoint: en memoria (`checkpointRef`) y en el registro de
+// localStorage del checkpoint NIIF (`saveCheckpointLedger`).
+
+/** Opciones de una corrida que su checkpoint conserva para reanudarla. */
+export interface CheckpointRunOptions {
+  /** Override provisional activo de la corrida; `null` si no lo hubo. */
+  provisional: ProvisionalFlag | null;
+  instructions: string | null;
+  excludedFactIds: string[];
+}
+
+/** Opciones de la corrida que arranca con `intake`. */
+export function runOptionsOf(intake: NiifRunIntake | null | undefined): CheckpointRunOptions {
+  return {
+    provisional: intake?.provisional?.active === true ? intake.provisional : null,
+    instructions: intake?.specialInstructions ?? null,
+    excludedFactIds: [...(intake?.excludedFactIds ?? [])],
+  };
+}
+
+/**
+ * Opciones con que corre cada sub-fase. Corrida completa: las del intake.
+ * Reanudación: las del checkpoint. Sólo un checkpoint sin opciones (registro
+ * escrito antes de I5-6) cae a las del intake, como antes.
+ */
+export function resolveRunOptions(
+  start: 'niif' | 'strategy' | 'governance',
+  intake: NiifRunIntake | null,
+  checkpoint: { run?: CheckpointRunOptions | null } | null,
+): CheckpointRunOptions {
+  if (start !== 'niif' && checkpoint?.run) return checkpoint.run;
+  return runOptionsOf(intake);
+}
+
+/**
+ * Opciones guardadas con el checkpoint de `conversationId`; `null` si no hay
+ * registro de esa conversación o es anterior a I5-6. Un campo ilegible se
+ * descarta (sin provisional, sin instrucciones, sólo los ids de texto).
+ */
+export function loadCheckpointRunOptions(
+  conversationId: string,
+  storage: Storage | null = localStorageOrNull(),
+): CheckpointRunOptions | null {
+  if (!storage || !conversationId) return null;
+  try {
+    const raw = storage.getItem(NIIF_CHECKPOINT_LEDGER_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { conversationId?: unknown; run?: unknown };
+    if (parsed?.conversationId !== conversationId) return null;
+    const run = parsed.run as { provisional?: unknown; instructions?: unknown; excludedFactIds?: unknown } | undefined;
+    if (!run || typeof run !== 'object') return null;
+    const flag = run.provisional as { active?: unknown; reason?: unknown } | null | undefined;
+    return {
+      provisional:
+        flag && typeof flag === 'object' && flag.active === true
+          ? { active: true, reason: typeof flag.reason === 'string' ? flag.reason : '' }
+          : null,
+      instructions: typeof run.instructions === 'string' ? run.instructions : null,
+      excludedFactIds: Array.isArray(run.excludedFactIds)
+        ? run.excludedFactIds.filter((id): id is string => typeof id === 'string')
+        : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
 // ─── Intake de la corrida y cuerpo de /niif ──────────────────────────────────
 // Del Doctor de Datos al pipeline (cross-dep I1-4): el ajuste confirmado viaja
 // con su `period` desde el ledger del chat hasta `adjustmentLedger` del cuerpo
@@ -1016,17 +1097,39 @@ export type NiifRunIntake = NiifReportIntake & {
 };
 
 /**
+ * Ledger confirmado acumulado de las sesiones del Doctor de Datos (I5-9). Cada
+ * error de /niif abre una sesión nueva del Doctor (`repairConvId` se reinicia:
+ * la telemetría agrupa por error), y la regeneración sustituía el ledger por
+ * los `applied` de la ÚLTIMA sesión: los ajustes que el usuario confirmó en una
+ * sesión anterior desaparecían del informe. Se acumulan los confirmados de la
+ * corrida vigente y los nuevos, sin duplicar por id (la versión más reciente
+ * del mismo ajuste gana, en su posición original). Sólo `applied`.
+ */
+export function mergeConfirmedAdjustments(
+  prior: readonly Adjustment[] | null | undefined,
+  next: readonly Adjustment[],
+): Adjustment[] {
+  const byId = new Map<string, Adjustment>();
+  for (const a of [...(prior ?? []), ...next]) {
+    if (a?.status === 'applied') byId.set(a.id, a);
+  }
+  return Array.from(byId.values());
+}
+
+/**
  * Intake de la regeneración con los ajustes confirmados en el Doctor. Los
- * ajustes pasan tal cual (con su `period`); aplicar ajustes reales sustituye al
- * override provisional, que se limpia.
+ * ajustes pasan tal cual (con su `period`) y se ACUMULAN con los que la
+ * corrida vigente ya aplicaba (`mergeConfirmedAdjustments`, I5-9); aplicar
+ * ajustes reales sustituye al override provisional, que se limpia.
  */
 export function buildRegenerationIntake(
   input: NiifReportIntake,
   applied: Adjustment[],
 ): NiifRunIntake {
+  const prior = (input as NiifRunIntake).adjustmentLedger?.adjustments;
   return {
     ...input,
-    adjustmentLedger: { adjustments: applied },
+    adjustmentLedger: { adjustments: mergeConfirmedAdjustments(prior, applied) },
     provisional: undefined,
   };
 }
@@ -2428,6 +2531,12 @@ export function PipelineWorkspace() {
      * honesto con ajustes recibiría 422 al reanudar tras una recarga.
      */
     adjustmentLedger: AdjustmentLedger | null;
+    /**
+     * Provisional, instrucciones y hechos excluidos de la corrida (I5-6): la
+     * reanudación usa éstos, no los del intake vigente. `null` en un
+     * checkpoint rehidratado sin registro de opciones (anterior a I5-6).
+     */
+    run: CheckpointRunOptions | null;
   }
   const checkpointRef = useRef<NiifRunCheckpoint | null>(null);
   // Espejo en estado del ref anterior: la UI necesita saber si hay checkpoint
@@ -2505,6 +2614,8 @@ export function PipelineWorkspace() {
           // I3-3: el ledger de la corrida del checkpoint, aunque su
           // preprocesado no haya cabido en sessionStorage.
           adjustmentLedger: resolveResumeLedger(lastCompletedReport.conversationId),
+          // I5-6: provisional, instrucciones y exclusiones de ESA corrida.
+          run: loadCheckpointRunOptions(lastCompletedReport.conversationId),
         };
         setHasCheckpoint(true);
       }
@@ -2629,18 +2740,20 @@ export function PipelineWorkspace() {
       // handleRegenerateWithAdjustments. Backend route accepts it as
       // optional and applies adjustments post-preprocessing.
       const intakeWithExtras = (intake ?? null) as NiifRunIntake | null;
-      const provisional = intakeWithExtras?.provisional;
       // I3-3: en una reanudación el ledger y el balance son SIEMPRE los del
       // checkpoint (los que produjeron su preprocesado), no los del intake
       // vigente, que puede venir de una regeneración que falló en /niif.
       const runSources = resolveRunSources(start, intakeWithExtras, resumeCheckpoint);
       const adjustmentLedger = runSources.adjustmentLedger;
+      // I5-6: lo mismo para provisional, instrucciones y hechos excluidos.
       // Ola 2 — hechos del negocio excluidos en la confirmación del intake
       // (Task 8). Se propaga a las 4 rutas del pipeline SOLO cuando hay
       // exclusiones, para que cada ruta netee la misma lista que confirmó el
       // usuario. Las rutas (Tasks 3–6) side-parsean `excludedFactIds` del body.
-      const excludedFactIds = intake?.excludedFactIds ?? [];
-      const instructions = intake?.specialInstructions;
+      const runOptions = resolveRunOptions(start, intakeWithExtras, resumeCheckpoint);
+      const provisional = runOptions.provisional;
+      const excludedFactIds = runOptions.excludedFactIds;
+      const instructions = runOptions.instructions ?? undefined;
 
       // Handler común de progress events para las 3 sub-fases — mantiene la
       // misma semántica que el legacy: stage_start/complete actualizan el
@@ -2774,6 +2887,7 @@ export function PipelineWorkspace() {
         conversationId: nextConvId,
         strategyResult,
         adjustmentLedger: adjustmentLedger ?? null,
+        run: runOptions,
       };
       setHasCheckpoint(true);
       if (start === 'niif') {
@@ -2783,7 +2897,7 @@ export function PipelineWorkspace() {
           savedAt: new Date().toISOString(),
         });
         // El ledger de ESTA corrida viaja con su checkpoint (I3-3).
-        saveCheckpointLedger(nextConvId, adjustmentLedger);
+        saveCheckpointLedger(nextConvId, adjustmentLedger, undefined, runOptions);
         // Best-effort: sessionStorage con tope de tamaño (pipeline-flujo-03).
         persistPreprocessedForResume(nextConvId, niifContext.preprocessed, undefined, adjustmentLedger);
       }
@@ -3948,6 +4062,10 @@ export function PipelineWorkspace() {
                   period: pipelineInput.fiscalPeriod,
                   conversationId: repairConvId,
                 }}
+                // I5-9: la sesión nueva del Doctor arranca con los ajustes
+                // que la corrida vigente ya aplicó (el Doctor revalida sobre
+                // el mismo balance que procesó /niif y no los re-propone).
+                confirmedAdjustments={(pipelineInput as NiifRunIntake).adjustmentLedger?.adjustments}
                 onMarkProvisional={handleMarkProvisional}
                 onRegenerateWithAdjustments={handleRegenerateWithAdjustments}
                 onClose={() => {

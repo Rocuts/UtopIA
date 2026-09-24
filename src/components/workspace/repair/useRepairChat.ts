@@ -115,7 +115,26 @@ export function adjustmentFromProposal(
 
 // ─── Implementación ─────────────────────────────────────────────────────────
 
-export function useRepairChat(initialContext: RepairContext): UseRepairChat {
+export interface UseRepairChatOptions {
+  /**
+   * Ajustes confirmados que la corrida vigente ya aplicó (sesiones anteriores
+   * del Doctor, I5-9). Son el ledger inicial de una sesión NUEVA: el servidor
+   * del chat los aplica al balance (preview y `recheck_validation` sobre el
+   * mismo balance que procesó /niif) y la regeneración los conserva. Una
+   * sesión persistida que se rehidrata (mismo `conversationId`) manda.
+   */
+  confirmedAdjustments?: readonly Adjustment[] | null;
+}
+
+/** Ledger inicial de una sesión: sólo los ajustes confirmados (`applied`). */
+export function initialRepairLedger(confirmed: readonly Adjustment[] | null | undefined): Adjustment[] {
+  return (confirmed ?? []).filter((a) => a?.status === 'applied').map((a) => ({ ...a }));
+}
+
+export function useRepairChat(
+  initialContext: RepairContext,
+  options: UseRepairChatOptions = {},
+): UseRepairChat {
   const [messages, setMessages] = useState<RepairMessage[]>([]);
   const [pendingAssistant, setPendingAssistant] = useState('');
   const [toolCalls, setToolCalls] = useState<RepairToolInvocation[]>([]);
@@ -125,7 +144,9 @@ export function useRepairChat(initialContext: RepairContext): UseRepairChat {
     useState<string | null>(null);
 
   // Phase 2 state
-  const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
+  const [adjustments, setAdjustments] = useState<Adjustment[]>(() =>
+    initialRepairLedger(options.confirmedAdjustments),
+  );
   const [pendingAdjustmentId, setPendingAdjustmentId] = useState<string | null>(
     null,
   );
@@ -149,7 +170,7 @@ export function useRepairChat(initialContext: RepairContext): UseRepairChat {
 
   // Espejo del adjustment ledger para enviarlo en `sendMessage` sin recrear
   // el callback con cada cambio del state.
-  const adjustmentsRef = useRef<Adjustment[]>([]);
+  const adjustmentsRef = useRef<Adjustment[]>(adjustments);
   useEffect(() => {
     adjustmentsRef.current = adjustments;
   }, [adjustments]);

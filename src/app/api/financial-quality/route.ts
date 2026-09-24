@@ -3,8 +3,8 @@ import { z } from 'zod';
 import { requireAuthSession } from '@/lib/auth/require-session';
 import { runQualityAudit } from '@/lib/agents/financial/quality/agent';
 import { resolveClientPreprocessed } from '@/lib/reports/client-preprocessed';
+import { resolveAuditedReport } from '@/lib/reports/audited-report';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
-import type { FinancialReport } from '@/lib/agents/financial/types';
 import type { AuditReport } from '@/lib/agents/financial/audit/types';
 
 // ---------------------------------------------------------------------------
@@ -14,6 +14,8 @@ import type { AuditReport } from '@/lib/agents/financial/audit/types';
 // practices (IASB, IFRS 18, ISO 25012, ISO 42001, CTCP Colombia).
 //
 // Input: { report, auditReport?, preprocessed?, adjustmentLedger?, language }
+// El texto auditado es el consolidado que el servidor produce desde el JSON de
+// las Partes I–III (I5-1); un informe sin ellas → 422 REPORT_PARTS_REQUIRED.
 // Output: QualityAssessment with 12-dimension scores + IFRS 18 readiness
 //
 // Auditoría 2026-09 (auditoria-calidad-11): el cuerpo se valida con Zod y
@@ -81,11 +83,16 @@ export async function POST(req: Request) {
     const preprocessed: PreprocessedBalance | undefined = client.preprocessed;
 
     const raw = body as { report: unknown; auditReport?: unknown };
+    const language = parsed.data.language ?? 'es';
+    // I5-1: la meta-auditoría lee el consolidado que produce el servidor desde
+    // el JSON de las Partes I–III (con sus veredictos), no el Markdown recibido.
+    const audited = resolveAuditedReport(raw.report, client, language);
+    if (!audited.ok) return audited.response;
     const result = await runQualityAudit({
-      report: raw.report as FinancialReport,
+      report: audited.report,
       auditReport: (raw.auditReport ?? undefined) as AuditReport | undefined,
       preprocessed,
-      language: parsed.data.language ?? 'es',
+      language,
     });
 
     return NextResponse.json(result);

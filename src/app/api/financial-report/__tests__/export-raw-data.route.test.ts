@@ -38,8 +38,16 @@ import {
   type PreprocessedBalance,
 } from '@/lib/preprocessing/trial-balance';
 
-/** Balance cuyas anclas coinciden con `makeCoherentNiifReport` (Activo $10.000). */
+/**
+ * Balance cuyas anclas coinciden con `makeCoherentNiifReport` (Activo $10.000).
+ * Lleva la identidad en el encabezado, como un archivo que /consolidate
+ * declara emitible: desde I5-4 /export sin referencia pliega también los
+ * bloqueantes de identidad del archivo (V5 razón social/NIT extraídos, V6 DV
+ * del NIT) del gate recalculado.
+ */
 const CSV_COHERENTE = [
+  'Razón social: EMPRESA PRUEBA SAS',
+  'NIT: 900.123.456-8',
   'codigo,nombre,nivel,transaccional,saldo 2025',
   '110505,Caja,Auxiliar,1,1700',
   '130505,Clientes,Auxiliar,1,8300',

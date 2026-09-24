@@ -1790,7 +1790,8 @@ export const dict = {
       sourceHashLine: 'Huella SHA-256 del balance preprocesado: {hash}',
       sourceMissingLine: 'Balance preprocesado: no disponible en la versión persistida',
       rawDataHashLine: 'Huella SHA-256 del balance recibido: {hash}',
-      contractLine: 'Reglas aplicadas: contrato {contract} · preprocesador {preprocessor}',
+      contractRenderedLine:
+        'Reglas aplicadas: versión persistida con el contrato {contract}, re-renderizada con {rendered} · preprocesador {preprocessor}',
       verifiedDraftTitle: 'PROCEDENCIA VERIFICADA — BORRADOR (VALIDACIÓN PENDIENTE)',
       unverifiedDraftTitle: 'PROCEDENCIA NO VERIFICADA — BORRADOR (VALIDACIÓN PENDIENTE)',
       draftLine:
@@ -3549,7 +3550,8 @@ export const dict = {
       sourceHashLine: 'Preprocessed trial balance SHA-256 fingerprint: {hash}',
       sourceMissingLine: 'Preprocessed trial balance: not available in the persisted version',
       rawDataHashLine: 'Received trial balance SHA-256 fingerprint: {hash}',
-      contractLine: 'Rules applied: contract {contract} · preprocessor {preprocessor}',
+      contractRenderedLine:
+        'Rules applied: version persisted under contract {contract}, re-rendered with {rendered} · preprocessor {preprocessor}',
       verifiedDraftTitle: 'VERIFIED PROVENANCE — DRAFT (VALIDATION PENDING)',
       unverifiedDraftTitle: 'UNVERIFIED PROVENANCE — DRAFT (VALIDATION PENDING)',
       draftLine:

@@ -79,7 +79,13 @@ describe('Wave 2.F4 — bindingTotals: nuevas líneas Wave 2.F4', () => {
     expect(text).toContain('Ingresos operacionales netos (grupo 41 − devoluciones 4175)');
     expect(text).toContain('Otros ingresos no operacionales (grupo 42');
     expect(text).toContain('Total Ingresos Netos (neto de devoluciones 4175)');
-    expect(text).toContain('NIIF 15 §47');
+    // I5-8: el neteo de la 4175 es criterio de presentación de UtopIA
+    // (41 − 4175, con la 4175 revelada), no una exigencia de NIIF 15 §47
+    // (spec v10.1 enmendada en I4-4). El texto viaja al LLM: no cita la norma.
+    const linea = text.split('\n').find((l) => l.includes('Total Ingresos Netos (neto de devoluciones 4175)'));
+    expect(linea).toMatch(/criterio de presentación de UtopIA/);
+    expect(linea).toMatch(/41 − 4175/);
+    expect(text).not.toMatch(/NIIF 15/);
   });
 
   it('Emite la sección "## KPIs PRE-CALCULADOS" con los 13 ratios', () => {

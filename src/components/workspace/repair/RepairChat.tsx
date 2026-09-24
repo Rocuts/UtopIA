@@ -64,6 +64,13 @@ export interface RepairChatProps {
    * que el autosave del hook persista la intención (DB → reload preserva).
    */
   provisional?: ProvisionalFlag | null;
+  /**
+   * Ajustes que la corrida vigente ya aplicó (confirmados en una sesión
+   * anterior del Doctor). La sesión arranca con ellos en su ledger (I5-9):
+   * el Doctor revalida sobre el mismo balance que procesó /niif y la
+   * regeneración no los pierde.
+   */
+  confirmedAdjustments?: Adjustment[] | null;
 }
 
 // ─── i18n ───────────────────────────────────────────────────────────────────
@@ -203,6 +210,7 @@ export function RepairChat({
   language,
   initialUserMessage,
   provisional,
+  confirmedAdjustments,
 }: RepairChatProps) {
   const copy = COPY[language];
   const regionId = useId();
@@ -239,7 +247,7 @@ export function RepairChat({
     clearToolError,
     autosaveError,
     clearAutosaveError,
-  } = useRepairChat(enhancedContext);
+  } = useRepairChat(enhancedContext, { confirmedAdjustments });
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);

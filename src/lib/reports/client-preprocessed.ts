@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { revivePreprocessedBalance } from '@/lib/preprocessing/json-safe';
+import type { applyAdjustments } from '@/lib/agents/repair/adjustments';
+import type { Adjustment } from '@/lib/agents/repair/types';
 import { readAppliedAdjustments, rederivePreprocessedFromRows } from './preprocessed-integrity';
 
 // ---------------------------------------------------------------------------
@@ -24,7 +26,16 @@ import { readAppliedAdjustments, rederivePreprocessedFromRows } from './preproce
 // ---------------------------------------------------------------------------
 
 export type ClientPreprocessedResult =
-  | { ok: true; preprocessed: PreprocessedBalance | undefined }
+  | {
+      ok: true;
+      preprocessed: PreprocessedBalance | undefined;
+      /**
+       * Ajustes confirmados aplicados en la re-derivación y su detalle: la
+       * traza de ajustes del consolidado que el servidor reconstruye para las
+       * Partes IV/V (I5-1). Ausente sin ajustes.
+       */
+      adjustments?: { applied: Adjustment[]; affected: ReturnType<typeof applyAdjustments>['affected'] };
+    }
   | { ok: false; response: Response };
 
 /** Código máquina-legible del 422 (la UI lo muestra con los detalles). */
@@ -65,5 +76,9 @@ export function resolveClientPreprocessed(raw: unknown, ledger: unknown): Client
       ),
     };
   }
-  return { ok: true, preprocessed: rederived.preprocessed };
+  return {
+    ok: true,
+    preprocessed: rederived.preprocessed,
+    ...(adjustments.length > 0 ? { adjustments: { applied: adjustments, affected: rederived.affected } } : {}),
+  };
 }

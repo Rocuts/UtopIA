@@ -17,6 +17,7 @@ vi.mock('@/lib/agents/financial/agents/runtime', () => ({
 }));
 
 import { runGovernancePhase } from '@/lib/agents/financial/orchestrator';
+import { actaArithmeticSeal } from '@/lib/agents/financial/agents/governance-specialist';
 import { financialExportBlockers } from '@/lib/export/financial-export-validation';
 import { makeExportableReport } from '@/lib/agents/financial/__fixtures__/coherent-niif-report';
 import { parseTrialBalanceCSV, preprocessTrialBalance } from '@/lib/preprocessing/trial-balance';
@@ -113,6 +114,10 @@ describe('runGovernancePhase — acta sin preprocesado', () => {
     expect(g.actaQualifications?.clean).toBe(false);
     expect(g.actaQualifications?.motivos.join(' ')).toMatch(/sin aritmética determinista/);
     expect(g.shareholderMinutes).toContain('ACTA CON SALVEDADES');
+    // I5-7 — paridad: el sello de la fase es el de `actaArithmeticSeal`, la
+    // misma función que usa el re-render del servidor (part-markdown.ts).
+    expect(g.shareholderMinutes.startsWith(actaArithmeticSeal(g.actaQualifications!.motivos, false, 'es'))).toBe(true);
+    expect(g.fullContent.startsWith(actaArithmeticSeal(g.actaQualifications!.motivos, false, 'es'))).toBe(true);
 
     const report = makeExportableReport();
     report.governance = g;
@@ -149,5 +154,7 @@ describe('runGovernancePhase — acta sin preprocesado', () => {
     const g = await runGovernancePhase(input(pp));
     expect(g.actaQualifications?.clean).toBe(false);
     expect(g.actaQualifications?.motivos.join(' ')).not.toMatch(/sin aritmética determinista/);
+    // I5-7 — paridad del sello anclado con el del servidor.
+    expect(g.shareholderMinutes.startsWith(actaArithmeticSeal(g.actaQualifications!.motivos, true, 'es'))).toBe(true);
   });
 });

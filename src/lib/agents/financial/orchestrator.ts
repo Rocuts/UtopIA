@@ -9,7 +9,7 @@ import { buildNiifAncora, ancoraOrNull } from './ancora/build-ancora';
 import type { NiifAncora } from './ancora/types';
 import { buildFiscalSnapshot } from './escudo-survival/fiscal-anchor/snapshot';
 import { runStrategyDirector } from './agents/strategy-director';
-import { runGovernanceSpecialist } from './agents/governance-specialist';
+import { actaArithmeticSeal, runGovernanceSpecialist } from './agents/governance-specialist';
 import {
   extractCompanyMetadata,
   preprocessTrialBalance,
@@ -67,6 +67,8 @@ import {
 } from './agents/reconcile-anchors';
 import { toNiifAnalysisResult } from './agents/renderer';
 import {
+  buildStrategyQualificationSeal,
+  buildStrategyVerificationNote,
   reconcileStrategyAnchors,
   strategyAnchorSources,
   type QualifiedStrategicAnalysisResult,
@@ -74,7 +76,9 @@ import {
   type StrategyQualifications,
 } from './validators/strategy-anchors';
 import {
+  buildNiifNarrativeSeal,
   checkGovernanceNarrative,
+  checkNiifNarrative,
   narrativeSourcesFromPreprocessed,
   sealGovernanceNarrative,
 } from './validators/narrative-anchors';
@@ -297,6 +301,57 @@ export function sellarConSalvedades(
   niif.balanceSheet = `${seal}\n${niif.balanceSheet}`;
 }
 
+/**
+ * Âncora y snapshot fiscal deterministas de un informe, desde el balance
+ * preprocesado y la empresa. La usan `prepareFinancialContext` (de ahí salen
+ * los de /niif y /consolidate) y /export sin referencia (I5-4), que ya no
+ * reenvía los que trae el cuerpo.
+ *
+ *   - Âncora: `buildNiifAncora` nunca lanza; sin preprocesado devuelve el
+ *     sentinela "empty" (el llamador lo filtra con `ancoraOrNull`).
+ *   - Snapshot fiscal (Capa 5 El Escudo): sólo con un balance bien formado;
+ *     `buildFiscalSnapshot` devuelve `undefined` ante fallo. El NIT del archivo
+ *     sale del `rawData` cuando lo hay.
+ */
+export function deriveReportSidecars(input: {
+  preprocessed: PreprocessedBalance | undefined;
+  company: CompanyInfo;
+  rawData?: string | null;
+  hoy?: Date;
+}): { ancora: NiifAncora; fiscalSnapshot: FiscalSnapshot | undefined } {
+  const { preprocessed, company } = input;
+  const ancora: NiifAncora = buildNiifAncora(preprocessed, company);
+  let fiscalSnapshot: FiscalSnapshot | undefined;
+  if (preprocessed) {
+    const nitFromFile = input.rawData ? extractCompanyMetadata(input.rawData).nitFromFile : null;
+    fiscalSnapshot = buildFiscalSnapshot({
+      preprocessed,
+      company: { name: company.name, nit: company.nit, sector: company.sector },
+      hoy: input.hoy ?? new Date(),
+      nitFromFile,
+    });
+  }
+  return { ancora, fiscalSnapshot };
+}
+
+/**
+ * Sella la Parte I por cifras citadas en las notas de los estados o en las
+ * notas técnicas que contradicen los estados o el balance (I5-3,
+ * `checkNiifNarrative`). Mismo canal que `sellarConSalvedades`: reconciliación
+ * en `clean: false` y sello en la portada. Lo usan `runNiifPhase` y el
+ * re-render del servidor (src/lib/reports/part-markdown.ts).
+ */
+export function sellarProsaNiif(
+  niif: NiifAnalysisResult,
+  motivos: string[],
+  language: 'es' | 'en',
+): void {
+  niif.reconciliation = markReconciliationQualified(niif.reconciliation);
+  const seal = buildNiifNarrativeSeal(motivos, language);
+  niif.fullContent = `${seal}\n${niif.fullContent}`;
+  niif.balanceSheet = `${seal}\n${niif.balanceSheet}`;
+}
+
 // ---------------------------------------------------------------------------
 // Periodo del informe — una sola fuente determinista (pipeline-flujo-17)
 // ---------------------------------------------------------------------------
@@ -491,8 +546,11 @@ function deriveDiscrepanciesFromSnapshot(snap: PeriodSnapshot | null): string[] 
  * unifica las validaciones de TODOS los PeriodSnapshots — si CUALQUIER periodo
  * tiene blocking=true, el conjunto bloquea, y los reasons/suggestedAccounts se
  * concatenan con prefijo de periodo para que el usuario sepa donde corregir.
+ *
+ * Exportada (I5-7): el Escudo (`motivosBloqueoBalance`, balance-ingesta.ts)
+ * aplica la MISMA política que el gate de /niif en vez de una copia.
  */
-function deriveValidation(preprocessed: unknown): {
+export function deriveValidation(preprocessed: unknown): {
   blocking: boolean;
   reasons: string[];
   suggestedAccounts: string[];
@@ -826,8 +884,10 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
   // real era 500 M, así que NO se publica. Se publican los ingresos
   // operacionales netos (41 − 4175) y los otros ingresos no operacionales
   // (grupo 42 y demás) por separado — decisión del coordinador 2026-09: el 42
-  // va debajo de la utilidad operacional — y el total neto de devoluciones
-  // (NIIF 15 §47 obliga presentación neta).
+  // va debajo de la utilidad operacional — y el total neto de devoluciones.
+  // Restar la 4175 (41 − 4175) y revelar su cifra en su propia línea es un
+  // criterio de presentación de UtopIA, no una exigencia normativa: el texto
+  // que viaja al LLM no lo atribuye a NIIF 15 §47 (I5-8; spec v10.1, I4-4).
   const totalsForRev = totals as ControlTotalsInput & {
     ingresosNetos?: number;
     totalDevoluciones?: number;
@@ -862,7 +922,8 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
         'Total Ingresos Netos (neto de devoluciones 4175)',
         totalsForRev.ingresosNetos,
         cts?.ingresosNetos,
-        ` (devoluciones 4175 detectadas: ${fmtCop(devs)} COP; NIIF 15 §47)${pygTag}`,
+        ` (devoluciones 4175 detectadas: ${fmtCop(devs)} COP; criterio de presentación de UtopIA: ` +
+          `ingresos operacionales netos = 41 − 4175, con la 4175 revelada en su propia línea)${pygTag}`,
       ),
     );
   }
@@ -2098,30 +2159,13 @@ export async function prepareFinancialContext(
     ? deriveReportMode(ppForAgents)
     : 'COMPARATIVO_COMPLETO';
 
-  // Bloque Âncora — cálculo determinístico desde el preprocesado. No
-  // depende del LLM y nunca lanza; cuando `ppForAgents` es undefined,
-  // buildNiifAncora devuelve un Âncora "empty" coherente.
-  const ancora: NiifAncora = buildNiifAncora(ppForAgents, effectiveCompany);
-
-  // Capa El Escudo (Capa 5) — snapshot fiscal determinístico. Solo posible con
-  // un `PreprocessedBalance` bien formado; `buildFiscalSnapshot` nunca lanza
-  // (devuelve undefined ante fallo) — el pipeline NIIF no aborta.
-  let fiscalSnapshot: FiscalSnapshot | undefined;
-  if (ppForAgents) {
-    const nitFromFile = effectiveRawData
-      ? extractCompanyMetadata(effectiveRawData).nitFromFile
-      : null;
-    fiscalSnapshot = buildFiscalSnapshot({
-      preprocessed: ppForAgents,
-      company: {
-        name: effectiveCompany.name,
-        nit: effectiveCompany.nit,
-        sector: effectiveCompany.sector,
-      },
-      hoy: new Date(),
-      nitFromFile,
-    });
-  }
+  // Âncora y snapshot fiscal (Capa 5): una sola función para /niif,
+  // /consolidate y /export sin referencia (I5-4).
+  const { ancora, fiscalSnapshot } = deriveReportSidecars({
+    preprocessed: ppForAgents,
+    company: effectiveCompany,
+    rawData: effectiveRawData,
+  });
 
   // ---------------------------------------------------------------------------
   // Pre-vuelo del gate de emitibilidad.
@@ -2440,6 +2484,22 @@ export async function runNiifPhase(
         sellarConSalvedades(niif, mensajes, language);
       }
     }
+
+    // Cifras citadas en las notas de los estados y en las notas técnicas
+    // (I5-3): el Markdown, el PDF y el Excel las imprimen tal cual. Mismas
+    // fuentes que el servidor (`serverNiifIntegrity`): paridad del sello.
+    const narrative = checkNiifNarrative(
+      niif.json,
+      narrativeSourcesFromPreprocessed(context.ppForAgents, niif.json),
+      language,
+    );
+    if (narrative.motivos.length > 0) {
+      onProgress?.({
+        type: 'warning',
+        warnings: narrative.motivos.map((m) => `[Parte I — cifras en notas] ${m}`),
+      });
+      sellarProsaNiif(niif, narrative.motivos, language);
+    }
   } else {
     // Sin `niif.json` no hay nada que cruzar y las E1..E9 no corren. Antes eso
     // pasaba en silencio: el informe salía 200 y con sello, indistinguible de
@@ -2712,38 +2772,14 @@ function qualifyStrategyResult(
       type: 'warning',
       warnings: qualifications.motivos.map((m) => `[Estrategia — anclas] ${m}`),
     });
-    const seal = [
-      es
-        ? '> ## ANÁLISIS ESTRATÉGICO CON SALVEDADES — CIFRAS SIN RESPALDO'
-        : '> ## STRATEGIC ANALYSIS WITH QUALIFICATIONS — UNSUPPORTED FIGURES',
-      '>',
-      es
-        ? '> Cifras de la Parte II no coinciden con el balance preprocesado. Esta sección NO es emitible tal como está:'
-        : '> Part II figures do not match the preprocessed trial balance. This section is NOT issuable as is:',
-      '>',
-      ...qualifications.motivos.map((m) => `> - ${m}`),
-      '',
-    ].join('\n');
+    // Mismo texto que el re-render del servidor (part-markdown.ts, I5-7).
+    const seal = buildStrategyQualificationSeal(qualifications.motivos, language);
     strategy.kpiDashboard = `${seal}\n${strategy.kpiDashboard}`;
     strategy.fullContent = `${seal}\n${strategy.fullContent}`;
   }
 
   if (qualifications.noVerificables.length > 0) {
-    const MAX = 12;
-    const shown = qualifications.noVerificables.slice(0, MAX);
-    const rest = qualifications.noVerificables.length - shown.length;
-    const note = [
-      '',
-      es ? '### Verificación determinista de la Parte II' : '### Deterministic verification of Part II',
-      es
-        ? `- Cifras cruzadas contra el balance preprocesado: ${verifiedCount}.`
-        : `- Figures cross-checked against the preprocessed trial balance: ${verifiedCount}.`,
-      (es
-        ? '- No verificables contra anclas deterministas (estimaciones del modelo, no cifras del balance): '
-        : '- Not verifiable against deterministic anchors (model estimates, not trial-balance figures): ') +
-        shown.join('; ') +
-        (rest > 0 ? (es ? `; y ${rest} más.` : `; and ${rest} more.`) : '.'),
-    ].join('\n');
+    const note = buildStrategyVerificationNote(verifiedCount, qualifications.noVerificables, language);
     strategy.fullContent = `${strategy.fullContent}\n${note}`;
   }
 
@@ -2842,20 +2878,8 @@ export async function runGovernancePhase(
       // El sello va en el cuerpo del acta además de en el flag: un evento SSE
       // `warning` muere en el navegador sin handler (verificado por la auditoría
       // integral), así que la señal tiene que viajar en el texto que se lee.
-      const seal = [
-        language === 'es'
-          ? '> ## ACTA CON SALVEDADES — INTEGRIDAD ARITMÉTICA'
-          : '> ## MINUTES WITH QUALIFICATIONS — ARITHMETIC INTEGRITY',
-        '>',
-        language === 'es'
-          ? '> Las cifras del acta no coinciden con la aritmética determinista sobre la ' +
-            'utilidad del ejercicio. Este documento NO es firmable ni inscribible tal como está:'
-          : '> The minutes figures do not match the deterministic arithmetic over the ' +
-            'period result. This document is NOT signable as issued:',
-        '>',
-        ...motivos.map((m) => `> - ${m}`),
-        '',
-      ].join('\n');
+      // Mismo texto que el re-render del servidor (part-markdown.ts, I5-7).
+      const seal = actaArithmeticSeal(motivos, true, language);
       governance.shareholderMinutes = `${seal}\n${governance.shareholderMinutes}`;
       governance.fullContent = `${seal}\n${governance.fullContent}`;
     } else {
@@ -2876,21 +2900,7 @@ export async function runGovernancePhase(
         warnings: motivos.map((m) => `[Acta — sin ancla] ${m}`),
       });
       governance.actaQualifications = { clean: false, motivos };
-      const seal = [
-        language === 'es'
-          ? '> ## ACTA CON SALVEDADES — CIFRAS SIN VERIFICAR'
-          : '> ## MINUTES WITH QUALIFICATIONS — UNVERIFIED FIGURES',
-        '>',
-        language === 'es'
-          ? '> El acta propone cifras de destinación que no pudieron contrastarse con una ' +
-            'aritmética determinista sobre la utilidad del ejercicio. Este documento NO es firmable ' +
-            'ni inscribible tal como está:'
-          : '> The minutes propose allocation figures that could not be checked against ' +
-            'deterministic arithmetic over the period result. This document is NOT signable as issued:',
-        '>',
-        ...motivos.map((m) => `> - ${m}`),
-        '',
-      ].join('\n');
+      const seal = actaArithmeticSeal(motivos, false, language);
       governance.shareholderMinutes = `${seal}\n${governance.shareholderMinutes}`;
       governance.fullContent = `${seal}\n${governance.fullContent}`;
     }
