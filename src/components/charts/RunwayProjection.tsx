@@ -181,7 +181,7 @@ export function RunwayProjection({
         },
       ],
     };
-  }, [months, empty, tokens, texts]);
+  }, [months, empty, tokens, texts, language]);
 
   return (
     <ChartContainer
