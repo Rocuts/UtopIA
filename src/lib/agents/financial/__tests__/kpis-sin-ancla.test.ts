@@ -288,6 +288,11 @@ describe('superficies: fase, Excel y HTML', () => {
       expect(out.map((f) => f.detail).join(' ')).toMatch(/Margen bruto/);
     });
 
+    it('la cifra de otra frase no se atribuye al KPI N/D', () => {
+      const out = r7(html('', 'El margen EBITDA ajustado se publica N/D. El margen operativo fue de 23,7 %.'));
+      expect(out).toEqual([]);
+    });
+
     it('la banda sectorial del KPI no se confunde con la cifra descartada', () => {
       const j = strategy();
       j.kpis[1] = { ...j.kpis[1], resultPrimary: '15', benchmarkBand: { description: '> 15%', lowerBound: '15', upperBound: null } };

@@ -44,6 +44,7 @@ import {
   checkRoeUnits,
   findForeignCutoffYears,
   narrativeSourcesFromPreprocessed,
+  windowAfter,
   type NarrativeUnit,
 } from '../validators/narrative-anchors';
 import {
@@ -1248,7 +1249,7 @@ function checkDiscardedKpiFigures(
       const at = text.indexOf(name);
       if (at < 0) continue;
       // Lo que sigue al nombre en la misma fila o frase, sin la banda sectorial.
-      let tail = text.slice(at + name.length, at + name.length + 240);
+      let tail = windowAfter(text, at + name.length, []);
       if (band) tail = tail.split(band).join(' ');
       if (!patterns.some((re) => re.test(tail))) continue;
       const key = `${d.name}|${d.value}`;
