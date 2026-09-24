@@ -7,6 +7,7 @@
 // corte, moneda, citas normativas y leyenda de comparativo no presentado.
 // ---------------------------------------------------------------------------
 
+import { parseMoneyCop } from '@/lib/agents/financial/contracts/money';
 import { isContraAsset } from '@/lib/preprocessing/curator-rules/contra-asset-registry';
 
 const ZERO = BigInt(0);
@@ -49,6 +50,76 @@ export function incomeTotalLabel(kind: IncomeTotalKind, primaryCents: bigint): s
 export function incomeTotalLabelVariants(kind: IncomeTotalKind): string[] {
   const l = INCOME_TOTAL_LABELS[kind];
   return [l.profit, l.loss];
+}
+
+/** Rótulo normalizado (sin tildes, espacios colapsados, mayúsculas) para comparar filas. */
+export function normalizeStatementLabel(label: string): string {
+  return label
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+}
+
+export interface IncomeTotalRow {
+  label: string;
+  /** MoneyCop firmado del periodo actual. */
+  primary: string;
+  /** MoneyCop firmado del comparativo; `null` = sin cifra comparativa. */
+  comparative: string | null;
+}
+
+interface IncomeStatementTotalsInput {
+  lines: ReadonlyArray<{ label: string }>;
+  grossProfitPrimary: string;
+  grossProfitComparative: string | null;
+  operatingProfitPrimary: string;
+  operatingProfitComparative: string | null;
+  netIncomePrimary: string;
+  netIncomeComparative: string | null;
+  oriPrimary: string;
+  oriComparative: string | null;
+}
+
+const addCents = (a: string | null, b: string | null): string | null =>
+  a !== null && b !== null ? (parseMoneyCop(a) + parseMoneyCop(b)).toString(10) : null;
+
+/**
+ * Totales del Estado de Resultados Integral que se anexan tras los renglones
+ * del analista, con la MISMA regla en Markdown/HTML, PDF y Excel (antes cada
+ * superficie tenía su lista y el Markdown rotulaba "UTILIDAD" una pérdida y
+ * omitía el resultado integral total — reportes-export-01/-15):
+ *   - UTILIDAD / PÉRDIDA bruta, operativa y neta según el signo del periodo actual;
+ *   - OTRO RESULTADO INTEGRAL y RESULTADO INTEGRAL TOTAL (neto + ORI), enfoque
+ *     de un único estado (NIIF para las PYMES 5.5 / NIC 1.81A).
+ * Un total que el analista ya emitió como renglón (con cualquiera de los dos
+ * rótulos) no se duplica.
+ */
+export function incomeStatementTotalRows(p: IncomeStatementTotalsInput): IncomeTotalRow[] {
+  const emitted = new Set(p.lines.map((l) => normalizeStatementLabel(l.label)));
+  const out: IncomeTotalRow[] = [];
+  const push = (label: string, variants: string[], primary: string, comparative: string | null) => {
+    if (variants.some((v) => emitted.has(normalizeStatementLabel(v)))) return;
+    out.push({ label, primary, comparative });
+  };
+  for (const [kind, primary, comparative] of [
+    ['gross', p.grossProfitPrimary, p.grossProfitComparative],
+    ['operating', p.operatingProfitPrimary, p.operatingProfitComparative],
+    ['net', p.netIncomePrimary, p.netIncomeComparative],
+  ] as const) {
+    push(incomeTotalLabel(kind, parseMoneyCop(primary)), incomeTotalLabelVariants(kind), primary, comparative);
+  }
+  push('OTRO RESULTADO INTEGRAL', ['OTRO RESULTADO INTEGRAL'], p.oriPrimary, p.oriComparative);
+  const hasTotalIntegral = [...emitted].some((l) => l.startsWith('RESULTADO INTEGRAL TOTAL'));
+  if (!hasTotalIntegral) {
+    out.push({
+      label: 'RESULTADO INTEGRAL TOTAL',
+      primary: addCents(p.netIncomePrimary, p.oriPrimary) ?? p.netIncomePrimary,
+      comparative: addCents(p.netIncomeComparative, p.oriComparative),
+    });
+  }
+  return out;
 }
 
 export type PeriodoTipo = 'cerrado' | 'parcial' | 'indeterminado';

@@ -16,7 +16,11 @@
 import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
 import { callFinancialAgent } from '../agents/runtime';
 import { buildQualityAuditorPrompt } from './prompt';
-import { QualityReportSchema, type QualityReportJson } from '../contracts/quality-report';
+import {
+  QualityReportSchema,
+  type QualityGradeJson,
+  type QualityReportJson,
+} from '../contracts/quality-report';
 import type { FinancialReport } from '../types';
 import type { AuditReport } from '../audit/types';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
@@ -153,16 +157,47 @@ function buildUserContent(input: QualityAuditInput, context: QualityV21Context):
 }
 
 // ---------------------------------------------------------------------------
-// Tope determinista del score/grade del LLM
+// Score y grade deterministas (auditoria-calidad-10)
 // ---------------------------------------------------------------------------
 
-function gradeFromScore(score: number): string {
+/**
+ * Cortes documentados del grade interno (QualityAssessment.grade):
+ * A+ ≥ 95 · A ≥ 90 · B ≥ 80 · C ≥ 70 · D ≥ 60 · F < 60.
+ */
+export function gradeFromScore(score: number): QualityGradeJson {
   if (score >= 95) return 'A+';
   if (score >= 90) return 'A';
   if (score >= 80) return 'B';
   if (score >= 70) return 'C';
   if (score >= 60) return 'D';
   return 'F';
+}
+
+/**
+ * overallScore y grade calculados en código, no tomados del LLM
+ * (auditoria-calidad-10). El LLM emitía ambos libremente —el esquema acepta
+ * `{overallScore: 40, grade: 'A+'}` y "ponderando las 14 dimensiones" no
+ * declara pesos—, así que la insignia de la UI y la PDF podían decir "A+ · 96"
+ * mientras el sello v2.1 del mismo informe decía "requiere corrección".
+ *
+ *   overallScore = score global v2.1 (promedio de las dimensiones evaluadas,
+ *                  0-10, un decimal) × 10  →  escala 0-100;
+ *   grade        = cortes de `gradeFromScore`.
+ *
+ * Con los mismos cortes del sello (8,0 / 6,0) el grade ≥ B coincide con
+ * "certificada" y el F con "requiere corrección". Si el sello está bloqueado
+ * (integridad rota o Exactitud < 6), el score se topa en 59 → F
+ * (auditoria-calidad-03). Sin ninguna dimensión evaluable no hay score:
+ * `null` (N/D), nunca 0.
+ */
+export function deriveQualityScore(
+  view: QualityV21View,
+): { overallScore: number | null; grade: QualityGradeJson | null; capped: boolean } {
+  if (view.globalScore10 === null) return { overallScore: null, grade: null, capped: false };
+  const base = Math.round(view.globalScore10 * 10);
+  const blocked = view.sello.type === 'requiere_correccion' && view.selloBlockers.length > 0;
+  const overallScore = blocked ? Math.min(base, 59) : base;
+  return { overallScore, grade: gradeFromScore(overallScore), capped: overallScore !== base };
 }
 
 /**
@@ -199,7 +234,14 @@ export function toLegacyQualityAssessment(
   context: QualityV21Context = {},
 ): QualityAssessment {
   const view = buildQualityV21View(json, context);
-  const cap = capLlmScore(json.overallScore, json.grade, view);
+  const derived = deriveQualityScore(view);
+  // Sin dimensiones evaluables (inalcanzable con un JSON que pasó Zod: las
+  // métricas ISO 25012/42001 son obligatorias) el contrato legado exige un
+  // número: se conserva el del LLM topado como no certificable.
+  const cap =
+    derived.overallScore !== null && derived.grade !== null
+      ? { overallScore: derived.overallScore, grade: derived.grade, capped: derived.capped }
+      : capLlmScore(Math.min(json.overallScore, 59), 'F', view);
   const dimensions: QualityDimension[] = json.dimensions.map((d) => ({
     name: d.name,
     score: d.score,

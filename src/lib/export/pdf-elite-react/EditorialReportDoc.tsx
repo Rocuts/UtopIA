@@ -132,7 +132,7 @@ export function EditorialReportDoc({ doc }: Props) {
       {/* NotesPage returns array, one per block */}
       {showNotes && NotesPage({ doc })}
       <RecommendationsPage doc={doc} />
-      {/* Acta de Asamblea — governance.shareholderMinutes (Art. 187 Ley 222/1995).
+      {/* Acta de Asamblea — governance.shareholderMinutes (Art. 187 C.Co.).
           Omitida si el agente de Gobierno no produjo borrador o el usuario
           destildó el toggle. */}
       {showShareholderMinutes && <ShareholderMinutesPage doc={doc} />}

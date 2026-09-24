@@ -25,8 +25,7 @@ import {
   CURRENCY_NOTE,
   NARRATIVE_DISCLAIMER,
   comparativeNotPresentedLegend,
-  incomeTotalLabel,
-  incomeTotalLabelVariants,
+  incomeStatementTotalRows,
   presentedLineCents,
   resolvePeriodoTipos,
   statementDateLabel,
@@ -823,40 +822,12 @@ function addIncomeStatementFromJson(
   );
   row = addJsonLines(ws, row, p.lines, hasComparative);
 
-  // Totales vinculantes del contrato. Se anexan sólo si el analista no los
-  // emitió ya como línea — misma regla que `niifJsonToIncomeTable` en el PDF,
-  // para que ambos entregables listen exactamente las mismas filas y rótulos
-  // (UTILIDAD/PÉRDIDA según el signo; ORI y resultado integral total).
-  const norm = (s: string) =>
-    s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim().toUpperCase();
-  const emitted = new Set(p.lines.map((l) => norm(l.label)));
-  const pushTotal = (label: string, variants: string[], primary: string, comp: string | null) => {
-    if (variants.some((v) => emitted.has(norm(v)))) return;
-    row = addJsonStatementRow(ws, row, null, label, primary, comp, hasComparative, 'total');
-  };
-  for (const [kind, primary, comp] of [
-    ['gross', p.grossProfitPrimary, p.grossProfitComparative],
-    ['operating', p.operatingProfitPrimary, p.operatingProfitComparative],
-    ['net', p.netIncomePrimary, p.netIncomeComparative],
-  ] as const) {
-    pushTotal(
-      incomeTotalLabel(kind, parseMoneyCop(primary)),
-      incomeTotalLabelVariants(kind),
-      primary,
-      comp,
-    );
-  }
-  const hasTotalIntegral = [...emitted].some((l) => l.startsWith('RESULTADO INTEGRAL TOTAL'));
-  pushTotal('OTRO RESULTADO INTEGRAL', ['OTRO RESULTADO INTEGRAL'], p.oriPrimary, p.oriComparative);
-  if (!hasTotalIntegral) {
-    const sum = (a: string | null, b: string | null): string | null =>
-      a !== null && b !== null ? (parseMoneyCop(a) + parseMoneyCop(b)).toString(10) : null;
-    pushTotal(
-      'RESULTADO INTEGRAL TOTAL',
-      ['RESULTADO INTEGRAL TOTAL'],
-      sum(p.netIncomePrimary, p.oriPrimary) ?? p.netIncomePrimary,
-      sum(p.netIncomeComparative, p.oriComparative),
-    );
+  // Totales vinculantes del contrato (UTILIDAD/PÉRDIDA según el signo; ORI y
+  // resultado integral total). Regla única compartida con el PDF y el Markdown
+  // (`incomeStatementTotalRows`): un total ya emitido como renglón no se
+  // duplica y los tres entregables listan las mismas filas y rótulos.
+  for (const t of incomeStatementTotalRows(p)) {
+    row = addJsonStatementRow(ws, row, null, t.label, t.primary, t.comparative, hasComparative, 'total');
   }
 
   if (p.modeBanner) {
@@ -1335,6 +1306,16 @@ function computeKPIs(primary: PeriodView, comparative: PeriodView | null): KPIRo
   };
   const roeMeta = basisNote('roe');
   const roaMeta = basisNote('roa');
+  // ROE N/D por base no interpretable (patrimonio promedio ≤ 0): la nota es el
+  // motivo que publicó el preprocesador, no la base de un cálculo que no se
+  // hizo (ratios-kpis-07). Mismo texto que la tarjeta del PDF.
+  const ndMotivo = (view: PeriodView | null) => view?.controlTotals?.kpiNdMotivos?.roe ?? null;
+  const roeNdNote =
+    roeP === null && ndMotivo(primary)
+      ? ndMotivo(primary)!
+      : comparative && roeC === null && ndMotivo(comparative)
+        ? `${comparative.period}: ${ndMotivo(comparative)}`
+        : null;
 
   return [
     kpiOf('Total Activo', p.totalAssets, c?.totalAssets ?? null, { isMoney: true }),
@@ -1345,7 +1326,7 @@ function computeKPIs(primary: PeriodView, comparative: PeriodView | null): KPIRo
     kpiOf('Margen Neto', margenNetoP, margenNetoC, { isPct: true }),
     kpiOf('Endeudamiento', endeudamientoP, endeudamientoC, { isPct: true }),
     { ...kpiOf('ROA', roaP, roaC, { isPct: true, comparable: roaMeta.comparable }), note: roaMeta.note },
-    { ...kpiOf('ROE', roeP, roeC, { isPct: true, comparable: roeMeta.comparable }), note: roeMeta.note },
+    { ...kpiOf('ROE', roeP, roeC, { isPct: true, comparable: roeMeta.comparable }), note: roeNdNote ?? roeMeta.note },
   ];
 }
 
