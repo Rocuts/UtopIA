@@ -63,7 +63,7 @@ describe('valoracion-11 — signos en el Markdown del Strategy Director', () => 
     expect(res.projectedCashFlow).toContain('- Saldo Final Año +3: ($250.000.000,00)');
     // Pendiente #2 (auditoría integral 2026-09-24): sin preprocesado el KPI no
     // tiene base determinista y se publica N/D, no la cifra del modelo.
-    expect(res.kpiDashboard).toContain('| liquidity | Capital de trabajo | Capital de trabajo: sin fórmula determinista | ND |');
+    expect(res.kpiDashboard).toContain('| liquidity | Capital de trabajo | Capital de trabajo: sin fórmula determinista | N/D |');
     expect(res.kpiDashboard).not.toContain('($250.000.000,00)');
 
     // Con preprocesado el capital de trabajo se recalcula (AC − PC) y conserva el signo.

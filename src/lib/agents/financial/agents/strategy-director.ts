@@ -351,8 +351,9 @@ function applyDeterministicTrends(
 // ---------------------------------------------------------------------------
 
 function fmt(value: string, unit: KpiJson['unit'] = 'cop'): string {
-  // Sentinel "ND" (Parte 6 spec v2.0): KPI no confiable — preservar literal.
-  if (value === 'ND') return 'ND';
+  // Sentinel "ND" (Parte 6 spec v2.0): KPI no confiable. Se imprime "N/D",
+  // la forma que lee el usuario en el visor, el Excel y el HTML (pendiente #2).
+  if (value === 'ND') return 'N/D';
   // Con signo (valoracion-11): un capital de trabajo negativo no es positivo.
   if (unit === 'cop') return formatCopFromCents(parseMoneyCop(value), false);
   if (unit === 'percent') return `${value}%`;

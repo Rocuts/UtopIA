@@ -200,7 +200,7 @@ describe('superficies: fase, Excel y HTML', () => {
     });
     expect(out.strategyQualifications?.clean).toBe(true);
     expect(byName(out.json!, 'Margen EBITDA ajustado').resultPrimary).toBe('ND');
-    expect(out.kpiDashboard).toMatch(/\| Margen EBITDA ajustado \| Margen EBITDA ajustado: sin fórmula determinista \| ND \|/);
+    expect(out.kpiDashboard).toMatch(/\| Margen EBITDA ajustado \| Margen EBITDA ajustado: sin fórmula determinista \| N\/D \|/);
     expect(out.kpiDashboard).toMatch(/\| Margen bruto \| .* \| 62,5% \|/);
     expect(out.kpiDashboard).toContain('Publicados N/D por no tener ancla determinista');
     expect(out.fullContent).not.toMatch(/23,7|99,0/);
@@ -232,7 +232,7 @@ describe('superficies: fase, Excel y HTML', () => {
       if (typeof c.value === 'string') vals.push(c.value);
     }));
     const all = vals.join('\n');
-    expect(all).toMatch(/Margen EBITDA ajustado \| Margen EBITDA ajustado: sin fórmula determinista \| ND/);
+    expect(all).toMatch(/Margen EBITDA ajustado \| Margen EBITDA ajustado: sin fórmula determinista \| N\/D/);
     expect(all).not.toMatch(/23,7/);
     expect(all).toContain('3. ANÁLISIS DE TENDENCIAS');
   });
