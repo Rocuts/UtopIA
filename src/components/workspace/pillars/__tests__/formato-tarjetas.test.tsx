@@ -225,3 +225,23 @@ describe('CapexEventsModal', () => {
     expect(t).toContain('$450K');
   });
 });
+
+// ratios-kpis-29 — el 4,5 % con que se indexan los gastos fijos es un supuesto
+// de escenario (describeIpcAssumption, P6), pero ninguna vista lo mostraba: la
+// proyección parecía usar un dato oficial. FuturoTrendBars lo rotula.
+describe('FuturoTrendBars — supuesto de indexación rotulado', () => {
+  const series: FuturoBarSeries[] = [
+    { label: 'M+1', monthIndex: 1, cajaBase: 1_000_000, cajaConservadora: 900_000, cajaAgresiva: 1_100_000, capexAplicado: 0 },
+  ];
+
+  it('es: muestra el 4,5 % como supuesto de escenario, no dato DANE ni meta BanRep', () => {
+    const t = text(<FuturoTrendBars series={series} language="es" />);
+    expect(t).toContain('Gastos fijos indexados al 4,5 % anual: supuesto de escenario');
+    expect(t).toContain('no es un dato del DANE ni la meta del Banco de la República');
+  });
+
+  it('en: rótulo en inglés', () => {
+    const t = text(<FuturoTrendBars series={series} language="en" />);
+    expect(t).toContain('Fixed expenses indexed at 4.5% per year: scenario assumption');
+  });
+});

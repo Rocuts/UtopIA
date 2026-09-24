@@ -16,6 +16,10 @@
  * ajustar el factor de crecimiento del escenario base y ver la línea
  * recalcularse instantáneamente. Sin balance, el selector queda visible pero
  * deshabilitado (modo demo / mock).
+ *
+ * Indexación de gastos fijos (ratios-kpis-29): la proyección usa el supuesto
+ * de escenario de `describeIpcAssumption()` (4,5 % anual, sin fuente oficial)
+ * y la vista lo rotula. No hay control en la UI para cambiar esa tasa.
  */
 
 import { useMemo, useState } from 'react';
@@ -28,7 +32,7 @@ import { useChartTheme } from '@/lib/charts/use-theme';
 import { ChartContainer } from '@/components/charts/ChartContainer';
 import { cn } from '@/lib/utils';
 import { formatBigCop } from '@/lib/charts/format';
-import { buildFuturoBarSeries } from '@/lib/pillars/futuro-bars';
+import { buildFuturoBarSeries, describeIpcAssumption } from '@/lib/pillars/futuro-bars';
 import type { FuturoBarSeries } from '@/lib/pillars/futuro-bars';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { useCapexEvents } from '@/hooks/useCapexEvents';
@@ -307,6 +311,8 @@ export function FuturoTrendBars({ series, language, density, balance, workspaceI
     : '12-month projection · adjustable base scenario · fixed conservative & aggressive';
 
   const hasBalance = !!balance;
+  // Mismo supuesto que aplica buildFuturoBarSeries (sin ipcRate explícito).
+  const ipcAssumption = describeIpcAssumption();
 
   return (
     <div className="flex flex-col gap-3">
@@ -320,6 +326,9 @@ export function FuturoTrendBars({ series, language, density, balance, workspaceI
             {isEs
               ? 'Factores: Base ajustable · Conservador 0,85× · Agresivo 1,10×'
               : 'Factors: Adjustable base · Conservative 0.85× · Aggressive 1.10×'}
+          </span>
+          <span className="text-xs text-n-600" data-testid="futuro-ipc-assumption">
+            {isEs ? ipcAssumption.labelEs : ipcAssumption.labelEn}
           </span>
           {conservadoraCruzaCero && (
             <span className="inline-flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
