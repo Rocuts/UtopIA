@@ -18,9 +18,10 @@
 // `metadata.partial = true` y sigue. El sintetizador trabaja con lo que tenga.
 // ---------------------------------------------------------------------------
 
-import { parseTrialBalanceCSV, preprocessTrialBalance } from '@/lib/preprocessing/trial-balance';
 import { UVT_2026_COP } from '@/lib/accounting/tax-engine/constants';
+import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { buildFiscalAnchor } from '../fiscal-anchor';
+import { exigirIntegridadBalance, leerBalanceEscudo } from '../lib/balance-ingesta';
 import type { FiscalAnchorBlock } from '../fiscal-anchor/types';
 import { runCcvFiscalAgent } from './agents/ccv-fiscal.agent';
 import { runConciliacionAgent } from './agents/conciliacion.agent';
@@ -165,13 +166,27 @@ export async function orchestrateFiscalAgent(
 
   // ── 1. Preprocesamiento ────────────────────────────────────────────────
   callbacks?.onProgress?.({ stage: 'preprocessing', status: 'started' });
-  const preprocessed = inp.preprocessed ?? (() => {
-    const rows = parseTrialBalanceCSV(inp.rawData);
-    if (rows.length === 0) {
-      throw new Error('No se pudieron parsear filas del balance de prueba.');
+  // Misma lectura que /upload y /niif (P4 cross-dep): directivas de ingesta
+  // (unidad confirmada, vencimientos), bloques por hoja del XLSX y bloqueo con
+  // motivo (`EscudoBalanceBloqueadoError`) si no hay filas o la lectura tiene
+  // motivos de integridad, como una unidad declarada sin confirmar. Un
+  // preprocesado recibido del llamador pasa por el mismo bloqueo.
+  let preprocessed: PreprocessedBalance;
+  try {
+    if (inp.preprocessed) {
+      exigirIntegridadBalance(inp.preprocessed, language);
+      preprocessed = inp.preprocessed;
+    } else {
+      preprocessed = leerBalanceEscudo(inp.rawData, { language, sinFilas: 'bloquear' });
     }
-    return preprocessTrialBalance(rows);
-  })();
+  } catch (err) {
+    callbacks?.onProgress?.({
+      stage: 'preprocessing',
+      status: 'failed',
+      message: err instanceof Error ? err.message : 'parse_error',
+    });
+    throw err;
+  }
   const fiscalAnchor: FiscalAnchorBlock =
     inp.fiscalAnchor ??
     buildFiscalAnchor({

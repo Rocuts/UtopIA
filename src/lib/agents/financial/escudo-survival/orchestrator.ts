@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // Modo Supervivencia Élite — Orchestrator
 // ---------------------------------------------------------------------------
-// Pipeline: rawData -> preprocessTrialBalance -> [5 agentes en paralelo] ->
+// Pipeline: rawData -> leerBalanceEscudo -> [5 agentes en paralelo] ->
 // sintetizador -> EscudoSurvivalReport.
 //
 // Patron: Promise.allSettled. Si CUALQUIER agente falla, el reporte se entrega
@@ -13,8 +13,6 @@
 import { z } from 'zod';
 import {
   extractCompanyMetadata,
-  parseTrialBalanceCSV,
-  preprocessTrialBalance,
   type PreprocessedBalance,
 } from '@/lib/preprocessing/trial-balance';
 import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
@@ -51,6 +49,7 @@ import {
 } from './lib/deterministic-survival';
 import { TTD_UNAVAILABLE_REASON } from './fiscal-agent/tools/ccv-calculator';
 import { validateSurvivalReport } from './validators/survival-validators';
+import { EscudoBalanceBloqueadoError, leerBalanceEscudo } from './lib/balance-ingesta';
 
 // ---------------------------------------------------------------------------
 // Synthesizer schema — el LLM consolida los 5 resultados en topRecommendations
@@ -88,10 +87,14 @@ export async function orchestrateEscudoSurvival(
   // Stage 0: Preprocessing (deterministico)
   // -------------------------------------------------------------------------
   emit(onProgress, 'preprocessing', 'started');
+  // Misma lectura que /upload y /niif (P4 cross-dep): directivas de ingesta
+  // confirmadas (unidad, vencimientos), bloques por hoja del XLSX y bloqueo
+  // con motivo si la lectura tiene problemas de integridad (p. ej. unidad
+  // declarada sin confirmar). El texto libre (OCR) conserva el contrato
+  // anterior: balance vacío, sin cifras vinculantes.
   let preprocessed: PreprocessedBalance;
   try {
-    const rows = parseTrialBalanceCSV(input.rawData);
-    preprocessed = preprocessTrialBalance(rows);
+    preprocessed = leerBalanceEscudo(input.rawData, { language, sinFilas: 'vacio' });
   } catch (err) {
     emit(
       onProgress,
@@ -99,6 +102,7 @@ export async function orchestrateEscudoSurvival(
       'failed',
       err instanceof Error ? err.message : 'parse_error',
     );
+    if (err instanceof EscudoBalanceBloqueadoError) throw err;
     throw new Error(
       `[escudo-survival] No se pudo preprocesar el balance: ${
         err instanceof Error ? err.message : 'unknown_error'
