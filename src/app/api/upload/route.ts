@@ -14,7 +14,7 @@ import {
   parseUploadedTrialBalanceText,
   TrialBalanceIngestError,
 } from '@/lib/preprocessing/raw-data';
-import { sanitizeSheetLabel, xlsxRowToCsvLine } from '@/lib/upload/xlsx-csv';
+import { sanitizeSheetLabel, xlsxRowToCsvLine, type XlsxNumberPrecision } from '@/lib/upload/xlsx-csv';
 import {
   escribirDirectivasIngesta,
   leerCampoUnidad,
@@ -374,7 +374,14 @@ async function extractTextFromImage(buffer: Buffer, filename: string): Promise<s
 }
 
 // Supported file types and their text extractors
-async function extractText(buffer: Buffer, filename: string): Promise<string> {
+async function extractText(
+  buffer: Buffer,
+  filename: string,
+  // P4-a: con la unidad confirmada en miles / millones las celdas numéricas
+  // del XLSX conservan todos sus decimales (dos decimales de la unidad no son
+  // centavos); en pesos se redondean al centavo como siempre.
+  xlsxPrecision: XlsxNumberPrecision = 'cents',
+): Promise<string> {
   const ext = path.extname(filename).toLowerCase();
 
   if (!ALLOWED_UPLOAD_EXTENSIONS.has(ext)) {
@@ -503,7 +510,7 @@ async function extractText(buffer: Buffer, filename: string): Promise<string> {
         // los convierte a texto y escapa cada campo segun RFC 4180: un nombre
         // de cuenta con coma ("Propiedades, planta y equipo") ya no desplaza
         // las columnas (ingesta-05).
-        const line = xlsxRowToCsvLine(row.values as unknown[], rows.length === 0);
+        const line = xlsxRowToCsvLine(row.values as unknown[], rows.length === 0, xlsxPrecision);
         // Filas sin ningún valor (sólo formato) no aportan: si quedaran
         // primeras, el parser las tomaría como encabezado.
         if (/^,*$/.test(line)) return;
@@ -718,7 +725,11 @@ async function processDocument(
 
   let text: string;
   try {
-    text = await extractText(buffer, filename);
+    text = await extractText(
+      buffer,
+      filename,
+      unidadConfirmada === 'miles' || unidadConfirmada === 'millones' ? 'full' : 'cents',
+    );
   } catch (extractError) {
     // Return the specific error message so the frontend can display actionable feedback
     const message = extractError instanceof Error

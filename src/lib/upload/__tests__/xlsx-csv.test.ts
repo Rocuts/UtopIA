@@ -24,6 +24,20 @@ describe('formatXlsxNumber', () => {
     expect(formatXlsxNumber(5.999)).toBe('6');
     expect(formatXlsxNumber(Number.NaN)).toBe('');
   });
+  it('P4-a: con la unidad confirmada en miles / millones conserva todos los decimales del valor almacenado', () => {
+    // Dos decimales de "millones" son $10.000: 4232,848882125 millones salía
+    // "4232.85" ($4.232.850.000) en vez de $4.232.848.882,13.
+    expect(formatXlsxNumber(4232.848882125, 'full')).toBe('4232.848882125');
+    expect(formatXlsxNumber(100.1 + 200.2, 'full')).toBe('300.3');
+    expect(formatXlsxNumber(1.5e-7, 'full')).toBe('0.00000015');
+    expect(formatXlsxNumber(11050501, 'full')).toBe('11050501');
+    // Tres decimales exactos se leerían como separador de miles: cero final.
+    expect(formatXlsxNumber(1.234, 'full')).toBe('1.2340');
+    expect(formatXlsxNumber(-100.125, 'full')).toBe('-100.1250');
+    expect(xlsxRowToCsvLine([undefined, '110505', 'Caja', 1.234], false, 'full')).toBe('110505,Caja,1.2340');
+    // Sin la unidad confirmada, el redondeo al centavo de siempre.
+    expect(formatXlsxNumber(4232.848882125)).toBe('4232.85');
+  });
 });
 
 describe('xlsxCellToText', () => {

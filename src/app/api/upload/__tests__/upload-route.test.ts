@@ -384,6 +384,47 @@ describe('/api/upload — unidad declarada con confirmación (P4-a)', () => {
     expect(json.preprocessed!.primary.controlTotals.activo).toBe(1_000_000_000);
   });
 
+  it('XLSX en millones: la confirmación conserva los decimales de cada celda (centavos exactos)', async () => {
+    // Las celdas se serializaban a dos decimales de la unidad antes de
+    // reexpresar: 4232,848882125 millones → "4232.85" → $4.232.850.000 y
+    // 1,234 millones → "1.23" → $1.230.000, sin bloqueo (el balance cuadraba).
+    const buf = await xlsxOf([
+      {
+        name: 'Balance 2025',
+        header: ['codigo', 'nombre', 'Saldo 2025 (millones de pesos)'],
+        rows: [
+          ['11050501', 'Caja', 4232.848882125],
+          ['11100501', 'Bancos', 1.234],
+          ['13050501', 'Clientes', 0.1 + 0.2],
+          ['15200101', 'PPE', 500],
+          ['22050101', 'Proveedores', 150],
+          ['23359501', 'Otros', 100],
+          ['25050101', 'Salarios', 50],
+          ['24080101', 'IVA', 100],
+          ['31050501', 'Capital', 4234.382882125],
+          ['33050501', 'Reserva', 100],
+          ['14350101', 'Mercancías', 0],
+        ],
+      },
+    ]);
+    const fd = new FormData();
+    fd.append('file', new File([new Blob([new Uint8Array(buf)])], 'balance.xlsx'));
+    fd.append('context', 'test');
+    fd.append('unitMultiplier', '1000000');
+    const res = await POST(new Request('http://localhost/api/upload', { method: 'POST', body: fd }));
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as UploadJson & {
+      preprocessed: { primary: { controlTotals: { cents: { activo: string } }; validation: { blocking: boolean } } };
+    };
+    // 4.232.848.882,13 + 1.234.000 + 300.000 + 500.000.000
+    expect(String(json.preprocessed.primary.controlTotals.cents.activo)).toBe('473438288213');
+    expect(json.preprocessed.primary.validation.blocking).toBe(false);
+    expect(json.rawData).toContain('11100501,Bancos,1.2340');
+    // /niif re-deriva lo mismo desde rawData.
+    const reparsed = preprocessTrialBalance(parseUploadedTrialBalanceText(json.rawData!).rows);
+    expect(reparsed.primary.controlTotals.cents!.activo).toBe(BigInt(473438288213));
+  });
+
   it('unitMultiplier inválido o en un documento no tabular: 400 explícito', async () => {
     expect((await uploadWith(CSV_MILES, 'balance.csv', '100')).status).toBe(400);
     const txt = await uploadWith('Acta de asamblea', 'acta.txt', '1000');
