@@ -668,3 +668,34 @@ describe('revisión I3 — /export sin referencia aplica el gate de texto de /co
     expect(containsFake(vi.mocked(composeEditorialReport).mock.calls[0][0].report)).toBe(false);
   });
 });
+
+describe('revisión I3 — versión persistida antes de I3 que pasó el gate de texto con el Markdown del navegador', () => {
+  it('JSON sin TTD, TTD sólo en el texto guardado y emitibilidad "emittable": /export y /html por referencia → 422 (V10)', async () => {
+    const g = gobierno();
+    g.financialNotes = g.financialNotes.filter((n) => n.number !== 2);
+    const f = await fases({ governance: g });
+    const c = await consolidar(f, f.context.company);
+    // Lo que un /consolidate anterior a I3 persistía: el texto del navegador
+    // (con la TTD) y la emitibilidad calculada sobre ESE texto.
+    const governance = { ...c.report.governance, fullContent: `${c.report.governance.fullContent}\n\n${TTD_NOTE_BODY}` };
+    const legacy: FinancialReport = {
+      ...c.report,
+      governance,
+      consolidatedReport: c.report.consolidatedReport.replace(c.report.governance.fullContent, governance.fullContent),
+      emittability: { kind: 'emittable', blockers: [], suggestedAdjustments: [] },
+    };
+    const version = buildFinancialReportVersion({ report: legacy, preprocessed: pp, rawData: CSV_PERDIDA_COMPARATIVO });
+    const persisted = await persistFinancialReportVersion({ workspaceId: W1, version, controlTotals: null });
+    if (persisted.status !== 'persisted') throw new Error('no persistió');
+    const reportRef = { reportId: persisted.provenance.reportId, reportHash: persisted.provenance.reportHash };
+    vi.clearAllMocks();
+    for (const format of ['excel', 'pdf-elite'] as const) {
+      const res = await exportReport(req('/api/financial-report/export', { reportRef, format }));
+      expect(res.status, format).toBe(422);
+      expect(JSON.stringify(await res.json())).toMatch(/salvedades o validaciones bloqueantes/);
+    }
+    const page = await html(req('/api/financial-report/html', { reportRef, language: 'es' }));
+    expect(page.status).toBe(422);
+    expect(runHtmlEditor).not.toHaveBeenCalled();
+  });
+});

@@ -42,8 +42,8 @@ import { withServerPartVerdicts } from '@/lib/reports/part-verdicts';
 import {
   buildServerConsolidatedReport,
   foldServerEmittability,
-  withServerPartsInConsolidated,
   withServerRenderedParts,
+  withServerRenderedPersisted,
 } from '@/lib/reports/part-markdown';
 import { applyRequestConfirmations } from '@/lib/reports/ingest-confirmations';
 import {
@@ -265,21 +265,13 @@ function resolveExportPreprocessed(body: Record<string, unknown>, label: string)
 // Partes. Ese texto se RE-RENDERIZA en el servidor desde el JSON de cada Parte
 // (`withServerRenderedParts`) antes del gate y de componer el artefacto; el
 // que trae el cuerpo o una versión persistida anterior se descarta:
-//   - por referencia, en el consolidado persistido (ensamblado por el
-//     servidor) se sustituye sólo el segmento de las Partes;
+//   - por referencia (`withServerRenderedPersisted`), en el consolidado
+//     persistido (ensamblado por el servidor) se sustituye sólo el segmento de
+//     las Partes y el gate de texto de /consolidate se recalcula sobre él;
 //   - sin referencia, el consolidado se reconstruye entero con la misma
-//     función que /consolidate y la traza de ajustes del ledger de la petición.
+//     función que /consolidate y la traza de ajustes del ledger de la petición,
+//     y su validación y bloqueantes de texto se pliegan sobre los recibidos.
 // ---------------------------------------------------------------------------
-
-function persistedWithServerMarkdown(
-  report: FinancialReport,
-  preprocessed: PreprocessedBalance | undefined,
-  language: 'es' | 'en',
-): FinancialReport {
-  const rendered = withServerRenderedParts(report, preprocessed, language);
-  const consolidated = withServerPartsInConsolidated(report.consolidatedReport, rendered, language);
-  return { ...rendered, consolidatedReport: consolidated ?? rendered.consolidatedReport };
-}
 
 function clientReportWithServerMarkdown(
   report: FinancialReport,
@@ -350,7 +342,7 @@ async function exportPersisted(
   const language: 'es' | 'en' = body.language === 'en' ? 'en' : 'es';
   // Veredictos con las reglas vigentes y Markdown re-renderizado desde el JSON
   // persistido (una versión anterior a I3 pudo guardar el texto del cliente).
-  const report = persistedWithServerMarkdown(persisted.report, preprocessed, language);
+  const report = withServerRenderedPersisted(persisted.report, preprocessed, language);
   const blocked = rejectInvalidExport(report, preprocessed);
   if (blocked) return blocked;
   const stamp: ArtifactProvenance = isProvisionalDraft(report)

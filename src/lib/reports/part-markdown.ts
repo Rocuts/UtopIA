@@ -560,6 +560,37 @@ export function withServerPartsInConsolidated(
   return consolidated.slice(0, start) + consolidatedPartsSegment(report, language) + consolidated.slice(end);
 }
 
+/**
+ * Versión PERSISTIDA con el Markdown de las Partes re-renderizado desde su JSON
+ * (`withServerRenderedParts`), el segmento de las Partes de su consolidado
+ * sustituido (encabezado, BORRADOR y traza de ajustes del servidor se
+ * conservan) y el gate de texto de /consolidate (validación post-render y
+ * V8/V9/V10/V15) recalculado sobre ese texto: una versión persistida antes de
+ * I3 pudo pasar esos gates con el texto del navegador. Lo usan /export y /html
+ * por referencia. Si el consolidado persistido no tiene la estructura
+ * esperada, se usa el que reconstruye el servidor (nunca el texto guardado).
+ */
+export function withServerRenderedPersisted(
+  report: FinancialReport,
+  preprocessed: PreprocessedBalance | null | undefined,
+  language: 'es' | 'en',
+): FinancialReport {
+  const rendered = withServerRenderedParts(report, preprocessed, language);
+  if (rendered === report) return report;
+  const gate = buildServerConsolidatedReport({
+    report: rendered,
+    preprocessed,
+    language,
+    clientConsolidated: report.consolidatedReport,
+  });
+  const consolidated = withServerPartsInConsolidated(report.consolidatedReport, rendered, language);
+  return {
+    ...rendered,
+    consolidatedReport: consolidated ?? gate.consolidatedReport,
+    ...foldServerEmittability(rendered, gate, preprocessed),
+  };
+}
+
 /** Razón declarada en el sello BORRADOR de un consolidado (texto del usuario). */
 export function provisionalReasonOf(consolidated: unknown): string {
   if (typeof consolidated !== 'string') return '';
