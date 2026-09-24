@@ -53,6 +53,7 @@ import {
   preprocesarPerdidaComparativo,
 } from '@/lib/agents/financial/__fixtures__/perdida-comparativo-w4a';
 import { readAppliedAdjustments } from '@/lib/reports/preprocessed-integrity';
+import { toJsonSafe } from '@/lib/preprocessing/json-safe';
 import type { FinancialReport } from '@/lib/agents/financial/types';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { makeProvenanceParts, makeReportsTableFake } from '@/lib/reports/__tests__/provenance-fixture';
@@ -81,6 +82,7 @@ const LEDGER = {
   ],
 };
 const HONEST = preprocesarPerdidaComparativo();
+const HONEST_JSON = toJsonSafe(HONEST);
 
 let fake: ReturnType<typeof makeReportsTableFake>;
 const previousDbUrl = process.env.DATABASE_URL;
@@ -186,5 +188,62 @@ describe('ajuste del Doctor de Datos anclado al comparativo', () => {
       }),
     );
     expect(page.status, await page.clone().text()).toBe(200);
+  });
+
+  it('un ajuste confirmado anclado a un periodo que no existe en el balance es 422 en todas las rutas (no se descarta en silencio)', async () => {
+    // Revisión I1: con `period` respetado, `applyAdjustments` ignora con un
+    // aviso en el log el ajuste cuyo periodo no está en el balance. El informe
+    // salía 200 SIN el ajuste que el usuario confirmó.
+    const ghost = { adjustments: [{ ...LEDGER.adjustments[0], id: 'adj-2023', period: '2023' }] };
+
+    const niifRes = await niif(
+      req('/api/financial-report/niif', { rawData: CSV_PERDIDA_COMPARATIVO, company: COMPANY, language: 'es', adjustmentLedger: ghost }),
+    );
+    const niifText = await niifRes.text();
+    expect(niifRes.status, niifText).toBe(422);
+    expect(niifText).toMatch(/2023/);
+    expect(runNiifAnalyst).not.toHaveBeenCalled();
+
+    const p = makeProvenanceParts();
+    const consolidateRes = await consolidate(
+      req('/api/financial-report/consolidate', {
+        rawData: CSV_PERDIDA_COMPARATIVO,
+        company: COMPANY,
+        language: 'es',
+        adjustmentLedger: ghost,
+        reportParts: { niifAnalysis: p.niifAnalysis, strategicAnalysis: p.strategicAnalysis, governance: p.governance },
+      }),
+    );
+    expect(consolidateRes.status, await consolidateRes.clone().text()).toBe(422);
+    expect(fake.rows).toHaveLength(0);
+
+    // Sin referencia: desde `rawData` y desde las filas del propio preprocesado.
+    const report = { ...p, company: COMPANY, consolidatedReport: 'x', generatedAt: '2026-09-24T00:00:00Z' };
+    const withRaw = await exportReport(
+      req('/api/financial-report/export', {
+        report, rawData: CSV_PERDIDA_COMPARATIVO, preprocessed: HONEST_JSON, adjustmentLedger: ghost, format: 'excel',
+      }),
+    );
+    expect(withRaw.status, await withRaw.clone().text()).toBe(422);
+    const ownRows = await exportReport(
+      req('/api/financial-report/export', { report, preprocessed: HONEST_JSON, adjustmentLedger: ghost, format: 'excel' }),
+    );
+    expect(ownRows.status, await ownRows.clone().text()).toBe(422);
+    expect(await ownRows.clone().text()).toMatch(/2023/);
+
+    const page = await html(
+      req('/api/financial-report/html', {
+        niifReport: informeHonesto(HONEST),
+        strategyReport: {},
+        governanceReport: {},
+        company: { ...COMPANY, sector: null, city: null, signatories: null },
+        metadata: { entityNit: COMPANY.nit, periodEnd: '2025-12-31' },
+        language: 'es',
+        preprocessed: HONEST_JSON,
+        adjustmentLedger: ghost,
+      }),
+    );
+    expect(page.status, await page.clone().text()).toBe(422);
+    expect(runHtmlEditor).not.toHaveBeenCalled();
   });
 });

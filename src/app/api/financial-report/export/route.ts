@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { adjustmentLedgerSchema } from '@/lib/reports/adjustment-ledger';
+import { adjustmentLedgerSchema, unknownAdjustmentPeriodReasons } from '@/lib/reports/adjustment-ledger';
 import { financialExportBlockers } from '@/lib/export/financial-export-validation';
 import { Readable } from 'node:stream';
 import { generateFinancialExcel } from '@/lib/export/excel-export';
@@ -212,7 +212,10 @@ function resolveExportPreprocessed(body: Record<string, unknown>, label: string)
       ),
     };
   }
-  // Mismo paso que Stage 0.4 de /niif (`prepareFinancialContext`).
+  // Mismo paso que Stage 0.4 de /niif (`prepareFinancialContext`), incluido el
+  // rechazo de un ajuste confirmado con un periodo inexistente.
+  const periodErrors = unknownAdjustmentPeriodReasons(read.preprocessed, applied);
+  if (periodErrors.length > 0) return { ok: false, response: incoherentSourcesResponse(periodErrors) };
   const derived =
     applied.length === 0 ? read.preprocessed : applyAdjustments(read.preprocessed, applied).balance;
   if (claimed) {

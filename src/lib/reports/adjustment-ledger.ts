@@ -29,8 +29,9 @@ export const adjustmentSchema = z.object({
   rejectedAt: z.string().min(1).max(40).optional(),
   /**
    * Multiperiodo: sin periodo el ajuste va al primario (contrato de
-   * `applyAdjustments`); con uno que no existe en el balance, el aplicador lo
-   * ignora con un aviso en el log.
+   * `applyAdjustments`). Uno que no existe en el balance se rechaza en las
+   * rutas (`unknownAdjustmentPeriodReasons`): el aplicador lo ignoraría con
+   * sólo un aviso en el log.
    */
   period: adjustmentPeriodSchema.optional(),
 });
@@ -38,3 +39,29 @@ export const adjustmentSchema = z.object({
 export const adjustmentLedgerSchema = z
   .object({ adjustments: z.array(adjustmentSchema).max(50) })
   .optional();
+
+/**
+ * Motivos de rechazo de los ajustes CONFIRMADOS cuyo `period` no existe en el
+ * balance. `applyAdjustments` los descarta con un `console.warn`, así que el
+ * informe saldría sin el ajuste que el usuario confirmó y con cifras distintas
+ * de las que aprobó. Stage 0.4 (`prepareFinancialContext`), la re-derivación
+ * del preprocesado del cliente y /export los convierten en 422. Vacío si todos
+ * los periodos existen (o el ajuste no trae periodo: va al primario).
+ */
+export function unknownAdjustmentPeriodReasons(
+  balance: { periods: ReadonlyArray<{ period: string }> },
+  adjustments: ReadonlyArray<{ id: string; accountCode: string; status: string; period?: string | null }>,
+): string[] {
+  const known = balance.periods.map((p) => p.period);
+  const out: string[] = [];
+  for (const a of adjustments) {
+    if (a.status !== 'applied' || a.period === undefined || a.period === null) continue;
+    if (known.includes(a.period)) continue;
+    out.push(
+      `Ajuste confirmado ${a.id} (cuenta ${a.accountCode}): apunta al periodo "${a.period}", que no existe ` +
+        `en el balance (periodos: ${known.join(', ') || 'ninguno'}). No se aplica ni se descarta en silencio: ` +
+        'corrija el periodo del ajuste y vuelva a generar el informe.',
+    );
+  }
+  return out;
+}

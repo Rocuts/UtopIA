@@ -2,7 +2,7 @@ import type { Adjustment } from '@/lib/agents/repair/types';
 import { applyAdjustments } from '@/lib/agents/repair/adjustments';
 import { preprocessTrialBalance, type PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { preprocessedAnchorMismatches } from '@/lib/preprocessing/json-safe';
-import { adjustmentPeriodSchema } from './adjustment-ledger';
+import { adjustmentPeriodSchema, unknownAdjustmentPeriodReasons } from './adjustment-ledger';
 
 // ---------------------------------------------------------------------------
 // Re-derivación del preprocesado que envía el cliente (niif-preproceso-33)
@@ -48,6 +48,10 @@ export function rederivePreprocessedFromRows(
       defaultPeriod: claimed.primary?.period,
     });
     const applied = adjustments.filter((a) => a.status === 'applied');
+    // Un ajuste confirmado con un periodo inexistente no se descarta en
+    // silencio (mismo criterio que Stage 0.4 de /niif).
+    const periodErrors = unknownAdjustmentPeriodReasons(derived, applied);
+    if (periodErrors.length > 0) return { ok: false, details: periodErrors };
     if (applied.length > 0) derived = applyAdjustments(derived, applied).balance;
   } catch (err) {
     console.warn(

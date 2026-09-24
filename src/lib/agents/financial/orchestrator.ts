@@ -103,6 +103,7 @@ import type {
   ProvisionalFlag,
 } from '@/lib/agents/repair/types';
 import { applyAdjustments, revalidate } from '@/lib/agents/repair/adjustments';
+import { unknownAdjustmentPeriodReasons } from '@/lib/reports/adjustment-ledger';
 import { leerDirectivasIngesta } from '@/lib/upload/ingest-directives';
 import { getHechosEmpresaBlock } from '@/lib/facts/report-facts';
 import { computeEbitda } from '@/lib/pillars/ebitda';
@@ -1861,6 +1862,11 @@ export async function prepareFinancialContext(
     typeof preprocessed === 'object' &&
     isPreprocessedBalance(preprocessed)
   ) {
+    // Un ajuste confirmado anclado a un periodo que no existe en el balance:
+    // `applyAdjustments` lo ignoraría con sólo un aviso en el log y el informe
+    // saldría sin él. Se detiene con motivo (422), como el resto de Stage 0.
+    const periodErrors = unknownAdjustmentPeriodReasons(preprocessed, appliedAdjustments);
+    if (periodErrors.length > 0) throw new BalanceValidationError(periodErrors, []);
     adjustmentsApplicationDetail = applyAdjustments(preprocessed, appliedAdjustments);
     preprocessed = adjustmentsApplicationDetail.balance;
     onProgress?.({
