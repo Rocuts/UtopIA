@@ -15,7 +15,7 @@ import { describe, expect, it } from 'vitest';
 import { reconcileBindingFigures } from '../agents/html-editor-validator';
 import type { HtmlEditorInput } from '../contracts/html-editor';
 import type { NiifReportJson } from '../contracts/niif-report';
-import { buildHtmlEditorUserContent } from '../prompts/html-editor.prompt';
+import { buildHtmlEditorSystemPrompt, buildHtmlEditorUserContent } from '../prompts/html-editor.prompt';
 import { formatCopFromCents } from '../contracts/money';
 import {
   csvDosCortes,
@@ -262,5 +262,15 @@ describe('Prompt del Editor Jefe — comparativos deterministas y devoluciones 4
     const content = buildHtmlEditorUserContent(input(tres()));
     expect(content).not.toMatch(/NIIF 15 §47/);
     expect(content).toMatch(/4175[^\n]*criterio de presentación de UtopIA/);
+  });
+
+  it('integración I4: la spec v10.1 embebida en el system prompt tampoco atribuye la línea 4175 a NIIF 15 §47', () => {
+    const system = buildHtmlEditorSystemPrompt();
+    const linea4175 = system.split('\n').find((l) => l.includes('Cta 4175'));
+    expect(linea4175).toBeDefined();
+    expect(linea4175).not.toMatch(/NIIF 15/);
+    expect(linea4175).toMatch(/criterio de presentación de UtopIA/);
+    expect(linea4175).toMatch(/41 − 4175/);
+    expect(system).not.toMatch(/NIIF 15 §47/);
   });
 });
