@@ -903,8 +903,10 @@ interface HeaderLayout {
   balance: BalanceColumnDetection;
 }
 
+/** Separador de la línea, ignorando lo que va entre comillas ("nombre; x"). */
 function detectSeparator(line: string): string {
-  return line.includes('\t') ? '\t' : line.includes(';') ? ';' : ',';
+  const unquoted = line.replace(/"[^"]*"/g, '');
+  return unquoted.includes('\t') ? '\t' : unquoted.includes(';') ? ';' : ',';
 }
 
 function detectHeaderLayout(
@@ -3106,14 +3108,32 @@ function curatorFindingToDiscrepancy(
 }
 
 /**
- * Ordena periodos ascendentemente. Periodos numericos (años) se ordenan
- * naturalmente; etiquetas no numericas (DEFAULT_PERIOD, etc.) van al final.
+ * Clave cronológica (AAAAMM) de una etiqueta de periodo: "2025" es el cierre
+ * 2025-12, "2025-06" junio, "2025-Q2" el cierre del trimestre y un rango
+ * "AAAA-MM-DD..AAAA-MM-DD" su fecha final. `null` si no es una fecha.
+ */
+function periodSortKey(period: string): number | null {
+  let m = period.match(/^(20\d{2})$/);
+  if (m) return parseInt(m[1], 10) * 100 + 12;
+  m = period.match(/^(20\d{2})-(0[1-9]|1[0-2])$/);
+  if (m) return parseInt(m[1], 10) * 100 + parseInt(m[2], 10);
+  m = period.match(/^(20\d{2})-Q([1-4])$/i);
+  if (m) return parseInt(m[1], 10) * 100 + parseInt(m[2], 10) * 3;
+  m = period.match(/^\d{4}-\d{2}-\d{2}\.\.(20\d{2})-(0[1-9]|1[0-2])-\d{2}$/);
+  if (m) return parseInt(m[1], 10) * 100 + parseInt(m[2], 10);
+  return null;
+}
+
+/**
+ * Ordena periodos ascendentemente. Etiquetas con fecha ("2024", "2025-06",
+ * "2025-Q2", rangos) se ordenan cronológicamente entre sí; etiquetas sin
+ * fecha (DEFAULT_PERIOD, nombres de hoja) van al final.
  */
 function sortPeriodsAscending(periods: string[]): string[] {
   return [...periods].sort((a, b) => {
-    const ay = /^20\d{2}$/.test(a) ? parseInt(a, 10) : null;
-    const by = /^20\d{2}$/.test(b) ? parseInt(b, 10) : null;
-    if (ay !== null && by !== null) return ay - by;
+    const ay = periodSortKey(a);
+    const by = periodSortKey(b);
+    if (ay !== null && by !== null) return ay - by || a.localeCompare(b);
     if (ay !== null) return -1;
     if (by !== null) return 1;
     // Heuristica: "*_anterior" < "current"

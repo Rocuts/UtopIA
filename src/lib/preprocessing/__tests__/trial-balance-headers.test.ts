@@ -194,6 +194,34 @@ describe('ingesta-07 — "Saldo Débito | Saldo Crédito" con tilde es UNA colum
   });
 });
 
+describe('separador y orden de periodos (cross-deps de WP01)', () => {
+  it('un ";" dentro de un nombre entrecomillado no cambia el separador del archivo', () => {
+    const text = [
+      'codigo,"nombre; descripción",saldo',
+      '11050501,Caja,1000000',
+      '21050501,Obligaciones,400000',
+      '31050501,Capital,600000',
+    ].join('\n');
+    const t = totals(text);
+    expect([t.activo, t.pasivo, t.patrimonio]).toEqual([1_000_000, 400_000, 600_000]);
+  });
+
+  it('"YYYY" (cierre del año) y "YYYY-MM" se ordenan cronológicamente', () => {
+    const text = [
+      'codigo,nombre,saldo [2025-06],saldo [2024]',
+      '11050501,Caja,1500000,1000000',
+      '21050501,Obligaciones,600000,400000',
+      '31050501,Capital,900000,600000',
+    ].join('\n');
+    const t = totals(text);
+    expect(t.periods).toEqual(['2024', '2025-06']);
+    expect(t.activo).toBe(1_500_000);
+
+    const t2 = totals(text.replace('saldo [2024]', 'saldo [2025]'));
+    expect(t2.periods).toEqual(['2025-06', '2025']);
+  });
+});
+
 describe('forcePeriod (hoja XLSX) — lado parser de ingesta-03 / niif-preproceso-02', () => {
   it('columnas con año explícito conservan su año aunque la hoja se llame "Hoja1"', () => {
     const text = csv(['codigo', 'nombre', 'Saldo 2025', 'Saldo 2024'], ([c, n, si, , , sf]) => [c, n, sf, si]);
