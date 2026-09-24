@@ -35,12 +35,24 @@ export interface UploadDocumentResult {
   success: boolean;
   filename: string;
   chunks: number;
+  /**
+   * Texto para el chat. En un balance preprocesado lleva el informe de
+   * validación antepuesto: NO es re-parseable como CSV.
+   */
   extractedText: string;
+  /**
+   * Texto extraído sin el informe (CSV original o bloques `[period=…]` del
+   * XLSX). Es el `rawData` que espera /api/financial-report/niif. Opcional
+   * sólo por compatibilidad con despliegues anteriores.
+   */
+  rawData?: string;
   validationReport?: string;
   detectedCaseType: string | null;
   isTrialBalance: boolean;
   preprocessed: PreprocessedBalance | null;
   detectedPeriods: string[];
+  ingestWarnings?: string[];
+  ingestErrors?: string[];
   message: string;
 }
 
