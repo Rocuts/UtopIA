@@ -697,7 +697,21 @@ export function reconcileActaArithmetic(
     }
   }
 
-  // 6. Capitalización: base y monto.
+  // 6. Capitalización: primero el régimen (simétrico a la regla 2). Con
+  //    pérdida o utilidad bajo el umbral el ancla dice que NO aplica, y un acta
+  //    que la propone con base y monto inventados salía limpia (auditoría
+  //    2026-09, pipeline-flujo-12; Art. 151 C.Co.).
+  if (emitted.capitalizationApplies !== expected.capitalizationApplies) {
+    out.push({
+      field: 'shareholderMinutes.capitalizationProposal.applies',
+      label: 'Propuesta de capitalización de utilidades',
+      emitted: emitted.capitalizationApplies ? 'true' : 'false',
+      expected: expected.capitalizationApplies ? 'true' : 'false',
+      gapCents: '0',
+    });
+  }
+
+  // 7. Capitalización: base y monto.
   if (expected.capitalizationApplies) {
     const base = money(emitted.capitalizationBaseCop);
     if (base === null || parseMoneyCop(base) !== parseMoneyCop(expected.capitalizationBaseCop)) {

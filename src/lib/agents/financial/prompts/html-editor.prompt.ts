@@ -26,6 +26,7 @@
 
 import {
   collectBindingFigures,
+  collectActaBindingFigures,
   type BindingFigure,
   type HtmlEditorInput,
 } from '../contracts/html-editor';
@@ -111,7 +112,12 @@ ${rows}
 }
 
 export function buildHtmlEditorUserContent(input: HtmlEditorInput, hechosEmpresa?: string): string {
-  const bindingFigures = buildBindingFiguresBlock(collectBindingFigures(input.niifReport));
+  // Las cifras del acta también viajan preformateadas (auditoría 2026-09,
+  // pipeline-flujo-09): el validador las exige literalmente.
+  const bindingFigures = buildBindingFiguresBlock([
+    ...collectBindingFigures(input.niifReport),
+    ...collectActaBindingFigures(input.governanceReport),
+  ]);
 
   return `<task>Genera el HTML autocontenido v10.1 de 15 páginas A4 portrait según la plantilla maestra del system prompt (§13). Reemplaza los placeholders {{...}} con los valores del payload JSON. Estética: Berkshire Hathaway / Financial Times / Bloomberg Markets — austeridad como señal de autoridad.</task>
 

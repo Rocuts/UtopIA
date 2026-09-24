@@ -43,6 +43,8 @@ import {
   buildHtmlEditorUserContent,
 } from '../prompts/html-editor.prompt';
 import type { FinancialProgressEvent } from '../types';
+import { NiifReportSchema } from '../contracts/niif-report';
+import { validateNiifReportJson } from '../validators/niif-json-validator';
 import { withRetry } from '@/lib/agents/utils/retry';
 import { assertFinishedCleanlyOrThrow } from '../utils/finish-reason-check';
 import {
@@ -283,6 +285,16 @@ function runAllChecks(html: string, input: HtmlEditorInput): ChecklistFailure[] 
       detail: `La reconciliación no pudo ejecutarse: ${err instanceof Error ? err.message : String(err)}`,
       severity: 'block',
     });
+  }
+
+  // El HTML no puede ser emitible si el JSON NIIF que reproduce no supera los
+  // invariantes que sí bloquean el Excel y el PDF (auditoría 2026-09,
+  // pipeline-flujo-09: un HTML sobre A ≠ P + Pt salía emittable=true).
+  const niif = NiifReportSchema.safeParse(input.niifReport);
+  if (niif.success) {
+    for (const error of validateNiifReportJson(niif.data).errors) {
+      failures.push({ rule: '§1.1 · Integridad del reporte NIIF', detail: error, severity: 'block' });
+    }
   }
 
   failures.push(...internalMetadataChecklist(html));
