@@ -96,7 +96,7 @@ ${context2026}
 <task>Producir el reporte estratégico C-Level de ${company.name} (NIT ${company.nit}) — dashboard ejecutivo, KPIs financieros, break-even, proyección de flujo de caja Big Four a 3 años (${projectionYears.join(', ')}) y 3-5 recomendaciones estratégicas ancladas a cifras del Agente 1 — devolviendo JSON validado contra StrategyReportSchema.</task>
 
 <success_criteria>
-- Todas las cifras ancla (Total Activo, Total Pasivo, Total Patrimonio, Ingresos, EBITDA, UAI, Utilidad Neta, Caja) coinciden con TOTALES VINCULANTES al centavo.
+- Todas las cifras ancla (Total Activo, Total Pasivo, Total Patrimonio, Ingresos, UAI, Utilidad Neta, Caja) coinciden con TOTALES VINCULANTES al centavo. El EBITDA no es cifra vinculante (el bloque no lo publica): si se presenta, se deriva como EBIT + depreciación y amortización del periodo, con la fórmula y los sumandos a la vista, y confidence='medium'.
 - Identidad fiscal en el dashboard: utilidadNeta = utilidadAntesImpuestos − impuestoCausado. Si no se cumple en el binding, copiar los tres valores LITERALES y registrar la inconsistencia en preparerNotes.
 - kpis array contiene ≥1 KPI en CADA UNA de las 4 categorías obligatorias: profitability, liquidity, solvency, efficiency. Categorías ausentes son spec violation (Parte 7.II §2 — tabla KPIs + v8.1 §1.5). Cada KPI lleva fórmula con números sustituidos.
 - Cada KPI lleva confidence ∈ {high, medium, low} (v8.1 §1.5). KPIs con resultPrimary="ND" o con denominador anómalo deben llevar confidence='low'.
@@ -117,7 +117,7 @@ ${isComparative ? `- Modo comparativo: KPIs presentan resultComparative y yoyVar
 - MUST: el gasto por impuesto de renta SIEMPRE aparece como RESTA en el dashboard (precedido por (-)); utilidadNeta = utilidadAntesImpuestos − impuestoCausado. PROHIBIDO sumar el impuesto a UAI para llegar a utilidad neta.
 - MUST: en el Flujo de Caja proyectado, el Saldo Inicial Caja es EXCLUSIVAMENTE PUC 11 (Efectivo y Equivalentes) — NO Activo Corriente total, NO Deudores (PUC 13), NO Inventarios (PUC 14), NO Inversiones (PUC 12).
 - MUST: Cuentas por Pagar (PUC 23), Obligaciones Laborales (PUC 25) e Impuestos por Pagar (PUC 24) son salidas obligatorias del Año +1 (exigibilidad legal CST + calendario DIAN).
-- MUST: provisión de renta = Utilidad Operativa Proyectada × 35% (Art. 240 E.T.); pago de caja se refleja en el periodo SIGUIENTE (calendario DIAN marzo-abril).
+- MUST: impuesto proyectado = UAI proyectada × 35% (Art. 240 E.T.) como supuesto de planeación, declarado en assumptionsNote como estimación y no como liquidación (la base fiscal real es la renta líquida). La Tasa de Tributación Depurada (Art. 240 par. 6) no se modela sin impuesto depurado y utilidad depurada verificados. El pago de caja se refleja en el periodo SIGUIENTE, según el calendario DIAN 2026 por tipo de contribuyente y último dígito del NIT.
 - MUST: separar Gastos Fijos Administrativos (indexados a inflación 4-5% IPC) de Costos de Operación (escalables a ingresos). Documentar el factor en assumptionsNote.
 - MUST: cada KPI lleva confidence ∈ {high, medium, low} (v8.1 §1.5):
   - high: cifra anclada a TOTALES VINCULANTES sin ajuste.
@@ -198,7 +198,7 @@ If (costoVentas6 + costoProduccion7) / ingresos < 0.01 (base de costos < 1% de i
   - formula = "ND — denominador anómalamente pequeño (Clase 6 + Clase 7 < 1% Ingresos)"
   - diagnosis = "No confiable: base de costos insuficiente para calcular ciclo operativo (Clase 6 + Clase 7 < 1% Ingresos). El balance puede tener subregistro de costos (NIA 240 — riesgo de fraude) o pertenecer a una empresa de servicios sin inventario significativo."
   - yoyVariation = null
-otherwise calcular con la fórmula spec normal (Inventarios × 365 / Costo de Ventas; Cuentas por Pagar × 365 / Compras) y resultado decimal.
+otherwise copiar el KPI vinculante del bloque (misma fórmula del preprocesador: Inventarios (PUC 14) × 365 / (Costo 6 + 7); Proveedores (PUC 22) × 365 / (Costo 6 + 7)) y resultado decimal.
 
 Esta regla cubre el bug clásico de dividir entre un denominador ~$0 que produce resultados astronómicos sin sentido económico (ej. 36.500 días de inventario).
 
@@ -207,7 +207,7 @@ Macro-supuestos Colombia 2026 (referenciales):
 - IPC inflación: 4-5% (BanRep meta 3% +/- rango).
 - UVT 2026: $52.374 COP (DIAN).
 - Tarifa renta PJ: 35% (Art. 240 E.T., Ley 2277/2022).
-- Tarifa Mínima de Tributación (TMT): 15% (Art. 240 parágrafo 6 E.T.).
+- Tasa de Tributación Depurada (TTD, Art. 240 parágrafo 6 E.T.): piso del 15% medido como impuesto depurado / utilidad depurada; si es menor se liquida un impuesto a adicionar. No es una tarifa sustituta y sin ID/UD verificados no se calcula.
 - Dividendos — NO existe tarifa plana del 20% para persona natural residente (regimen post-Ley 2277/2022, vigente desde el AG 2023 y aplicable en 2026):
   - PN residente, dividendo NO gravado: se integra a la renta liquida y tributa a la tarifa progresiva marginal del Art. 241 E.T. (0% a 39%), por remision del inciso 1 del Art. 242 E.T. La retencion en la fuente del paragrafo del Art. 242 (Decreto 1103 de 2023) es 0% hasta 1.090 UVT y 15% sobre el exceso de 1.090 UVT = $57.087.660 (UVT 2026 $52.374), y es un ANTICIPO IMPUTABLE, no el impuesto definitivo.
   - Descuento Art. 254-1 E.T. (adicionado por el Art. 5 Ley 2277/2022): 0% hasta 1.090 UVT y 19% sobre el exceso, restado del impuesto a cargo del socio.
@@ -218,9 +218,9 @@ Macro-supuestos Colombia 2026 (referenciales):
   If un escenario proyecta reparto de utilidades a socio persona natural residente then modela la carga con la tarifa marginal del Art. 241 que declares como supuesto y trata el 15% como retencion imputable otherwise no cifres impuesto al dividendo y limita la recomendacion a la politica de reparto.
 
 Estructura de los 3 escenarios obligatorios cuando no haya gate de liquidez:
-- Conservative: ingresos −15% YoY, costos indexados a inflación máxima (5%), TMT 15% activa.
-- Base: ingresos crecen al PIB esperado (2,5%), costos a inflación esperada (4%), tarifa 35% sobre UAI.
-- Aggressive: ingresos +15% YoY (justificado por palanca específica), costos a inflación mínima (4%), tarifa 35%.
+- Conservative: ingresos −15% YoY, costos indexados a inflación máxima (5%), impuesto UAI proyectada × 35%.
+- Base: ingresos crecen al PIB esperado (2,5%), costos a inflación esperada (4%), impuesto UAI proyectada × 35%.
+- Aggressive: ingresos +15% YoY (justificado por palanca específica), costos a inflación mínima (4%), impuesto UAI proyectada × 35%.
 
 If Activo Corriente < Pasivo Corriente then projectedCashFlow.liquidityGate.triggered=true, scenarios=[], controlKpis=[] y la primera recommendation es priority=high + horizon=immediate citando la brecha en pesos; el message de liquidityGate es LITERAL "ALERTA DE LIQUIDEZ: AC ($X) < PC ($Y). Brecha: $Z. NO se proyecta flujo hasta resolver esta inconsistencia." (reemplazar X, Y, Z con los valores de TOTALES VINCULANTES) otherwise projectar normalmente.
 
@@ -237,9 +237,9 @@ Recomendaciones — cobertura mínima de 2 ejes según pertinencia:
 - Estructura de capital (reestructuración deuda, fondeo, dividendos, aportes).
 - Rentabilidad operativa (racionalización de costos, mix de producto, pricing).
 - Fiscal / Tributario (Art. 256/255 ET, Zona Franca, ZOMAC, CHC Art. 894 ET, dividendos Art. 242).
-- Cumplimiento / Gobierno (reserva legal, IFRS 18 si Grupo 1, calendario DIAN).
+- Cumplimiento / Gobierno (reserva legal según tipo societario y estatutos, preparación voluntaria NIIF 18 si Grupo 1 —no incorporada en Colombia a la fecha—, calendario DIAN).
 
-Defensa Art. 647 E.T.: si una recomendación invoca un ajuste técnico-contable que pudiera disentir del software contable de origen (Siigo, World Office, Helisa) o de la liquidación tributaria del periodo anterior, incluir en normReference la cita "Art. 647 E.T. — diferencia de criterio + Concepto DIAN 100208221-1352 de 2018" para anular sanción por inexactitud.
+Si una recomendación invoca un criterio técnico-contable distinto del aplicado en el software contable de origen (Siigo, World Office, Helisa) o en la liquidación tributaria del periodo anterior, normReference cita la norma NIIF que lo sustenta y la recomendación advierte que cualquier efecto en declaraciones tributarias requiere evaluación del contador. No afirmes que una diferencia de criterio "anula" o excluye sanciones: el Art. 647 E.T. sólo excluye la inexactitud en declaraciones con interpretación razonable y hechos y cifras completos y verdaderos.
 </constraints>
 
 <context>

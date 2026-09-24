@@ -76,15 +76,15 @@ function buildNiifMeasurementKnowledgeEs(): string {
   - **Etapa 1**: ECL 12 meses (riesgo no aumento significativamente).
   - **Etapa 2**: ECL toda la vida (riesgo aumento significativamente).
   - **Etapa 3**: incumplimiento — ECL vida + interes sobre valor neto.
-- PYMES (Sec. 11): enfoque simplificado de perdida incurrida + perdida esperada vida en cartera comercial.
+- PYMES (Grupo 2, Sec. 11): modelo de **perdida incurrida** (evidencia objetiva de deterioro, parrafos 11.21-11.26); la Seccion 11 no adopta el modelo de perdida esperada de la NIIF 9.
 
-### Arrendamientos — Arrendatario (NIIF 16 / Sec. 20 PYMES)
-- **Todos los arrendamientos** se reconocen en balance (excepto corto plazo <= 12 meses y bajo valor).
+### Arrendamientos — Arrendatario (NIIF 16 Grupo 1 / Sec. 20 PYMES Grupo 2)
+- **NIIF 16 (Grupo 1):** todos los arrendamientos se reconocen en balance (excepto corto plazo <= 12 meses y bajo valor).
 - Reconocer: **Activo por derecho de uso (DDU)** + **Pasivo por arrendamiento**.
-- Pasivo inicial: valor presente de pagos futuros descontados a la tasa incremental del prestamo.
+- Pasivo inicial (NIIF 16.26): valor presente de los pagos futuros descontados a la tasa de interes implicita en el arrendamiento; si no puede determinarse facilmente, a la tasa incremental por prestamos del arrendatario.
 - Activo inicial: pasivo + costos directos iniciales + pagos anticipados - incentivos.
-- Arrendador: sigue modelo NIC 17 — operativo vs. financiero.
-- Nota: en PYMES (Sec. 20) la mayoria de los arrendamientos se siguen tratando como operativos en P&G.
+- Arrendador (NIIF 16): clasifica cada arrendamiento como operativo o financiero (la NIC 17 no esta vigente en Colombia).
+- PYMES (Grupo 2, Sec. 20): el arrendatario clasifica en financiero u operativo; el arrendamiento operativo se reconoce como gasto en resultados, sin activo por derecho de uso.
 `;
 }
 
@@ -126,15 +126,15 @@ function buildNiifMeasurementKnowledgeEn(): string {
   - **Stage 1**: 12-month ECL (no significant credit risk increase).
   - **Stage 2**: lifetime ECL (significant risk increase).
   - **Stage 3**: default — lifetime ECL + interest on net amount.
-- SMEs (Sec. 11): simplified incurred loss + lifetime ECL for trade receivables.
+- SMEs (Group 2, Sec. 11): **incurred loss** model (objective evidence of impairment, paragraphs 11.21-11.26); Section 11 does not adopt the IFRS 9 expected-loss model.
 
-### Leases — Lessee (IFRS 16 / SME Sec. 20)
-- **All leases** are recognized on the balance sheet (except short-term <= 12 months and low value).
+### Leases — Lessee (IFRS 16 Group 1 / SME Sec. 20 Group 2)
+- **IFRS 16 (Group 1):** all leases are recognized on the balance sheet (except short-term <= 12 months and low value).
 - Recognize: **Right-of-Use Asset (RoU)** + **Lease Liability**.
-- Initial liability: present value of future payments discounted at the incremental borrowing rate.
+- Initial liability (IFRS 16.26): present value of future payments discounted at the interest rate implicit in the lease; if that rate cannot be readily determined, at the lessee's incremental borrowing rate.
 - Initial asset: liability + initial direct costs + prepayments - incentives.
-- Lessor: still follows IAS 17 model — operating vs. finance.
-- Note: under SMEs (Sec. 20) most leases continue to be treated as operating leases in P&L.
+- Lessor (IFRS 16): classifies each lease as operating or finance (IAS 17 is not in force in Colombia).
+- SMEs (Group 2, Sec. 20): the lessee classifies leases as finance or operating; operating leases are expensed in profit or loss, with no right-of-use asset.
 `;
 }
 
@@ -179,7 +179,7 @@ function buildNiifDisclosureKnowledgeEs(): string {
 **NIC 37 — Provisiones y contingencias**
 - Naturaleza y estimacion de cada provision significativa.
 - Incertidumbres en estimacion del importe o momento.
-- Activos y pasivos contingentes (cuando la probabilidad es posible pero no probable).
+- Pasivos contingentes: revelar cuando la salida de recursos es posible pero no probable (salvo que sea remota). Activos contingentes: revelar solo cuando la entrada de beneficios es probable (NIC 37.89).
 
 **NIIF 7 — Riesgos de instrumentos financieros**
 - **Riesgo de credito**: exposicion maxima, calidad crediticia, concentraciones.
@@ -270,7 +270,7 @@ function buildNiifDisclosureKnowledgeEn(): string {
 **IAS 37 — Provisions and contingencies**
 - Nature and estimation of each significant provision.
 - Uncertainties in amount or timing estimation.
-- Contingent assets and liabilities (when probability is possible but not probable).
+- Contingent liabilities: disclose when an outflow is possible but not probable (unless remote). Contingent assets: disclose only when an inflow of benefits is probable (IAS 37.89).
 
 **IFRS 7 — Risks of financial instruments**
 - **Credit risk**: maximum exposure, credit quality, concentrations.
