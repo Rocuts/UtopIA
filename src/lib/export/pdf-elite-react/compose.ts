@@ -65,7 +65,7 @@ import {
   niifJsonToIncomeTable,
   type StatementTableContext,
 } from './compose-statements-from-json';
-import { formatCopFromCents } from '@/lib/agents/financial/contracts/money';
+import { formatCopFromPesos } from '@/lib/agents/financial/contracts/money';
 import { narrativeDisclaimer, resolvePeriodoTipos } from '../statement-presentation';
 import { revenueBreakdown, type RevenueBreakdown } from '../revenue';
 
@@ -1587,13 +1587,15 @@ function formatBindingTotals(t: ControlTotals): string {
  * mismo entregable, y dos redondeos distintos (`toLocaleString` sobre float vs
  * aritmética exacta en centavos). Se unifica en el helper canónico.
  *
- * `controlTotals` viaja en PESOS (number); el helper trabaja en centavos, por
- * eso el ×100 redondeado — el mismo redondeo al centavo que usa el
- * preprocesador (`toRawString`).
+ * `controlTotals` viaja en PESOS (number); el helper trabaja en centavos. La
+ * conversión va por el texto decimal (`formatCopFromPesos`), igual que
+ * `fmtCopPesos` del Excel: `Math.round(n * 100)` deja de ser un entero seguro
+ * por encima de ~$90 billones y, desde niif-contrato-22, `formatCopFromCents`
+ * lanza RangeError con él (integración I2).
  */
 function formatCop(n: number | undefined | null): string {
   if (typeof n !== 'number' || !Number.isFinite(n)) return 'N/D';
-  return formatCopFromCents(Math.round(n * 100), false);
+  return formatCopFromPesos(n, false);
 }
 
 function formatRatio(n: number | undefined | null): string {

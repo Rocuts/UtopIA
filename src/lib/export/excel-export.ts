@@ -21,7 +21,7 @@
 
 import ExcelJS from 'exceljs';
 import type { FinancialReport } from '@/lib/agents/financial/types';
-import { formatCopFromCents, parseMoneyCop } from '@/lib/agents/financial/contracts/money';
+import { formatCopFromPesos, parseMoneyCop } from '@/lib/agents/financial/contracts/money';
 import type { NiifReportJson } from '@/lib/agents/financial/contracts/niif-report';
 import { StrategyReportSchema } from '@/lib/agents/financial/contracts/strategy-report';
 import { applyKpiAnchors } from '@/lib/agents/financial/validators/strategy-anchors';
@@ -121,13 +121,10 @@ function centsToPesos(value: string): number {
  * workbook sale ahora de la misma aritmética exacta en centavos.
  */
 function fmtCopPesos(pesos: number): string {
-  if (!Number.isFinite(pesos)) return 'N/D';
   // Pesos → centavos exactos por el texto decimal (redondeo simétrico al
   // centavo y sin pasar por un `number` de centavos, que deja de ser exacto
-  // por encima de 2^53 — niif-contrato-22).
-  const fixed = pesos.toFixed(2);
-  if (!/^-?\d+\.\d{2}$/.test(fixed)) return 'N/D';
-  return formatCopFromCents(BigInt(fixed.replace('.', '')), false);
+  // por encima de 2^53 — niif-contrato-22). Mismo helper que el PDF.
+  return formatCopFromPesos(pesos, false);
 }
 
 // ---------------------------------------------------------------------------
