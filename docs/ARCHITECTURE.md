@@ -37,6 +37,15 @@ Four auditors run **in parallel** (`Promise.allSettled`): NIIF, Tax, Legal, Fisc
 - `POST /api/financial-report/export`: full pipeline (preprocess → 3 agents → Excel) or export-only mode.
 - The upload route (`/api/upload`) auto-detects trial balance CSVs and prepends a validation report to the extracted text.
 
+#### Server-side report provenance (`src/lib/reports/`)
+
+The last step of the split pipeline, `POST /api/financial-report/consolidate`, receives the three parts (`reportParts`), re-derives the trial balance from `rawData` (with the confirmed Doctor de Datos ledger), assembles the final report (the shareholders' minutes re-checked against the deterministic arithmetic of the re-derived balance —the server verdict can only tighten the one received—, qualifications folded, `fiscalSnapshot` and Âncora computed server-side) and stores it as a `reports` row (`kind = 'financial_report'`) of the **session's** workspace (`getCurrentWorkspaceId`; never from the body). The row's `data` jsonb holds the report and the preprocessed balance in canonical JSON, SHA-256 fingerprints of both (`reportHash`, `sourceHash`) and of the received `rawData`, the rules contract (`FINANCIAL_REPORT_CONTRACT_VERSION`) and the preprocessor contract. The response carries `reportRef = {reportId, reportHash}`; the UI keeps it on the report (`serverVersion`) and drops it when the report is edited in the browser.
+
+- `/export` (Excel, PDF), `/html` and `/api/escudo/fiscal-anchor` accept `reportRef` and load **that** version within the session's workspace; figures in the request body are ignored and the same export gate (`financialExportBlockers`, for Excel, PDF and HTML alike) re-runs on that version against the persisted balance (anchors always present). Malformed ref → 400; other workspace or unknown id → the same 404; same id with another hash, or a row whose content no longer matches its fingerprint → 409.
+- Artifacts are stamped inside the file (Excel summary block, PDF appendix line, HTML `<meta>` + visible banner) and with `X-Report-Provenance` headers: *procedencia verificada* (version id, fingerprints, contract) or *procedencia no verificada* when there is no persisted version (historical reports, sessions without `DATABASE_URL` or workspace). The unverified path keeps the previous behavior; a client-sent `preprocessed` is always re-derived (from `rawData`, or from its own `rawRows` plus the confirmed ledger) and rejected with 422 if its control totals differ.
+- `/api/escudo/fiscal-anchor` only persists the snapshot and Âncora of a persisted version (`reportRef` required).
+- Limits: the audit (Parte IV) and quality (Parte V) results are not part of the persisted version, so the PDF still omits client-sent ones; tenant isolation relies on the existing workspace resolution (session or anonymous cookie).
+
 ### 5. Quality Meta-Auditor — best practices validation
 `src/lib/agents/financial/quality/agent.ts`
 

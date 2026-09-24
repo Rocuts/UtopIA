@@ -19,6 +19,13 @@
 //   - `event: done`         { stage: 'html' }
 //   - `event: error`        { error, code, detail }
 //
+// Procedencia servidor (fase 2, P1): con `reportRef: {reportId, reportHash}`
+// los JSON, la empresa, el preprocesado, los veredictos y las cifras de la
+// metadata salen de la versión persistida del workspace de la sesión
+// (`htmlInputFromPersisted`); el cuerpo sólo aporta presentación. Referencia
+// inválida → 400, ajena o inexistente → 404, huella distinta → 409. El HTML
+// sale sellado con la procedencia (verificada o "no verificada").
+//
 // Refs:
 //   - src/app/api/financial-report/niif/route.ts (patrón a replicar)
 //   - docs/spec/financial-report-v10.1.md
@@ -43,8 +50,11 @@ import {
   resolveOwnedReportId,
   type TelemetryContext,
 } from '@/lib/db/telemetry';
-import { niifArithmeticBlockers } from '@/lib/export/financial-export-validation';
-import { revivePreprocessedBalance } from '@/lib/preprocessing/json-safe';
+import {
+  financialExportBlockers,
+  niifArithmeticBlockers,
+} from '@/lib/export/financial-export-validation';
+import { revivePreprocessedBalance, toJsonSafe } from '@/lib/preprocessing/json-safe';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import {
   describeActaQualifications,
@@ -54,6 +64,17 @@ import { parseMoneyCop } from '@/lib/agents/financial/contracts/money';
 import type { GovernanceReportJson } from '@/lib/agents/financial/contracts/governance-report';
 import { buildActaExpectedArithmetic } from '@/lib/agents/financial/prompts/governance-specialist.prompt';
 import type { CompanyInfo } from '@/lib/agents/financial/types';
+import { resolvePersistedReport } from '@/lib/reports/persisted-report-request';
+import { htmlInputFromPersisted } from '@/lib/reports/html-input';
+import {
+  readAppliedAdjustments,
+  rederivePreprocessedFromRows,
+} from '@/lib/reports/preprocessed-integrity';
+import {
+  provenanceHeaders,
+  stampHtmlProvenance,
+  type ArtifactProvenance,
+} from '@/lib/reports/provenance-stamp';
 
 export const runtime = 'nodejs';
 export const maxDuration = 800;
@@ -167,7 +188,18 @@ export async function POST(req: Request) {
   if (!gate.ok) return gate.response;
 
   try {
-    const body = await req.json();
+    const rawBody: unknown = await req.json();
+    // Versión persistida: prevalece sobre las cifras del cuerpo.
+    const persisted = await resolvePersistedReport(rawBody);
+    if (persisted.kind === 'error') return persisted.response;
+    const provenance: ArtifactProvenance =
+      persisted.kind === 'ok'
+        ? { kind: 'verified', provenance: persisted.provenance }
+        : { kind: 'unverified' };
+    const body: unknown =
+      persisted.kind === 'ok' && rawBody && typeof rawBody === 'object' && !Array.isArray(rawBody)
+        ? htmlInputFromPersisted(rawBody as Record<string, unknown>, persisted)
+        : rawBody;
     const parsed = HtmlEditorInputSchema.safeParse(body);
 
     if (!parsed.success) {
@@ -180,15 +212,36 @@ export async function POST(req: Request) {
       );
     }
 
-    // Preprocesado opcional (el que usó /niif): habilita el cruce contra anclas.
-    const bodyPreprocessed = (body as { preprocessed?: unknown }).preprocessed;
+    // Preprocesado (el que usó /niif): habilita el cruce contra anclas. Con
+    // versión persistida es el que el servidor re-derivó al consolidar. Sin
+    // ella (niif-preproceso-33) el del cliente se RE-DERIVA desde sus propias
+    // filas con los ajustes confirmados que reenvía (`adjustmentLedger`) y se
+    // usa el re-derivado; si sus totales de control difieren → 422.
     let preprocessed: PreprocessedBalance | undefined;
-    if (bodyPreprocessed !== undefined && bodyPreprocessed !== null) {
-      const revived = revivePreprocessedBalance(bodyPreprocessed);
-      if (!revived) {
-        return NextResponse.json({ error: 'Invalid preprocessed format.' }, { status: 400 });
+    if (persisted.kind === 'ok') {
+      preprocessed = persisted.preprocessed;
+    } else {
+      const bodyPreprocessed = (body as { preprocessed?: unknown }).preprocessed;
+      if (bodyPreprocessed !== undefined && bodyPreprocessed !== null) {
+        const revived = revivePreprocessedBalance(bodyPreprocessed);
+        const adjustments = readAppliedAdjustments(
+          (body as { adjustmentLedger?: unknown }).adjustmentLedger,
+        );
+        if (!revived || !adjustments) {
+          return NextResponse.json(
+            { error: revived ? 'Invalid adjustmentLedger format.' : 'Invalid preprocessed format.' },
+            { status: 400 },
+          );
+        }
+        const rederived = rederivePreprocessedFromRows(revived, adjustments);
+        if (!rederived.ok) {
+          return NextResponse.json(
+            { error: 'Report is not exportable.', details: rederived.details },
+            { status: 422 },
+          );
+        }
+        preprocessed = rederived.preprocessed;
       }
-      preprocessed = revived;
     }
 
     // Gate aritmético ANTES de pagar el Editor Jefe (32-48K tokens): la MISMA
@@ -198,10 +251,19 @@ export async function POST(req: Request) {
     // Con el preprocesado que usó /niif, además los cruces contra sus anclas.
     // Antes /html sólo validaba la forma: un JSON NIIF con Activo ≠ Pasivo +
     // Patrimonio producía un HTML "emitible".
-    const blockers = niifArithmeticBlockers(parsed.data.niifReport, {
-      strategyJson: parsed.data.strategyReport,
-      preprocessed,
-    });
+    //
+    // Con versión persistida el servidor tiene el informe completo: se aplica
+    // el MISMO gate que /export sobre ESA versión (`financialExportBlockers`:
+    // validación post-render, emitibilidad, salvedades, completitud, identidad
+    // y el gate aritmético). Sin esto una versión que /export rechaza salía en
+    // HTML sellado "procedencia verificada".
+    const blockers =
+      persisted.kind === 'ok'
+        ? financialExportBlockers(persisted.report, preprocessed)
+        : niifArithmeticBlockers(parsed.data.niifReport, {
+            strategyJson: parsed.data.strategyReport,
+            preprocessed,
+          });
     // Veredictos de las Partes II y III (auditoría 2026-09-24, e2e-niif-16):
     // /export ya bloqueaba con `actaQualifications`/`strategyQualifications`
     // en `clean: false`, pero /html no los miraba y el HTML salía "emitible"
@@ -213,6 +275,9 @@ export async function POST(req: Request) {
         { status: 422 },
       );
     }
+    // El Editor Jefe (reconciliación §1.1 y contexto) usa el MISMO preprocesado
+    // con que se acaba de validar: el re-derivado o el de la versión persistida.
+    const editorInput = { ...parsed.data, preprocessed: preprocessed ? toJsonSafe(preprocessed) : null };
 
     // Hechos del negocio (Ola 2) — resueltos SERVER-SIDE, nunca desde el body
     // del cliente (tenancy). El bloque <hechos_empresa> viaja al <context> del
@@ -244,10 +309,11 @@ export async function POST(req: Request) {
     const telemetryWorkspaceId = asTelemetryUuid(workspaceId);
     const telemetryCtx: TelemetryContext = {
       workspaceId: workspaceId ?? null,
-      reportId: await resolveOwnedReportId(
-        (body as { reportId?: unknown }).reportId,
-        telemetryWorkspaceId,
-      ),
+      // Con versión persistida la medición se ata a ESA fila `reports`.
+      reportId:
+        persisted.kind === 'ok'
+          ? persisted.provenance.reportId
+          : await resolveOwnedReportId((body as { reportId?: unknown }).reportId, telemetryWorkspaceId),
     };
 
     // El header X-Stream o el query param ?stream=1 activan SSE. Espejado de
@@ -260,17 +326,24 @@ export async function POST(req: Request) {
     if (!wantsStream) {
       // Non-streaming: ejecuta y devuelve el output completo en una sola
       // respuesta JSON. Útil para invocaciones server-to-server o tests.
-      const result = await runWithTelemetryContext(telemetryCtx, () =>
-        runHtmlEditor(parsed.data, undefined, undefined, hechosEmpresa),
+      const generated = await runWithTelemetryContext(telemetryCtx, () =>
+        runHtmlEditor(editorInput, undefined, undefined, hechosEmpresa),
       );
-      logIfNotEmittable(result);
+      logIfNotEmittable(generated);
+      const result = {
+        ...generated,
+        html: stampHtmlProvenance(generated.html, provenance, parsed.data.language),
+      };
       return NextResponse.json(result, {
         // El payload sigue viajando con 200 aunque no sea emitible: el HTML ya
         // viene estampado como BORRADOR por `runHtmlEditor` y devolver 422
         // dejaría al contador sin entregable tras ~10 min de pipeline por un
         // eventual falso positivo del checklist. La bandera `emittable` y la
         // cabecera son la señal máquina-legible para gatear la descarga.
-        headers: { 'X-Report-Emittable': result.emittable ? 'true' : 'false' },
+        headers: {
+          'X-Report-Emittable': result.emittable ? 'true' : 'false',
+          ...provenanceHeaders(provenance),
+        },
       });
     }
 
@@ -293,8 +366,12 @@ export async function POST(req: Request) {
             send('progress', event);
           };
 
-          const result = await runHtmlEditor(parsed.data, onProgress, req.signal, hechosEmpresa);
-          logIfNotEmittable(result);
+          const generated = await runHtmlEditor(editorInput, onProgress, req.signal, hechosEmpresa);
+          logIfNotEmittable(generated);
+          const result = {
+            ...generated,
+            html: stampHtmlProvenance(generated.html, provenance, language),
+          };
 
           send('html_phase', result);
           send('done', { stage: 'html' });
@@ -332,6 +409,7 @@ export async function POST(req: Request) {
         // real al cliente.
         'X-Accel-Buffering': 'no',
         Connection: 'keep-alive',
+        ...provenanceHeaders(provenance),
       },
     });
   } catch (err) {

@@ -138,10 +138,13 @@ export function niifArithmeticBlockers(
  *   - Identidad (reportes-export-10): nombre, NIT y periodos de `report.company`
  *     deben coincidir con `json.company`.
  *
- * Límite documentado: sin `preprocessed` (la petición no trae `rawData`) el
- * gate sólo prueba coherencia interna, no procedencia. La procedencia completa
- * exige exportar desde una versión persistida del informe (HANDOFF, tarea
- * "procedencia servidor").
+ * Procedencia (niif-contrato-21, fase 2 P1): con `reportRef`, /export y /html
+ * cargan la versión persistida del workspace y llaman a este gate con SU
+ * balance preprocesado (el que /consolidate re-derivó en el servidor), así que
+ * los cruces contra anclas (E3/E8/E9/E14/E18) siempre corren. Sin referencia
+ * (informes históricos, modo sin base de datos) y sin `preprocessed` ni
+ * `rawData`, el gate sólo prueba coherencia interna y el artefacto sale
+ * rotulado "procedencia no verificada" (src/lib/reports/provenance-stamp.ts).
  */
 export function financialExportBlockers(
   report: FinancialReport,
