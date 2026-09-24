@@ -12,7 +12,6 @@ import type { PeriodSnapshot, PreprocessedBalance } from '@/lib/preprocessing/tr
 import {
   buildDeterministicCashFlow,
   crossCheckCashFlowAgainstDeterministic,
-  type DeterministicCashFlow,
 } from '../contracts/deterministic-breakdown';
 import { validateNiifReportJson } from '../validators/niif-json-validator';
 import { makeCoherentNiifReport } from '../__fixtures__/coherent-niif-report';
@@ -272,6 +271,3 @@ describe('Prompt: el texto de dividendos no niega pagos sin evidencia (niif-cont
     expect(p3).toMatch(/No hay evidencia contable de distribución distinta de la variación de resultados acumulados/);
   });
 });
-
-// Evita que `DeterministicCashFlow` se considere import sin uso si se poda un caso.
-export type _Det = DeterministicCashFlow;
