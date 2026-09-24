@@ -39,11 +39,11 @@ export function MaturityOverridesEditor({
   const add = () => {
     const parsed = parseMaturityOverrideCode(code);
     if (!parsed.ok) {
-      setError(parsed.reason);
+      setError(parsed.kind === 'class' ? t.maturityInvalidClass : t.maturityInvalidCode);
       return;
     }
     if (!(parsed.code in value) && entries.length >= MAX_VENCIMIENTOS_DECLARADOS) {
-      setError(`Máximo ${MAX_VENCIMIENTOS_DECLARADOS}.`);
+      setError(t.maturityMax.replace('{max}', String(MAX_VENCIMIENTOS_DECLARADOS)));
       return;
     }
     onChange({ ...value, [parsed.code]: term });

@@ -1760,6 +1760,9 @@ export const dict = {
       maturityAdd: 'Agregar excepción',
       maturityRemove: 'Quitar',
       maturityEmpty: 'Sin excepciones: se usa la clasificación por grupo PUC.',
+      maturityInvalidCode: 'Escriba un código PUC de 2 a 20 dígitos (p. ej. 2105).',
+      maturityInvalidClass: 'Sólo cuentas de activo (clase 1) o de pasivo (clase 2).',
+      maturityMax: 'Máximo {max} excepciones.',
     },
   },
   en: {
@@ -3484,6 +3487,9 @@ export const dict = {
       maturityAdd: 'Add override',
       maturityRemove: 'Remove',
       maturityEmpty: 'No overrides: PUC-group classification applies.',
+      maturityInvalidCode: 'Enter a PUC code of 2 to 20 digits (e.g. 2105).',
+      maturityInvalidClass: 'Only asset (class 1) or liability (class 2) accounts.',
+      maturityMax: 'At most {max} overrides.',
     },
   },
 };

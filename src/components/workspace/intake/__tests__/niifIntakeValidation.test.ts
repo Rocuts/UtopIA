@@ -87,6 +87,7 @@ import {
 } from '../niifIntakeValidation';
 import { buildExtractedFields } from '../useDocumentExtraction';
 import { leerDirectivasIngesta } from '@/lib/upload/ingest-directives';
+import { dict } from '@/lib/i18n/dictionaries';
 
 describe('P4-a — unidad declarada sin confirmar bloquea el paso "Revisar"', () => {
   it('con la unidad pendiente falta un campo; confirmada, no', () => {
@@ -142,5 +143,20 @@ describe('P4 — applyIntakeDirectives', () => {
     expect(parseMaturityOverrideCode('21.05')).toEqual({ ok: true, code: '2105' });
     expect(parseMaturityOverrideCode('4135').ok).toBe(false);
     expect(parseMaturityOverrideCode('abc').ok).toBe(false);
+  });
+
+  it('el motivo del rechazo se muestra desde el diccionario (es/en), no en español fijo', () => {
+    // Antes el editor mostraba `reason` (español) también con la interfaz en inglés.
+    const clase = parseMaturityOverrideCode('4135');
+    const formato = parseMaturityOverrideCode('abc');
+    expect(clase.ok === false && clase.kind).toBe('class');
+    expect(formato.ok === false && formato.kind).toBe('format');
+    for (const lang of ['es', 'en'] as const) {
+      const t = dict[lang].niifIntake;
+      expect(t.maturityInvalidClass).toBeTruthy();
+      expect(t.maturityInvalidCode).toBeTruthy();
+      expect(t.maturityMax).toContain('{max}');
+    }
+    expect(dict.en.niifIntake.maturityInvalidClass).not.toBe(dict.es.niifIntake.maturityInvalidClass);
   });
 });

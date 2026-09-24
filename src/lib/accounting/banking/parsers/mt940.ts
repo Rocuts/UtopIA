@@ -36,7 +36,6 @@ function toText(content: string | Buffer): string {
   }
 }
 
-/** YYMMDD → Date UTC. Pivote de siglo SWIFT: 00-79 ⇒ 2000s, 80-99 ⇒ 1900s. */
 /**
  * Fecha de entrada (mes y día, sin año) del campo :61: en el año que la deja
  * más cerca de la fecha valor: el mismo, el anterior o el siguiente
@@ -57,6 +56,7 @@ function entryDateNear(valueDate: Date, month: number, day: number): Date | null
   return best;
 }
 
+/** YYMMDD → Date UTC. Pivote de siglo SWIFT: 00-79 ⇒ 2000s, 80-99 ⇒ 1900s. */
 function parseSwiftDate(yymmdd: string): Date | undefined {
   const m = yymmdd.match(/^(\d{2})(\d{2})(\d{2})$/);
   if (!m) return undefined;

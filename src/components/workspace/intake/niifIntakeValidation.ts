@@ -128,10 +128,15 @@ export function applyIntakeDirectives(
  */
 export function parseMaturityOverrideCode(
   input: string,
-): { ok: true; code: string } | { ok: false; reason: string } {
+):
+  | { ok: true; code: string }
+  | { ok: false; kind: 'format' | 'class'; reason: string } {
   const code = input.replace(/[.\-\s]/g, '');
   const reason = motivoCodigoVencimientoInvalido(code);
-  return reason ? { ok: false, reason } : { ok: true, code };
+  if (!reason) return { ok: true, code };
+  // `kind` elige el texto del diccionario (es/en) que ve el usuario; `reason`
+  // es el motivo del servidor, en español.
+  return { ok: false, kind: /^\d{2,20}$/.test(code) ? 'class' : 'format', reason };
 }
 
 /**
