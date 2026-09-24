@@ -91,7 +91,7 @@ export function runR9(snapshot: PeriodSnapshot): R9Result {
         `El contrato de precisión BigInt cents falló en ${audit.driftCount} de ` +
         `${audit.fieldsChecked} totales canónicos: ${driftedFields.join('; ')}. ` +
         `Esto compromete la aritmética anti-alucinación que los validators del gate consumen.`,
-      normReference: 'NIC 1 párr. 32 (compensación) + IFRS 18 (presentación coherente)',
+      normReference: 'NIIF para PYMES, Sección 2, párr. 2.7 (fiabilidad) + NIC 1, párr. 15 (presentación razonable)',
       recommendation:
         'Revisar el parser `buildSnapshotForPeriod` y los helpers `toCents` / ' +
         '`toRawString`. Confirmar que los montos del balance se leyeron sin ' +
