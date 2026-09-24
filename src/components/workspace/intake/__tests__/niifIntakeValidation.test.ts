@@ -160,3 +160,33 @@ describe('P4 — applyIntakeDirectives', () => {
     expect(dict.en.niifIntake.maturityInvalidClass).not.toBe(dict.es.niifIntake.maturityInvalidClass);
   });
 });
+
+// ---------------------------------------------------------------------------
+// ICU-07 — la lista de faltantes del paso "Revisar" (incluida la unidad
+// pendiente de P4) salía en español con la interfaz en inglés.
+// ---------------------------------------------------------------------------
+describe('collectMissingRequired — etiquetas por idioma (ICU-07)', () => {
+  it('con las etiquetas del diccionario en inglés no queda texto en español', async () => {
+    const { dict } = await import('@/lib/i18n/dictionaries');
+    const { missingRequiredLabels, UNIT_PENDING_LABEL: ES_UNIT } = await import('../niifIntakeValidation');
+    const vacio = { company: { name: '', nit: '' } as never, fiscalPeriod: '', niifGroup: undefined as never };
+    const en = collectMissingRequired(vacio, '', { unitPending: true, labels: missingRequiredLabels(dict.en.niifIntake) });
+    expect(en).toEqual([
+      dict.en.niifIntake.missingCompanyName,
+      dict.en.niifIntake.missingNit,
+      dict.en.niifIntake.missingFiscalPeriod,
+      dict.en.niifIntake.missingNiifGroup,
+      dict.en.niifIntake.missingRawData,
+      dict.en.niifIntake.missingUnit,
+    ]);
+    expect(en).not.toContain(ES_UNIT);
+    expect(dict.en.niifIntake.missingUnit).toMatch(/unit/i);
+    const es = collectMissingRequired(vacio, '', { unitPending: true, labels: missingRequiredLabels(dict.es.niifIntake) });
+    expect(es).toContain(ES_UNIT);
+    expect(es).toContain(RAW_DATA_LABEL);
+    // Sin etiquetas: español (contrato anterior).
+    expect(collectMissingRequired(vacio, '', { unitPending: true })).toEqual(es);
+    expect(dict.en.niifIntake.missingBanner).toContain('{n}');
+    expect(dict.es.niifIntake.missingBanner).toContain('{n}');
+  });
+});

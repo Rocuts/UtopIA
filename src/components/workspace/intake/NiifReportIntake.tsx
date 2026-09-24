@@ -32,6 +32,8 @@ import { HechosEmpresaConfirm } from './HechosEmpresaConfirm';
 import {
   applyIntakeDirectives,
   collectMissingRequired,
+  isUnitPending,
+  missingRequiredLabels,
   normalizeRegimenTributario,
   resolveExtractedFiscalPeriod,
   resolveNiifRawData,
@@ -527,7 +529,9 @@ export function NiifReportIntake() {
   // P4-a: unidad declarada por el archivo subido y su confirmación.
   const unitInfo =
     extractionState.status === 'done' && !skippedUpload ? extractionState.extracted?.unit ?? null : null;
-  const unitPending = unitInfo?.requiresConfirmation === true;
+  // ICU-04: también mientras una (re)confirmación está en vuelo o falló: el
+  // texto aún lleva la unidad anterior.
+  const unitPending = !skippedUpload && isUnitPending(extractionState);
 
   const handleSubmit = useCallback(() => {
     const extractedRaw =
@@ -543,7 +547,9 @@ export function NiifReportIntake() {
     // al final del wizard y recibía un HTTP 400 críptico.
     if (!finalRawData) return;
     // Unidad declarada sin confirmar: /niif respondería 422 (recalculo-final-03).
-    if (extractionState.status === 'done' && extractionState.extracted?.unit?.requiresConfirmation) return;
+    // Con una reconfirmación en vuelo (o fallida) el texto lleva la unidad
+    // anterior: no se envía con una unidad distinta de la elegida (ICU-04).
+    if (isUnitPending(extractionState)) return;
 
     const finalIntake: NiifReportIntakeType = {
       ...values,
@@ -618,9 +624,9 @@ export function NiifReportIntake() {
           niifGroup: values.niifGroup,
         },
         resolvedRawData,
-        { unitPending },
+        { unitPending, labels: missingRequiredLabels(t) },
       ),
-    [values.company, values.fiscalPeriod, values.niifGroup, resolvedRawData, unitPending],
+    [values.company, values.fiscalPeriod, values.niifGroup, resolvedRawData, unitPending, t],
   );
 
   // ─── Step 1: Upload Document ──────────────────────────────────────────────
@@ -716,7 +722,7 @@ export function NiifReportIntake() {
           className="rounded-2xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger"
         >
           <p className="font-semibold mb-1">
-            Falta(n) {missingRequired.length} campo(s) requerido(s) para continuar:
+            {t.missingBanner.replace('{n}', String(missingRequired.length))}
           </p>
           <ul className="list-disc list-inside space-y-0.5">
             {missingRequired.map((label) => (

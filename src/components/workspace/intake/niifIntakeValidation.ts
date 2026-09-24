@@ -60,6 +60,45 @@ export function pickNiifRawDataFromUpload(upload: {
 
 type RequiredSubset = Pick<NiifReportIntake, 'company' | 'fiscalPeriod' | 'niifGroup'>;
 
+/** Etiquetas de la lista de faltantes del paso "Revisar" (ICU-07: por idioma). */
+export interface MissingRequiredLabels {
+  companyName: string;
+  nit: string;
+  fiscalPeriod: string;
+  niifGroup: string;
+  rawData: string;
+  unitPending: string;
+}
+
+/** Etiquetas en español: el contrato anterior de `collectMissingRequired`. */
+export const MISSING_REQUIRED_LABELS_ES: MissingRequiredLabels = {
+  companyName: 'Razón Social',
+  nit: 'NIT',
+  fiscalPeriod: 'Periodo Fiscal',
+  niifGroup: 'Grupo NIIF',
+  rawData: RAW_DATA_LABEL,
+  unitPending: UNIT_PENDING_LABEL,
+};
+
+/** Etiquetas de faltantes desde `dict[language].niifIntake`. */
+export function missingRequiredLabels(t: {
+  missingCompanyName: string;
+  missingNit: string;
+  missingFiscalPeriod: string;
+  missingNiifGroup: string;
+  missingRawData: string;
+  missingUnit: string;
+}): MissingRequiredLabels {
+  return {
+    companyName: t.missingCompanyName,
+    nit: t.missingNit,
+    fiscalPeriod: t.missingFiscalPeriod,
+    niifGroup: t.missingNiifGroup,
+    rawData: t.missingRawData,
+    unitPending: t.missingUnit,
+  };
+}
+
 /**
  * Campos bloqueantes del paso "Revisar". Incluye el balance porque sin él el
  * pipeline NIIF no arranca: el backend lo rechaza antes de llamar a ningún
@@ -68,15 +107,16 @@ type RequiredSubset = Pick<NiifReportIntake, 'company' | 'fiscalPeriod' | 'niifG
 export function collectMissingRequired(
   values: RequiredSubset,
   resolvedRawData: string,
-  opts: { unitPending?: boolean } = {},
+  opts: { unitPending?: boolean; labels?: MissingRequiredLabels } = {},
 ): string[] {
+  const labels = opts.labels ?? MISSING_REQUIRED_LABELS_ES;
   const missing: string[] = [];
-  if (!values.company?.name?.trim()) missing.push('Razón Social');
-  if (!values.company?.nit?.trim()) missing.push('NIT');
-  if (!values.fiscalPeriod) missing.push('Periodo Fiscal');
-  if (!values.niifGroup) missing.push('Grupo NIIF');
-  if (!resolvedRawData) missing.push(RAW_DATA_LABEL);
-  if (opts.unitPending) missing.push(UNIT_PENDING_LABEL);
+  if (!values.company?.name?.trim()) missing.push(labels.companyName);
+  if (!values.company?.nit?.trim()) missing.push(labels.nit);
+  if (!values.fiscalPeriod) missing.push(labels.fiscalPeriod);
+  if (!values.niifGroup) missing.push(labels.niifGroup);
+  if (!resolvedRawData) missing.push(labels.rawData);
+  if (opts.unitPending) missing.push(labels.unitPending);
   return missing;
 }
 
@@ -84,9 +124,29 @@ export function collectMissingRequired(
 export function isReviewStepValid(
   values: RequiredSubset,
   resolvedRawData: string,
-  opts: { unitPending?: boolean } = {},
+  opts: { unitPending?: boolean; labels?: MissingRequiredLabels } = {},
 ): boolean {
   return collectMissingRequired(values, resolvedRawData, opts).length === 0;
+}
+
+/**
+ * Unidad de las cifras pendiente (P4-a / ICU-04) en la lectura del archivo:
+ *  - el archivo declara "miles / millones" y el usuario no la confirmó; o
+ *  - hay una (re)confirmación en vuelo: el texto aún lleva la unidad ANTERIOR
+ *    y enviar ahora usaría una unidad distinta de la que el usuario acaba de
+ *    elegir; o
+ *  - la última confirmación falló: la unidad elegida no se aplicó.
+ * El banner, la validez del paso "Revisar" y el envío usan esta misma regla.
+ */
+export function isUnitPending(extraction: {
+  status: string;
+  extracted?: { unit?: { requiresConfirmation?: boolean } | null } | null;
+  unitConfirmation?: { status: 'idle' | 'confirming' | 'error' } | null;
+}): boolean {
+  if (extraction.status !== 'done' || !extraction.extracted) return false;
+  if (extraction.extracted.unit?.requiresConfirmation === true) return true;
+  const confirmation = extraction.unitConfirmation?.status ?? 'idle';
+  return confirmation === 'confirming' || confirmation === 'error';
 }
 
 /**
