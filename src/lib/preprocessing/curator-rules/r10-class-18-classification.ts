@@ -27,6 +27,18 @@ import type { Class18ClassificationAudit, CuratorFinding } from './types';
 const TAX_CAUSATION_MATERIALITY = 1_000_000; // $1M COP
 /** Tolerancia para considerar grupo 24 ≈ 0. */
 const TAX_PAYABLE_TOLERANCE = 1_000; // $1K COP
+/**
+ * Proporción del gasto de renta que los anticipos/retenciones de renta deben
+ * cubrir para explicar un pasivo 2404 en cero por compensación.
+ */
+const RENTA_CREDIT_COVERAGE = 0.5;
+
+/** Subcuentas 1355 que son crédito de RENTA (decisión de negocio 2026-09). */
+function isRentaCreditAccount(code: string, name: string): boolean {
+  if (code.startsWith('135505') || code.startsWith('135515')) return true;
+  if (code.startsWith('135595')) return /renta/i.test(name);
+  return false;
+}
 
 export interface R10Result {
   audit: Class18ClassificationAudit;
@@ -65,12 +77,28 @@ export function runR10(snapshot: PeriodSnapshot): R10Result {
   const taxPayable = taxPayableAccounts.reduce((s, a) => s + a.balance, 0);
 
   // -------------------------------------------------------------------------
+  // 3.b Anticipos y retenciones de RENTA (1355). Auditoría 2026-09
+  //     (niif-preproceso-18): con la liquidación privada, el pasivo 2404 puede
+  //     quedar en 0 porque las retenciones y anticipos superan o igualan el
+  //     impuesto (Art. 850 E.T.; compensación NIC 12 ¶71). Sólo cuentan las
+  //     subcuentas de renta: 135505 (anticipo de renta), 135515 (retención en
+  //     la fuente) y 135595 cuando su nombre es de renta. 135510/135517/
+  //     135518/135520… (ICA, IVA, sobrantes) no.
+  // -------------------------------------------------------------------------
+  const rentaCredits = (class1?.accounts ?? [])
+    .filter((a) => isRentaCreditAccount(a.code, a.name))
+    .reduce((s, a) => s + a.balance, 0);
+  const compensacionExplicada =
+    taxExpense > 0 && rentaCredits >= taxExpense * RENTA_CREDIT_COVERAGE;
+
+  // -------------------------------------------------------------------------
   // 4. Banderas determinísticas.
   // -------------------------------------------------------------------------
   const cuenta18UsadaComoGasto = class18Balance < -TAX_PAYABLE_TOLERANCE;
-  const missingTaxCausation =
+  const pasivoAusente =
     taxExpense > TAX_CAUSATION_MATERIALITY &&
     Math.abs(taxPayable) <= TAX_PAYABLE_TOLERANCE;
+  const missingTaxCausation = pasivoAusente && !compensacionExplicada;
 
   const audit: Class18ClassificationAudit = {
     class18BalanceCop: class18Balance,
@@ -131,9 +159,24 @@ export function runR10(snapshot: PeriodSnapshot): R10Result {
         'la renta y complementarios por pagar). Si la entidad pagó directamente sin causar, ' +
         'reverter el cargo a caja y reclasificar.',
       impact:
-        'El informe NO es emitible mientras este flag esté activo: la utilidad neta ' +
-        'reportada incluye un gasto sin contraparte de pasivo, violando la ecuación ' +
-        'patrimonial Activo = Pasivo + Patrimonio.',
+        'El informe NO es emitible mientras este flag esté activo: el gasto de renta del ' +
+        'periodo no tiene contrapartida verificable (pasivo 2404 ni anticipos/retenciones de ' +
+        'renta que lo compensen).',
+      period: snapshot.period,
+    });
+  } else if (pasivoAusente && compensacionExplicada) {
+    findings.push({
+      code: 'CUR-R10',
+      severity: 'informativo',
+      title: 'Impuesto de renta causado y compensado con anticipos/retenciones',
+      description:
+        `Grupo 54xx reporta $${formatCOP(taxExpense)} de gasto de renta y el grupo 24xx está en ` +
+        `$${formatCOP(taxPayable)}; los anticipos y retenciones de renta (1355) suman ` +
+        `$${formatCOP(rentaCredits)}, lo que explica la compensación del pasivo.`,
+      normReference: 'Art. 850 E.T. + NIC 12 párr. 71 (compensación de activos y pasivos corrientes)',
+      recommendation:
+        'Conservar el formulario 110 (liquidación privada) como soporte de la compensación.',
+      impact: 'Informativo: no bloquea la emisión.',
       period: snapshot.period,
     });
   }

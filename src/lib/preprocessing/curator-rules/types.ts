@@ -105,7 +105,11 @@ export interface Reclassification {
 
 export interface CashFlowOperatingSection {
   utilidadNeta: number;
-  /** + Depreciación / Amortización (Δ saldos PUC 1592, 1595, 1598). */
+  /**
+   * + Depreciación, amortización y deterioros no monetarios: aumento de las
+   * correctoras de los grupos 15-18 (1592, 1597, 1598, 1599, 1698, 1699,
+   * 1798, 1899 … ver `contra-asset-registry.ts`).
+   */
   depreciacionAmortizacion: number;
   /** ± Variación Cuentas por Cobrar (Δ Clase 13). Activos ↑ → flujo ↓. */
   varCuentasPorCobrar: number;
@@ -113,30 +117,47 @@ export interface CashFlowOperatingSection {
   varInventarios: number;
   /** ± Variación Proveedores (Δ Clase 22). */
   varProveedores: number;
-  /** ± Variación Cuentas por Pagar comerciales (Δ Clase 23). */
+  /** ± Variación Cuentas por Pagar (Δ Clase 23, sin 2360 dividendos por pagar). */
   varCuentasPorPagar: number;
   /** ± Variación Impuestos por Pagar (Δ Clase 24). */
   varImpuestosPorPagar: number;
   /** ± Variación Obligaciones Laborales (Δ Clase 25). */
   varObligacionesLaborales: number;
+  /**
+   * ± Variación de otros pasivos operativos: 26 pasivos estimados y
+   * provisiones, 27 diferidos, 28 otros pasivos (anticipos recibidos …).
+   * Opcional por compatibilidad con literales previos; R2 siempre lo emite.
+   */
+  varOtrosPasivosOperativos?: number;
   /** Total flujo de actividades operativas. */
   total: number;
 }
 
 export interface CashFlowInvestingSection {
-  /** Δ Propiedad Planta y Equipo bruto (Clase 15 sin depreciación). */
+  /** Δ Propiedad Planta y Equipo bruto (Clase 15 sin correctoras). */
   varPPE: number;
-  /** ± Otros movimientos de inversión. */
+  /**
+   * ± Otros movimientos de inversión: −Δ12 inversiones, −Δ16/17/18 brutos,
+   * −Δ19 valorizaciones + Δ38 superávit por valorizaciones (no monetarios,
+   * se netean entre sí).
+   */
   otros: number;
   total: number;
 }
 
 export interface CashFlowFinancingSection {
-  /** Δ Obligaciones financieras (Clase 21). */
+  /** Δ Obligaciones financieras (21) y bonos (29), incluidos sobregiros reclasificados. */
   varObligacionesFinancieras: number;
-  /** Δ Capital + reservas (Clases 31, 32, 33 excluyendo utilidad del ejercicio). */
+  /**
+   * Δ capital, superávit, reservas y revalorización (31-35) más el
+   * movimiento de resultados acumulados que no es resultado del año ni
+   * dividendo identificado.
+   */
   varCapitalReservas: number;
-  /** Dividendos / distribuciones aproximadas (Δ Utilidades acumuladas — Utilidad neta T). */
+  /**
+   * Dividendos pagados (≤ 0), SÓLO con evidencia (2360/35):
+   * Δ(36+37, incl. virtuales de R8) − utilidad del año + Δ2360.
+   */
   dividendosEstimados: number;
   total: number;
 }
@@ -183,14 +204,16 @@ export interface BalanceGapAttribution {
 }
 
 // ---------------------------------------------------------------------------
-// R4 — Validación renta teórica (Art. 240 E.T., 35%)
+// R4 — Causación del impuesto de renta
+// ---------------------------------------------------------------------------
+// Auditoría 2026-09 (niif-preproceso-17): R4 ya no calcula una "renta teórica"
+// (35 % de la utilidad neta contra todo el grupo 24). La utilidad contable no
+// es base fiscal; sin depuración verificada no se cuantifica impuesto ni
+// brecha. `TaxProvisionRisk` se conserva sólo por compatibilidad de tipos y
+// R4 no lo emite.
 // ---------------------------------------------------------------------------
 
-/** Tasa nominal de renta colombiana 2026 (Art. 240 E.T.). */
-export const RENTA_NOMINAL_RATE = 0.35;
-/** Threshold a partir del cual disparamos el riesgo. */
-export const RENTA_PROVISION_FLOOR = 0.30;
-
+/** @deprecated R4 ya no cuantifica una brecha de renta (ver arriba). */
 export interface TaxProvisionRisk {
   utilidadNeta: number;
   /** Provisión observada en cuenta 24xx. */
@@ -221,7 +244,7 @@ export interface CuratorResult {
   cashFlowIndirecto?: CashFlowStatement;
   /** R3: atribución de brecha de cuadratura (si hay descuadre). */
   balanceGapAttribution?: BalanceGapAttribution;
-  /** R4: riesgo fiscal (si la provisión < 30% de utilidad). */
+  /** R4 (histórico): ya no se emite; R4 sólo produce un hallazgo informativo. */
   taxProvisionRisk?: TaxProvisionRisk;
   /** R5: ajuste de anclaje patrimonial (Balance ↔ ECP). */
   convergenceAdjustment?: ConvergenceAdjustment;
@@ -293,43 +316,55 @@ export interface CashFlowClosureAdjustment {
 // si el ERP entrega un Clase 3 con un saldo histórico en 3605 que no
 // corresponde al P&L del periodo.
 //
-// La regla SIEMPRE se aplica:
+// Cuando hay actividad P&L la regla:
 //   1. Toma utilidad transitoria = Clase 4 - Clase 5 - Clase 6 - Clase 7
 //      (ya calculada en `controlTotals.utilidadNeta` por preprocesamiento).
-//   2. Reclasifica el saldo de la cuenta 3605 del CSV (si difiere de la
-//      utilidad transitoria) hacia una cuenta virtual `3710VC` (Resultados
-//      Acumulados — Cierre Virtual). Conserva trazabilidad: anula el saldo de
-//      3605 a 0 sin remover la fila, e inyecta `3710VC` con el monto.
+//   2. Lee el grupo 36 del CSV (3605 utilidad y 3610 pérdida del ejercicio).
+//      Si coincide con la utilidad transitoria, es el resultado del periodo y
+//      se reemplaza. Si difiere, es un resultado de ejercicios anteriores no
+//      trasladado y se reclasifica a la cuenta virtual `3710VC`. Conserva
+//      trazabilidad: anula el saldo de 36 a 0 sin remover la fila.
 //   3. Inyecta una cuenta virtual `3605VC` (Resultado del Ejercicio — Corte
 //      Actual) en Clase 3 con saldo = utilidad transitoria.
 //   4. Recalcula `controlTotals.patrimonio` y `summary.totalEquity`.
-//   5. Si tras la inyección queda una diferencia marginal por redondeo
-//      (≤ tolerancia centavos), la absorbe en `3710VC`.
+//   5. NO absorbe ninguna otra diferencia. Si tras los pasos 2-3
+//      Activo − Pasivo − Patrimonio ≠ 0 al centavo, el residual queda visible
+//      como descuadre BLOQUEANTE (`validation.curatorBlockingReasons`).
 //   6. Sobreescribe `equityBreakdown.utilidadEjercicio` con el cálculo
-//      dinámico (autoritativo para downstream: pilares Verdad/Valor, agentes
-//      NIIF, Excel export).
+//      dinámico y suma la reclasificación a `utilidadesAcumuladas`.
 //
 // Severidad de findings:
 //   - 'informativo' siempre (la regla siempre actúa por diseño).
-//   - 'medio' si tuvo que reclasificar saldo material de 3605 (auditor lo
+//   - 'medio' si tuvo que reclasificar saldo material de 36 (auditor lo
 //     debe revisar).
+//   - 'critico' si queda un residual no explicado (bloquea la emisión).
 // ---------------------------------------------------------------------------
 export interface VirtualCloseAdjustment {
   /** Utilidad transitoria calculada del P&L (Clase 4 − 5 − 6 − 7). */
   dynamicNetIncome: number;
-  /** Saldo histórico en cuenta 3605 leído del CSV (0 si no existía). */
+  /** Saldo del grupo 36 (3605 + 3610) leído del CSV (0 si no existía). */
   csvUtilidadEjercicio: number;
   /** Diferencia |dynamicNetIncome − csvUtilidadEjercicio|. */
   utilidadGap: number;
-  /** Si true, hubo que reclasificar saldo no-trivial de 3605 a 3710VC. */
+  /** Si true, hubo que reclasificar saldo no-trivial del grupo 36 a 3710VC. */
   reclassifiedFrom3605: boolean;
-  /** Monto reclasificado de 3605 hacia 3710VC (0 si no hubo). */
+  /** Monto reclasificado del grupo 36 hacia 3710VC (0 si no hubo). */
   reclassifiedAmount: number;
-  /** Diferencia residual de la ecuación tras inyectar 3605VC, antes del
-   *  ajuste de centavos. */
+  /** Activo − Pasivo − Patrimonio tras el traslado (pesos). Si ≠ 0 NO se
+   *  absorbe: queda como descuadre bloqueante. */
   residualGapBeforeCents: number;
-  /** Ajuste de centavos absorbido en 3710VC (puede ser negativo). */
+  /**
+   * Histórico: ajuste residual absorbido en 3710VC. Desde la auditoría
+   * 2026-09 R8 no absorbe residuales, así que siempre vale 0; se conserva
+   * por compatibilidad con consumidores que lo leen.
+   */
   centsAdjustment: number;
+  /** Residual no explicado por el resultado del ejercicio, en pesos. */
+  unexplainedResidual?: number;
+  /** Mismo residual en string canónica de centavos exactos (`-?\d+\.\d{2}`). */
+  unexplainedResidualRaw?: string;
+  /** True si el residual ≠ 0 y el snapshot quedó bloqueado. */
+  blocking?: boolean;
   /** Total Patrimonio FINAL post-R8 — autoritativo. */
   reconciledEquity: number;
   /** Cuenta virtual donde se imputa la utilidad del ejercicio. */
@@ -396,25 +431,43 @@ export interface Class18ClassificationAudit {
 }
 
 // ---------------------------------------------------------------------------
-// R12 — Detector de cierre de libros (gate previo a R8)
+// R12 — Detector de cierre de libros
 // ---------------------------------------------------------------------------
-// Si saldoNeto(clase 4) − saldoNeto(clase 5) − saldoNeto(clase 6) − saldoNeto(clase 7)
-// ≠ 0 Y saldoNeto(grupo 36 + grupo 37) ≈ 0, los libros NO están cerrados:
-// la utilidad transitoria del P&L no fue trasladada al patrimonio.
-// Cuando se dispara, R8 (Cierre Virtual) NO ejecuta — el orchestrator emite
-// dictamen "no emitible" sin llegar al builder.
+// "Sin traslado": el P&G del periodo es material y el grupo 36 no lo contiene
+// (el grupo 37 son ejercicios anteriores y no cuenta). La bandera del gate
+// (`librosNoCerrados` → V12) se omite en cortes 'parcial'. Además detecta un
+// comparativo no cerrado (P&G del periodo posiblemente acumulado).
 // ---------------------------------------------------------------------------
+
+/** Evidencia de P&G acumulado por comparativo no cerrado (recalculo-03). */
+export interface PygAcumuladoAudit {
+  /** Periodo comparativo cuyo resultado no ingresó al patrimonio. */
+  comparativePeriod: string;
+  /** Resultado del comparativo (pesos). */
+  utilidadComparativo: number;
+  /** Resultado publicado del periodo principal (saldo final de clases 4-7). */
+  utilidadPublicada: number;
+  /** Cifra alternativa: resultado del ejercicio = publicado − comparativo (centavos exactos). */
+  utilidadMovimientoRaw: string;
+  /** Ingresos netos del ejercicio si el P&G es acumulado (centavos exactos). */
+  ingresosNetosMovimientoRaw: string;
+  /** Variación de resultados anteriores (patrimonio sin resultado del año, sin aportes). */
+  variacionResultadosAnterioresRaw: string;
+}
+
 export interface ClosingDetectorAudit {
-  /** Utilidad transitoria del P&L (clase 4 − 5 − 6 − 7). */
+  /** Resultado del P&L del periodo (= controlTotals.utilidadNeta). */
   utilidadTransitoriaCop: number;
-  /** Saldo neto del grupo 36 (resultados del ejercicio) en clase 3. */
+  /** Saldo neto REAL del grupo 36 (resultados del ejercicio) en clase 3. */
   grupo36SaldoCop: number;
-  /** Saldo neto del grupo 37 (resultados ejercicios anteriores) en clase 3. */
+  /** Saldo neto REAL del grupo 37 (resultados ejercicios anteriores) en clase 3. */
   grupo37SaldoCop: number;
-  /** True si los libros NO están cerrados (utilidad sin trasladar). */
+  /** True si los libros NO están cerrados y el corte no es parcial (o el comparativo no se cerró). */
   librosNoCerrados: boolean;
   /** Asientos sugeridos (NO aplicados) para cerrar el periodo. */
   suggestedClosingEntries: string[];
+  /** Presente si el P&G del periodo puede ser acumulado (comparativo sin cerrar). */
+  pygAcumulado?: PygAcumuladoAudit;
 }
 
 // ---------------------------------------------------------------------------

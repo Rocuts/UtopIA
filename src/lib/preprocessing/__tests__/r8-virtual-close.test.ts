@@ -199,11 +199,62 @@ describe('R8 — Cierre Virtual (Autonomía de Cierre)', () => {
   // -------------------------------------------------------------------------
   // Escenario 3: Conflicto — 3605 histórico ≠ utilidad dinámica
   // -------------------------------------------------------------------------
-  it('conflicto: 3605 histórico se reclasifica a 3710VC y se inyecta utilidad dinámica', () => {
-    // Activo 1.000M | Pasivo 600M | Patrimonio (200M capital + 150M en 3605 viejo) = 350M
-    // Pre-R8 cuadra crudo: 1.000 = 600 + 350 + 50 (50M en otras cuentas... pongamos 50M en 3705)
-    // Para simplificar: 1.000 = 600 + 400 (200 capital + 150 en 3605 viejo + 50 en 3705)
-    // Utilidad dinámica del periodo actual = 200M (≠ 150M en 3605 viejo)
+  it('3605 histórico (año anterior sin trasladar) se reclasifica a 3710VC y la ecuación cuadra sin residual', () => {
+    // Pasivo 600M | Capital 200M + 3605 (año ANTERIOR) 150M + 3705 50M = 400M
+    // Utilidad dinámica del periodo = 200M, aún en clases 4-7.
+    // Activo = 600 + 400 + 200 (utilidad sin trasladar) = 1.200M.
+    const snap = makeSnapshot({
+      period: '2026-08',
+      controlTotals: makeControlTotals({
+        activo: 1_200_000_000,
+        pasivo: 600_000_000,
+        patrimonio: 400_000_000,
+        ingresos: 800_000_000,
+        gastos: 600_000_000,
+        utilidadNeta: 200_000_000,
+      }),
+      classes: [
+        makeClass(1, [{ code: '110505', name: 'Caja', balance: 1_200_000_000 }]),
+        makeClass(2, [{ code: '210505', name: 'Bancos CP', balance: 600_000_000 }]),
+        makeClass(3, [
+          { code: '3115', name: 'Capital', balance: 200_000_000 },
+          { code: '360505', name: 'Utilidad ejercicio (histórico)', balance: 150_000_000 },
+          { code: '3705', name: 'Utilidades acumuladas', balance: 50_000_000 },
+        ]),
+      ],
+      equity: { capitalSuscritoPagado: 200_000_000, utilidadEjercicio: 150_000_000, utilidadesAcumuladas: 50_000_000 },
+    });
+
+    const out = runR8(snap);
+
+    expect(out.virtualCloseAdjustment.reclassifiedFrom3605).toBe(true);
+    expect(out.virtualCloseAdjustment.csvUtilidadEjercicio).toBe(150_000_000);
+    expect(out.virtualCloseAdjustment.dynamicNetIncome).toBe(200_000_000);
+
+    const clase3 = snap.classes.find((c) => c.code === 3)!;
+    expect(clase3.accounts.find((a) => a.code === '360505')!.balance).toBe(0);
+    expect(clase3.accounts.find((a) => a.code === '3605VC')!.balance).toBe(200_000_000);
+    // 3710VC recibe SÓLO la reclasificación del resultado anterior.
+    expect(clase3.accounts.find((a) => a.code === '3710VC')!.balance).toBe(150_000_000);
+    expect(out.virtualCloseAdjustment.reclassifiedAmount).toBe(150_000_000);
+    expect(out.virtualCloseAdjustment.centsAdjustment).toBe(0);
+
+    // 200 + 50 + 200 + 150 = 600M; 1.200 = 600 + 600.
+    expect(snap.controlTotals.patrimonio).toBe(600_000_000);
+    expect(snap.summary.equationBalanced).toBe(true);
+    expect(snap.validation.blocking).toBe(false);
+    // El resultado anterior reclasificado es "resultado de ejercicios anteriores".
+    expect(snap.equityBreakdown.utilidadEjercicio).toBe(200_000_000);
+    expect(snap.equityBreakdown.utilidadesAcumuladas).toBe(200_000_000);
+
+    expect(out.findings.some((f) => f.severity === 'medio')).toBe(true);
+    expect(out.findings.some((f) => f.severity === 'critico')).toBe(false);
+  });
+
+  it('conflicto: balance que ya cuadraba sin el P&G (3605 ≠ utilidad) → residual BLOQUEANTE, no se absorbe', () => {
+    // 1.000 = 600 + 400 (200 capital + 150 en 3605 + 50 en 3705) y además hay
+    // P&G de 200M en clases 4-7. El P&G no tiene contrapartida en el balance:
+    // la versión anterior de R8 escondía la diferencia en 3710VC (−50M).
     const snap = makeSnapshot({
       period: '2026-08',
       controlTotals: makeControlTotals({
@@ -226,37 +277,19 @@ describe('R8 — Cierre Virtual (Autonomía de Cierre)', () => {
     });
 
     const out = runR8(snap);
+    const v = out.virtualCloseAdjustment;
 
-    // Reclasificación detectada.
-    expect(out.virtualCloseAdjustment.reclassifiedFrom3605).toBe(true);
-    expect(out.virtualCloseAdjustment.csvUtilidadEjercicio).toBe(150_000_000);
-    expect(out.virtualCloseAdjustment.dynamicNetIncome).toBe(200_000_000);
-
-    const clase3 = snap.classes.find((c) => c.code === 3)!;
-
-    // 3605 original anulado a 0.
-    expect(clase3.accounts.find((a) => a.code === '360505')!.balance).toBe(0);
-
-    // 3605VC con utilidad dinámica.
-    expect(clase3.accounts.find((a) => a.code === '3605VC')!.balance).toBe(200_000_000);
-
-    // 3710VC absorbe el residual: balance crudo cuadraba (1.000 = 600 + 400),
-    // pero al reemplazar 3605 viejo (150M) por dinámica (200M) el patrimonio
-    // sube 50M → 3710VC = -50M para mantener cuadre. La reclassifiedAmount
-    // (audit trail) sí guarda los 150M originales.
-    const v3710 = clase3.accounts.find((a) => a.code === '3710VC');
-    expect(v3710).toBeDefined();
-    expect(v3710!.balance).toBe(-50_000_000);
-
-    // Audit trail conserva el monto histórico para el auditor.
-    expect(out.virtualCloseAdjustment.reclassifiedAmount).toBe(150_000_000);
-
-    // Patrimonio cuadra: 200 (capital) + 0 (3605 anulado) + 50 (3705) + 200 (3605VC) - 50 (3710VC) = 400M
-    expect(snap.controlTotals.patrimonio).toBe(400_000_000);
-    expect(snap.summary.equationBalanced).toBe(true);
-
-    // Finding 'medio' por la reclasificación material (auditor revisa).
-    expect(out.findings.some((f) => f.severity === 'medio')).toBe(true);
+    // Ninguna cifra no explicada entra al patrimonio como "resultados acumulados".
+    expect(v.centsAdjustment).toBe(0);
+    expect(v.blocking).toBe(true);
+    // 1.000 − 600 − (200 + 50 + 200 + 150) = −200M: el P&G ya estaba "dentro".
+    expect(v.unexplainedResidual).toBe(-200_000_000);
+    expect(v.unexplainedResidualRaw).toBe('-200000000.00');
+    expect(snap.summary.equationBalanced).toBe(false);
+    expect(snap.validation.blocking).toBe(true);
+    expect(snap.validation.curatorBlockingReasons?.some((r) => r.includes('-200.000.000,00'))).toBe(true);
+    const critico = out.findings.find((f) => f.severity === 'critico');
+    expect(critico?.description).toMatch(/ya cuadraba SIN el resultado/);
   });
 
   // -------------------------------------------------------------------------
@@ -328,14 +361,14 @@ describe('R8 — Cierre Virtual (Autonomía de Cierre)', () => {
   // -------------------------------------------------------------------------
   // Escenario 6: Centavos — gap marginal absorbido
   // -------------------------------------------------------------------------
-  it('absorbe diferencia residual de centavos en 3710VC', () => {
-    // Balance descuadrado por $237 COP (redondeo acumulado): pre-R8 patrimonio
-    // 200M capital + 200M utilidad calculada por inyección = 400M. Si el activo
-    // es 1.000.000.237 (con cola de centavos), el gap residual son $237.
+  it('residual distinto de cero (aun de $237,01) NO se absorbe en 3710VC: queda BLOQUEANTE con el monto', () => {
+    // Auditoría 2026-09 (niif-preproceso-06): la versión anterior llevaba
+    // cualquier residual a 3710VC. Una diferencia no explicada por el
+    // resultado del ejercicio es un descuadre del archivo, no patrimonio.
     const snap = makeSnapshot({
       period: '2026-05',
       controlTotals: makeControlTotals({
-        activo: 1_000_000_237,
+        activo: 1_000_000_237.01,
         pasivo: 600_000_000,
         patrimonio: 200_000_000,
         ingresos: 800_000_000,
@@ -343,7 +376,7 @@ describe('R8 — Cierre Virtual (Autonomía de Cierre)', () => {
         utilidadNeta: 200_000_000,
       }),
       classes: [
-        makeClass(1, [{ code: '110505', name: 'Caja', balance: 1_000_000_237 }]),
+        makeClass(1, [{ code: '110505', name: 'Caja', balance: 1_000_000_237.01 }]),
         makeClass(2, [{ code: '210505', name: 'Bancos CP', balance: 600_000_000 }]),
         makeClass(3, [{ code: '3115', name: 'Capital', balance: 200_000_000 }]),
       ],
@@ -351,13 +384,159 @@ describe('R8 — Cierre Virtual (Autonomía de Cierre)', () => {
 
     const out = runR8(snap);
 
-    // 3710VC absorbe los $237.
     const v3710 = snap.classes.find((c) => c.code === 3)!.accounts.find((a) => a.code === '3710VC');
-    expect(v3710).toBeDefined();
-    expect(v3710!.balance).toBe(237);
+    expect(v3710).toBeUndefined();
+    expect(out.virtualCloseAdjustment.centsAdjustment).toBe(0);
+    expect(out.virtualCloseAdjustment.unexplainedResidualRaw).toBe('237.01');
+    expect(out.virtualCloseAdjustment.blocking).toBe(true);
+    // La ecuación NO se declara cuadrada y el monto exacto viaja al usuario.
+    expect(snap.summary.equationBalanced).toBe(false);
+    expect(snap.summary.equationBalance).toBe(237.01);
+    expect(snap.validation.blocking).toBe(true);
+    expect(snap.validation.curatorBlockingReasons).toHaveLength(1);
+    expect(snap.validation.curatorBlockingReasons![0]).toMatch(/^\[CUR-R8\] .*237,01/);
+    expect(out.findings.some((f) => f.code === 'CUR-R8' && f.severity === 'critico')).toBe(true);
 
-    // Ecuación cuadra al centavo.
+    // Idempotente: una segunda corrida no duplica la razón bloqueante.
+    runR8(snap);
+    expect(snap.validation.curatorBlockingReasons).toHaveLength(1);
+    expect(snap.validation.reasons.filter((r) => r.startsWith('[CUR-R8]'))).toHaveLength(1);
+  });
+
+  it('3605 del año anterior que coincide por azar con la utilidad del año: se reclasifica (la brecha lo prueba)', () => {
+    // Capital 400 + 3605 (año anterior) 200; utilidad del año 200 aún en
+    // clases 4-7 → Activo = 500 (pasivo) + 600 + 200 = 1.300. Si R8 tomara el
+    // 3605 como "el resultado del periodo" dejaría un residual de 200M.
+    const snap = makeSnapshot({
+      period: '2025',
+      controlTotals: makeControlTotals({
+        activo: 1_300_000_000,
+        pasivo: 500_000_000,
+        patrimonio: 600_000_000,
+        ingresos: 900_000_000,
+        gastos: 700_000_000,
+        utilidadNeta: 200_000_000,
+      }),
+      classes: [
+        makeClass(1, [{ code: '110505', name: 'Caja', balance: 1_300_000_000 }]),
+        makeClass(2, [{ code: '220505', name: 'Proveedores', balance: 500_000_000 }]),
+        makeClass(3, [
+          { code: '310505', name: 'Capital', balance: 400_000_000 },
+          { code: '360505', name: 'Utilidad 2024', balance: 200_000_000 },
+        ]),
+      ],
+    });
+    const out = runR8(snap);
+    expect(out.virtualCloseAdjustment.reclassifiedFrom3605).toBe(true);
+    expect(out.virtualCloseAdjustment.blocking).toBe(false);
+    expect(snap.controlTotals.patrimonio).toBe(800_000_000);
     expect(snap.summary.equationBalanced).toBe(true);
-    expect(out.virtualCloseAdjustment.centsAdjustment).toBe(237);
+  });
+
+  it('idempotencia con reclasificación del grupo 36: la segunda corrida no inventa residual', () => {
+    const snap = makeSnapshot({
+      period: '2026-08',
+      controlTotals: makeControlTotals({
+        activo: 1_200_000_000,
+        pasivo: 600_000_000,
+        patrimonio: 400_000_000,
+        ingresos: 800_000_000,
+        gastos: 600_000_000,
+        utilidadNeta: 200_000_000,
+      }),
+      classes: [
+        makeClass(1, [{ code: '110505', name: 'Caja', balance: 1_200_000_000 }]),
+        makeClass(2, [{ code: '210505', name: 'Bancos CP', balance: 600_000_000 }]),
+        makeClass(3, [
+          { code: '3115', name: 'Capital', balance: 200_000_000 },
+          { code: '360505', name: 'Utilidad 2025', balance: 150_000_000 },
+          { code: '3705', name: 'Utilidades acumuladas', balance: 50_000_000 },
+        ]),
+      ],
+      equity: { utilidadEjercicio: 150_000_000, utilidadesAcumuladas: 50_000_000 },
+    });
+    runR8(snap);
+    const second = runR8(snap);
+    expect(second.virtualCloseAdjustment.reclassifiedFrom3605).toBe(true);
+    expect(second.virtualCloseAdjustment.reclassifiedAmount).toBe(150_000_000);
+    expect(second.virtualCloseAdjustment.blocking).toBe(false);
+    expect(snap.controlTotals.patrimonio).toBe(600_000_000);
+    expect(snap.equityBreakdown.utilidadesAcumuladas).toBe(200_000_000);
+    expect(snap.validation.blocking).toBe(false);
+  });
+
+  // -------------------------------------------------------------------------
+  // Grupo 36 completo: 3610 (Pérdida del ejercicio) — niif-preproceso-12
+  // -------------------------------------------------------------------------
+  it('pérdida del ejercicio en 3610 + P&G presente: no se duplica ni fabrica utilidad acumulada', () => {
+    // Activo 800 | Pasivo 400 | Capital 500 | 3610 = −100 (pérdida del periodo)
+    // P&G: 400 − 300 − 200 = −100. El balance ya trae el resultado en 3610.
+    const snap = makeSnapshot({
+      period: '2025',
+      controlTotals: makeControlTotals({
+        activo: 800_000_000,
+        pasivo: 400_000_000,
+        patrimonio: 400_000_000,
+        ingresos: 400_000_000,
+        gastos: 500_000_000,
+        utilidadNeta: -100_000_000,
+      }),
+      classes: [
+        makeClass(1, [{ code: '110505', name: 'Caja', balance: 800_000_000 }]),
+        makeClass(2, [{ code: '220505', name: 'Proveedores', balance: 400_000_000 }]),
+        makeClass(3, [
+          { code: '310505', name: 'Capital', balance: 500_000_000 },
+          { code: '361005', name: 'Perdida del ejercicio', balance: -100_000_000 },
+        ]),
+      ],
+      equity: { capitalSuscritoPagado: 500_000_000, utilidadEjercicio: -100_000_000 },
+    });
+
+    const out = runR8(snap);
+    const acc3 = snap.classes.find((c) => c.code === 3)!.accounts;
+
+    expect(out.virtualCloseAdjustment.csvUtilidadEjercicio).toBe(-100_000_000);
+    expect(out.virtualCloseAdjustment.reclassifiedFrom3605).toBe(false);
+    expect(acc3.find((a) => a.code === '361005')!.balance).toBe(0);
+    expect(acc3.find((a) => a.code === '3605VC')!.balance).toBe(-100_000_000);
+    expect(acc3.find((a) => a.code === '3710VC')).toBeUndefined();
+    expect(snap.controlTotals.patrimonio).toBe(400_000_000);
+    expect(snap.summary.equationBalanced).toBe(true);
+    expect(snap.equityBreakdown.utilidadEjercicio).toBe(-100_000_000);
+    expect(snap.equityBreakdown.utilidadesAcumuladas).toBeUndefined();
+    expect(out.findings.some((f) => f.severity === 'alto' || f.severity === 'critico')).toBe(false);
+  });
+
+  it('3610 con la pérdida del año ANTERIOR: se reclasifica a resultados acumulados (Art. 151 la ve)', () => {
+    // Capital 500 | 3610 = −80 (pérdida 2024 sin trasladar) | P&G 2025 = +30 abierto.
+    // Activo = 300 (pasivo) + 500 − 80 + 30 = 750.
+    const snap = makeSnapshot({
+      period: '2025',
+      controlTotals: makeControlTotals({
+        activo: 750_000_000,
+        pasivo: 300_000_000,
+        patrimonio: 420_000_000,
+        ingresos: 130_000_000,
+        gastos: 100_000_000,
+        utilidadNeta: 30_000_000,
+      }),
+      classes: [
+        makeClass(1, [{ code: '110505', name: 'Caja', balance: 750_000_000 }]),
+        makeClass(2, [{ code: '220505', name: 'Proveedores', balance: 300_000_000 }]),
+        makeClass(3, [
+          { code: '310505', name: 'Capital', balance: 500_000_000 },
+          { code: '361005', name: 'Perdida del ejercicio 2024', balance: -80_000_000 },
+        ]),
+      ],
+      equity: { capitalSuscritoPagado: 500_000_000, utilidadEjercicio: -80_000_000 },
+    });
+
+    const out = runR8(snap);
+    expect(out.virtualCloseAdjustment.reclassifiedFrom3605).toBe(true);
+    expect(out.virtualCloseAdjustment.reclassifiedAmount).toBe(-80_000_000);
+    expect(out.virtualCloseAdjustment.blocking).toBe(false);
+    expect(snap.summary.equationBalanced).toBe(true);
+    expect(snap.equityBreakdown.utilidadEjercicio).toBe(30_000_000);
+    expect(snap.equityBreakdown.utilidadesAcumuladas).toBe(-80_000_000);
   });
 });

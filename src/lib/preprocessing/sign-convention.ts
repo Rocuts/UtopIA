@@ -45,16 +45,16 @@ const CREDIT_NATURE_CLASSES = ['2', '3', '4'] as const;
 /**
  * Grupo PUC 36 — "Resultados del Ejercicio" (3605 utilidad, 3610 pérdida).
  *
- * Se EXCLUYE de la suma del detector, no de la normalización. Motivo: el
- * balance de prueba colombiano típico publica a la vez el resultado del periodo
- * en 3605 Y los movimientos de las clases 4/5/6/7 que lo producen. Bajo
- * convención algebraica esas dos representaciones del mismo resultado se suman,
- * y la identidad "todo suma cero" se rompe por exactamente el monto de la
- * utilidad.
- *
- * Medido sobre el corpus patológico: con el grupo 36 dentro, la suma da
- * −$187.000.000 sobre un activo de $800.000.000 (23,4%) y el archivo se
- * clasifica como natural siendo algebraico. Excluyéndolo, da $0,00 exacto.
+ * El detector evalúa la suma CON y SIN el grupo 36 y toma la menor:
+ *   - Sin el 36: el balance de prueba colombiano típico publica a la vez el
+ *     resultado del periodo en 3605 Y los movimientos de las clases 4/5/6/7
+ *     que lo producen (no es partida doble). Medido sobre el corpus
+ *     patológico: con el 36 dentro la suma da −$187.000.000 sobre un activo de
+ *     $800.000.000 (23,4 %); sin él, $0,00 exacto.
+ *   - Con el 36: en un export algebraico de PARTIDA DOBLE real (año cerrado
+ *     con el resultado en 3605, o utilidad previa aún sin trasladar) la suma
+ *     de todas las hojas es 0 incluyendo el 36; excluirlo dejaba |3605| y el
+ *     archivo se leía como natural. Auditoría 2026-09, niif-preproceso-11.
  */
 const PERIOD_RESULT_GROUP = '36';
 
@@ -115,34 +115,48 @@ export function detectSignConvention(rows: RawAccountRow[]): SignConventionDetec
   const ratioByPeriod: Record<string, number> = {};
   const periodsEvaluated: string[] = [];
   let algebraicVotes = 0;
+  let liabilitiesAndEquityNegativeEverywhere = true;
 
   for (const period of periods) {
-    let sumAll = 0;
+    let sumWithResultGroup = 0;
+    let sumResultGroup = 0;
     let sumAssets = 0;
     let sumCreditClasses = 0;
+    let sumLiabilitiesAndEquity = 0;
     for (const row of leaves) {
       const balance = row.balancesByPeriod[period];
       if (!Number.isFinite(balance)) continue;
       const cls = row.code[0];
-      if (!row.code.startsWith(PERIOD_RESULT_GROUP)) sumAll += balance;
+      sumWithResultGroup += balance;
+      if (row.code.startsWith(PERIOD_RESULT_GROUP)) sumResultGroup += balance;
       if (cls === '1') sumAssets += balance;
       if ((CREDIT_NATURE_CLASSES as readonly string[]).includes(cls)) {
         sumCreditClasses += balance;
       }
+      if (cls === '2' || cls === '3') sumLiabilitiesAndEquity += balance;
     }
 
     if (Math.abs(sumAssets) < MIN_ASSET_MAGNITUDE) continue;
     periodsEvaluated.push(period);
+    if (!(sumLiabilitiesAndEquity < 0)) liabilitiesAndEquityNegativeEverywhere = false;
 
-    const ratio = Math.abs(sumAll) / Math.abs(sumAssets);
+    const sumWithoutResultGroup = sumWithResultGroup - sumResultGroup;
+    const ratio =
+      Math.min(Math.abs(sumWithResultGroup), Math.abs(sumWithoutResultGroup)) /
+      Math.abs(sumAssets);
     ratioByPeriod[period] = ratio;
     if (ratio < ALGEBRAIC_RATIO_THRESHOLD && sumCreditClasses < 0) algebraicVotes++;
   }
 
-  // Mayoría estricta de los periodos evaluados. Un solo periodo dudoso no
-  // arrastra un archivo multiperiodo.
+  // Mayoría estricta de los periodos evaluados: un solo periodo dudoso no
+  // arrastra un archivo multiperiodo. Empate (p. ej. 1 de 2): decide el signo
+  // de las clases 2 y 3 — en convención algebraica suman negativo en TODOS
+  // los periodos; en natural, positivo.
+  const n = periodsEvaluated.length;
   const isAlgebraic =
-    periodsEvaluated.length > 0 && algebraicVotes * 2 > periodsEvaluated.length;
+    n > 0 &&
+    (algebraicVotes * 2 > n ||
+      (algebraicVotes > 0 && algebraicVotes * 2 === n && liabilitiesAndEquityNegativeEverywhere));
 
   const detail = periodsEvaluated
     .map((p) => `${p}: ${(ratioByPeriod[p] * 100).toFixed(2)}%`)

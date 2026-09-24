@@ -217,10 +217,14 @@ describe('Wave 2.F4 — Fix #3 — 14 KPIs deterministicos en ControlTotals', ()
       '24,Impuestos,Grupo,20000000',
       '240405,Renta,Auxiliar,20000000',
       // Patrimonio
-      '3,Patrimonio,Clase,120000000',
+      // Auditoría 2026-09: el fixture anterior (3705 +$20M a nivel Cuenta, sin
+      // auxiliares) no cumplía A = P + K + utilidad; R8 escondía −$100M en
+      // 3710VC. Con pérdidas acumuladas de $100M el balance cuadra y el
+      // patrimonio post-cierre sigue siendo $120M (100 − 100 + 120).
+      '3,Patrimonio,Clase,0',
       '31,Capital social,Grupo,100000000',
       '311505,Capital suscrito,Auxiliar,100000000',
-      '3705,Utilidades acumuladas,Cuenta,20000000',
+      '371005,Perdidas acumuladas,Auxiliar,-100000000',
       // P&L: ingresos $300M, costo $150M, gastos $30M (51 admin + 53 financ).
       '4,Ingresos,Clase,300000000',
       '41,Ingresos operacionales,Grupo,300000000',
@@ -360,14 +364,21 @@ describe('Wave 2.F4 — Fix #4 — R18 (Patrimonio negativo)', () => {
     expect(r.findings[0].normReference).toContain('NIA 570');
   });
 
-  it('Patrimonio negativo material vs Capital Suscrito → cita Art. 459 C.Co.', () => {
+  it('Patrimonio negativo material vs Capital Suscrito → NO cita el Art. 459 C.Co. (derogado)', () => {
+    // Auditoría 2026-09 (niif-preproceso-14): la Ley 2069 de 2020 (art. 4
+    // par. 2) derogó los arts. 457 num. 2, 458 y 459 C.Co. La alerta remite a
+    // la hipótesis de negocio en marcha (art. 4) sin afirmar una causal
+    // automática por porcentaje de pérdidas.
     const snap = buildSnapshot({
       patrimonio: -60_000_000,
       capitalSuscritoPagado: 100_000_000,
     });
     const r = runR18(snap);
-    expect(r.findings[0].description).toContain('Art. 459 C.Co.');
-    expect(r.findings[0].normReference).toContain('Art. 459');
+    const text = [r.findings[0].description, r.findings[0].normReference, r.findings[0].recommendation].join(' ');
+    expect(text).not.toMatch(/459/);
+    expect(text).not.toMatch(/SE CONFIGURA CAUSAL/i);
+    expect(r.findings[0].normReference).toContain('Ley 2069 de 2020 art. 4');
+    expect(r.findings[0].title).toMatch(/negocio en marcha/i);
   });
 
   it('Patrimonio = $0 (con tolerancia centavos) → no dispara', () => {

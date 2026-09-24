@@ -10,6 +10,8 @@ function buildSnapshotForR12(opts: {
   produccion: number; // clase 7
   grupo36: number;
   grupo37: number;
+  period?: string;
+  periodoTipo?: 'cerrado' | 'parcial' | 'indeterminado';
 }): PeriodSnapshot {
   const cl = (code: number, total: number, accounts: { code: string; balance: number }[] = []) => ({
     code,
@@ -27,7 +29,8 @@ function buildSnapshotForR12(opts: {
   });
 
   return {
-    period: '2025',
+    period: opts.period ?? '2025',
+    periodoTipo: opts.periodoTipo,
     classes: [
       cl(1, 0),
       cl(2, 0),
@@ -143,5 +146,60 @@ describe('R12 — Detector de cierre de libros', () => {
     const result = runR12(snap);
 
     expect(result.audit.librosNoCerrados).toBe(false);
+  });
+
+  // -------------------------------------------------------------------------
+  // niif-preproceso-26 — periodoTipo y detección por grupo 36
+  // -------------------------------------------------------------------------
+  it('corte PARCIAL sin traslado: nota explicativa, sin bandera de gate (no se sella no emitible)', () => {
+    const snap = buildSnapshotForR12({
+      ingresos: 500_000_000,
+      gastos: 400_000_000,
+      costos: 0,
+      produccion: 0,
+      grupo36: 0,
+      grupo37: 0,
+      period: '2025-06',
+      periodoTipo: 'parcial',
+    });
+    const result = runR12(snap);
+
+    expect(result.audit.librosNoCerrados).toBe(false);
+    expect(snap.findings?.librosNoCerrados).toBe(false);
+    expect(result.abortVirtualClose).toBe(false);
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0].severity).toBe('medio');
+    expect(result.findings[0].description).toMatch(/corte parcial/i);
+  });
+
+  it('año CERRADO sin traslado a 36 pero con 3705 previo: SÍ detecta libros no cerrados', () => {
+    const snap = buildSnapshotForR12({
+      ingresos: 500_000_000,
+      gastos: 400_000_000,
+      costos: 0,
+      produccion: 0,
+      grupo36: 0,
+      grupo37: 500_000_000, // utilidades de años anteriores, no el resultado del año
+      period: '2025-12',
+      periodoTipo: 'cerrado',
+    });
+    const result = runR12(snap);
+
+    expect(result.audit.librosNoCerrados).toBe(true);
+    expect(snap.findings?.librosNoCerrados).toBe(true);
+    expect(result.findings[0].severity).toBe('critico');
+  });
+
+  it('grupo 36 con el resultado de OTRO ejercicio (≠ utilidad del periodo) no cuenta como traslado', () => {
+    const snap = buildSnapshotForR12({
+      ingresos: 1_000_000_000,
+      gastos: 800_000_000,
+      costos: 0,
+      produccion: 0,
+      grupo36: 150_000_000, // utilidad 2024 sin trasladar a 37
+      grupo37: 0,
+      periodoTipo: 'cerrado',
+    });
+    expect(runR12(snap).audit.librosNoCerrados).toBe(true);
   });
 });

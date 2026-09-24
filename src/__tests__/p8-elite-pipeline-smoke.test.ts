@@ -96,15 +96,19 @@ describe('P8 Elite Pipeline Smoke — full bridge', () => {
     const out = preprocessTrialBalance(TB);
     const findings = out.primary.curator?.findings ?? [];
     const codes = new Set(findings.map((f) => f.code));
-    // R8 (Cierre Virtual): SIEMPRE dispara cuando hay actividad P&L. Absorbe la
-    // brecha original (Activo 1.456B vs Pasivo+Patrimonio 1.0B = gap 456M) en
-    // cuenta virtual 3710VC y deja la ecuación cuadrada al centavo. Por eso
-    // R3 ya NO dispara post-R8 (la brecha se anuló en patrimonio).
+    // R8 (Cierre Virtual): SIEMPRE dispara cuando hay actividad P&L. Auditoría
+    // 2026-09 (niif-preproceso-06): ya NO absorbe en 3710VC la parte del
+    // descuadre que no es la utilidad del periodo; este TB (Activo 1.456B vs
+    // Pasivo+Patrimonio 1.0B, utilidad 2B) queda con residual bloqueante.
     expect(codes.has('CUR-R8')).toBe(true);
     expect(out.primary.curator?.virtualCloseAdjustment).toBeDefined();
-    // R4: utilidadNeta = 2B (12B - 3.5B - 6.5B), provisión 24 = 3.8M → ratio 0.19% << 30%
+    expect(out.primary.virtualCloseAdjustment?.blocking).toBe(true);
+    // R4 (niif-preproceso-17): con UAI positiva y sin gasto de renta (54) emite
+    // un hallazgo INFORMATIVO sin cuantificar; ya no compara el grupo 24
+    // completo contra el 35 % de la utilidad neta.
     expect(codes.has('CUR-R4')).toBe(true);
-    expect(out.primary.curator?.taxProvisionRisk?.severidad).toBe('critico');
+    expect(findings.find((f) => f.code === 'CUR-R4')?.severity).toBe('informativo');
+    expect(out.primary.curator?.taxProvisionRisk).toBeUndefined();
   });
 
   it('(3) aggregatePillars consume snapshot real y produce 4 pilares con scores válidos', () => {

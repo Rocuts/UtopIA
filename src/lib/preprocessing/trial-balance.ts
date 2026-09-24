@@ -346,6 +346,12 @@ export interface ControlTotals {
   diasInventario?: number | null;
   /** Días de proveedores = (proveedores22 / (costoVentas6 + costoProduccion7)) × 365. null si costos anómalos. */
   diasProveedores?: number | null;
+  /**
+   * Motivo de los KPIs publicados como N/D por base no interpretable (p. ej.
+   * ROE con patrimonio promedio ≤ 0). Los renderizadores y el bloque
+   * vinculante deben mostrar el motivo en lugar de recalcular el KPI.
+   */
+  kpiNdMotivos?: KpiNdMotivos;
 }
 
 // ---------------------------------------------------------------------------
@@ -414,16 +420,50 @@ export interface ValidationResult {
    * degradarlos a informativos. Opcional por retrocompatibilidad.
    */
   integrityReasons?: string[];
+  /**
+   * Subconjunto de `reasons` escrito por reglas del curator DESPUÉS de construir
+   * el snapshot (R5, R8, R12). Son bloqueos que el cierre virtual no resuelve:
+   * el "Bridge de Cuadratura" del orquestador NO debe degradarlos a
+   * informativos. Ver `curator-rules/curator-blockers.ts`.
+   */
+  curatorBlockingReasons?: string[];
 }
 
-/** Desglose del patrimonio (Clase 3). */
+/**
+ * Desglose del patrimonio (Clase 3), PUC Decreto 2650/1993. Se calcula sobre
+ * las MISMAS hojas que el total de la clase 3, de modo que la suma de los
+ * componentes (sin `capitalAutorizado`, que es informativo) es el patrimonio.
+ */
 export interface EquityBreakdown {
+  /**
+   * 310505 Capital autorizado. DATO INFORMATIVO: no suma al patrimonio, porque
+   * la cuenta 3105 ya es el neto de autorizado − por suscribir − suscrito por
+   * cobrar (310505 − 310510 − 310515).
+   */
   capitalAutorizado?: number;
+  /**
+   * Grupo 31 — Capital social: 3105 Capital suscrito y pagado (neto),
+   * 3115 Aportes sociales, 3120 Capital asignado y demás cuentas del grupo.
+   */
   capitalSuscritoPagado?: number;
+  /** Grupo 32 — Superávit de capital. */
+  superavitCapital?: number;
+  /** 3305 — Reserva legal. */
   reservaLegal?: number;
+  /** Grupo 33 sin 3305 — reservas estatutarias y ocasionales. */
   otrasReservas?: number;
+  /** Grupo 34 — Revalorización del patrimonio. */
+  revalorizacionPatrimonio?: number;
+  /** Grupo 35 — Dividendos o participaciones decretados en acciones/cuotas. */
+  dividendosDecretadosEnAcciones?: number;
+  /** Grupo 36 — Resultado del ejercicio (3605 utilidad + 3610 pérdida). */
   utilidadEjercicio?: number;
+  /** Grupo 37 — Resultados de ejercicios anteriores (3705, 3710, …). */
   utilidadesAcumuladas?: number;
+  /** Grupo 38 — Superávit por valorizaciones. */
+  superavitValorizaciones?: number;
+  /** Cuentas de la clase 3 fuera de los grupos 31-38 (catálogos propios). */
+  otrasCuentasPatrimonio?: number;
   /** Gap absorbido por R5; 0 o ausente si Balance y ECP cuadraban. */
   convergenceAdjustment?: number;
 }
@@ -537,7 +577,8 @@ export interface ActividadInferida {
  *
  *   - `cuenta_destino_pasivo='2895'` para clase 12 (Inversiones, NIC 28).
  *   - `cuenta_destino_pasivo='2105'` para clase 11 (sobregiros bancarios).
- *   - `cuenta_destino_pasivo='2810'` para el resto del activo (default).
+ *   - `cuenta_destino_pasivo='2805'` para clases 13/14 (anticipos recibidos).
+ *   - `cuenta_destino_pasivo='2895'` para el resto del activo (diversos).
  *
  * Why: el LLM en producción debe citar códigos PUC reales, no códigos
  * virtuales internos. Este mapeo aísla el contrato externo del detalle de
@@ -547,7 +588,7 @@ export interface ReclasificacionNoCompensacion {
   cuenta_origen: string;
   /** Magnitud absoluta del saldo invertido (en centavos, BigInt). */
   saldo_invertido_centavos: bigint;
-  /** Cuenta PUC de destino: '2895' | '2810' | '2105'. */
+  /** Cuenta PUC de destino: '2105' | '2805' | '2895'. */
   cuenta_destino_pasivo: string;
   /** Norma + justificación legible. */
   motivo_norma: string;
@@ -635,8 +676,10 @@ const IMPORTANT_SUBCUENTAS: Record<string, { name: string; parentGroup: string }
   '1435': { name: 'Mercancias no fabricadas por la empresa', parentGroup: '14' },
   '2365': { name: 'Retencion en la fuente', parentGroup: '23' },
   '2408': { name: 'IVA por pagar', parentGroup: '24' },
-  '3105': { name: 'Capital autorizado', parentGroup: '31' },
-  '3115': { name: 'Capital suscrito y pagado', parentGroup: '31' },
+  // PUC D. 2650/1993: 3105 Capital suscrito y pagado (310505 autorizado −
+  // 310510 por suscribir − 310515 suscrito por cobrar); 3115 Aportes sociales.
+  '3105': { name: 'Capital suscrito y pagado', parentGroup: '31' },
+  '3115': { name: 'Aportes sociales', parentGroup: '31' },
   '3305': { name: 'Reserva legal', parentGroup: '33' },
   '3605': { name: 'Utilidad del ejercicio', parentGroup: '36' },
 };
@@ -1459,6 +1502,7 @@ export function preprocessTrialBalance(
     ct.diasCartera = recomputed.diasCartera;
     ct.diasInventario = recomputed.diasInventario;
     ct.diasProveedores = recomputed.diasProveedores;
+    ct.kpiNdMotivos = recomputed.kpiNdMotivos;
   }
 
   // -------------------------------------------------------------------------
@@ -1614,10 +1658,14 @@ function inferActividadFromSnapshot(
 /**
  * Mapea las reclasificaciones internas R1 al contrato externo PUC-aware.
  *
- * Reglas de mapeo:
- *   - Origen clase 11 (códigos `11xx`) → destino '2105' (sobregiros).
- *   - Origen clase 12 (códigos `12xx`) → destino '2895' (NIC 28).
- *   - Resto del activo → destino '2810' (otros pasivos diversos).
+ * Reglas de mapeo (PUC D. 2650/1993):
+ *   - Origen 11 (sobregiros)                 → '2105' Bancos nacionales (corriente).
+ *   - Origen 12 (reajustes de inversiones)   → '2895' Diversos.
+ *   - Origen 13/14 (anticipos recibidos …)   → '2805' Anticipos y avances recibidos.
+ *   - Resto del activo                       → '2895' Diversos.
+ *
+ * Auditoría 2026-09 (niif-preproceso-22): el resto iba a '2810', que en el PUC
+ * es "Depósitos recibidos", no "otros pasivos diversos".
  *
  * Why: el contrato externo cita códigos PUC reales que el LLM puede
  * referenciar. R1 internamente usa códigos virtuales `2810ZZ-*` / `2895VC-*`
@@ -1631,9 +1679,9 @@ function buildReclasificacionesNoCompensacion(
   for (const r of reclas) {
     if (!r.applied) continue;
     const origin = r.accountCode;
-    let destino = '2810';
+    let destino = '2895';
     if (origin.startsWith('11')) destino = '2105';
-    else if (origin.startsWith('12')) destino = '2895';
+    else if (origin.startsWith('13') || origin.startsWith('14')) destino = '2805';
 
     const amountCents = BigInt(
       Math.round(Math.abs(r.effectiveTransferCop ?? r.amountCop) * 100),
@@ -2060,7 +2108,7 @@ function buildSnapshotForPeriod(
   // -------------------------------------------------------------------------
   // 6. equityBreakdown
   // -------------------------------------------------------------------------
-  const equityBreakdown = extractEquityBreakdownForView(view, discrepancies);
+  const equityBreakdown = extractEquityBreakdownForView(view, discrepancies, leafRows);
 
   // -------------------------------------------------------------------------
   // 7. Cross-checks (riesgo liquidez, ecuacion patrimonial, etc.)
@@ -2131,8 +2179,8 @@ function buildSnapshotForPeriod(
             `Revisa si faltan cuentas 31xx/33xx/37xx.`,
         );
         suggestedAccounts.push(
-          '3105 — Capital autorizado',
-          '3115 — Capital suscrito y pagado',
+          '3105 — Capital suscrito y pagado',
+          '3115 — Aportes sociales',
           '3305 — Reserva legal',
           '3705 — Utilidades acumuladas',
         );
@@ -2230,89 +2278,117 @@ interface ViewRow {
   balance: number;
 }
 
+/**
+ * Filas hoja de una vista, con la MISMA regla que `buildSnapshotForPeriod`
+ * (auxiliares + subcuentas sin auxiliares). Sólo se usa cuando el llamador no
+ * entrega las hojas (wrapper deprecado `extractEquityBreakdown`).
+ */
+function selectLeafRowsForEquity(view: ViewRow[]): ViewRow[] {
+  const auxiliarRows = view.filter((r) => r.transactional || r.level === 'Auxiliar');
+  const auxiliarCodes = new Set(auxiliarRows.map((r) => r.code));
+  const orphanSubcuentas = view.filter(
+    (r) =>
+      r.level === 'Subcuenta' &&
+      !auxiliarCodes.has(r.code) &&
+      !auxiliarRows.some((aux) => aux.code !== r.code && aux.code.startsWith(r.code)),
+  );
+  return [...auxiliarRows, ...orphanSubcuentas];
+}
+
+/**
+ * Desglose del patrimonio por grupo PUC (Decreto 2650/1993).
+ *
+ * Auditoría 2026-09:
+ *   - niif-preproceso-13: 3105 es "Capital suscrito y pagado" (neto de 310510
+ *     por suscribir y 310515 suscrito por cobrar), no "capital autorizado".
+ *     Se publicaba como `capitalAutorizado` y `capitalSuscritoPagado` quedaba
+ *     vacío en SAS y S.A.; el tope de reserva legal (Art. 452 C.Co.) no era
+ *     evaluable. `capitalSuscritoPagado` = grupo 31 completo; 310505 queda
+ *     como dato informativo en `capitalAutorizado`.
+ *   - recalculo-08: el desglose sólo mapeaba 31/33/36/37 parcial y R5 anclaba
+ *     el patrimonio a esa suma, borrando 32/34/35/38 y otras 37xx. Ahora cada
+ *     grupo tiene su componente y todo se calcula sobre las MISMAS hojas que
+ *     el total de la clase 3, así la suma de componentes ES el patrimonio.
+ *   - niif-preproceso-12: 3610 (Pérdida del ejercicio) es resultado del
+ *     ejercicio, no "utilidades acumuladas".
+ *
+ * Si una cuenta agregada (nivel Cuenta) no coincide con la suma de sus hojas,
+ * se registra la discrepancia y se usa la suma de hojas: es la base del total
+ * de la clase 3 y del gate.
+ */
 function extractEquityBreakdownForView(
   view: ViewRow[],
   discrepancies: Discrepancy[],
+  leafRows?: ViewRow[],
 ): EquityBreakdown {
   const breakdown: EquityBreakdown = {};
-
-  const sumPreferring = (
-    prefix: string,
-    preferredLevel: 'Cuenta' | 'Subcuenta',
-    label: string,
-  ): number | undefined => {
-    const preferred = view.find((r) => r.code === prefix && r.level === preferredLevel);
-    const descendants = view.filter(
-      (r) => r.code !== prefix && r.code.startsWith(prefix) && r.balance !== 0,
-    );
-
-    if (preferred && preferred.balance !== 0) {
-      if (descendants.length > 0) {
-        const descSum = descendants
-          .filter((r) => r.level === 'Auxiliar' || r.level === 'Subcuenta')
-          .reduce((s, r) => s + r.balance, 0);
-        if (descSum !== 0 && Math.abs(descSum - preferred.balance) > 1) {
-          discrepancies.push({
-            location: `Patrimonio ${prefix} ${label}`,
-            reported: preferred.balance,
-            calculated: descSum,
-            difference: descSum - preferred.balance,
-            description: `Saldo agregado (${prefix}) $${formatCOP(preferred.balance)} difiere de la suma de descendientes $${formatCOP(descSum)}. Se prefiere nivel agregado.`,
-          });
-        }
-      }
-      return preferred.balance;
-    }
-
-    const descSum = descendants
-      .filter((r) => r.level === 'Auxiliar' || r.level === 'Subcuenta' || r.transactional)
-      .reduce((s, r) => s + r.balance, 0);
-    return descSum !== 0 ? descSum : undefined;
-  };
-
-  const v3105 = sumPreferring('3105', 'Cuenta', 'Capital autorizado');
-  if (v3105 !== undefined) breakdown.capitalAutorizado = v3105;
-
-  const v3115 = sumPreferring('3115', 'Cuenta', 'Capital suscrito y pagado');
-  const v3120 = sumPreferring('3120', 'Cuenta', 'Aporte de socios');
-  const capSuscrito = (v3115 ?? 0) + (v3120 ?? 0);
-  if (v3115 !== undefined || v3120 !== undefined) breakdown.capitalSuscritoPagado = capSuscrito;
-
-  const v3305 = sumPreferring('3305', 'Cuenta', 'Reserva legal');
-  if (v3305 !== undefined) breakdown.reservaLegal = v3305;
-
-  let otrasReservasTotal = 0;
-  let otrasReservasFound = false;
-  const cuentasGrupo33 = view.filter(
-    (r) => r.level === 'Cuenta' && r.code.startsWith('33') && r.code !== '3305' && r.balance !== 0,
+  const leaves = (leafRows ?? selectLeafRowsForEquity(view)).filter((r) =>
+    r.code.startsWith('3'),
   );
-  if (cuentasGrupo33.length > 0) {
-    otrasReservasTotal = cuentasGrupo33.reduce((s, r) => s + r.balance, 0);
-    otrasReservasFound = true;
-  } else {
-    const hojas33 = view.filter(
-      (r) =>
-        (r.level === 'Auxiliar' || r.level === 'Subcuenta' || r.transactional) &&
-        r.code.startsWith('33') &&
-        !r.code.startsWith('3305') &&
-        r.balance !== 0,
-    );
-    if (hojas33.length > 0) {
-      otrasReservasTotal = hojas33.reduce((s, r) => s + r.balance, 0);
-      otrasReservasFound = true;
+
+  const sumLeaves = (predicate: (code: string) => boolean): number | undefined => {
+    const rows = leaves.filter((r) => predicate(r.code));
+    if (!rows.some((r) => r.balance !== 0)) return undefined;
+    return sumLeavesPrecise(rows);
+  };
+  const inGroup = (group: string) => (code: string) => code.startsWith(group);
+
+  // Discrepancia agregado ↔ hojas por cada Cuenta (4 dígitos) de la clase 3.
+  for (const cuenta of view) {
+    if (cuenta.level !== 'Cuenta' || !cuenta.code.startsWith('3') || cuenta.balance === 0) continue;
+    const hojas = leaves.filter((r) => r.code !== cuenta.code && r.code.startsWith(cuenta.code));
+    if (hojas.length === 0) continue;
+    const suma = sumLeavesPrecise(hojas);
+    if (Math.abs(suma - cuenta.balance) > 1) {
+      discrepancies.push({
+        location: `Patrimonio ${cuenta.code} ${cuenta.name}`,
+        reported: cuenta.balance,
+        calculated: suma,
+        difference: suma - cuenta.balance,
+        description:
+          `Saldo agregado (${cuenta.code}) $${formatCOP(cuenta.balance)} difiere de la suma de ` +
+          `sus auxiliares $${formatCOP(suma)}. El desglose del patrimonio usa la suma de ` +
+          `auxiliares (misma base que el total de la clase 3).`,
+      });
     }
   }
-  if (otrasReservasFound) breakdown.otrasReservas = otrasReservasTotal;
 
-  const v3605 = sumPreferring('3605', 'Cuenta', 'Utilidad del ejercicio');
-  if (v3605 !== undefined) breakdown.utilidadEjercicio = v3605;
+  const capitalAutorizado = sumLeaves(inGroup('310505'));
+  if (capitalAutorizado !== undefined) breakdown.capitalAutorizado = capitalAutorizado;
 
-  const v3610 = sumPreferring('3610', 'Cuenta', 'Utilidades acumuladas');
-  const v3705 = sumPreferring('3705', 'Cuenta', 'Utilidad ejercicios anteriores');
-  const v3710 = sumPreferring('3710', 'Cuenta', 'Perdida ejercicios anteriores');
-  if (v3610 !== undefined || v3705 !== undefined || v3710 !== undefined) {
-    breakdown.utilidadesAcumuladas = (v3610 ?? 0) + (v3705 ?? 0) + (v3710 ?? 0);
-  }
+  const capitalSocial = sumLeaves(inGroup('31'));
+  if (capitalSocial !== undefined) breakdown.capitalSuscritoPagado = capitalSocial;
+
+  const superavitCapital = sumLeaves(inGroup('32'));
+  if (superavitCapital !== undefined) breakdown.superavitCapital = superavitCapital;
+
+  const reservaLegal = sumLeaves(inGroup('3305'));
+  if (reservaLegal !== undefined) breakdown.reservaLegal = reservaLegal;
+
+  const otrasReservas = sumLeaves((c) => c.startsWith('33') && !c.startsWith('3305'));
+  if (otrasReservas !== undefined) breakdown.otrasReservas = otrasReservas;
+
+  const revalorizacion = sumLeaves(inGroup('34'));
+  if (revalorizacion !== undefined) breakdown.revalorizacionPatrimonio = revalorizacion;
+
+  const dividendosEnAcciones = sumLeaves(inGroup('35'));
+  if (dividendosEnAcciones !== undefined) breakdown.dividendosDecretadosEnAcciones = dividendosEnAcciones;
+
+  // Grupo 36 — Resultados del ejercicio: 3605 utilidad y 3610 PÉRDIDA. Si R8
+  // (cierre virtual) encuentra que el grupo 36 guarda un resultado ANTERIOR,
+  // lo reclasifica a `utilidadesAcumuladas` (Art. 151 C.Co.).
+  const resultadoEjercicio = sumLeaves(inGroup('36'));
+  if (resultadoEjercicio !== undefined) breakdown.utilidadEjercicio = resultadoEjercicio;
+
+  const resultadosAnteriores = sumLeaves(inGroup('37'));
+  if (resultadosAnteriores !== undefined) breakdown.utilidadesAcumuladas = resultadosAnteriores;
+
+  const superavitValorizaciones = sumLeaves(inGroup('38'));
+  if (superavitValorizaciones !== undefined) breakdown.superavitValorizaciones = superavitValorizaciones;
+
+  const MAPPED_GROUPS = ['31', '32', '33', '34', '35', '36', '37', '38'];
+  const otras = sumLeaves((c) => !MAPPED_GROUPS.some((g) => c.startsWith(g)));
+  if (otras !== undefined) breakdown.otrasCuentasPatrimonio = otras;
 
   return breakdown;
 }
@@ -2565,13 +2641,33 @@ interface DerivedKpis {
   diasCartera: number | null;
   diasInventario: number | null;
   diasProveedores: number | null;
+  /** Motivo por KPI cuando el valor es `null` por una base no interpretable. */
+  kpiNdMotivos: KpiNdMotivos;
 }
+
+/** Motivo legible (es) de un KPI publicado como N/D. */
+export type KpiNdMotivos = Partial<Record<'roe' | 'apalancamientoFinanciero', string>>;
+
+const MOTIVO_PATRIMONIO_PROMEDIO_NO_POSITIVO =
+  'N/D — patrimonio promedio ≤ 0 (patrimonio negativo o nulo): el ROE no es interpretable';
+const MOTIVO_PATRIMONIO_NO_POSITIVO =
+  'N/D — patrimonio ≤ 0 (insolvencia técnica): el apalancamiento no es interpretable';
 
 function computeDerivedKpis(inputs: DerivedKpiInputs): DerivedKpis {
   const safeDiv = (num: number, den: number): number | null => {
     if (!Number.isFinite(num) || !Number.isFinite(den) || den === 0) return null;
     return num / den;
   };
+
+  // Auditoría 2026-09 (ratios-kpis-07): con patrimonio negativo el ROE y el
+  // apalancamiento cambian de signo y dejan de medir lo que dicen — una
+  // pérdida sobre patrimonio promedio negativo publicaba ROE +451 % como KPI
+  // VINCULANTE. Sin base interpretable, el KPI es N/D con motivo.
+  const kpiNdMotivos: KpiNdMotivos = {};
+  const patrimonioPromedioNoPositivo = !(inputs.patrimonioPromedio > 0);
+  const patrimonioNoPositivo = !(inputs.patrimonio > 0);
+  if (patrimonioPromedioNoPositivo) kpiNdMotivos.roe = MOTIVO_PATRIMONIO_PROMEDIO_NO_POSITIVO;
+  if (patrimonioNoPositivo) kpiNdMotivos.apalancamientoFinanciero = MOTIVO_PATRIMONIO_NO_POSITIVO;
 
   const ingresosBase = Math.abs(inputs.ingresosNetos);
   const costoTotalForRotation = inputs.costoVentas6 + inputs.costoProduccion7;
@@ -2594,7 +2690,9 @@ function computeDerivedKpis(inputs: DerivedKpiInputs): DerivedKpis {
       const r = safeDiv(inputs.pasivo, inputs.activo);
       return r === null ? null : r * 100;
     })(),
-    apalancamientoFinanciero: safeDiv(inputs.pasivo, inputs.patrimonio),
+    apalancamientoFinanciero: patrimonioNoPositivo
+      ? null
+      : safeDiv(inputs.pasivo, inputs.patrimonio),
     coberturaIntereses: (() => {
       const den = Math.abs(inputs.gastoFinanciero5305);
       if (den === 0) return null;
@@ -2609,6 +2707,7 @@ function computeDerivedKpis(inputs: DerivedKpiInputs): DerivedKpis {
       return r === null ? null : r * 100;
     })(),
     roe: (() => {
+      if (patrimonioPromedioNoPositivo) return null;
       const r = safeDiv(inputs.utilidadNeta, inputs.patrimonioPromedio);
       return r === null ? null : r * 100;
     })(),
@@ -2627,6 +2726,7 @@ function computeDerivedKpis(inputs: DerivedKpiInputs): DerivedKpis {
     diasProveedores: costsAnomalous
       ? null
       : (inputs.proveedores22 / costoTotalForRotation) * 365,
+    kpiNdMotivos,
   };
 }
 
@@ -3241,12 +3341,17 @@ function buildMultiPeriodValidationReport(
       lines.push('');
       lines.push('### Desglose de Patrimonio');
       lines.push('');
-      if (eb.capitalAutorizado !== undefined) lines.push(`- Capital autorizado (3105): $${formatCOP(eb.capitalAutorizado)}`);
-      if (eb.capitalSuscritoPagado !== undefined) lines.push(`- Capital suscrito y pagado (3115+3120): $${formatCOP(eb.capitalSuscritoPagado)}`);
+      if (eb.capitalSuscritoPagado !== undefined) lines.push(`- Capital suscrito y pagado (grupo 31: 3105 neto, 3115, 3120…): $${formatCOP(eb.capitalSuscritoPagado)}`);
+      if (eb.capitalAutorizado !== undefined) lines.push(`- Capital autorizado (310505, informativo — no suma): $${formatCOP(eb.capitalAutorizado)}`);
+      if (eb.superavitCapital !== undefined) lines.push(`- Superávit de capital (grupo 32): $${formatCOP(eb.superavitCapital)}`);
       if (eb.reservaLegal !== undefined) lines.push(`- Reserva legal (3305): $${formatCOP(eb.reservaLegal)}`);
       if (eb.otrasReservas !== undefined) lines.push(`- Otras reservas (3310-3395): $${formatCOP(eb.otrasReservas)}`);
-      if (eb.utilidadEjercicio !== undefined) lines.push(`- Utilidad del ejercicio (3605): $${formatCOP(eb.utilidadEjercicio)}`);
-      if (eb.utilidadesAcumuladas !== undefined) lines.push(`- Utilidades acumuladas (3610+3705+3710): $${formatCOP(eb.utilidadesAcumuladas)}`);
+      if (eb.revalorizacionPatrimonio !== undefined) lines.push(`- Revalorización del patrimonio (grupo 34): $${formatCOP(eb.revalorizacionPatrimonio)}`);
+      if (eb.dividendosDecretadosEnAcciones !== undefined) lines.push(`- Dividendos decretados en acciones/cuotas (grupo 35): $${formatCOP(eb.dividendosDecretadosEnAcciones)}`);
+      if (eb.utilidadEjercicio !== undefined) lines.push(`- Resultado del ejercicio (3605+3610): $${formatCOP(eb.utilidadEjercicio)}`);
+      if (eb.utilidadesAcumuladas !== undefined) lines.push(`- Resultados de ejercicios anteriores (grupo 37): $${formatCOP(eb.utilidadesAcumuladas)}`);
+      if (eb.superavitValorizaciones !== undefined) lines.push(`- Superávit por valorizaciones (grupo 38): $${formatCOP(eb.superavitValorizaciones)}`);
+      if (eb.otrasCuentasPatrimonio !== undefined) lines.push(`- Otras cuentas de patrimonio: $${formatCOP(eb.otrasCuentasPatrimonio)}`);
     }
 
     if (snap.discrepancies.length > 0) {

@@ -7,15 +7,15 @@
 //
 //   1. R1 — al menos una reclasificación aplicada (saldo negativo material
 //      en activo movido a cuenta virtual `2810ZZ-<originalCode>` en Pasivo).
-//   2. R5 — anclaje patrimonial Balance↔ECP, gap absorbido en
-//      Resultados Acumulados.
-//   3. R6 — cierre EFE↔caja PUC 11 al centavo.
+//   2. R8 — el descuadre deliberado del archivo (379505) NO se absorbe:
+//      queda como residual bloqueante (auditoría 2026-09).
+//   3. R6 — cierre EFE↔caja PUC 11.
 //   4. R7 — advertencia de costo presunto cuando margen > 85% y
 //      inventario > 50% × ingresos.
-//   5. Ecuación post-Curator: Activo = Pasivo + Patrimonio (al centavo).
+//   5. Ecuación post-Curator: el residual se expone al centavo.
 //
-// El fixture se diseñó con descuadres deliberados para activar las 4 reglas
-// (R1, R5, R6, R7) en un solo balance de prueba multiperiodo (2024 → 2025).
+// El fixture se diseñó con descuadres deliberados para activar las reglas
+// (R1, R6, R7, R8) en un solo balance de prueba multiperiodo (2024 → 2025).
 // ---------------------------------------------------------------------------
 
 import { readFileSync } from 'node:fs';
@@ -101,97 +101,79 @@ describe('ELITE Pulido Diamante — Curator E2E sobre fixture sintético', () =>
   });
 
   // -------------------------------------------------------------------------
-  // ASERCIÓN 2 — R8: Cierre Virtual absorbe el gap pre-existente.
+  // ASERCIÓN 2 — R8 NO absorbe el desbalance del archivo.
   // -------------------------------------------------------------------------
-  // Bajo la arquitectura post-R8 (mayo 2026), el ajuste pendiente de la cuenta
-  // 379505 (-$1.572B en el fixture) ya no es absorbido por R5: lo absorbe R8
-  // como `centsAdjustment` en la cuenta virtual `3710VC`. R5 solo ve la
-  // ecuación contable cuadrada por R8 y no actúa.
+  // El fixture trae la cuenta 379505 "Ajuste pendiente periodo anterior" por
+  // -$1.572M, que deja el archivo descuadrado. Hasta la auditoría 2026-09
+  // (niif-preproceso-06) R8 llevaba TODO el residual a 3710VC y la ecuación
+  // "cuadraba" por construcción: un descuadre real terminaba presentado como
+  // patrimonio. Ahora R8 sólo explica el traslado del resultado:
   //
-  // Cálculo manual del residual que R8 absorbe en 3710VC:
-  //   Activo post-R1                          = $3.400.000.000
-  //   Pasivo post-R1                          = $1.010.000.000
+  //   Activo post-R1                          = $3.270.000.000
+  //   Pasivo post-R1                          = $880.000.000
   //   Patrimonio CSV                          = $818.000.000
   //     (1.865 + 100 + 145 + 280 − 1.572)
-  //   R8 anula 3605 ($145M) e inyecta 3605VC  = -$2.500.000 (utilidad dinámica)
-  //   Patrimonio post-3605VC                  = $670.500.000
-  //   Residual = 3.400.000.000 − 1.010.000.000 − 670.500.000 = $1.719.500.000
-  //   → R8 inyecta 3710VC = $1.719,5M y centsAdjustment = $1.719,5M.
-  //
-  // Este residual incluye los $1.572B del 379505 + los $147,5M del gap entre
-  // 3605 viejo ($145M) y la utilidad dinámica (-$2,5M). Ambos fluyen al
-  // mismo destino contable (3710VC) — semánticamente correcto: ambos
-  // representan resultados de ejercicios anteriores no formalmente cerrados.
+  //   R8 anula 3605 ($145M, resultado anterior) → 3710VC = $145M
+  //   R8 inyecta 3605VC                       = -$2.500.000 (utilidad dinámica)
+  //   Patrimonio post-R8                      = $815.500.000
+  //   Residual NO explicado = 3.270 − 880 − 815,5 = $1.574.500.000 → BLOQUEANTE
   // -------------------------------------------------------------------------
-  it('Cuadratura 2 — R8 absorbe el gap pre-existente (≈ $1,72B) en 3710VC y R5 queda inactivo', () => {
+  it('Cuadratura 2 — R8 no absorbe el desbalance del archivo: residual $1.574,5M bloqueante y R5 sin anclaje', () => {
     const result = loadSnapshot();
     const snap = result.primary;
 
-    // R8: el ajuste de Cierre Virtual debe estar presente.
     const vc = snap.curator!.virtualCloseAdjustment;
     expect(
       vc,
       'R8 no produjo virtualCloseAdjustment — el fixture tiene actividad P&L y debería disparar.',
     ).toBeDefined();
 
-    // El residual absorbido por R8 ≈ $1.719,5M (los $1.572B de la cuenta
-    // pendiente 379505 + los $147,5M del gap 3605 viejo vs utilidad dinámica).
-    // Tolerancia $1K para redondeos.
-    expect(Math.abs(vc!.centsAdjustment - 1_719_500_000)).toBeLessThanOrEqual(1_000);
-    // residualGapBeforeCents == centsAdjustment (R8 absorbe TODO el residual).
-    expect(vc!.residualGapBeforeCents).toBe(vc!.centsAdjustment);
-
-    // Reclasificación de 3605 viejo: $145M (CSV) → $0 (utilidad dinámica autoritativa).
+    // Nada se absorbe en 3710VC salvo la reclasificación del 3605 anterior.
+    expect(vc!.centsAdjustment).toBe(0);
     expect(vc!.reclassifiedFrom3605).toBe(true);
     expect(vc!.csvUtilidadEjercicio).toBe(145_000_000);
     expect(vc!.reclassifiedAmount).toBe(145_000_000);
+    const v3710 = snap.classes.find((c) => c.code === 3)!.accounts.find((a) => a.code === '3710VC');
+    expect(v3710?.balance).toBe(145_000_000);
 
     // Utilidad dinámica = ingresos − costos − gastos = 85M − 12,5M − 75M = -$2,5M.
     expect(vc!.dynamicNetIncome).toBe(-2_500_000);
 
-    // El patrimonio post-R8 es autoritativo y debe coincidir con controlTotals.
-    expect(snap.controlTotals.patrimonio).toBe(vc!.reconciledEquity);
+    // El residual queda visible, al centavo, y bloquea la emisión.
+    expect(vc!.blocking).toBe(true);
+    expect(vc!.unexplainedResidualRaw).toBe('1574500000.00');
+    expect(vc!.residualGapBeforeCents).toBe(1_574_500_000);
+    expect(snap.summary.equationBalanced).toBe(false);
+    expect(snap.validation.blocking).toBe(true);
+    expect(
+      snap.validation.curatorBlockingReasons?.some((r) => r.includes('1.574.500.000,00')),
+    ).toBe(true);
 
-    // Snapshot debe llevar el ajuste a nivel raíz (acceso rápido para renderers).
+    // El patrimonio post-R8 es Σ clase 3 y coincide con controlTotals.
+    expect(snap.controlTotals.patrimonio).toBe(vc!.reconciledEquity);
+    expect(snap.controlTotals.patrimonio).toBe(815_500_000);
     expect(snap.virtualCloseAdjustment).toBe(vc);
 
-    // R5 NO debe actuar: tras R8 la ecuación contable cuadra y el guard de
-    // R5 lo deja pasar sin tocar.
-    expect(
-      snap.curator!.convergenceAdjustment,
-      'R5 no debería actuar cuando R8 ya cuadró la ecuación contable.',
-    ).toBeUndefined();
+    // R5 ya no ancla el patrimonio a un desglose: el desglose cubre toda la
+    // clase 3 (incluida la 379505) y concilia con el total.
+    expect(snap.curator!.convergenceAdjustment).toBeUndefined();
     expect(snap.equityAnchorAdjustment).toBeUndefined();
     expect(snap.equityBreakdown.convergenceAdjustment).toBeUndefined();
-
-    // Espíritu del test (multi-arquitectura): el flujo end-to-end produce un
-    // patrimonio cuadrado tras procesar el ajuste pendiente de 379505.
-    const lhs = snap.controlTotals.activo;
-    const rhs = snap.controlTotals.pasivo + snap.controlTotals.patrimonio;
-    expect(Math.abs(lhs - rhs)).toBeLessThanOrEqual(1);
+    expect(snap.validation.curatorBlockingReasons?.some((r) => r.startsWith('[CUR-R5]'))).toBe(false);
   });
 
   // -------------------------------------------------------------------------
-  // ASERCIÓN 3 — R6: cierre del EFE contra la caja PUC 11.
+  // ASERCIÓN 3 — R6: el EFE no se cierra a la fuerza.
   // -------------------------------------------------------------------------
-  // PREMISA CORREGIDA (auditoría 2026-08). Este test afirmaba antes que R6
-  // rechazaba el cierre porque la brecha era ≈ $312,5M, superior al 50 % de
-  // todos los buckets operativos. Esa brecha era un ARTEFACTO de un defecto de
-  // R1: la regla reclasificaba la depreciación acumulada (159205, −$130M) a
-  // pasivo, con lo cual (a) inflaba Activo y Pasivo en $130M cada uno y
-  // (b) anulaba la cuenta 1592 en Clase 1, dejando a R2 sin el ajuste no-cash
-  // de D&A del método indirecto. El EFE quedaba descuadrado por construcción.
-  //
-  // Con las cuentas correctoras preservadas en el activo (NIC 1 párr. 33), R2
-  // recupera la D&A del periodo (Δ 1592 = $30M) y la brecha real cae a $80M
-  // —absorbible por varInventarios ($170M) sin superar el tope del 50 %—, por
-  // lo que el guardrail SÍ autoriza el cierre y el EFE queda reconciliado
-  // contra PUC 11 al centavo, que es el contrato de R6 (NIC 7 párr. 45).
-  //
-  // El caso "guardrail rechaza el cierre" sigue siendo comportamiento válido de
-  // R6, pero necesita un fixture cuya brecha sea genuinamente inabsorbible.
+  // Auditoría 2026-09 (niif-preproceso-15/-16): R2 clasifica TODA cuenta de
+  // las clases 1-3, así que el EFE suma exactamente la variación de caja
+  // cuando ambos balances cuadran. Este fixture NO cuadra en ninguno de los
+  // dos periodos (379505), y la brecha del EFE es exactamente la variación del
+  // descuadre: 1.574,5M (2025) − 1.752M (2024) = −177,5M ⇒ brecha +$177,5M.
+  // Antes R6 absorbía $80M en varInventarios (y la diferencia quedaba
+  // escondida en capital de trabajo); ahora la brecha queda visible.
   // -------------------------------------------------------------------------
-  it('Cuadratura 3 — R6 cierra el EFE contra PUC 11 cuando la brecha es absorbible por un bucket operativo', () => {
+  it('Cuadratura 3 — R6 no absorbe la brecha material del EFE en capital de trabajo', () => {
     const result = loadSnapshot();
     const snap = result.primary;
 
@@ -199,43 +181,28 @@ describe('ELITE Pulido Diamante — Curator E2E sobre fixture sintético', () =>
     expect(efe, 'cashFlowIndirecto (EFE por R2) ausente — R6 no pudo correr').toBeDefined();
 
     // R6 ancla cashOpen / cashClose SIEMPRE, decida o no aplicar el cierre.
-    expect(snap.controlTotals.cashClose).toBeDefined();
-    expect(snap.controlTotals.cashOpen).toBeDefined();
     expect(snap.controlTotals.cashClose).toBe(snap.controlTotals.efectivoCuenta11);
     expect(snap.controlTotals.cashOpen).toBe(
       result.comparative?.controlTotals.efectivoCuenta11 ?? 0,
     );
 
-    // La brecha es absorbible ⇒ el cierre se aplica y queda documentado.
-    const closure = snap.curator!.cashFlowClosureAdjustment;
-    expect(
-      closure,
-      'R6 debería aplicar el cierre: con las correctoras preservadas la brecha ' +
-        'es de $80M, por debajo del 50 % de varInventarios ($170M).',
-    ).toBeDefined();
+    // Sin cierre forzado ni línea de ajuste.
+    expect(snap.curator!.cashFlowClosureAdjustment).toBeUndefined();
+    expect(snap.cashFlowClosureAdjustment).toBeUndefined();
+    expect((efe!.operating as { varCapitalTrabajoAjuste?: number }).varCapitalTrabajoAjuste).toBeUndefined();
 
-    // El efectivo final reconciliado DEBE ser el saldo PUC 11 al cierre — es el
-    // ancla dura de todo el EFE.
-    expect(closure!.reconciledClosingCash).toBe(snap.controlTotals.efectivoCuenta11);
-    expect(closure!.openingCash).toBe(
-      result.comparative?.controlTotals.efectivoCuenta11 ?? 0,
-    );
+    // La brecha es la variación del descuadre del archivo entre periodos.
+    const residualPrev = result.comparative!.virtualCloseAdjustment!.unexplainedResidual!;
+    const residualNow = snap.virtualCloseAdjustment!.unexplainedResidual!;
+    expect(efe!.reconciliationGap).toBeCloseTo(-(residualNow - residualPrev), 2);
+    expect(efe!.reconciliationGap).toBeCloseTo(177_500_000, 2);
+    expect(efe!.reconciled).toBe(false);
 
-    // La brecha cerrada es exactamente la diferencia entre la variación
-    // observada en caja y la que arrojaba el EFE indirecto antes del ajuste.
-    expect(closure!.gapCop).toBe(
-      closure!.efeNetChangeBefore - closure!.observedChangeInCash,
-    );
+    // D&A del periodo recuperada de la correctora 1592 (Δ = $30M).
+    expect(efe!.operating.depreciacionAmortizacion).toBe(30_000_000);
 
-    // El ajuste va con etiqueta LITERAL y justificación normativa: un plug
-    // silencioso sería indefendible ante la DIAN (Art. 647 E.T.).
-    expect(closure!.adjustmentLineLabel).toBe(
-      'Variaciones en Capital de Trabajo (ajuste de cierre)',
-    );
-    expect(closure!.justification).toContain('NIC 7');
-
-    // Consecuencia del cierre: el EFE queda reconciliado.
-    expect(efe!.reconciled).toBe(true);
+    const r6 = snap.curator!.findings.find((f) => f.code === 'CUR-R6');
+    expect(r6?.severity).toBe('alto');
   });
 
   // -------------------------------------------------------------------------
@@ -277,11 +244,14 @@ describe('ELITE Pulido Diamante — Curator E2E sobre fixture sintético', () =>
     expect(trazas.length).toBe(1);
     expect(trazas[0].normReference).toContain('NIC 1 párr. 33');
 
-    // Invariante de fondo: preservar la correctora NO rompe la ecuación.
+    // Invariante de fondo: preservar la correctora NO altera la ecuación. El
+    // único residual es el desbalance propio del archivo (379505), que R8 ya
+    // no absorbe (ver Cuadratura 2).
     expect(
       snap.controlTotals.activo -
         (snap.controlTotals.pasivo + snap.controlTotals.patrimonio),
-    ).toBe(0);
+    ).toBe(snap.virtualCloseAdjustment!.unexplainedResidual);
+    expect(snap.virtualCloseAdjustment!.unexplainedResidual).toBe(1_574_500_000);
   });
 
   // -------------------------------------------------------------------------
@@ -313,22 +283,18 @@ describe('ELITE Pulido Diamante — Curator E2E sobre fixture sintético', () =>
   // -------------------------------------------------------------------------
   // ASERCIÓN 5 — Ecuación patrimonial post-Curator.
   // -------------------------------------------------------------------------
-  it('Cuadratura 5 — Ecuación post-Curator: Activo = Pasivo + Patrimonio (al centavo)', () => {
+  it('Cuadratura 5 — Ecuación post-Curator: el descuadre del archivo queda expuesto al centavo (no se oculta)', () => {
     const result = loadSnapshot();
     const snap = result.primary;
+    const cents = snap.controlTotals.cents!;
 
-    const lhs = snap.controlTotals.activo;
-    const rhs = snap.controlTotals.pasivo + snap.controlTotals.patrimonio;
-    const delta = lhs - rhs;
-
-    expect(
-      Math.abs(delta),
-      `Ecuación patrimonial post-Curator descuadrada al centavo. ` +
-        `Activo: $${lhs.toLocaleString()}, ` +
-        `Pasivo: $${snap.controlTotals.pasivo.toLocaleString()}, ` +
-        `Patrimonio: $${snap.controlTotals.patrimonio.toLocaleString()}, ` +
-        `Δ (Activo − [Pasivo + Patrimonio]): $${delta.toLocaleString()}.`,
-    ).toBeLessThanOrEqual(1);
+    // Activo − (Pasivo + Patrimonio) en la MISMA representación del gate V1.
+    const gapCents = cents.activo - cents.pasivo - cents.patrimonio;
+    expect(gapCents).toBe(BigInt(157_450_000_000));
+    // Y coincide con lo que R8 reporta como residual no explicado.
+    expect(snap.virtualCloseAdjustment!.unexplainedResidualRaw).toBe('1574500000.00');
+    expect(snap.summary.equationBalanced).toBe(false);
+    expect(snap.validation.blocking).toBe(true);
   });
 
   // -------------------------------------------------------------------------
