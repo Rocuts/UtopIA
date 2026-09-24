@@ -111,7 +111,10 @@ export interface NarrativeCheckOptions {
   language?: 'es' | 'en';
   /** Sujeto de los mensajes ("el HTML", "la narrativa"). */
   subject?: { es: string; en: string };
-  /** Sólo cuentan montos con "$" o con escala ("1.500 millones"): evita NIT y códigos. */
+  /**
+   * Sólo cuentan montos con moneda ("$", "COP" delante o "pesos" detrás) o con
+   * escala ("1.500 millones"): evita NIT y códigos.
+   */
   requireCurrency?: boolean;
   /** No juzga proyecciones, metas, promedios sectoriales ni años futuros. */
   skipForwardLooking?: boolean;
@@ -421,6 +424,8 @@ const FORWARD_WORDS =
  */
 const FUTURE_OR_CONDITIONAL =
   /(?<![\p{L}])(?:aumentar|elevar|subir|incrementar|mejorar|reducir|disminuir|bajar|pasar|quedar|ubicar|situar|generar|liberar|cerrar|ascender|llevar|crecer|representar|ser|estar|tendr|habr|podr|deber|saldr|valdr)(?:[ií]an?|[áÁ]n?)(?![\p{L}])/iu;
+/** "4.000.000 de pesos", "4.000.000,00 pesos m/cte.": la palabra marca el monto. */
+const CURRENCY_WORD_AFTER = /^[(\s−-]*[\d.,]+\s*\)?\s*(?:de\s+)?pesos\b/i;
 /** Cifra presentada como parte del concepto, no como su saldo. */
 const COMPONENT_WORDS = /incluy|compuest|conformad|concentr|\bcubr|de\s+los\s+cuales|de\s+las\s+cuales/i;
 /** Monto por unidad ("$200,00 por acción", "$15 / cuota"): no es el total del concepto. */
@@ -514,7 +519,12 @@ export function checkNarrativeUnits(
           if (t.percent) return false;
           if (PER_UNIT_AFTER.test(win.slice(t.index))) return false;
           if (!options.requireCurrency) return true;
-          return t.abbreviated || /^[(\s−-]*\$/.test(win.slice(t.index));
+          return (
+            t.abbreviated ||
+            /^[(\s−-]*\$/.test(win.slice(t.index)) ||
+            /\bCOP\s*$/i.test(win.slice(0, t.index)) ||
+            CURRENCY_WORD_AFTER.test(win.slice(t.index))
+          );
         });
         if (!token) continue;
         const before = win.slice(0, token.index);
@@ -699,6 +709,9 @@ export function governanceNarrativeUnits(json: GovernanceReportJson, language: '
     const acta = en ? 'Minutes' : 'Acta';
     out.push(...unit(m.convocationStatement, `${acta} — ${en ? 'call notice' : 'convocatoria'}`));
     out.push(...unit(m.quorumStatement, `${acta} — quorum`));
+    for (const item of m.agenda ?? []) {
+      out.push(...unit(item.topic, `${acta} — ${en ? 'agenda' : 'orden del día'} ${item.number}`));
+    }
     for (const d of m.developments ?? []) {
       out.push(...unit(d.body, `${acta} — ${en ? 'item' : 'punto'} ${d.itemNumber}`));
     }

@@ -499,3 +499,31 @@ describe('revisión adversarial — prosa honesta sin falsos positivos', () => {
     expect(r.deviations.join('\n')).toMatch(/Recomendación 1 · Utilidad neta: la narrativa imprime \$200\.000\.000,00/);
   });
 });
+
+describe('revisión adversarial — cifras que escapaban al cruce', () => {
+  it('"COP 4.000.000" o "4.000.000 de pesos" (sin "$") también son montos en prosa', () => {
+    const r = checkGovernanceNarrative(
+      govJson({
+        developments: [
+          'La utilidad neta del ejercicio fue de COP 4.000.000,00.',
+          'El patrimonio asciende a 7.000.000 de pesos.',
+          'La sociedad, NIT 900.123.456-7, aprobó los estados financieros.',
+        ],
+      }),
+      narrativeSourcesFromPreprocessed(pp, null, { acta }),
+    );
+    const all = r.motivos.join('\n');
+    expect(all).toMatch(/punto 1 · Utilidad neta: la narrativa imprime \$4\.000\.000,00/);
+    expect(all).toMatch(/punto 2 · Total Patrimonio: la narrativa imprime \$7\.000\.000,00/);
+    expect(all).not.toMatch(/punto 3/);
+  });
+
+  it('el orden del día se imprime en el acta: un dividendo inventado en un punto sella', () => {
+    const j = govJson({ developments: HONEST_DEVELOPMENTS });
+    j.shareholderMinutes.agenda[5] = { number: 6, topic: 'Distribución de dividendos por $900.000.000,00.' };
+    const r = checkGovernanceNarrative(j, narrativeSourcesFromPreprocessed(pp, null, { acta }));
+    expect(r.motivos.join('\n')).toMatch(/Acta — orden del día 6 · Dividendos: la narrativa imprime \$900\.000\.000,00/);
+    // El orden del día canónico, sin cifras, no se acusa.
+    expect(checkGovernanceNarrative(govJson({ developments: HONEST_DEVELOPMENTS }), narrativeSourcesFromPreprocessed(pp, null, { acta })).motivos).toEqual([]);
+  });
+});
