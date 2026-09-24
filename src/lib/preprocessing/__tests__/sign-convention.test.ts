@@ -108,6 +108,58 @@ describe('detectSignConvention', () => {
     expect(detectSignConvention(parseRaw(csv)).convention).toBe('natural');
   });
 
+  // -------------------------------------------------------------------------
+  // niif-preproceso-11 — partida doble real con saldo en 3605
+  // -------------------------------------------------------------------------
+  // Excluir el grupo 36 de la suma sólo sirve para el patrón NO de partida
+  // doble (3605 duplicado con el P&G). En un export algebraico de partida
+  // doble, Σ(todas las hojas) = 0 CON el 36: excluirlo dejaba |3605| y el
+  // archivo se leía como natural (pasivo y patrimonio negativos).
+  const ALGEBRAICO_PARTIDA_DOBLE = [
+    'codigo,nombre,nivel,transaccional,Saldo 2024,Saldo 2025',
+    // 2024 = después del cierre (P&G en cero, resultado en 3605)
+    // 2025 = antes del cierre (3605 del año previo aún sin trasladar, P&G activo)
+    '110505,Caja,Auxiliar,1,1000000000,1300000000',
+    '220505,Proveedores,Auxiliar,1,-400000000,-500000000',
+    '310505,Capital,Auxiliar,1,-400000000,-400000000',
+    '360505,Utilidad del ejercicio,Auxiliar,1,-200000000,-200000000',
+    '370505,Utilidades acumuladas,Auxiliar,1,0,0',
+    '413505,Ventas,Auxiliar,1,0,-900000000',
+    '613505,Costo,Auxiliar,1,0,500000000',
+    '513505,Gastos,Auxiliar,1,0,200000000',
+  ].join('\n');
+
+  it('detecta ALGEBRAICA una partida doble con 3605 real (año cerrado y utilidad previa)', () => {
+    const rows = parseRaw(ALGEBRAICO_PARTIDA_DOBLE);
+    for (const p of ['2024', '2025']) {
+      expect(rows.reduce((s, r) => s + (r.balancesByPeriod[p] ?? 0), 0)).toBe(0);
+    }
+    const detection = detectSignConvention(rows);
+    expect(detection.convention).toBe('algebraica');
+    expect(detection.ratioByPeriod['2024']).toBeLessThan(0.05);
+    expect(detection.ratioByPeriod['2025']).toBeLessThan(0.05);
+
+    // Y el preprocesado queda con pasivo y patrimonio positivos y cuadrado.
+    const s = preprocessTrialBalance(parseTrialBalanceCSV(ALGEBRAICO_PARTIDA_DOBLE)).primary;
+    expect(s.controlTotals.pasivo).toBe(500_000_000);
+    expect(s.controlTotals.patrimonio).toBe(800_000_000);
+    expect(s.summary.equationBalanced).toBe(true);
+  });
+
+  it('empate de votos en multiperiodo: algebraica si las clases 2 y 3 suman negativo en todos', () => {
+    // 2024 es partida doble exacta (voto algebraico). 2025 trae un error de
+    // captura de 100M (Σ ≠ 0 → voto natural). Clases 2+3 negativas en ambos.
+    const csv = [
+      'codigo,nombre,nivel,transaccional,Saldo 2024,Saldo 2025',
+      '110505,Caja,Auxiliar,1,1000000000,1100000000',
+      '220505,Proveedores,Auxiliar,1,-400000000,-400000000',
+      '310505,Capital,Auxiliar,1,-600000000,-600000000',
+    ].join('\n');
+    const detection = detectSignConvention(parseRaw(csv));
+    expect(detection.periodsEvaluated).toEqual(['2024', '2025']);
+    expect(detection.convention).toBe('algebraica');
+  });
+
   it('no evalúa periodos cuyo activo es inmaterial — no toca balances de juguete', () => {
     const csv = [
       'codigo,nombre,nivel,transaccional,Saldo 2025',

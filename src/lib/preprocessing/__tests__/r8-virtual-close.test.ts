@@ -403,6 +403,36 @@ describe('R8 — Cierre Virtual (Autonomía de Cierre)', () => {
     expect(snap.validation.reasons.filter((r) => r.startsWith('[CUR-R8]'))).toHaveLength(1);
   });
 
+  it('3605 del año anterior que coincide por azar con la utilidad del año: se reclasifica (la brecha lo prueba)', () => {
+    // Capital 400 + 3605 (año anterior) 200; utilidad del año 200 aún en
+    // clases 4-7 → Activo = 500 (pasivo) + 600 + 200 = 1.300. Si R8 tomara el
+    // 3605 como "el resultado del periodo" dejaría un residual de 200M.
+    const snap = makeSnapshot({
+      period: '2025',
+      controlTotals: makeControlTotals({
+        activo: 1_300_000_000,
+        pasivo: 500_000_000,
+        patrimonio: 600_000_000,
+        ingresos: 900_000_000,
+        gastos: 700_000_000,
+        utilidadNeta: 200_000_000,
+      }),
+      classes: [
+        makeClass(1, [{ code: '110505', name: 'Caja', balance: 1_300_000_000 }]),
+        makeClass(2, [{ code: '220505', name: 'Proveedores', balance: 500_000_000 }]),
+        makeClass(3, [
+          { code: '310505', name: 'Capital', balance: 400_000_000 },
+          { code: '360505', name: 'Utilidad 2024', balance: 200_000_000 },
+        ]),
+      ],
+    });
+    const out = runR8(snap);
+    expect(out.virtualCloseAdjustment.reclassifiedFrom3605).toBe(true);
+    expect(out.virtualCloseAdjustment.blocking).toBe(false);
+    expect(snap.controlTotals.patrimonio).toBe(800_000_000);
+    expect(snap.summary.equationBalanced).toBe(true);
+  });
+
   it('idempotencia con reclasificación del grupo 36: la segunda corrida no inventa residual', () => {
     const snap = makeSnapshot({
       period: '2026-08',

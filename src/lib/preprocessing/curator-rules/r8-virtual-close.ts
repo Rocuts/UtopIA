@@ -42,7 +42,13 @@ import {
   sumNonCurrentLiabilities,
 } from './balance-groups';
 import { addCuratorBlocker, clearCuratorBlockers } from './curator-blockers';
-import { centsToCanonical, equationGapCents, syncControlTotals } from './sync-control-totals';
+import {
+  centsToCanonical,
+  equationGapCents,
+  pesosToCents,
+  sumClassCents,
+  syncControlTotals,
+} from './sync-control-totals';
 import type { CuratorFinding, VirtualCloseAdjustment } from './types';
 
 const VIRTUAL_CURRENT_CODE = '3605VC';
@@ -181,8 +187,34 @@ export function runR8(snapshot: PeriodSnapshot): R8Result {
   const csvUtilidadEjercicio =
     csvResultAccounts.reduce((sum, a) => sum + a.balance, 0) + carriedRetained;
   const utilidadGap = Math.abs(csvUtilidadEjercicio - dynamicNetIncome);
+
+  // Interpretación del grupo 36 — dos hipótesis, evaluadas al centavo sobre
+  // la brecha del balance ANTES del traslado (A − P − K, con la
+  // reclasificación de una corrida previa devuelta al grupo 36):
+  //   H1 "es el resultado del periodo": se reemplaza por 3605VC.
+  //        residual = brecha − utilidad + grupo36
+  //   H2 "es un resultado anterior no trasladado": se reclasifica a 3710VC.
+  //        residual = brecha − utilidad
+  // Si alguna hipótesis explica la brecha EXACTAMENTE, se usa esa (así un
+  // 3605 del año anterior que coincide por azar con la utilidad del año no
+  // se confunde con ella). Si ninguna la explica, decide la tolerancia de
+  // coincidencia y el residual queda bloqueante.
+  const gapBeforeCents =
+    sumClassCents(snapshot.classes.find((c) => c.code === 1)) -
+    sumClassCents(snapshot.classes.find((c) => c.code === 2)) -
+    sumClassCents(clasePatrimonio) -
+    pesosToCents(carriedRetained);
+  const utilidadCents = pesosToCents(dynamicNetIncome);
+  const grupo36Cents = pesosToCents(csvUtilidadEjercicio);
+  const residualIfPriorResult = gapBeforeCents - utilidadCents;
+  const residualIfCurrentResult = gapBeforeCents - utilidadCents + grupo36Cents;
   const reclassifiedFrom3605 =
-    utilidadGap > UTILIDAD_MATCH_TOL && csvUtilidadEjercicio !== 0;
+    grupo36Cents !== ZERO_CENTS &&
+    (residualIfPriorResult === ZERO_CENTS
+      ? true
+      : residualIfCurrentResult === ZERO_CENTS
+        ? false
+        : utilidadGap > UTILIDAD_MATCH_TOL);
   const reclassifiedAmount = reclassifiedFrom3605 ? csvUtilidadEjercicio : 0;
 
   // -------------------------------------------------------------------------
@@ -335,14 +367,10 @@ export function runR8(snapshot: PeriodSnapshot): R8Result {
 
   // Descuadre no explicado por el resultado del ejercicio → BLOQUEANTE.
   if (blocking) {
-    // Brecha del balance ANTES del traslado:
-    //   residual = brechaPrevia − utilidad + grupo36 − reclasificado
-    // Si esa brecha previa era 0, el balance recibido ya cuadraba sin las
-    // clases 4-7: el resultado está en otra cuenta de patrimonio o el P&G no
-    // corresponde al mismo corte.
-    const gapBeforeTransfer =
-      residualGapBeforeCents + dynamicNetIncome - csvUtilidadEjercicio + reclassifiedAmount;
-    const alreadyBalancedWithoutResult = pesosCents(gapBeforeTransfer) === ZERO_CENTS;
+    // Si la brecha previa al traslado era 0, el balance recibido ya cuadraba
+    // sin las clases 4-7: el resultado está en otra cuenta de patrimonio o el
+    // P&G no corresponde al mismo corte.
+    const alreadyBalancedWithoutResult = gapBeforeCents === ZERO_CENTS;
     const hint = alreadyBalancedWithoutResult
       ? ' El balance recibido ya cuadraba SIN el resultado de las clases 4-7: el resultado del ' +
         'ejercicio parece estar incluido en otra cuenta de patrimonio (p. ej. 37xx) o las ' +
@@ -468,11 +496,6 @@ function recomputeControlTotalsFromClasses(
   // los valores PRE-cierre y el gate comparaba el reporte contra un patrimonio
   // que ya no existía.
   syncControlTotals(totals, classes);
-}
-
-function pesosCents(value: number): bigint {
-  if (!Number.isFinite(value)) return ZERO_CENTS;
-  return BigInt(Math.round(value * 100));
 }
 
 function formatCOP(amount: number): string {
