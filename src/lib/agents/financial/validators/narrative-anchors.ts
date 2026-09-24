@@ -822,11 +822,35 @@ export function niifNarrativeUnits(json: NiifReportJson, language: 'es' | 'en' =
  * ingresos del propio ERI (ya cruzados contra el balance por el validador del
  * JSON NIIF): una nota que cita los ingresos brutos o la línea de otros
  * ingresos con su cifra es honesta.
+ *
+ * El efectivo y el patrimonio admiten también los saldos que imprimen el EFE y
+ * el ECP del propio informe, incluidos los del periodo comparativo (revisión
+ * I5-3): con tres cortes, el EFE y el ECP comparativos abren con el corte
+ * anterior al comparativo (p. ej. 2023 en un informe 2025/2024), que no es
+ * ninguno de los dos snapshots, y la nota que cita ese saldo de apertura es
+ * honesta. Esos saldos los calcula el código y el validador del JSON NIIF los
+ * cruza contra el balance (E2/E3/E18/E23 del EFE comparativo; E4/E7 del ECP).
  */
 function niifNarrativeConcepts(json: NiifReportJson, sources: NarrativeAnchorSources): NarrativeConcept[] {
   const concepts = buildNarrativeConcepts({ ...sources, niif: json, acta: null, actaConcepts: false }).filter((c) =>
     NIIF_NARRATIVE_KEYS.has(c.key),
   );
+  const cf = json.cashFlow;
+  const statementValues: Partial<Record<NarrativeConceptKey, number[]>> = {
+    efectivo: vals(
+      centsToPesos(cf?.cashOpeningComparative),
+      centsToPesos(cf?.cashClosingComparative),
+    ),
+    patrimonio: vals(
+      ...[...(json.equityChanges?.rows ?? []), ...(json.equityChanges?.comparativeRows ?? [])]
+        .filter((r) => r.kind === 'opening_balance' || r.kind === 'closing_balance')
+        .map((r) => centsToPesos(r.total)),
+    ),
+  };
+  for (const concept of concepts) {
+    const extra = statementValues[concept.key];
+    if (extra && extra.length > 0) concept.values = vals(...concept.values, ...extra);
+  }
   const revenueLines = vals(
     ...(json.incomeStatement?.lines ?? [])
       .filter((l) => /ingres|venta/i.test(l.label) && !/costo|gasto/i.test(l.label))

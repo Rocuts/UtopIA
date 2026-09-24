@@ -134,6 +134,24 @@ describe('checkNiifNarrative — sin falsos positivos en notas honestas', () => 
     }
   });
 
+  it('tres cortes: la nota del ECP/EFE que cita la apertura del comparativo (corte 2023) es honesta', () => {
+    // El EFE y el ECP comparativos (2024) abren con el corte 2023, que no es
+    // ninguno de los dos snapshots: su saldo lo imprime el propio informe.
+    const pp = preprocesarTresCortes();
+    const json = informeTresCortes(pp);
+    const eqOpen = json.equityChanges.comparativeRows!.find((r) => r.kind === 'opening_balance')!.total;
+    const cashOpen = json.cashFlow.cashOpeningComparative!;
+    const notes = [
+      `El patrimonio al cierre de 2023, saldo inicial del periodo comparativo, fue de ${cop(BigInt(eqOpen))}.`,
+      `El efectivo y equivalentes al cierre de 2023 fue de ${cop(BigInt(cashOpen))}.`,
+    ];
+    const honest = { ...json, equityChanges: { ...json.equityChanges, notes: notes.map((body, i) => ({ ref: `Nota ${i + 1}`, norma: null, body })) } };
+    expect(check(honest, pp).motivos).toEqual([]);
+    // Una cifra que no imprime ningún estado sigue sin respaldo.
+    const fake = withNotes(json, ['El patrimonio al cierre de 2023 fue de $74.000.000,00.']);
+    expect(check(fake, pp).motivos.join('\n')).toMatch(/Total Patrimonio: la nota imprime \$74\.000\.000,00/);
+  });
+
   it('fixture coherente sin preprocesado: sólo las anclas del propio JSON', () => {
     const json = makeCoherentNiifReport();
     const withProse = withNotes(json, [
