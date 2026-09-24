@@ -49,6 +49,12 @@
 //     reserva legal, queda…"), los partitivos ("del total de activos, $X…"),
 //     otra magnitud en medio ("el impuesto de renta de $X") y las cifras en
 //     otra unidad ("unidades", "USD") o que son identificadores (NIT, C.C.).
+//   - Revisión adversarial: los activos / pasivos sólo cuentan como sujeto
+//     ("la depreciación de los activos fue de", "los otros activos suman" no
+//     son el total), los flujos de efectivo no son el saldo, el fin de palabra
+//     reconoce tildes ("ascendió", "distribuyó", "se ubicó"), una relativa
+//     ("…, que ascendió a $X") es del sustantivo que la precede y una cifra
+//     del acta regida por un porcentaje no puede exceder esa fracción de la base.
 // Límites conocidos: la prosa en inglés y las cifras en palabras no se cruzan;
 // una redacción fuera de estas listas queda sin juzgar (no sella ni verifica).
 // ---------------------------------------------------------------------------
@@ -242,6 +248,14 @@ export function narrativeSourcesFromPreprocessed(
 // ---------------------------------------------------------------------------
 
 /**
+ * Fin de palabra que reconoce las tildes. Sin la bandera `u`, `\b` de JS sólo
+ * conoce [A-Za-z0-9_]: "ascendió", "distribuyó", "se ubicó" o "capitalizó"
+ * seguidos de un espacio no cumplían `[oó]\b` y la mención no se reconocía
+ * (revisión adversarial de la re-auditoría 2).
+ */
+const WORD_END = String.raw`(?![A-Za-zÀ-ÖØ-öø-ÿ0-9_])`;
+
+/**
  * Verbos que introducen el monto de un saldo en prosa ("asciende a", "es de",
  * "los activos suman"). El futuro ("ascenderá") se reconoce aquí pero la
  * mención queda como proyección (`FUTURE_OR_CONDITIONAL` sobre el rótulo).
@@ -255,6 +269,19 @@ const AMOUNT_VERBS = String.raw`(?:asciende|ascienden|ascendi[oó]|ascendieron|a
  */
 const LINE_ITEM = String.raw`(?:por|en)\s+(?:la\s+|el\s+)?(?:diferencia|venta|valoraci|m[eé]todo|deterioro|baja|medici|conversi|enajenaci|retiro|siniestro|cobertura|inversiones)`;
 
+/**
+ * "Los activos" como SUJETO de la frase: no "la depreciación de los activos fue
+ * de", "la venta de activos fue de" ni "los otros / demás activos suman", que
+ * son partidas o subtotales (revisión adversarial de la re-auditoría 2).
+ */
+const SUBJECT_ONLY = String.raw`(?<!\b(?:de|del|en|por|sobre|con|para|a|al|entre|hacia|desde|sin|tras|otros|otras|dem[aá]s|dichos|estos|esos|algunos|ciertos|principales|nuevos|mayores|menores)\s+)(?<!\b(?:de|en|por|sobre|con|para|a|entre|hacia|desde|sin|tras)\s+(?:los|sus|estos|esos|dichos)\s+)`;
+
+/**
+ * "Flujos de efectivo al 31 de diciembre", "estado de flujos de efectivo al
+ * cierre": el flujo del periodo, no el saldo de efectivo.
+ */
+const NOT_CASH_FLOW = String.raw`(?<!\bflujos?\s+(?:netos?\s+)?(?:de|del)\s+)`;
+
 /** "de la sociedad", "de la compañía": el sujeto sigue siendo el total de la entidad. */
 const OF_ENTITY = String.raw`(?:\s+de\s+(?:la|esta|dicha)\s+(?:sociedad|compa[nñ][ií]a|empresa|entidad))?`;
 /** "al cierre (del ejercicio) (de 2025)", "al 31 de diciembre de 2025". */
@@ -265,10 +292,11 @@ const OF_PERIOD = String.raw`(?:\s+del\s+(?:ejercicio|per[ií]odo|a[nñ]o))?(?:\
 /**
  * Calificativos de un SUBTOTAL tras "total de activos / pasivos": "total de
  * activos fijos", "total de pasivos laborales" (re-auditoría 2, narrativa-02).
- * "Activos netos" es el patrimonio, no el activo. "Total de activos de la
- * sociedad" sí es el total.
+ * "Activos netos" es el patrimonio, no el activo; "activo total promedio" es
+ * la base del ROA, no el saldo. "Total de activos de la sociedad" sí es el
+ * total.
  */
-const SUBTOTAL_QUALIFIER = String.raw`\s+(?:(?:no\s+)?corrientes?|circulantes?|fijos?|financieros?|intangibles?|laborales?|diferidos?|biol[oó]gicos?|contingentes?|tributarios?|fiscales?|(?:no\s+)?monetarios?|netos?|brutos?|operacionales?|productivos?|improductivos?|estimados?|restringidos?|mantenidos?|exigibles?|por\s+(?![$\d(−-]|COP\b|(?:un\s+)?(?:valor|monto|importe|total)\b|la\s+suma\b)|de\s+(?:corto|mediano|largo)\s+plazo|a\s+(?:corto|largo)\s+plazo|de\s+inversi[oó]n|en\s+(?:moneda|arrendamiento))`;
+const SUBTOTAL_QUALIFIER = String.raw`\s+(?:(?:no\s+)?corrientes?|circulantes?|fijos?|financieros?|intangibles?|laborales?|diferidos?|biol[oó]gicos?|contingentes?|tributarios?|fiscales?|(?:no\s+)?monetarios?|netos?|brutos?|operacionales?|productivos?|improductivos?|estimados?|restringidos?|mantenidos?|exigibles?|promedios?|por\s+(?![$\d(−-]|COP\b|(?:un\s+)?(?:valor|monto|importe|total)\b|la\s+suma\b)|de\s+(?:corto|mediano|largo)\s+plazo|a\s+(?:corto|largo)\s+plazo|de\s+inversi[oó]n|en\s+(?:moneda|arrendamiento))`;
 
 /** Mención de ingresos con monto (prosa) y rótulo de fila de tabla. "Otros ingresos" no es el total. */
 const INGRESOS_RE =
@@ -354,7 +382,7 @@ export function buildNarrativeConcepts(sources: NarrativeAnchorSources): Narrati
       // "la sociedad obtuvo utilidades por $X". "Del ejercicio anterior" es el
       // comparativo con otra redacción: no se juzga.
       proseRe: new RegExp(
-        String.raw`\b(?:utilidad(?:es)?|ganancias?|p[eé]rdida|resultado|excedentes?)\s+del\s+(?:ejercicio|per[ií]odo|a[nñ]o)(?:\s+(?:de\s+)?(?:19|20)\d{2})?(?!(?:\s+(?:de\s+)?(?:19|20)\d{2})?\s+(?:anterior|precedente|pasado|distribuible|disponible|a\s+disposici[oó]n|despu[eé]s|tras|restante|por\s+distribuir|a\s+distribuir|l[ií]quid|por\s+(?:acci[oó]n|cuota)|antes\s+de|${LINE_ITEM}))` +
+        String.raw`(?<!\bestados?\s+(?:integral\s+)?de\s+)\b(?:utilidad(?:es)?|ganancias?|p[eé]rdida|resultado|excedentes?)\s+del\s+(?:ejercicio|per[ií]odo|a[nñ]o)(?:\s+(?:de\s+)?(?:19|20)\d{2})?(?!(?:\s+(?:de\s+)?(?:19|20)\d{2})?\s+(?:anterior|precedente|pasado|distribuible|disponible|a\s+disposici[oó]n|despu[eé]s|tras|restante|por\s+distribuir|a\s+distribuir|l[ií]quid|por\s+(?:acci[oó]n|cuota)|antes\s+de|${LINE_ITEM}))` +
           String.raw`|\b(?:obtuv(?:o|ieron)|obtiene|gener(?:[oó]|a|aron)|arroj(?:[oó]|a)|alcanz[oó]|report(?:[oó]|a)|registr(?:[oó]|a))\s+(?:una\s+|unas\s+)?(?:utilidad(?:es)?|ganancias?|excedentes?)(?:\s+net[ao]s?)?\s+(?:por|de)(?=\s*\(?\s*[-−]?\s*(?:\$|COP\b|\d))`,
         'gi',
       ),
@@ -379,12 +407,12 @@ export function buildNarrativeConcepts(sources: NarrativeAnchorSources): Narrati
       key: 'activo',
       label: 'Total Activo',
       re: new RegExp(
-        String.raw`\b(?:total\s+(?:de\s+)?(?:los\s+)?activos?|activos?\s+totales?)\b(?!${SUBTOTAL_QUALIFIER})`,
+        String.raw`\b(?:total\s+(?:de\s+)?(?:los\s+)?activos?|activos?\s+total(?:es)?)\b(?!${SUBTOTAL_QUALIFIER})`,
         'gi',
       ),
       // "Los activos (de la sociedad) ascienden / suman / totalizan" (narrativa-09).
       proseRe: new RegExp(
-        String.raw`\b(?:los\s+)?activos(?:\s+totales)?${OF_ENTITY}${AT_CUTOFF}\s+${AMOUNT_VERBS}`,
+        String.raw`${SUBJECT_ONLY}\b(?:los\s+)?activos(?:\s+totales)?${OF_ENTITY}${AT_CUTOFF}\s+${AMOUNT_VERBS}`,
         'gi',
       ),
       values: vals(
@@ -399,11 +427,11 @@ export function buildNarrativeConcepts(sources: NarrativeAnchorSources): Narrati
       key: 'pasivo',
       label: 'Total Pasivo',
       re: new RegExp(
-        String.raw`\b(?:total\s+(?:de\s+)?(?:los\s+)?pasivos?|pasivos?\s+totales?)\b(?!${SUBTOTAL_QUALIFIER})(?!\s*(?:y|\+|m[aá]s)\s*(?:el\s+)?patrimonio)`,
+        String.raw`\b(?:total\s+(?:de\s+)?(?:los\s+)?pasivos?|pasivos?\s+total(?:es)?)\b(?!${SUBTOTAL_QUALIFIER})(?!\s*(?:y|\+|m[aá]s)\s*(?:el\s+)?patrimonio)`,
         'gi',
       ),
       proseRe: new RegExp(
-        String.raw`\b(?:los\s+)?pasivos(?:\s+totales)?${OF_ENTITY}${AT_CUTOFF}\s+${AMOUNT_VERBS}`,
+        String.raw`${SUBJECT_ONLY}\b(?:los\s+)?pasivos(?:\s+totales)?${OF_ENTITY}${AT_CUTOFF}\s+${AMOUNT_VERBS}`,
         'gi',
       ),
       values: vals(
@@ -425,7 +453,7 @@ export function buildNarrativeConcepts(sources: NarrativeAnchorSources): Narrati
       // activo), no el patrimonio (revisión I5-3; frase habitual de las notas
       // de la Parte I).
       re: new RegExp(
-        String.raw`(?<!\bpasivos?\s*(?:y|\+|m[aá]s)\s*(?:el\s+)?)\b(?:total\s+(?:del?\s+)?patrimonio|patrimonio\s+(?:total|al\s+cierre|al\s+31\s+de\s+diciembre(?:\s+(?:de|del)\s+\d{4})?)|patrimonio(?:\s+(?:neto|total))?(?:\s+de\s+la\s+(?:sociedad|compa[nñ][ií]a|empresa|entidad))?\s+${AMOUNT_VERBS})\b`,
+        String.raw`(?<!\bpasivos?\s*(?:y|\+|m[aá]s)\s*(?:el\s+)?)\b(?:total\s+(?:del?\s+)?patrimonio|patrimonio\s+(?:total|al\s+cierre|al\s+31\s+de\s+diciembre(?:\s+(?:de|del)\s+\d{4})?)|patrimonio(?:\s+(?:neto|total))?(?:\s+de\s+la\s+(?:sociedad|compa[nñ][ií]a|empresa|entidad))?\s+${AMOUNT_VERBS})${WORD_END}`,
         'gi',
       ),
       values: vals(
@@ -442,7 +470,7 @@ export function buildNarrativeConcepts(sources: NarrativeAnchorSources): Narrati
       label: 'Efectivo al cierre',
       // El cierre del comparativo es la apertura del periodo actual.
       re: new RegExp(
-        String.raw`\befectivo(?:\s+y\s+equivalentes(?:\s+(?:de|al)\s+efectivo)?)?\s+al\s+(?:cierre|final)(?:\s+del\s+(?:per[ií]odo|ejercicio|a[nñ]o))?(?:\s+(?:de|del)\s+\d{4})?|\befectivo\s+y\s+equivalentes(?:\s+(?:de|al)\s+efectivo)?\s+${AMOUNT_VERBS}\b`,
+        String.raw`${NOT_CASH_FLOW}\befectivo(?:\s+y\s+equivalentes(?:\s+(?:de|al)\s+efectivo)?)?\s+al\s+(?:cierre|final)(?:\s+del\s+(?:per[ií]odo|ejercicio|a[nñ]o))?(?:\s+(?:de|del)\s+\d{4})?|\befectivo\s+y\s+equivalentes(?:\s+(?:de|al)\s+efectivo)?\s+${AMOUNT_VERBS}${WORD_END}`,
         'gi',
       ),
       // "El efectivo asciende a", "el efectivo de la compañía al 31 de
@@ -451,7 +479,7 @@ export function buildNarrativeConcepts(sources: NarrativeAnchorSources): Narrati
       // neto / restringido" no es el saldo: el calificativo corta la mención.
       proseRe: new RegExp(
         String.raw`(?:\bel\s+efectivo|\bel\s+disponible|\b(?:la\s+)?caja\s+y\s+bancos)${OF_ENTITY}${AT_CUTOFF}\s+${AMOUNT_VERBS}` +
-          String.raw`|(?:\befectivo(?:\s+y\s+equivalentes(?:\s+(?:de|al)\s+efectivo)?)?|\bel\s+disponible|\bcaja\s+y\s+bancos)${OF_ENTITY}\s+al\s+(?:31\s+de\s+diciembre(?:\s+(?:de|del)\s+(?:19|20)\d{2})?|(?:cierre|final)(?:\s+del?\s+(?:per[ií]odo|ejercicio|a[nñ]o))?(?:\s+(?:de|del)\s+(?:19|20)\d{2})?)`,
+          String.raw`|(?:${NOT_CASH_FLOW}\befectivo(?:\s+y\s+equivalentes(?:\s+(?:de|al)\s+efectivo)?)?|\bel\s+disponible|\bcaja\s+y\s+bancos)${OF_ENTITY}\s+al\s+(?:31\s+de\s+diciembre(?:\s+(?:de|del)\s+(?:19|20)\d{2})?|(?:cierre|final)(?:\s+del?\s+(?:per[ií]odo|ejercicio|a[nñ]o))?(?:\s+(?:de|del)\s+(?:19|20)\d{2})?)`,
         'gi',
       ),
       values: vals(
@@ -555,6 +583,18 @@ function equityDistributions(rows: EquityRow[]): number[] {
 }
 
 /**
+ * Los verbos "distribuir", "repartir" y "capitalizar" sólo son la decisión del
+ * acta con los socios, la utilidad, las reservas o la asamblea en la misma
+ * cláusula: "la compañía distribuye productos farmacéuticos, con ventas netas
+ * de $X" o "los inventarios se distribuyen entre bodegas" son la operación
+ * (revisión adversarial de la re-auditoría 2). El punto de miles ("$876.543")
+ * no cierra la cláusula.
+ */
+const ACTA_CONTEXT_AHEAD = String.raw`(?=(?:[^.;]|\.(?=\d)){0,80}?(?:\baccionistas|\bsocios|\basociados|\bdividendos?\b|\butilidad|\bexcedentes?\b|\bparticipaciones\b|\breservas?\b|\bcapital\s+(?:social|suscrito)|\bacciones\b|\bcuotas\b|\basamblea|\bsuma\s+de\b|\bArt\.?\s*30\b))`;
+/** Lo que capitaliza una nota NIIF (Secciones 17, 18 y 25): costos y mejoras de un activo. */
+const NIIF_CAPITALIZED = String.raw`(?:los\s+|las\s+)?(?:costos?|gastos?|desembolsos?|mejoras?|intereses|erogaciones|adiciones|licencias?|software|desarrollos?|proyectos?)\b`;
+
+/**
  * Conceptos del acta: cada uno admite las cifras que la aritmética determinista
  * publica para él (y los saldos del ECP que las notas citan). Sin aritmética
  * ni saldos del ECP, cualquier cifra impresa es N/D.
@@ -601,7 +641,10 @@ function actaConcepts(sources: NarrativeAnchorSources, netValues: number[]): Nar
       // dividendos" son saldos del balance o ingresos, no la distribución del
       // acta. "Distribuir entre los accionistas la suma de", "se reparten" y
       // "distribución a los socios" son la misma decisión (narrativa-10).
-      /(?<!ingresos\s+por\s+)\bdividendos?\b(?!\s+(?:por\s+(?:pagar|cobrar)|recibidos?))|\butilidades?\s+(?:a\s+distribuir|por\s+distribuir)\b|\bsaldo\s+distribuible\b|\bm[ií]nimo\s+(?:legal\s+)?a\s+repartir\b|\bdistribu(?:ir|ye|yen|y[oó]|yeron|ir[aá]n?)\b|\bdistribuci[oó]n(?:es)?\s+(?:a|entre)\s+(?:los\s+)?(?:accionistas|socios|asociados)\b|\brepart(?:ir|e|en|i[oó]|ieron)\b/gi,
+      new RegExp(
+        String.raw`(?<!ingresos\s+por\s+)\bdividendos?\b(?!\s+(?:por\s+(?:pagar|cobrar)|recibidos?))|\butilidades?\s+(?:a\s+distribuir|por\s+distribuir)\b|\bsaldo\s+distribuible\b|\bm[ií]nimo\s+(?:legal\s+)?a\s+repartir\b|\bdistribu(?:ir|ye|yen|y[oó]|yeron|ir[aá]n?)${WORD_END}${ACTA_CONTEXT_AHEAD}|\bdistribuci[oó]n(?:es)?\s+(?:a|entre)\s+(?:los\s+)?(?:accionistas|socios|asociados)\b|\brepart(?:ir|e|en|i[oó]|ieron)${WORD_END}${ACTA_CONTEXT_AHEAD}`,
+        'gi',
+      ),
       vals(
         pesos(a?.distribuibleCop),
         pesos(a?.saldoDistribuibleCop),
@@ -647,7 +690,10 @@ function actaConcepts(sources: NarrativeAnchorSources, netValues: number[]): Nar
     concept(
       'enjugue',
       'Enjugamiento de pérdidas',
-      /\benjug(?:amiento|ar[aá]n?|aron|ar|an|ue|uen|a|[oó])\b(?:\s+(?:de\s+)?(?:las\s+)?p[eé]rdidas?(?:\s+(?:acumuladas|de\s+(?:ejercicios|per[ií]odos|a[nñ]os)\s+anteriores))?)?/gi,
+      new RegExp(
+        String.raw`\benjug(?:amiento|ar[aá]n?|aron|ar|an|ue|uen|a|[oó])${WORD_END}(?:\s+(?:de\s+)?(?:las\s+)?p[eé]rdidas?(?:\s+(?:acumuladas|de\s+(?:ejercicios|per[ií]odos|a[nñ]os)\s+anteriores))?)?`,
+        'gi',
+      ),
       vals(
         pesos(a?.enjugarPerdidasCop),
         ...breakdowns.map((b) =>
@@ -676,7 +722,15 @@ function actaConcepts(sources: NarrativeAnchorSources, netValues: number[]): Nar
     concept(
       'capitalizacion',
       'Monto a capitalizar',
-      /\bcapitaliz(?:aci[oó]n|ar[aá]n?|ad[oa]s?|an|ar|a)\b/gi,
+      // "Capitalización" y "capitalizar" como antes; las demás formas del verbo
+      // sólo con la utilidad, las reservas o la asamblea en la cláusula: en las
+      // notas NIIF "se capitalizan los costos por préstamos" o "la compañía
+      // capitalizó mejoras por $X" son activos, no la capitalización del acta.
+      new RegExp(
+        String.raw`\bcapitaliz(?:aci[oó]n|ar)${WORD_END}(?!\s+(?:de\s+)?${NIIF_CAPITALIZED})` +
+          String.raw`|\bcapitaliz(?:ar[aá]n?|aron|ad[oa]s?|an|a|[oó])${WORD_END}(?!\s+${NIIF_CAPITALIZED})${ACTA_CONTEXT_AHEAD}`,
+        'gi',
+      ),
       vals(pesos(a?.capitalizationAmountCop), pesos(a?.capitalizationBaseCop)),
     ),
   ];
@@ -688,6 +742,11 @@ function actaConcepts(sources: NarrativeAnchorSources, netValues: number[]): Nar
  */
 const WINDOW_STOPS: RegExp[] = [
   /\breserva\s+estatutaria/i,
+  // Las Partes I y II no tienen los conceptos del acta: "con la utilidad neta
+  // se enjugan pérdidas por $X" o "se destina a reserva ocasional $X" siguen
+  // cortando la ventana, como antes de la re-auditoría 2.
+  /\breservas?\s+ocasional/i,
+  /\benjug/i,
   /\bcapital\s+(?:suscrito|social|pagado)/i,
   /\bp[eé]rdidas?\s+(?:acumuladas|de\s+ejercicios\s+anteriores)/i,
   /\b(?:utilidades|resultados|ganancias)\s+(?:acumulad[oa]s|de\s+ejercicios\s+anteriores)/i,
@@ -705,12 +764,26 @@ const WINDOW_STOPS: RegExp[] = [
  * nivel ("aumentó a", "creció hasta", "…, fue de"; ver `levelAfterVariation`).
  */
 const VARIATION_WORDS =
-  /variaci|aument|disminu|increment|reducci|redujo|reducid|cay[oó]|ca[ií]da|crec|diferencia|cambio|pas(?:[oó]|ar|ando)\s+de|mejor[oó]|empeor|frente\s+al?\b|respecto\s+(?:a|al|de|del)\b|respecto|comparad[oa]s?\s+con|en\s+comparaci[oó]n\s+con|\bvs\.?|\bversus\b/i;
+  /variaci|aument|disminu|increment|reducci|redujo|reducid|cay[oó]|ca[ií]da|crec|diferencia|cambio|pas(?:[oó]|ar|ando)\s+de|mejor[oó]|empeor|\bsub(?:i[oó]|ieron)(?![\p{L}])|\bbaj(?:ó|aron)(?![\p{L}])|repunt|retroced|descend|\bse\s+contrajo|frente\s+al?\b|respecto\s+(?:a|al|de|del)\b|respecto|comparad[oa]s?\s+con|en\s+comparaci[oó]n\s+con|\bvs\.?|\bversus\b/iu;
 /** Sustantivos de variación: "el aumento fue de $5M" es la variación, no el nivel. */
 const VARIATION_NOUN = /^(?:variaci[oó]n|aumentos?|incrementos?|disminuci[oó]n|reducci[oó]n|crecimiento|ca[ií]da|diferencias?|cambios?|mejora|deterioro)(?:es)?$/i;
-/** Verbo de saldo tras una variación: "que mejoró frente a 2024, fue de $X" afirma el nivel. */
-const LEVEL_VERB =
-  /\b(?:fue|es|era|son|fueron|eran)\s+de\b|\b(?:asciende|ascienden|ascendi[oó]|ascendieron|cerr[oó]|cerraron|qued[oó]|quedaron|lleg[oó]|totaliz[oó]|sum[oó]|alcanz[oó])\b|\bse\s+(?:ubic|situ)[oó]\b/i;
+/**
+ * Verbo de saldo tras una variación: "que mejoró frente a 2024, fue de $X"
+ * afirma el nivel. En una relativa ("…por el impuesto de renta, que ascendió a
+ * $6M") el verbo es del sustantivo que la precede, no del concepto.
+ */
+const LEVEL_VERB = new RegExp(
+  String.raw`(?<!\bque\s+(?:se\s+)?)(?:\b(?:fue|es|era|son|fueron|eran)\s+de\b|\b(?:asciende|ascienden|ascendi[oó]|ascendieron|cerr[oó]|cerraron|qued[oó]|quedaron|lleg[oó]|totaliz[oó]|sum[oó]|alcanz[oó])${WORD_END}|\bse\s+(?:ubic|situ)[oó]${WORD_END})`,
+  'i',
+);
+/**
+ * Lo que sigue a la palabra de variación cuando la cifra es el nivel: el resto
+ * del verbo, un porcentaje o un año opcionales y "a" / "hasta" ("aumentó a",
+ * "creció un 20 %, hasta", "frente a 2024, hasta"). "…frente a 2024 debido a
+ * $X de inversiones" no es el nivel.
+ */
+const LEVEL_TAIL =
+  /^[A-Za-zÀ-ÖØ-öø-ÿ]*\s*,?\s*(?:(?:en\s+|de\s+)?(?:un\s+|el\s+)?[\d.,]+\s*%\s*,?\s*)?(?:(?:en|de|del)\s+)?(?:(?:19|20)\d{2}\s*,?\s*)?(?:a|hasta)\s*$/i;
 /**
  * Enlace entre la cifra de una variación (o de otra magnitud) y la del nivel:
  * "pasó de $1M (en 2024) a $4M", "aumentó $3M, hasta $4M", "…, y cerró en
@@ -745,7 +818,19 @@ const IDENTIFIER_BEFORE =
  * que un verbo de saldo vuelva al concepto ("…, neta del impuesto, fue de $X").
  */
 const OTHER_QUANTITY =
-  /(?<![\p{L}])(?:impuestos?|provisi[oó]n|provisiones|retenci[oó]n|retenciones|costos?|gastos?|obligaci[oó]n|obligaciones|pagos?|pag[oó]|pagaron|compras?|inversi[oó]n|inversiones|pr[eé]stamos?|cr[eé]ditos?|deudas?|anticipos?|sanci[oó]n|sanciones|multas?|intereses|reservas?)(?![\p{L}])/iu;
+  /(?<![\p{L}])(?:impuestos?|provisi[oó]n|provisiones|retenci[oó]n|retenciones|costos?|gastos?|obligaci[oó]n|obligaciones|pagos?|pag[oó]|pagaron|compras?|inversi[oó]n|inversiones|pr[eé]stamos?|cr[eé]ditos?|deudas?|anticipos?|sanci[oó]n|sanciones|multas?|intereses|reservas?|restricci[oó]n|restricciones|embargos?|rendimientos?|sobregiros?|comisi[oó]n|comisiones|depreciaci[oó]n|amortizaci[oó]n)(?![\p{L}])/iu;
+/**
+ * La mención es complemento de otra magnitud sin ancla: "el gasto por
+ * impuesto de renta sobre la utilidad del ejercicio fue de $6M". La cifra
+ * enlazada por un verbo es de esa magnitud; la pegada a la mención ("…sobre la
+ * utilidad neta de $20M") sí es del concepto (revisión adversarial de la
+ * re-auditoría 2). Dividendos y reservas no están aquí: son conceptos del acta
+ * y su cifra se sigue cruzando.
+ */
+const OTHER_HEAD_PREFIX =
+  /(?<![\p{L}])(?:impuestos?|provisi[oó]n|retenci[oó]n|gastos?|costos?|tasa|margen|porcentaje)(?:\s+[\p{L}]+){0,4}\s+(?:sobre|de|del|a|al|en)\s+(?:(?:la|el|los|las)\s+)?$/iu;
+/** Cifra pegada a la mención: "… utilidad neta de $X", "… utilidad neta ($X)", "…, por $X". */
+const ATTACHED_TOKEN = /^\s*(?:\(\s*|,?\s*(?:de|por)\s+)$/i;
 /** "Del total de activos, $X son corrientes": partitivo, la cifra que sigue a la coma es una parte. */
 const PARTITIVE_PREFIX = /^\s*(?:del|de\s+(?:la|las|los|el))\s*$/i;
 /** "1.200.000 unidades", "USD 4.000.000": la cifra no está en pesos. */
@@ -779,8 +864,14 @@ const POSITIVE_WORDS = /positiv|super[aá]vit|excedente|ganancia/i;
 const NEGATIVE_WORDS = /negativ|p[eé]rdida|d[eé]ficit/i;
 /** Saldos cuyo signo es parte de la cifra (un negativo impreso sin signo es otra cifra). */
 const SIGNED_BALANCES: ReadonlySet<NarrativeConceptKey> = new Set(['utilidadNeta', 'patrimonio', 'ebitda']);
-/** "$40.000.000,00 negativos", "… en rojo": el signo va después de la cifra. */
-const NEGATIVE_AFTER = /^\s*(?:negativ|en\s+rojo|deficitari)/i;
+/**
+ * El signo va después de la cifra: "$40.000.000,00 negativos", "… en rojo",
+ * "… (pérdida)", "…, una pérdida explicada por…", "… de pérdida". Una pérdida
+ * con su propia cifra ("… (pérdida de $30M en 2024)") es otra cifra, no el
+ * signo de ésta.
+ */
+const NEGATIVE_AFTER =
+  /^\s*(?:negativ|en\s+rojo|deficitari|\(\s*(?:una?\s+)?(?:p[eé]rdida|d[eé]ficit)(?:\s+(?:neta|del\s+(?:ejercicio|per[ií]odo|a[nñ]o)))?\s*\)|(?:,\s*|de\s+|[-—–]\s*)(?:(?:es\s+decir|esto\s+es|que\s+(?:corresponde|equivale)\s+a)\s*,?\s*)?(?:una?\s+)?(?:negativ|p[eé]rdida|d[eé]ficit)(?![\p{L}]*\s+(?:de|por)\s+[$\d(−-]))/iu;
 export const ROE_LABEL = /\bROE\b|rentabilidad\s+(?:del|sobre\s+el)\s+patrimonio/i;
 
 /** Tramo tras el rótulo hasta el fin de la frase o la mención de otro concepto. */
@@ -870,7 +961,7 @@ function levelAfterVariation(before: string): boolean {
   const word = /^[\p{L}]+/u.exec(before.slice(last.index))?.[0] ?? '';
   if (VARIATION_NOUN.test(word)) return false;
   const tail = before.slice(last.index + last[0].length);
-  return /(?:^|[\s,])(?:a|hasta)\s*$/i.test(tail) || LEVEL_VERB.test(tail);
+  return LEVEL_TAIL.test(tail) || LEVEL_VERB.test(tail);
 }
 
 /** Texto que sigue a la cifra (sin la cifra). */
@@ -1023,6 +1114,8 @@ export function checkNarrativeUnits(
         // "Del total de activos, $X corresponden a inventarios": la cifra es
         // una parte. "De la utilidad neta, por $X, se apropia…" sí es el saldo.
         if (PARTITIVE_PREFIX.test(prefix) && /^\s*,?\s*$/.test(before)) continue;
+        // "El impuesto de renta sobre la utilidad del ejercicio fue de $6M".
+        if (OTHER_HEAD_PREFIX.test(prefix) && !ATTACHED_TOKEN.test(before)) continue;
         if (prose && isComponent(before)) continue;
         if (concept.skipIfAfter?.test(afterToken(win, token))) continue;
         if (
@@ -1054,9 +1147,16 @@ export function checkNarrativeUnits(
         // aritmética del acta; el signo no se juzga (narrativa-01).
         const percentOf = PERCENT_OF_PREFIX.exec(prefix);
         if (percentOf) {
-          if (match !== undefined || (concept.percentResults ?? []).some(matches)) continue;
           const { ratio, tolerance } = parsePercent(percentOf[1]);
           const bases = vals(...concept.values, ...(concept.percentBases ?? []));
+          // Una cifra del acta vale como resultado del porcentaje sólo si no
+          // excede esa fracción de la base (la reserva legal limitada por el
+          // tope del Art. 452 es menor que el 10 %): "el 10 % de la utilidad
+          // neta, es decir $10M" con utilidad de $20M no se ampara en que $10M
+          // sea el mínimo del Art. 155.
+          const cap = Math.max(0, ...bases.map((b) => Math.abs(b))) * (ratio + tolerance) + tol;
+          const actaResult = (concept.percentResults ?? []).some((v) => matches(v) && Math.abs(v) <= cap);
+          if (match !== undefined || actaResult) continue;
           const fits = bases.some(
             (b) => Math.abs(Math.abs(token.value) - ratio * Math.abs(b)) <= tol + tolerance * Math.abs(b),
           );

@@ -286,6 +286,30 @@ const HONEST: Phrase[] = [
   { id: 'H64', scope: 'estados', text: () => 'El total de activos supera 5.000 SMMLV (7.117.500.000), por lo que la sociedad está obligada a tener revisor fiscal.' },
   { id: 'H65', scope: 'estados', text: () => 'La utilidad del ejercicio se destinará a reservas por $2.500.000,00.' },
   { id: 'H66', scope: 'estados', text: () => 'El resultado del ejercicio se vio afectado por gastos financieros de $10.000.000,00.' },
+  // Revisión adversarial: partidas de activos/pasivos, flujos, relativas, "debido a" y el signo tras la cifra
+  { id: 'H67', scope: 'estados', text: () => 'Los otros activos ascienden a $2.500.000,00 y corresponden a gastos pagados por anticipado.' },
+  { id: 'H68', scope: 'estados', text: () => 'Los demás pasivos suman $1.200.000,00.' },
+  { id: 'H69', scope: 'estados', text: () => 'La depreciación de los activos fue de $3.000.000,00.' },
+  { id: 'H70', scope: 'estados', text: () => 'El valor razonable de los activos ascendió a $4.000.000,00.' },
+  { id: 'H71', scope: 'estados', text: () => 'La ganancia del ejercicio en venta de activos fue de $3.000.000,00.' },
+  { id: 'H72', scope: 'estados', text: (s) => `El estado de flujos de efectivo al 31 de diciembre de ${s.year} presenta flujos netos de operación por $4.321.000,00.` },
+  { id: 'H73', scope: 'estados', text: (s) => `El disponible al 31 de diciembre de ${s.year} tiene una restricción de $2.000.000,00.` },
+  { id: 'H74', scope: 'estados', text: (s) => `El total de activos aumentó frente a ${Number(s.year) - 1} debido a $30.000.000,00 de nuevas inversiones en maquinaria.` },
+  { id: 'H75', scope: 'estados', text: (s) => `La ${res(s.un)} neta cambió por el mayor impuesto de renta, que ascendió a $6.000.000,00.` },
+  { id: 'H76', scope: 'estados', text: (s) => `El resultado del ejercicio fue de ${cop(s.un)} (${res(s.un)}).` },
+  { id: 'H77', scope: 'estados', text: (s) => `El resultado neto del ejercicio fue de ${cop(s.un)}, una ${res(s.un)} explicada por la evolución de las ventas.` },
+  { id: 'H78', scope: 'estados', text: () => 'La utilidad neta subió $5.000.000,00 frente al presupuesto.' },
+  { id: 'H79', scope: 'estados', text: () => 'Los flujos de efectivo al cierre del ejercicio muestran salidas netas de $4.321.000,00.' },
+  { id: 'H80', scope: 'estados', text: (s) => `La cartera representa parte de los activos, que suman ${cop(s.activo)}.` },
+  // Revisión adversarial: la operación no es la destinación del acta; otra magnitud sobre el resultado
+  { id: 'H81', scope: 'estados', text: () => 'La compañía distribuye productos farmacéuticos en Colombia, con ventas netas de $123.456.789,00.' },
+  { id: 'H82', scope: 'estados', text: () => 'Los inventarios se distribuyen entre bodegas por $4.000.000,00.' },
+  { id: 'H83', scope: 'estados', text: () => 'La compañía capitalizó mejoras por $5.000.000,00 en propiedades, planta y equipo.' },
+  { id: 'H84', scope: 'estados', text: () => 'Los costos de desarrollo se capitalizan cuando cumplen la Sección 18, por $3.000.000,00.' },
+  { id: 'H85', scope: 'estados', text: () => 'El gasto por impuesto de renta sobre la utilidad del ejercicio fue de $6.000.000,00.' },
+  { id: 'H86', scope: 'estados', text: () => 'El impuesto sobre la utilidad neta fue de $6.000.000,00.' },
+  { id: 'H87', scope: 'estados', text: (s) => `El estado de resultado del ejercicio ${s.year} presenta ingresos por $123.456.789,00.` },
+  { id: 'H88', scope: 'estados', text: (s) => (s.un > ZERO ? `La utilidad neta del ejercicio fue de ${cop(s.un)} (pérdida de $1.234.567,00 en el año anterior).` : null) },
 ];
 
 // ---------------------------------------------------------------------------
@@ -336,6 +360,21 @@ const FALSE: Phrase[] = [
   { id: 'F41', scope: 'estados', text: (s) => `Se registró un total de activos por ${wrong(s.activo)}.` },
   { id: 'F42', scope: 'estados', text: (s) => `La ${res(s.un)} del ejercicio, neta de reservas, fue de ${wrong(s.un)}.` },
   { id: 'F43', scope: 'estados', text: (s) => `De la ${res(s.un)} neta del ejercicio, por ${wrong(s.un)}, se apropia la reserva de ley.` },
+  // Revisión adversarial: verbos con tilde, "activo total", sujeto tras una coma y el signo tras la cifra
+  { id: 'F44', scope: 'estados', text: (s) => `El patrimonio ascendió a ${wrong(s.patrimonio)}.` },
+  { id: 'F45', scope: 'acta', text: () => 'Se distribuyó entre los accionistas la suma de $987.654.321,00.' },
+  { id: 'F46', scope: 'acta', text: () => 'Se repartió entre los socios la suma de $987.654.321,00.' },
+  { id: 'F47', scope: 'acta', text: () => 'Se capitalizó la suma de $876.543,21.' },
+  { id: 'F48', scope: 'acta', text: () => 'Se enjugaron pérdidas acumuladas por $7.777.777,00.' },
+  { id: 'F49', scope: 'estados', text: (s) => `La ${res(s.un)} neta del ejercicio, que cambió frente a ${Number(s.year) - 1}, se ubicó en ${wrong(s.un)}.` },
+  { id: 'F50', scope: 'estados', text: (s) => `El total de pasivos, que incluye obligaciones financieras de $25.000.000,00, ascendió a ${wrong(s.pasivo)}.` },
+  { id: 'F51', scope: 'estados', text: (s) => `El activo total asciende a ${wrong(s.activo)}.` },
+  { id: 'F52', scope: 'estados', text: (s) => `El pasivo total asciende a ${wrong(s.pasivo)}.` },
+  { id: 'F53', scope: 'estados', text: (s) => `Al cierre de ${s.year}, los activos ascendieron a ${wrong(s.activo)}.` },
+  { id: 'F54', scope: 'estados', text: (s) => `La ${res(s.un)} neta aumentó un 25 %, hasta ${wrong(s.un)}.` },
+  { id: 'F55', scope: 'estados', text: (s) => (s.un < ZERO ? `El resultado del ejercicio fue de ${cop(s.un)}, pese a mayores ventas.` : null) },
+  { id: 'F56', scope: 'acta', text: () => 'Se aprueba distribuir la suma de $987.654.321,00 a título de dividendo.' },
+  { id: 'F57', scope: 'estados', text: (s) => `La ${res(s.un)} neta del ejercicio fue de ${Math.round(pesos(absB(s.un) * B(3)) / 1e6) + 7} millones de COP.` },
 ];
 
 // ---------------------------------------------------------------------------
