@@ -2,28 +2,30 @@
 // Opening Balance Importer — pipeline (Ola 1.D)
 // ---------------------------------------------------------------------------
 // Convierte un `OpeningBalanceImport` (lineas + metadata) en UN journal
-// entry posteado, asegurando que sum(debit) == sum(credit). La cuenta
-// balanceadora `3705 — Resultados de ejercicios anteriores` absorbe la
-// diferencia residual, segun la convencion clasica del PUC colombiano.
+// entry posteado, asegurando que sum(debit) == sum(credit).
+//
+// Auditoría ingesta-27 / contab-nomina-17: el descuadre BLOQUEA, no se
+// absorbe. Antes las líneas con cuenta inexistente o no postable se omitían
+// con un warning (mientras no superaran el 30 % de los CÓDIGOS, no del
+// valor) y toda la diferencia se cuadraba contra 3705 y se posteaba: una PPE
+// de $400M no mapeada terminaba como débito en patrimonio.
 //
 // Flujo:
 //   1. Validar input: al menos una linea con saldo, fecha y periodo.
 //   2. Resolver cada accountCode -> accountId via getAccount(workspaceId).
-//      - No encontrada -> warning + skip linea.
-//      - No postable    -> warning + skip linea (los CHECKs DB la rechazarian).
+//      Una línea CON SALDO sin cuenta, o con cuenta no postable, bloquea.
 //   3. Acumular sumDebit / sumCredit en BigInt-centavos para precision.
-//   4. Calcular diferencia = sumDebit - sumCredit (en centavos).
-//      - Si diferencia > 0 -> agregar linea de 3705 al credit.
-//      - Si diferencia < 0 -> agregar linea de 3705 al debit.
+//   4. diferencia = sumDebit - sumCredit (en centavos):
+//      - |diferencia| ≤ ROUNDING_TOLERANCE_COP → línea de redondeo en 370505.
+//      - mayor → UNBALANCED (422) con el detalle; nada se postea.
 //   5. Llamar createEntry con sourceType='opening', status='posted'.
 //   6. Devolver ImportResult con counters + warnings.
 //
-// Errores criticos:
-//   - PUC_MISMATCH: si > 30% de los codigos del input NO existen en el
-//     chart_of_accounts del workspace, abortamos con 422 (probablemente
-//     el archivo no corresponde al PUC del cliente).
-//   - NO_BALANCING_ACCOUNT: si la cuenta 3705 no existe ni hay alternativa
-//     dentro del grupo 37xx postable, abortamos con 422.
+// Errores criticos (todos antes de postear):
+//   - PUC_MISMATCH: > 30 % de los códigos del archivo no existen.
+//   - UNMAPPED_ACCOUNTS: alguna línea con saldo sin cuenta postable.
+//   - UNBALANCED: descuadre mayor a la tolerancia de redondeo.
+//   - NO_BALANCING_ACCOUNT: hay redondeo y no existe 370505 (ni 3705) postable.
 //   - PERIOD_NOT_OPEN: re-emitido del double-entry service.
 // ---------------------------------------------------------------------------
 
@@ -37,7 +39,9 @@ import {
   OpeningBalanceError,
   OPENING_ERR,
   OPENING_BALANCING_ACCOUNT_CODE,
+  OPENING_BALANCING_FALLBACK_CODES,
   PUC_MISMATCH_THRESHOLD,
+  ROUNDING_TOLERANCE_COP,
   type ImportResult,
   type OpeningBalanceImport,
 } from './types';
@@ -104,6 +108,14 @@ export async function importOpeningBalance(
 
   let codesAttempted = 0;
   let codesNotFound = 0;
+  /** Líneas con saldo que no pueden postearse: bloquean la importación. */
+  const unmapped: Array<{
+    accountCode: string;
+    accountName: string | null;
+    reason: 'not_found' | 'not_postable' | 'lookup_error';
+    debit: string;
+    credit: string;
+  }> = [];
 
   for (const rawLine of input.lines) {
     codesAttempted++;
@@ -158,30 +170,42 @@ export async function importOpeningBalance(
       } catch (err) {
         cached = null;
         warnings.push(
-          `Linea ${rawLine.accountCode}: error al consultar plan de cuentas (${err instanceof Error ? err.message : 'desconocido'}). Omitida.`,
+          `Linea ${rawLine.accountCode}: error al consultar plan de cuentas (${err instanceof Error ? err.message : 'desconocido'}).`,
         );
         accountCache.set(rawLine.accountCode, null);
         codesNotFound++;
-        skippedRows++;
+        unmapped.push({
+          accountCode: rawLine.accountCode,
+          accountName: rawLine.accountName ?? null,
+          reason: 'lookup_error',
+          debit: centsToNumericString(lineDebitCents),
+          credit: centsToNumericString(lineCreditCents),
+        });
         continue;
       }
       accountCache.set(rawLine.accountCode, cached);
     }
 
     if (!cached) {
-      warnings.push(
-        `Cuenta PUC ${rawLine.accountCode}${rawLine.accountName ? ' (' + rawLine.accountName + ')' : ''} no existe en el plan de cuentas del workspace. Linea omitida.`,
-      );
       codesNotFound++;
-      skippedRows++;
+      unmapped.push({
+        accountCode: rawLine.accountCode,
+        accountName: rawLine.accountName ?? null,
+        reason: 'not_found',
+        debit: centsToNumericString(lineDebitCents),
+        credit: centsToNumericString(lineCreditCents),
+      });
       continue;
     }
 
     if (!cached.isPostable) {
-      warnings.push(
-        `Cuenta PUC ${rawLine.accountCode} no es postable (es agregadora). Linea omitida — los saldos deben venir solo en cuentas auxiliares.`,
-      );
-      skippedRows++;
+      unmapped.push({
+        accountCode: rawLine.accountCode,
+        accountName: rawLine.accountName ?? null,
+        reason: 'not_postable',
+        debit: centsToNumericString(lineDebitCents),
+        credit: centsToNumericString(lineCreditCents),
+      });
       continue;
     }
 
@@ -217,6 +241,22 @@ export async function importOpeningBalance(
     }
   }
 
+  if (unmapped.length > 0) {
+    // Cualquier línea con saldo que no puede postearse bloquea: cuadrarla
+    // contra patrimonio escondería activos/pasivos reales.
+    const unmappedValue = unmapped.reduce(
+      (acc, u) => acc + numericStringToCents(u.debit) + numericStringToCents(u.credit),
+      BI_0,
+    );
+    throw new OpeningBalanceError(
+      OPENING_ERR.UNMAPPED_ACCOUNTS,
+      `${unmapped.length} línea(s) con saldo (valor ${centsToNumericString(unmappedValue)}) no tienen ` +
+        `una cuenta postable en el plan de cuentas del workspace. Cree o mapee esas cuentas ` +
+        `(o registre el saldo en sus auxiliares) antes de importar; no se cuadran contra patrimonio.`,
+      { unmapped, unmappedValue: centsToNumericString(unmappedValue), warnings },
+    );
+  }
+
   if (lines.length === 0) {
     throw new OpeningBalanceError(
       OPENING_ERR.EMPTY_INPUT,
@@ -226,32 +266,45 @@ export async function importOpeningBalance(
   }
 
   // ---------------------------------------------------------------------
-  // 4. Calcular diferencia y agregar linea balanceadora 3705 si necesario.
+  // 4. Diferencia: sólo el redondeo va a la cuenta balanceadora.
   // ---------------------------------------------------------------------
   const diffCents = sumDebitCents - sumCreditCents;
   if (diffCents !== BI_0) {
-    const balancingAccount = await getAccount(
-      input.workspaceId,
-      OPENING_BALANCING_ACCOUNT_CODE,
-    );
-    if (!balancingAccount) {
+    const absDiff = diffCents > BI_0 ? diffCents : -diffCents;
+    const absDiffStr = centsToNumericString(absDiff);
+    const toleranceCents = numericStringToCents(ROUNDING_TOLERANCE_COP);
+    if (absDiff > toleranceCents) {
       throw new OpeningBalanceError(
-        OPENING_ERR.NO_BALANCING_ACCOUNT,
-        `La cuenta balanceadora ${OPENING_BALANCING_ACCOUNT_CODE} (Resultados de ejercicios ` +
-          `anteriores) no existe en el plan de cuentas del workspace. Es requerida para ` +
-          `cuadrar el asiento de apertura. Ejecute la siembra del PUC con la cuenta 3705.`,
-      );
-    }
-    if (!balancingAccount.isPostable) {
-      throw new OpeningBalanceError(
-        OPENING_ERR.NO_BALANCING_ACCOUNT,
-        `La cuenta ${OPENING_BALANCING_ACCOUNT_CODE} existe pero no es postable. ` +
-          `Verifique que el PUC sembrado tenga la subcuenta 3705 marcada como is_postable=true.`,
+        OPENING_ERR.UNBALANCED,
+        `El balance de apertura no cuadra: débitos ${centsToNumericString(sumDebitCents)} vs ` +
+          `créditos ${centsToNumericString(sumCreditCents)} (diferencia ${absDiffStr}). ` +
+          `Sólo un redondeo de hasta ${ROUNDING_TOLERANCE_COP} peso(s) se ajusta automáticamente. ` +
+          `Verifique que el archivo incluya todas las cuentas y el resultado del ejercicio (3605/3610).`,
+        {
+          totalDebit: centsToNumericString(sumDebitCents),
+          totalCredit: centsToNumericString(sumCreditCents),
+          difference: centsToNumericString(diffCents),
+          warnings,
+        },
       );
     }
 
-    const absDiff = diffCents > BI_0 ? diffCents : -diffCents;
-    const absDiffStr = centsToNumericString(absDiff);
+    let balancingAccount: { id: string; isPostable: boolean; code: string } | null = null;
+    for (const code of [OPENING_BALANCING_ACCOUNT_CODE, ...OPENING_BALANCING_FALLBACK_CODES]) {
+      const acc = await getAccount(input.workspaceId, code);
+      if (acc && acc.isPostable) {
+        balancingAccount = { id: acc.id, isPostable: acc.isPostable, code };
+        break;
+      }
+    }
+    if (!balancingAccount) {
+      throw new OpeningBalanceError(
+        OPENING_ERR.NO_BALANCING_ACCOUNT,
+        `Hay una diferencia de redondeo de ${absDiffStr} y no existe una cuenta postable ` +
+          `${OPENING_BALANCING_ACCOUNT_CODE} (Utilidades acumuladas) en el plan de cuentas del ` +
+          `workspace. Ejecute la siembra del PUC.`,
+      );
+    }
 
     if (diffCents > BI_0) {
       // sum(debit) > sum(credit) -> falta credit.
@@ -259,7 +312,7 @@ export async function importOpeningBalance(
         accountId: balancingAccount.id,
         debit: '0',
         credit: absDiffStr,
-        description: 'Saldo balanceador apertura (3705)',
+        description: `Redondeo saldos de apertura (${balancingAccount.code})`,
       });
       sumCreditCents += absDiff;
     } else {
@@ -267,14 +320,14 @@ export async function importOpeningBalance(
         accountId: balancingAccount.id,
         debit: absDiffStr,
         credit: '0',
-        description: 'Saldo balanceador apertura (3705)',
+        description: `Redondeo saldos de apertura (${balancingAccount.code})`,
       });
       sumDebitCents += absDiff;
     }
 
     warnings.push(
-      `Asiento balanceado con ${OPENING_BALANCING_ACCOUNT_CODE} por diferencia de ${absDiffStr}. ` +
-        `Esta es la convencion PUC: la cuenta 3705 absorbe el descuadre del balance importado.`,
+      `Diferencia de redondeo de ${absDiffStr} registrada en ${balancingAccount.code} ` +
+        `(tolerancia ${ROUNDING_TOLERANCE_COP}).`,
     );
   }
 

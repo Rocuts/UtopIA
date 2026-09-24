@@ -294,8 +294,9 @@ export async function postJournalEntryAction(
 // ---------------------------------------------------------------------------
 // reverseJournalEntryAction
 //
-// Crea el asiento espejo (sourceType='reversal') y marca el original como
-// 'reversed'. Ambos invalidan ledger y lista; la entrada original tambien
+// Crea el asiento espejo (sourceType='reversal') y enlaza el original
+// (reversedByEntryId); el original sigue 'posted' para que original + reverso
+// neteen a cero. Ambos invalidan ledger y lista; la entrada original tambien
 // recibe su tag puntual.
 // ---------------------------------------------------------------------------
 

@@ -10,6 +10,7 @@ import {
   type ArlClase,
 } from '@/lib/payroll/prestaciones';
 import type { PymeEmpleado } from '@/lib/db/schema';
+import { getEmpleador114_1 } from '@/lib/db/workspace-empleador';
 
 // ---------------------------------------------------------------------------
 // /api/pyme/empleados — nómina simple del workspace (Ola 8).
@@ -20,6 +21,11 @@ import type { PymeEmpleado } from '@/lib/db/schema';
 // POST: registra una persona (empleado con contrato o dueño independiente).
 //
 // `numeric` llega como string desde drizzle — se convierte antes de calcular.
+//
+// La exoneración del Art. 114-1 E.T. depende de la condición del EMPLEADOR
+// (workspaces.empleador_beneficiario_114_1, ver /api/pyme/empleador). Sin
+// declarar, el costo se calcula SIN exoneración y se informa el ahorro
+// potencial (auditoría contab-nomina-19).
 // ---------------------------------------------------------------------------
 
 const MAX_JSON_BODY = 64 * 1024;
@@ -32,14 +38,23 @@ export interface EmpleadoConCosto {
     | { kind: 'dueno'; data: ReturnType<typeof aporteIndependiente> };
 }
 
-function withCosto(e: PymeEmpleado): EmpleadoConCosto {
+function withCosto(e: PymeEmpleado, empleador114_1: boolean | null): EmpleadoConCosto {
   const salario = Number(e.salarioCop);
   const base = { ...e, salarioCop: salario };
   if (e.tipo === 'dueno') {
     return { empleado: base, costo: { kind: 'dueno', data: aporteIndependiente(salario) } };
   }
   const clase = (e.arlClase ?? 1) as ArlClase;
-  return { empleado: base, costo: { kind: 'empleado', data: costoEmpleado(salario, clase) } };
+  return {
+    empleado: base,
+    costo: {
+      kind: 'empleado',
+      data: costoEmpleado(salario, clase, {
+        empleadorBeneficiario114_1: empleador114_1,
+        salarioIntegral: e.salarioIntegral === true,
+      }),
+    },
+  };
 }
 
 export async function GET() {
@@ -48,8 +63,15 @@ export async function GET() {
 
   try {
     const ws = await getOrCreateWorkspace();
-    const rows = await repo.listEmpleados(ws.id);
-    return NextResponse.json({ ok: true, empleados: rows.map(withCosto) });
+    const [rows, empleador114_1] = await Promise.all([
+      repo.listEmpleados(ws.id),
+      getEmpleador114_1(ws.id),
+    ]);
+    return NextResponse.json({
+      ok: true,
+      empleador114_1,
+      empleados: rows.map((r) => withCosto(r, empleador114_1)),
+    });
   } catch (err) {
     return handleError(err, '[pyme/empleados][GET]');
   }
@@ -78,13 +100,18 @@ export async function POST(req: NextRequest) {
       cargo: body.cargo,
       tipoContrato: body.tipoContrato,
       salarioCop: body.salarioCop.toFixed(2),
+      salarioIntegral: body.salarioIntegral,
       eps: body.eps,
       afp: body.afp,
       arl: body.arl,
       arlClase: body.arlClase,
     });
 
-    return NextResponse.json({ ok: true, empleado: withCosto(created) }, { status: 201 });
+    const empleador114_1 = await getEmpleador114_1(ws.id);
+    return NextResponse.json(
+      { ok: true, empleado: withCosto(created, empleador114_1) },
+      { status: 201 },
+    );
   } catch (err) {
     return handleError(err, '[pyme/empleados][POST]');
   }

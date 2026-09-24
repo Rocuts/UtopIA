@@ -9,6 +9,7 @@ import 'server-only';
 import { and, desc, eq, gte, isNull, lte, not, sql } from 'drizzle-orm';
 import { getDb } from '@/lib/db/client';
 import {
+  accountingPeriods,
   bankAccounts,
   bankStatementImports,
   bankTransactions,
@@ -251,10 +252,30 @@ export async function getLatestReconciliations(
 
 // ── Aggregates for reconciliation math ──────────────────────────────────────
 
+/** Período contable del workspace (fechas de corte), o null. */
+export async function getPeriodBounds(workspaceId: string, periodId: string) {
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: accountingPeriods.id,
+      startsAt: accountingPeriods.startsAt,
+      endsAt: accountingPeriods.endsAt,
+    })
+    .from(accountingPeriods)
+    .where(and(eq(accountingPeriods.id, periodId), eq(accountingPeriods.workspaceId, workspaceId)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
 /**
- * Compute ledger balance for a PUC account in a period.
- * Balance = SUM(debit) - SUM(credit) for asset accounts (1xxx).
- * We always return debit - credit (caller interprets sign).
+ * Saldo en libros de una cuenta PUC ACUMULADO al corte del período
+ * (auditoría contab-nomina-09): todos los asientos posteados de los períodos
+ * cuyo cierre es ≤ al del período consultado — saldo inicial incluido. Antes
+ * sumaba sólo el movimiento del period_id y lo comparaba con el saldo FINAL
+ * del extracto: toda cuenta con saldo inicial quedaba "descuadrada".
+ *
+ * Devuelve débito − crédito (NUMERIC string); el caller interpreta el signo.
+ * Original + reverso netean (el original sigue 'posted').
  */
 export async function getLedgerBalanceForAccount(
   workspaceId: string,
@@ -267,7 +288,7 @@ export async function getLedgerBalanceForAccount(
 
   const result = await db
     .select({
-      balance: sql<string>`COALESCE(SUM(${journalLines.debit}) - SUM(${journalLines.credit}), 0)`,
+      balance: sql<string>`(COALESCE(SUM(${journalLines.debit}), 0) - COALESCE(SUM(${journalLines.credit}), 0))::numeric(20,2)::text`,
     })
     .from(journalLines)
     .innerJoin(journalEntries, eq(journalLines.entryId, journalEntries.id))
@@ -275,35 +296,47 @@ export async function getLedgerBalanceForAccount(
       and(
         eq(journalLines.workspaceId, workspaceId),
         eq(journalLines.accountId, pucAccountId),
-        eq(journalEntries.periodId, periodId),
         // Only posted entries count in the ledger balance.
         eq(journalEntries.status, 'posted'),
+        sql`${journalEntries.periodId} IN (
+          SELECT ap.id FROM accounting_periods ap
+          WHERE ap.workspace_id = ${workspaceId}
+            AND ap.ends_at <= (
+              SELECT cut.ends_at FROM accounting_periods cut
+              WHERE cut.id = ${periodId} AND cut.workspace_id = ${workspaceId}
+            )
+        )`,
       ),
     );
 
-  return result[0]?.balance ?? '0';
+  return result[0]?.balance ?? '0.00';
 }
 
 /**
- * Count matched and unmatched transactions for a bank account.
+ * Count matched and unmatched transactions for a bank account. With `range`,
+ * only transactions posted within [from, to] (the period being reconciled).
  */
 export async function getMatchCounts(
   workspaceId: string,
   bankAccountId: string,
+  range?: { from: Date; to: Date },
 ): Promise<{ matched: number; unmatched: number }> {
   const db = getDb();
+  const conditions = [
+    eq(bankTransactions.workspaceId, workspaceId),
+    eq(bankTransactions.bankAccountId, bankAccountId),
+  ];
+  if (range) {
+    conditions.push(gte(bankTransactions.postedAt, range.from));
+    conditions.push(lte(bankTransactions.postedAt, range.to));
+  }
   const rows = await db
     .select({
       isMatched: sql<boolean>`${bankTransactions.matchedJournalLineId} IS NOT NULL`,
       cnt: sql<string>`COUNT(*)`,
     })
     .from(bankTransactions)
-    .where(
-      and(
-        eq(bankTransactions.workspaceId, workspaceId),
-        eq(bankTransactions.bankAccountId, bankAccountId),
-      ),
-    )
+    .where(and(...conditions))
     .groupBy(sql`${bankTransactions.matchedJournalLineId} IS NOT NULL`);
 
   let matched = 0;
@@ -316,7 +349,36 @@ export async function getMatchCounts(
   return { matched, unmatched };
 }
 
-/** Latest statement import for a bank account — used to get endingBalance. */
+/**
+ * Extracto del MISMO período: importación completada con saldo final cuyo
+ * corte (period_end) cae dentro del período; si hay varias, la de corte más
+ * reciente y, a igualdad, la última importada. null → no conciliable.
+ */
+export async function getStatementImportForPeriod(
+  workspaceId: string,
+  bankAccountId: string,
+  period: { startsAt: Date; endsAt: Date },
+) {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(bankStatementImports)
+    .where(
+      and(
+        eq(bankStatementImports.workspaceId, workspaceId),
+        eq(bankStatementImports.bankAccountId, bankAccountId),
+        eq(bankStatementImports.status, 'completed'),
+        sql`${bankStatementImports.endingBalance} IS NOT NULL`,
+        gte(bankStatementImports.periodEnd, period.startsAt),
+        lte(bankStatementImports.periodEnd, period.endsAt),
+      ),
+    )
+    .orderBy(desc(bankStatementImports.periodEnd), desc(bankStatementImports.createdAt))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** Latest statement import for a bank account (any period). */
 export async function getLatestStatementImport(
   workspaceId: string,
   bankAccountId: string,

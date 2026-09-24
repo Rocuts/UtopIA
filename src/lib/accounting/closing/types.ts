@@ -41,7 +41,8 @@ export interface HealthCheckResult {
     bankAccountLabel: string;
     differenceCop: string;
     ledgerBalanceCop: string;
-    bankBalanceCop: string;
+    /** null cuando no hay extracto del período (no conciliable). */
+    bankBalanceCop: string | null;
   }>;
   /** Documentos OCR/uploads pendientes de revisión. */
   pendingDocs: number;
@@ -63,10 +64,16 @@ export interface ClosingEntryResult {
   totalIncomeCop: string;
   /** Suma de gastos + costos cerrados. */
   totalExpenseAndCostCop: string;
-  /** Resultado neto trasladado a Patrimonio (Utilidades del Ejercicio). */
+  /**
+   * Resultado neto (ingresos − gastos/costos). En el cierre mensual es sólo
+   * informativo; en el cierre anual (período 13) es lo trasladado a patrimonio.
+   */
   netResultCop: string;
-  /** Cuenta destino (típicamente 360500 — Utilidades del Ejercicio). */
-  retainedEarningsAccountCode: string;
+  /**
+   * Cuenta destino del traslado (360505 utilidad / 361005 pérdida) o null si
+   * no hubo traslado (cierre mensual o resultado cero).
+   */
+  retainedEarningsAccountCode: string | null;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,24 +1,81 @@
-// ─── WS5 — Step: closing-entry (zero-out) ────────────────────────────────────
-// Genera el asiento de cierre que:
-//   - Cancela todos los saldos de cuentas de INGRESO, GASTO y COSTO del período.
-//   - Traslada el resultado neto a Patrimonio (cuenta 360500 — Utilidades del
-//     Ejercicio / Pérdida del Ejercicio).
+// ─── WS5 — Step: closing-entry ───────────────────────────────────────────────
 //
-// Si la suma no cuadra → FatalError (no debería ocurrir dado el invariante de
-// partida doble, pero se protege por defensa).
+// Auditoría contab-nomina-04 / -03.
+//
+// Cierre MENSUAL (períodos 1–12): NO traslada resultados a patrimonio. Antes
+// el asiento de cierre cancelaba ingresos/gastos dentro del mismo período y
+// todo mes cerrado quedaba con P&G/EBITDA 0 en la vista de pilares, el P&G
+// del PDF y cualquier reporte por período. El paso sólo calcula el resultado
+// del mes (informativo); el bloqueo y el hash lo hacen los pasos siguientes.
+//
+// Cierre ANUAL (período 13 — "ajustes de cierre", 31-dic): cancela los saldos
+// del EJERCICIO de las cuentas de resultado (clases 4, 5 y 6) contra
+//   360505 Utilidad del ejercicio  (si hay utilidad)  o
+//   361005 Pérdida del ejercicio   (si hay pérdida),
+// cuentas del PUC sembrado (antes se buscaba "360500", inexistente, y el
+// asiento no cuadraba). Las líneas conservan cuenta + centro de costo +
+// tercero, porque las cuentas de resultado del PUC sembrado los exigen. El
+// asiento vive en el período 13, así que no anula el P&G de diciembre, y la
+// vista de pilares excluye source_type='closing' (migración 0022).
+//
+// Clase 7 (costos de producción): se traslada a inventarios (14) / costo de
+// ventas (61) ANTES del cierre; si tiene saldo, el cierre se detiene con un
+// error explícito en vez de llevarla a patrimonio.
+//
+// Idempotente: sourceRef `fiscal-year:<año>`; un reintento devuelve el
+// asiento existente.
 
 import { FatalError } from 'workflow';
 import type { CloseMonthInput, ClosingEntryResult } from '@/lib/accounting/closing/types';
 import { createEntry } from '@/lib/accounting/double-entry/service';
-import type { JournalLineInput } from '@/lib/accounting/types';
+import { DoubleEntryError, ERR, type JournalLineInput } from '@/lib/accounting/types';
 import {
-  getAccountPeriodBalance,
   getPeriodById,
-  getResultAccounts,
+  getPostableAccountByCode,
+  getResultBalances,
+  type ResultBalanceRow,
 } from '../repository';
 
-// Cuenta destino del resultado neto (Patrimonio — Utilidades del Ejercicio)
-const RETAINED_EARNINGS_CODE = '360500';
+/** Utilidad del ejercicio (PUC 3605 → subcuenta sembrada). */
+export const PROFIT_ACCOUNT_CODE = '360505';
+/** Pérdida del ejercicio (PUC 3610 → subcuenta sembrada). */
+export const LOSS_ACCOUNT_CODE = '361005';
+
+const SCALE = BigInt(100);
+const ZERO = BigInt(0);
+
+function toCents(raw: string): bigint {
+  const t = (raw ?? '0').trim() || '0';
+  const neg = t.startsWith('-');
+  const abs = neg ? t.slice(1) : t;
+  const [i, f = ''] = abs.split('.');
+  const c = BigInt(i || '0') * SCALE + BigInt((f + '00').slice(0, 2));
+  return neg ? -c : c;
+}
+
+function fromCents(c: bigint): string {
+  const neg = c < ZERO;
+  const a = neg ? -c : c;
+  return `${neg ? '-' : ''}${a / SCALE}.${(a % SCALE).toString().padStart(2, '0')}`;
+}
+
+interface ResultSummary {
+  /** Ingresos netos (crédito − débito de INGRESO). */
+  income: bigint;
+  /** Gastos + costos netos (débito − crédito de GASTO/COSTO). */
+  expenseAndCost: bigint;
+}
+
+function summarize(rows: ResultBalanceRow[]): ResultSummary {
+  let income = ZERO;
+  let expenseAndCost = ZERO;
+  for (const r of rows) {
+    const b = toCents(r.balance);
+    if (r.type === 'INGRESO') income -= b;
+    else expenseAndCost += b;
+  }
+  return { income, expenseAndCost };
+}
 
 export async function generateClosingEntry(
   input: CloseMonthInput & { runId: string },
@@ -32,183 +89,102 @@ export async function generateClosingEntry(
     throw new FatalError(`Período ${periodId} no encontrado al generar asiento de cierre.`);
   }
 
-  // Cuentas de resultado activas y postables
-  const resultAccounts = await getResultAccounts(workspaceId);
-  if (resultAccounts.length === 0) {
-    // Sin cuentas de resultado: cierre con resultado cero
-    const noopEntry = await createEntry({
-      workspaceId,
-      periodId,
-      entryDate: period.endsAt,
-      description: `Cierre mensual período ${period.year}-${String(period.month).padStart(2, '0')} — sin movimientos de resultado`,
-      sourceType: 'closing',
-      sourceRef: `period:${periodId}`,
-      status: 'posted',
-      lines: [],
-    });
-    return {
-      closingEntryId: noopEntry.entry.id,
-      totalIncomeCop: '0.00',
-      totalExpenseAndCostCop: '0.00',
-      netResultCop: '0.00',
-      retainedEarningsAccountCode: RETAINED_EARNINGS_CODE,
-    };
-  }
-
-  // Calcular saldos del período por cuenta
-  const lines: JournalLineInput[] = [];
-  let totalIncome = 0;
-  let totalExpenseAndCost = 0;
-
-  for (const account of resultAccounts) {
-    // balance > 0 = saldo deudor (neto en el debe); < 0 = saldo acreedor (neto en el haber)
-    const balanceStr = await getAccountPeriodBalance(workspaceId, periodId, account.id);
-    const balance = parseFloat(balanceStr);
-
-    if (balance === 0) continue;
-
-    if (account.type === 'INGRESO') {
-      // Cuentas de ingreso: naturaleza crédito → para cancelar se debita
-      // Si balance > 0 (saldo deudor anormal): crédito para cancelar
-      // Si balance < 0 (saldo acreedor normal): débito para cancelar
-      if (balance < 0) {
-        lines.push({
-          accountId: account.id,
-          debit: Math.abs(balance).toFixed(2),
-          credit: '0',
-          description: `Cierre ${account.code} ${account.name}`,
-        });
-        totalIncome += Math.abs(balance);
-      } else {
-        lines.push({
-          accountId: account.id,
-          debit: '0',
-          credit: balance.toFixed(2),
-          description: `Cierre ${account.code} ${account.name}`,
-        });
-        totalIncome -= balance; // ingreso negativo (poco frecuente)
-      }
-    } else {
-      // GASTO o COSTO: naturaleza débito → para cancelar se acredita
-      if (balance > 0) {
-        lines.push({
-          accountId: account.id,
-          debit: '0',
-          credit: balance.toFixed(2),
-          description: `Cierre ${account.code} ${account.name}`,
-        });
-        totalExpenseAndCost += balance;
-      } else {
-        lines.push({
-          accountId: account.id,
-          debit: Math.abs(balance).toFixed(2),
-          credit: '0',
-          description: `Cierre ${account.code} ${account.name}`,
-        });
-        totalExpenseAndCost -= Math.abs(balance);
-      }
-    }
-  }
-
-  // Resultado neto: ingresos - gastos/costos
-  const netResult = totalIncome - totalExpenseAndCost;
-
-  // Buscar la cuenta 360500 por código
-  const { getDb } = await import('@/lib/db/client');
-  const { chartOfAccounts } = await import('@/lib/db/schema');
-  const { and, eq } = await import('drizzle-orm');
-
-  const db = getDb();
-  const retainedRows = await db
-    .select()
-    .from(chartOfAccounts)
-    .where(
-      and(
-        eq(chartOfAccounts.workspaceId, workspaceId),
-        eq(chartOfAccounts.code, RETAINED_EARNINGS_CODE),
-        eq(chartOfAccounts.active, true),
-      ),
-    )
-    .limit(1);
-
-  const retainedAccount = retainedRows[0];
-
-  if (!retainedAccount) {
-    // Si no existe la cuenta 360500, omitimos la línea de balance (el asiento
-    // podría no cuadrar — se registra el error pero no se lanza FatalError
-    // para no bloquear clientes que no han configurado el PUC completo).
-    console.warn('[closing-entry] Cuenta 360500 no encontrada — asiento de cierre sin línea de patrimonio.');
-
-    // Si no hay líneas (sin movimientos), retornar noop
-    if (lines.length === 0) {
-      return {
-        closingEntryId: 'no-op',
-        totalIncomeCop: '0.00',
-        totalExpenseAndCostCop: '0.00',
-        netResultCop: '0.00',
-        retainedEarningsAccountCode: RETAINED_EARNINGS_CODE,
-      };
-    }
-  } else {
-    // Línea de balance hacia patrimonio
-    if (netResult > 0) {
-      // Utilidad: acreditamos patrimonio
-      lines.push({
-        accountId: retainedAccount.id,
-        debit: '0',
-        credit: netResult.toFixed(2),
-        description: 'Utilidad neta del ejercicio — cierre mensual',
-      });
-    } else if (netResult < 0) {
-      // Pérdida: debitamos patrimonio
-      lines.push({
-        accountId: retainedAccount.id,
-        debit: Math.abs(netResult).toFixed(2),
-        credit: '0',
-        description: 'Pérdida neta del ejercicio — cierre mensual',
-      });
-    }
-  }
-
-  // Validar que cuadra (defensa extra)
-  if (lines.length > 0) {
-    const sumDebit = lines.reduce((s, l) => s + parseFloat(l.debit || '0'), 0);
-    const sumCredit = lines.reduce((s, l) => s + parseFloat(l.credit || '0'), 0);
-    if (Math.abs(sumDebit - sumCredit) > 0.01) {
-      throw new FatalError(
-        `Asiento de cierre no cuadra: Débito ${sumDebit.toFixed(2)} ≠ Crédito ${sumCredit.toFixed(2)}. Verificar cuentas de resultado.`,
-      );
-    }
-  }
-
-  // Si no hay líneas (período sin movimientos de resultado)
-  if (lines.length === 0) {
+  // ── Cierre mensual: sin traslado a patrimonio ──────────────────────────────
+  if (period.month !== 13) {
+    const s = summarize(await getResultBalances(workspaceId, { periodId }));
     return {
       closingEntryId: 'no-op',
-      totalIncomeCop: '0.00',
-      totalExpenseAndCostCop: '0.00',
-      netResultCop: '0.00',
-      retainedEarningsAccountCode: RETAINED_EARNINGS_CODE,
+      totalIncomeCop: fromCents(s.income),
+      totalExpenseAndCostCop: fromCents(s.expenseAndCost),
+      netResultCop: fromCents(s.income - s.expenseAndCost),
+      retainedEarningsAccountCode: null,
     };
   }
 
-  const periodLabel = `${period.year}-${String(period.month).padStart(2, '0')}`;
-  const created = await createEntry({
-    workspaceId,
-    periodId,
-    entryDate: period.endsAt,
-    description: `Cierre mensual período ${periodLabel}`,
-    sourceType: 'closing',
-    sourceRef: `period:${periodId}`,
-    status: 'posted',
-    lines,
+  // ── Cierre anual (período 13) ──────────────────────────────────────────────
+  const rows = (await getResultBalances(workspaceId, { year: period.year })).filter(
+    (r) => toCents(r.balance) !== ZERO,
+  );
+
+  const class7 = rows.filter((r) => r.code.startsWith('7'));
+  if (class7.length > 0) {
+    throw new FatalError(
+      `Cierre anual ${period.year}: las cuentas de costos de producción (clase 7) ` +
+        `${[...new Set(class7.map((r) => r.code))].join(', ')} tienen saldo. Trasládelas a ` +
+        'inventarios (14) o costo de ventas (61) antes de cerrar; no se llevan a patrimonio.',
+    );
+  }
+
+  const s = summarize(rows);
+  const net = s.income - s.expenseAndCost;
+
+  const lines: JournalLineInput[] = rows.map((r) => {
+    const b = toCents(r.balance);
+    // Saldo deudor (b > 0) se cancela con crédito; saldo acreedor con débito.
+    return {
+      accountId: r.accountId,
+      costCenterId: r.costCenterId,
+      thirdPartyId: r.thirdPartyId,
+      debit: b < ZERO ? fromCents(-b) : '0.00',
+      credit: b > ZERO ? fromCents(b) : '0.00',
+      description: `Cierre ${period.year} ${r.code} ${r.name}`,
+    };
   });
 
-  return {
-    closingEntryId: created.entry.id,
-    totalIncomeCop: totalIncome.toFixed(2),
-    totalExpenseAndCostCop: totalExpenseAndCost.toFixed(2),
-    netResultCop: netResult.toFixed(2),
-    retainedEarningsAccountCode: RETAINED_EARNINGS_CODE,
+  let equityCode: string | null = null;
+  if (net !== ZERO) {
+    equityCode = net > ZERO ? PROFIT_ACCOUNT_CODE : LOSS_ACCOUNT_CODE;
+    const equity = await getPostableAccountByCode(workspaceId, equityCode);
+    if (!equity) {
+      throw new FatalError(
+        `Cierre anual ${period.year}: falta la cuenta ${equityCode} ` +
+          `(${net > ZERO ? 'Utilidad' : 'Pérdida'} del ejercicio) activa y postable en el PUC del workspace.`,
+      );
+    }
+    lines.push({
+      accountId: equity.id,
+      debit: net < ZERO ? fromCents(-net) : '0.00',
+      credit: net > ZERO ? fromCents(net) : '0.00',
+      description: `${net > ZERO ? 'Utilidad' : 'Pérdida'} del ejercicio ${period.year}`,
+    });
+  }
+
+  const summaryOut = {
+    totalIncomeCop: fromCents(s.income),
+    totalExpenseAndCostCop: fromCents(s.expenseAndCost),
+    netResultCop: fromCents(net),
+    retainedEarningsAccountCode: equityCode,
   };
+
+  if (lines.length < 2) {
+    return { closingEntryId: 'no-op', ...summaryOut };
+  }
+
+  try {
+    const created = await createEntry(
+      {
+        workspaceId,
+        periodId,
+        entryDate: period.endsAt,
+        description: `Cierre del ejercicio ${period.year}: traslado del resultado a patrimonio`,
+        sourceType: 'closing',
+        sourceRef: `fiscal-year:${period.year}`,
+        status: 'posted',
+        createdBy: input.triggeredBy ?? null,
+        lines,
+      },
+      { idempotentBySource: true },
+    );
+    return { closingEntryId: created.entry.id, ...summaryOut };
+  } catch (err) {
+    if (err instanceof DoubleEntryError && err.code === ERR.DUPLICATE_SOURCE) {
+      const existing = (err.details as { existingEntryId?: string } | undefined)?.existingEntryId;
+      return { closingEntryId: existing ?? 'no-op', ...summaryOut };
+    }
+    if (err instanceof DoubleEntryError) {
+      // Determinista (cuenta inactiva, período no abierto, …): no reintentar.
+      throw new FatalError(`Asiento de cierre anual rechazado: ${err.message}`);
+    }
+    throw err;
+  }
 }

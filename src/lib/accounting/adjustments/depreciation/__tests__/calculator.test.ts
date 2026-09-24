@@ -187,3 +187,91 @@ describe('calculateDepreciation — straight-line', () => {
     expect(result.proposedEntry!.lines[1].accountId).toBe('acc-depr-acum');
   });
 });
+
+// ── contab-nomina-14 / -05: disponibilidad, método, prorrateo y tope ─────────
+
+function makeUtcPeriod(year: number, month: number): AccountingPeriodRow {
+  return {
+    ...makePeriod(year, month),
+    startsAt: new Date(Date.UTC(year, month - 1, 1)),
+    endsAt: new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)),
+  } as AccountingPeriodRow;
+}
+
+describe('calculateDepreciation — fecha de disponibilidad y método (contab-nomina-14)', () => {
+  it('activo adquirido después del cierre del período → not_yet_in_use (antes depreciaba)', () => {
+    const asset = makeAsset({ acquisitionDate: new Date('2026-12-15T00:00:00Z') });
+    const result = calculateDepreciation(makeInput([asset], makeUtcPeriod(2026, 9)));
+    expect(result.lines).toHaveLength(0);
+    expect(result.skipped).toEqual([{ fixedAssetId: 'asset-1', reason: 'not_yet_in_use' }]);
+    expect(result.proposedEntry).toBeNull();
+  });
+
+  it('método accelerated / units_of_production → method_not_supported (antes línea recta rotulada straight_line)', () => {
+    const a1 = makeAsset({ id: 'acc', depreciationMethod: 'accelerated' });
+    const a2 = makeAsset({ id: 'uop', depreciationMethod: 'units_of_production' });
+    const result = calculateDepreciation(makeInput([a1, a2], makeUtcPeriod(2026, 1)));
+    expect(result.lines).toHaveLength(0);
+    expect(result.skipped.map((s) => s.reason)).toEqual(['method_not_supported', 'method_not_supported']);
+  });
+
+  it('mes de adquisición: prorrateo por días en uso (15-sep → 16/30 días)', () => {
+    // 3.600.000 / 36 = 100.000 exacto; en uso 16 de 30 días → 53.333,33
+    const asset = makeAsset({
+      acquisitionDate: new Date('2026-09-15T00:00:00Z'),
+      acquisitionCost: '3600000.00',
+    });
+    const result = calculateDepreciation(makeInput([asset], makeUtcPeriod(2026, 9)));
+    expect(result.lines[0].monthlyAmountCop).toBe('53333.33');
+  });
+
+  it('adquirido el día 1 del período: mes completo', () => {
+    const asset = makeAsset({
+      acquisitionDate: new Date('2026-09-01T00:00:00Z'),
+      acquisitionCost: '3600000.00',
+    });
+    const result = calculateDepreciation(makeInput([asset], makeUtcPeriod(2026, 9)));
+    expect(result.lines[0].monthlyAmountCop).toBe('100000.00');
+  });
+
+  it('meses no corridos desde la última depreciación se recuperan (acotado al pendiente)', () => {
+    const asset = makeAsset({
+      acquisitionCost: '3600000.00',
+      accumulatedDepreciation: '100000.00',
+      lastDepreciatedPeriod: { year: 2026, month: 1 },
+    });
+    const result = calculateDepreciation(makeInput([asset], makeUtcPeriod(2026, 4)));
+    // feb + mar + abr = 3 meses
+    expect(result.lines[0].monthlyAmountCop).toBe('300000.00');
+    expect(result.lines[0].newAccumulatedCop).toBe('400000.00');
+  });
+
+  it('nunca supera el valor depreciable: 48 corridas de un activo a 36 meses suman exactamente el costo', () => {
+    let accumulated = '0';
+    let last: { year: number; month: number } | null = null;
+    let total = BigInt(0);
+    for (let i = 0; i < 48; i++) {
+      const year = 2026 + Math.floor(i / 12);
+      const month = (i % 12) + 1;
+      const asset = makeAsset({
+        acquisitionDate: new Date('2025-12-01T00:00:00Z'),
+        acquisitionCost: '1000000.00',
+        accumulatedDepreciation: accumulated,
+        lastDepreciatedPeriod: last,
+      });
+      const r = calculateDepreciation(makeInput([asset], makeUtcPeriod(year, month)));
+      if (r.lines.length > 0) {
+        total += BigInt(r.lines[0].monthlyAmountCop.replace('.', ''));
+        accumulated = r.lines[0].newAccumulatedCop;
+        last = { year, month };
+      }
+    }
+    expect(total).toBe(BigInt(100000000)); // 1.000.000,00 en centavos
+  });
+
+  it('período 13 (ajustes de cierre anual) no genera depreciación', () => {
+    const result = calculateDepreciation(makeInput([makeAsset({})], makePeriod(2026, 13)));
+    expect(result.lines).toHaveLength(0);
+    expect(result.skipped[0].reason).toBe('closing_period');
+  });
+});

@@ -15,7 +15,14 @@
 //      credito / abono / deposit       ← credit column (positive number, cash in)
 //      saldo / balance
 //      referencia / reference / ref
-//  - If debit+credit columns: amount = credit - debit  (positive = cash in)
+//      naturaleza / tipo / dc / signo  ← D/C (débito/crédito) del movimiento
+//  - If debit+credit columns: amount = |credit| - |debit|  (positive = cash in;
+//    un débito exportado como "-300.000" sigue siendo salida — ingesta-25)
+//  - Columna de naturaleza (D/C) con monto siempre positivo: el signo sale de
+//    la naturaleza (D = cargo/salida, C = abono/entrada) — ingesta-25.
+//  - Orden del archivo (ascendente/descendente) detectado por fechas y, en
+//    empate, por la continuidad del saldo; endingBalance = saldo de la fila
+//    más reciente según ese orden (ingesta-24).
 //  - Números: la desambiguación miles/decimales vive en `./number.ts`
 //    (ES-CO `1.234.567,89` y `1.234.567` sin centavos, EN-US `1,234,567.89`).
 //    Celda vacía = 0; celda ilegible = fila omitida con warning — NUNCA 0
@@ -54,6 +61,22 @@ const CREDIT_ALIASES = new Set([
 const BALANCE_ALIASES = new Set([
   'saldo', 'balance', 'saldo_final', 'saldo_disponible',
 ]);
+/** Columna de naturaleza del movimiento (D/C). Sólo se usa si TODOS sus
+ *  valores no vacíos son indicadores reconocibles de débito/crédito. */
+const NATURE_ALIASES = new Set([
+  'naturaleza', 'tipo', 'dc', 'cd', 'signo', 'tipomovimiento',
+  'tipo_movimiento', 'debitocredito', 'db_cr', 'dbcr', 'crdb', 'naturaleza_mov',
+]);
+const NATURE_DEBIT = new Set(['d', 'db', 'deb', 'debito', 'debit', 'cargo', 'retiro', 'egreso', '-']);
+const NATURE_CREDIT = new Set(['c', 'cr', 'cre', 'cred', 'credito', 'credit', 'abono', 'deposito', 'ingreso', '+']);
+
+function natureOf(raw: string | undefined): 'D' | 'C' | null {
+  const k = normalizeHeader(raw ?? '') || (raw ?? '').trim();
+  if (NATURE_DEBIT.has(k)) return 'D';
+  if (NATURE_CREDIT.has(k)) return 'C';
+  return null;
+}
+
 const REF_ALIASES = new Set([
   'referencia', 'reference', 'ref', 'numero', 'número',
   'num_operacion', 'num', 'transaccion', 'operacion',
@@ -252,6 +275,7 @@ export const csvParser: BankStatementParser = {
     const colCredit = findCol(headers, CREDIT_ALIASES);
     const colBalance = findCol(headers, BALANCE_ALIASES);
     const colRef = findCol(headers, REF_ALIASES);
+    const colNatureCandidate = findCol(headers, NATURE_ALIASES);
 
     if (colDate === -1) {
       throw new BankingError(
@@ -275,13 +299,29 @@ export const csvParser: BankStatementParser = {
     }
 
     const warnings: string[] = [];
-    const transactions: ParsedBankTransaction[] = [];
-    let firstDate: Date | undefined;
-    let lastDate: Date | undefined;
-    let lastBalance: number | undefined;
+
+    // Columna de naturaleza: activa sólo si todos sus valores no vacíos son
+    // D/C reconocibles (una columna "Tipo" con texto libre se ignora).
+    let colNature = -1;
+    if (colNatureCandidate !== -1) {
+      const values = lines
+        .slice(1)
+        .map((l) => splitRow(l, delimiter)[colNatureCandidate] ?? '')
+        .filter((v) => v.trim().length > 0);
+      if (values.length > 0 && values.every((v) => natureOf(v) !== null)) {
+        colNature = colNatureCandidate;
+      }
+    }
+
+    interface Row {
+      rowIdx: number;
+      postedAt: Date;
+      amount: number;
+      balance: number | undefined;
+      tx: ParsedBankTransaction;
+    }
+    const parsedRows: Row[] = [];
     let usFormatWarned = false;
-    let continuityWarned = false;
-    let prevBalance: number | undefined;
 
     for (let rowIdx = 1; rowIdx < lines.length; rowIdx++) {
       const cells = splitRow(lines[rowIdx], delimiter);
@@ -322,8 +362,19 @@ export const csvParser: BankStatementParser = {
           continue;
         }
         amountCop = signed;
+        if (colNature !== -1) {
+          const nature = natureOf(cells[colNature]);
+          if (nature === null) {
+            warnings.push(
+              `Fila ${rowIdx + 1}: naturaleza (D/C) vacía con monto ${cells[colAmount]} — fila omitida.`,
+            );
+            continue;
+          }
+          amountCop = nature === 'D' ? -Math.abs(signed) : Math.abs(signed);
+        }
       } else {
-        // credit - debit: positive = cash in
+        // |crédito| − |débito|: positivo = entrada. Un débito exportado con
+        // signo negativo sigue siendo salida (antes se volvía abono).
         const credit = colCredit !== -1 ? parseAmountCell(cells[colCredit]) : 0;
         const debit = colDebit !== -1 ? parseAmountCell(cells[colDebit]) : 0;
         if (credit === null || debit === null) {
@@ -333,7 +384,7 @@ export const csvParser: BankStatementParser = {
           );
           continue;
         }
-        amountCop = credit - debit;
+        amountCop = Math.abs(credit) - Math.abs(debit);
       }
 
       let balanceValue: number | undefined;
@@ -349,64 +400,99 @@ export const csvParser: BankStatementParser = {
       }
       const runningBalance = balanceValue !== undefined ? balanceValue.toFixed(2) : undefined;
 
-      // Defensa en profundidad: si el extracto trae saldo, la variación entre
-      // filas consecutivas debe igualar el monto (o su opuesto, si el banco
-      // lista de más reciente a más antiguo). Un desajuste delata un parseo de
-      // números roto ANTES de que el error llegue a la conciliación — es lo
-      // que habría atrapado el bug "1.234.567 → 1,23" sin test dirigido.
-      if (balanceValue !== undefined && prevBalance !== undefined && !continuityWarned) {
-        const delta = balanceValue - prevBalance;
-        const tolerance = 1; // 1 peso: redondeos de exportación
-        if (Math.abs(delta - amountCop) > tolerance && Math.abs(delta + amountCop) > tolerance) {
-          continuityWarned = true;
-          warnings.push(
-            `Fila ${rowIdx + 1}: el saldo no cuadra con el movimiento ` +
-              `(variación ${delta.toFixed(2)} vs monto ${amountCop.toFixed(2)}). ` +
-              `Revise el formato numérico del archivo antes de conciliar.`,
-          );
-        }
-      }
-      if (balanceValue !== undefined) prevBalance = balanceValue;
-
       const reference =
         colRef !== -1 && cells[colRef] ? cells[colRef].trim() : undefined;
 
-      const tx: ParsedBankTransaction = {
+      parsedRows.push({
+        rowIdx,
         postedAt,
-        description,
-        amountCop: amountCop.toFixed(2),
-        runningBalance,
-        reference,
-        rawPayload: Object.fromEntries(
-          rawHeaders.map((h, i) => [h, cells[i] ?? '']),
-        ),
-      };
-
-      transactions.push(tx);
-
-      if (!firstDate || postedAt < firstDate) firstDate = postedAt;
-      // `endingBalance` debe ser el saldo de la fila MÁS RECIENTE, no el de la
-      // última fila del archivo: hay bancos que exportan en orden descendente,
-      // y ahí "última fila" es el saldo más ANTIGUO. `runReconciliation` usa
-      // este valor como saldo bancario de cierre.
-      if (!lastDate || postedAt >= lastDate) {
-        lastDate = postedAt;
-        if (balanceValue !== undefined) lastBalance = balanceValue;
-      }
+        amount: amountCop,
+        balance: balanceValue,
+        tx: {
+          postedAt,
+          description,
+          amountCop: amountCop.toFixed(2),
+          runningBalance,
+          reference,
+          rawPayload: Object.fromEntries(
+            rawHeaders.map((h, i) => [h, cells[i] ?? '']),
+          ),
+        },
+      });
     }
 
-    if (transactions.length === 0) {
+    if (parsedRows.length === 0) {
       throw new BankingError(
         BANK_ERR.PARSE_FAILED,
         'El CSV no contiene transacciones válidas tras el encabezado.',
       );
     }
 
+    // ── Orden del archivo (ingesta-24) ────────────────────────────────────────
+    const TOL = 1; // 1 peso: redondeos de exportación
+    const continuityMisses = (dir: 'asc' | 'desc'): number => {
+      let misses = 0;
+      for (let i = 1; i < parsedRows.length; i++) {
+        const prev = parsedRows[i - 1];
+        const cur = parsedRows[i];
+        if (prev.balance === undefined || cur.balance === undefined) continue;
+        const ok =
+          dir === 'asc'
+            ? Math.abs(cur.balance - prev.balance - cur.amount) <= TOL
+            : Math.abs(prev.balance - cur.balance - prev.amount) <= TOL;
+        if (!ok) misses++;
+      }
+      return misses;
+    };
+    const firstTime = parsedRows[0].postedAt.getTime();
+    const lastTime = parsedRows[parsedRows.length - 1].postedAt.getTime();
+    let direction: 'asc' | 'desc';
+    if (firstTime < lastTime) direction = 'asc';
+    else if (firstTime > lastTime) direction = 'desc';
+    else direction = continuityMisses('desc') < continuityMisses('asc') ? 'desc' : 'asc';
+
+    // Continuidad con signo fijo según la dirección: la variación entre filas
+    // consecutivas debe igualar el monto (asc: el de la fila actual; desc: el
+    // de la fila previa, que es la más reciente). Delata números mal parseados
+    // y signos invertidos ANTES de conciliar.
+    for (let i = 1; i < parsedRows.length; i++) {
+      const prev = parsedRows[i - 1];
+      const cur = parsedRows[i];
+      if (prev.balance === undefined || cur.balance === undefined) continue;
+      const delta = direction === 'asc' ? cur.balance - prev.balance : prev.balance - cur.balance;
+      const expected = direction === 'asc' ? cur.amount : prev.amount;
+      if (Math.abs(delta - expected) > TOL) {
+        warnings.push(
+          `Fila ${cur.rowIdx + 1}: el saldo no cuadra con el movimiento ` +
+            `(variación ${delta.toFixed(2)} vs monto ${expected.toFixed(2)}). ` +
+            `Revise el formato numérico y el signo del archivo antes de conciliar.`,
+        );
+        break;
+      }
+    }
+
+    let firstDate: Date | undefined;
+    let lastDate: Date | undefined;
+    for (const r of parsedRows) {
+      if (!firstDate || r.postedAt < firstDate) firstDate = r.postedAt;
+      if (!lastDate || r.postedAt > lastDate) lastDate = r.postedAt;
+    }
+
+    // `endingBalance` = saldo de la fila MÁS RECIENTE: la última del archivo
+    // si es ascendente, la primera si es descendente (con empates de fecha
+    // el orden del archivo decide). `runReconciliation` lo usa como saldo
+    // bancario de cierre.
+    const chronological = direction === 'asc' ? parsedRows : [...parsedRows].reverse();
+    let lastBalance: number | undefined;
+    for (const r of chronological) {
+      if (r.balance !== undefined) lastBalance = r.balance;
+    }
+
     return {
       periodStart: firstDate,
       periodEnd: lastDate,
       endingBalance: lastBalance !== undefined ? lastBalance.toFixed(2) : undefined,
-      transactions,
+      transactions: parsedRows.map((r) => r.tx),
       warnings,
     };
   },

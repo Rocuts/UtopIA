@@ -172,6 +172,10 @@ export const heuristicMatcher: BankMatcher = {
             eq(journalLines.workspaceId, workspaceId),
             eq(journalLines.accountId, pucAccountId),
             eq(journalEntries.status, 'posted'),
+            // Asientos anulados no son candidatos: ni el original reversado
+            // (sigue 'posted' y netea con su reverso) ni el propio reverso.
+            sql`${journalEntries.reversedByEntryId} IS NULL`,
+            sql`${journalEntries.sourceType} <> 'reversal'`,
             between(journalEntries.entryDate, fromWindow, toWindow),
           ),
         );
@@ -240,6 +244,15 @@ export const heuristicMatcher: BankMatcher = {
         bestCandidate: best ?? null,
         alternativeCandidates: rest.slice(0, 5), // top 5 alternatives for manual review
       });
+
+      // Emparejamiento 1:1 (auditoría contab-nomina-10): la línea que se va a
+      // auto-conciliar queda reservada para esta corrida. Antes el set se
+      // calculaba una sola vez y dos consignaciones idénticas quedaban
+      // conciliadas contra la MISMA línea (unmatched = 0 ocultaba el asiento
+      // faltante).
+      if (best && best.confidence >= AUTO_MATCH_THRESHOLD) {
+        excludedLineIds.add(best.journalLineId);
+      }
     }
 
     return results;

@@ -40,6 +40,12 @@ export const workspaces = pgTable('workspaces', {
   revisorFiscalTp: text('revisor_fiscal_tp'),
   contadorPublicoNombre: text('contador_publico_nombre'),
   contadorPublicoTp: text('contador_publico_tp'),
+  // Condición del empleador frente al Art. 114-1 E.T. (exoneración de salud
+  // del empleador, SENA e ICBF por trabajadores que devenguen < 10 SMMLV).
+  // Beneficiarios: sociedades/personas jurídicas declarantes de renta y
+  // personas naturales con 2+ trabajadores. null = no declarada: nómina y
+  // provisiones NO asumen la exoneración (migración 0023).
+  empleadorBeneficiario114_1: boolean('empleador_beneficiario_114_1'),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -349,6 +355,8 @@ export const pymeEmpleados = pgTable(
     arl: text('arl'),
     /** Clase de riesgo ARL I..V (Decreto 1772/1994). Solo empleados. */
     arlClase: integer('arl_clase').default(1),
+    /** Salario integral (CST art. 132): aportes sobre el 70 %, sin prima ni cesantías. */
+    salarioIntegral: boolean('salario_integral').notNull().default(false),
     activo: boolean('activo').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()

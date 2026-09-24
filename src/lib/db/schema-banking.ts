@@ -213,8 +213,10 @@ export const bankReconciliations = pgTable(
       .notNull()
       .references(() => accountingPeriods.id, { onDelete: 'cascade' }),
     ledgerBalance: numeric('ledger_balance', { precision: 20, scale: 2 }).notNull(),
-    bankBalance: numeric('bank_balance', { precision: 20, scale: 2 }).notNull(),
-    difference: numeric('difference', { precision: 20, scale: 2 }).notNull(),
+    // null = sin extracto del período: no conciliable (migración 0022). Antes
+    // se guardaba 0 y la "diferencia" era el saldo completo en libros.
+    bankBalance: numeric('bank_balance', { precision: 20, scale: 2 }),
+    difference: numeric('difference', { precision: 20, scale: 2 }),
     matchedCount: integer('matched_count').notNull().default(0),
     unmatchedCount: integer('unmatched_count').notNull().default(0),
     status: varchar('status', { length: 16 }).notNull().default('open'),

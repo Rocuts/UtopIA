@@ -111,8 +111,14 @@ function parseCSVContent(csvText: string): ParseFileResult {
 }
 
 // ---------------------------------------------------------------------------
-// XLSX path (multi-hoja: cada hoja se concatena como CSV con header propio)
+// XLSX path — UNA sola hoja (auditoría ingesta-28)
 // ---------------------------------------------------------------------------
+// Antes se concatenaban las filas de TODAS las hojas: una copia ("Balance" y
+// "Balance (2)") o un comparativo sin año en el encabezado duplicaba el
+// asiento de apertura sin error, porque cada copia cuadra por sí sola. Ahora
+// se usa la PRIMERA hoja con filas de balance reconocibles y se advierte qué
+// hojas se ignoraron; si otra hoja repite códigos de la elegida, se avisa
+// expresamente que es una copia/comparativo.
 
 async function parseXLSXContent(buffer: Buffer): Promise<ParseFileResult> {
   const warnings: string[] = [];
@@ -138,15 +144,11 @@ async function parseXLSXContent(buffer: Buffer): Promise<ParseFileResult> {
     );
   }
 
-  const aggregated: RawAccountRow[] = [];
+  let aggregated: RawAccountRow[] = [];
+  let chosenSheet: string | null = null;
+  const ignoredSheets: Array<{ name: string; overlapping: number }> = [];
 
   workbook.eachSheet((worksheet) => {
-    if (!companyName && worksheet.name) {
-      // Heuristica suave: usamos el nombre de la primera hoja con datos
-      // como "companyName" tentativo. No es definitivo — el frontend puede
-      // sobreescribirlo con el campo de razon social del wizard.
-      companyName = worksheet.name;
-    }
 
     const csvRows: string[] = [];
     worksheet.eachRow((row) => {
@@ -166,8 +168,28 @@ async function parseXLSXContent(buffer: Buffer): Promise<ParseFileResult> {
       );
       return;
     }
-    aggregated.push(...sheetRows);
+    if (chosenSheet === null) {
+      chosenSheet = worksheet.name;
+      // Heuristica suave: nombre de la hoja usada como "companyName"
+      // tentativo; el frontend puede sobreescribirlo.
+      companyName = worksheet.name || undefined;
+      aggregated = sheetRows;
+      return;
+    }
+    const chosenCodes = new Set(aggregated.map((r) => r.code));
+    const overlapping = sheetRows.filter((r) => chosenCodes.has(r.code)).length;
+    ignoredSheets.push({ name: worksheet.name, overlapping });
   });
+
+  for (const ig of ignoredSheets) {
+    warnings.push(
+      ig.overlapping > 0
+        ? `Hoja "${ig.name}" ignorada: repite ${ig.overlapping} código(s) de la hoja "${chosenSheet}" ` +
+            `(copia o comparativo). Sólo se importa una hoja para no duplicar saldos.`
+        : `Hoja "${ig.name}" ignorada: sólo se importa la primera hoja con balance ("${chosenSheet}"). ` +
+            `Si el balance está repartido en varias hojas, consolídelo en una.`,
+    );
+  }
 
   if (aggregated.length === 0) {
     throw new OpeningBalanceError(
@@ -192,10 +214,25 @@ async function parseXLSXContent(buffer: Buffer): Promise<ParseFileResult> {
 // ---------------------------------------------------------------------------
 
 /**
+ * Naturaleza PUC (Decreto 2650/1993) por clase y grupo (auditoría ingesta-29):
+ *   - Clases 1, 5, 6, 7: deudoras.  Clases 2, 3, 4: acreedoras.
+ *   - Clase 8 (orden deudoras): 81-83 deudoras; 84-86 "por contra" acreedoras.
+ *   - Clase 9 (orden acreedoras): 91-93 acreedoras; 94-96 "por contra" deudoras.
+ * Antes `classCode >= 5` trataba toda la clase 9 como deudora.
+ */
+export function isDebitNaturePuc(code: string): boolean {
+  const cls = parseInt(code[0] ?? '', 10);
+  const grp = parseInt(code.slice(0, 2), 10);
+  if (cls === 8) return !(grp >= 84 && grp <= 86);
+  if (cls === 9) return grp >= 94 && grp <= 96;
+  return cls === 1 || cls === 5 || cls === 6 || cls === 7;
+}
+
+/**
  * Filtra hojas (transactional o level === 'Auxiliar') y enruta el saldo
- * neto al lado correcto segun la naturaleza PUC:
- *   - Clases 1, 5, 6, 7 son deudoras por naturaleza -> saldo positivo va a debit.
- *   - Clases 2, 3, 4 son acreedoras por naturaleza -> saldo positivo va a credit.
+ * neto al lado correcto segun la naturaleza PUC (`isDebitNaturePuc`):
+ *   - Deudoras -> saldo positivo va a debit.
+ *   - Acreedoras -> saldo positivo va a credit.
  *
  * Cuando el balance preprocessed ya viene con la convencion "saldo neto
  * positivo = saldo natural" (asi lo emite el preprocessor), basta con
@@ -245,8 +282,7 @@ function rowsToOpeningLines(
       continue;
     }
 
-    const classCode = parseInt(r.code[0], 10);
-    const isDebitNature = classCode === 1 || classCode >= 5;
+    const isDebitNature = isDebitNaturePuc(r.code);
 
     // El preprocesor entrega un saldo "natural" firmado. Si es positivo,
     // va al lado de la naturaleza. Si es negativo, invertimos el lado

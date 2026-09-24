@@ -5,7 +5,9 @@
 //   1. Locks the original (must be 'posted', not already reversed).
 //   2. Creates a new posted entry with `sourceType='reversal'` and inverted
 //      debit/credit on each line; metadata records the reason and origin.
-//   3. Marks original.status='reversed' and original.reversedByEntryId=new.id.
+//   3. Links original.reversedByEntryId=new.id. The original KEEPS
+//      status='posted' so original + reversal net to zero in every ledger
+//      reader (auditoría contab-nomina-01).
 // Both happen in a single serializable transaction.
 // ---------------------------------------------------------------------------
 

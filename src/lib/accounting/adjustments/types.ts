@@ -80,6 +80,10 @@ export type ProvisionType =
   | 'salud'
   | 'pension'
   | 'arl'
+  | 'caja'
+  | 'sena'
+  | 'icbf'
+  /** Legado: Caja + SENA + ICBF agrupados (se omite; ver calculator). */
   | 'parafiscales'
   | 'income_tax';
 
