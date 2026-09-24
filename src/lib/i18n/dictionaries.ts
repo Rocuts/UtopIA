@@ -402,7 +402,7 @@ export const dict = {
           dianRiskLabel: 'Riesgo DIAN',
           riskNotDeterminable: 'No determinable',
           riskNotDeterminableReason:
-            'Sin base gravable en el periodo (F01 = $0): el score de riesgo no tiene qué medir.',
+            'Sin utilidad antes de impuestos en el periodo (F01, UAI contable = $0; no es base fiscal): el score de riesgo no tiene qué medir.',
           period: 'Periodo',
         },
       },
@@ -2135,7 +2135,7 @@ export const dict = {
           dianRiskLabel: 'DIAN risk',
           riskNotDeterminable: 'Not determinable',
           riskNotDeterminableReason:
-            'No taxable base for the period (F01 = $0): the risk score has nothing to measure.',
+            'No pre-tax income for the period (F01, book PBT = $0; not the tax base): the risk score has nothing to measure.',
           period: 'Period',
         },
       },

@@ -104,6 +104,14 @@ describe('NM-13 — rótulos F01/F09 del Âncora Fiscal (es/en)', () => {
     expect(en.fiscalAnchor.f09.description).toMatch(/not the TTD/i);
   });
 
+  it('el motivo de score no determinable no llama «base gravable» a F01 (UAI contable)', () => {
+    const es = dict.es.elite.dataStatus.escudo.riskNotDeterminableReason;
+    const en = dict.en.elite.dataStatus.escudo.riskNotDeterminableReason;
+    expect(es).not.toMatch(/base gravable/i);
+    expect(en).not.toMatch(/taxable base/i);
+    expect(es).toMatch(/UAI/);
+  });
+
   it('las filas F06/F07 del CCV en inglés rotulan las mismas cuentas que en español (2365 / 2368)', () => {
     const en = dict.en.elite.areas.escudo.fiscalAgent.cards.ccv;
     expect(en.f06).toMatch(/withholding/i);
