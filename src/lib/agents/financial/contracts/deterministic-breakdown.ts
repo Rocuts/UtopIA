@@ -1812,6 +1812,40 @@ function unmeasuredOriAnchor(closing: PeriodSnapshot): OriAnchor {
 }
 
 /**
+ * Nota determinista del ORI no medible del periodo actual (I5-niif 3): un
+ * solo corte y saldo en el grupo 38. `oriPrimary` no admite N/D y el ERI
+ * presenta $0; la nota dice que esa cifra no es una medición y qué corte hace
+ * falta para medirla (NIIF para las PYMES, Sección 5: estado del resultado
+ * integral). `null` para cualquier otra ancla. En el idioma del informe.
+ */
+export function oriNotMeasurableNote(
+  anchor: OriAnchor | null,
+  language: ComparativeNoteLanguage = 'es',
+): { ref: null; norma: string; body: string } | null {
+  if (!anchor || anchor.kind !== 'notMeasurable') return null;
+  if (language === 'en') {
+    return {
+      ref: null,
+      norma: 'IFRS for SMEs, Section 5',
+      body:
+        `Other comprehensive income (OCI) for ${anchor.period}: not measurable without the opening cut-off. ` +
+        'The trial balance shows a balance in PUC group 38 (revaluation surplus / OCI), but with a single ' +
+        'cut-off its movement for the period cannot be determined; OCI for the period is presented as $0 and ' +
+        'that figure is not a measurement. Measuring it requires the trial balance of the previous cut-off.',
+    };
+  }
+  return {
+    ref: null,
+    norma: 'NIIF para las PYMES, Sección 5',
+    body:
+      `Otro resultado integral (ORI) del periodo ${anchor.period}: no medible sin el corte de apertura. ` +
+      'El balance de prueba registra saldo en el grupo 38 (superávit por valorizaciones / ORI), pero con un ' +
+      'solo corte su variación del periodo no se puede determinar; el ORI del periodo se presenta en $0 y esa ' +
+      'cifra no es una medición. Para medirlo se requiere el balance de prueba del corte anterior.',
+  };
+}
+
+/**
  * Anclas del ORI de los dos periodos del informe. `primary` usa el corte
  * comparativo como apertura (el mismo que abre el ECP y el EFE del periodo);
  * `comparative` usa el corte anterior al comparativo con las mismas

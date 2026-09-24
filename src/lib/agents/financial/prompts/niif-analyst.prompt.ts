@@ -688,7 +688,7 @@ function oriLine(anchor: OriAnchor | null, primary: boolean): string {
   }
   return primary
     ? `- Otro resultado integral: sin corte de apertura la variación del grupo 38 (saldo ${formatCopFromCents(anchor.group38Cents)}) ` +
-        `no es medible; ${field} = "0" y la limitación se declara en incomeStatement.notes`
+        `no es medible; ${field} = "0"; la nota de esa limitación la agrega el código en incomeStatement.notes (no la repitas)`
     : `- Otro resultado integral: sin corte de apertura utilizable del periodo ${anchor.period} la variación del grupo 38 ` +
         `(saldo ${formatCopFromCents(anchor.group38Cents)}) no es medible → ${field} = null (N/D)`;
 }

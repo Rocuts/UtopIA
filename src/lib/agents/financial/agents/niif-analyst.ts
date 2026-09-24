@@ -46,9 +46,11 @@ import {
   attachComparativeStatements,
   buildComparativeStatementsBasis,
   buildDeterministicCashFlow,
+  buildOriAnchors,
   crossCheckCashFlowAgainstDeterministic,
   deterministicCuratorFlags,
   formatCashFlowCrossCheckViolations,
+  oriNotMeasurableNote,
 } from '../contracts/deterministic-breakdown';
 import {
   BalanceAndPnlSubSchema,
@@ -56,6 +58,7 @@ import {
   TechnicalNotesSubSchema,
   NiifReportSchema,
   assembleNiifReport,
+  type NiifReportJson,
   type BalanceAndPnlSubJson,
   type CashFlowAndEquitySubJson,
   type TechnicalNotesSubJson,
@@ -157,6 +160,25 @@ function extractPass2Anchors(pass2: CashFlowAndEquitySubJson): PreviouslyCompute
     cashClosing: pass2.cashFlow.cashClosing,
     netChange: pass2.cashFlow.netChange,
     ecpClosingTotal: closing?.total ?? '0',
+  };
+}
+
+/**
+ * ORI del periodo no medible (I5-niif 3): con un solo corte y saldo en el
+ * grupo 38 el ERI presenta ORI $0 porque `oriPrimary` no admite N/D. La
+ * limitación dependía de que el modelo la escribiera; la nota la agrega el
+ * código, una sola vez y en el idioma del informe.
+ */
+function withOriNotMeasurableNote<T extends Pick<NiifReportJson, 'incomeStatement'>>(
+  json: T,
+  preprocessed: PreprocessedBalance | undefined,
+  language: 'es' | 'en',
+): T {
+  const note = oriNotMeasurableNote(buildOriAnchors(preprocessed).primary, language);
+  if (!note || json.incomeStatement.notes.some((n) => n.body === note.body)) return json;
+  return {
+    ...json,
+    incomeStatement: { ...json.incomeStatement, notes: [...json.incomeStatement.notes, note] },
   };
 }
 
@@ -474,10 +496,14 @@ export async function runNiifAnalyst(
   // #3; NIIF para las PYMES 3.14). No los redacta el modelo: se calculan desde
   // el corte anterior al comparativo (tres cortes) o no se presentan, con una
   // nota determinista que pide el corte (3.14), en el idioma del informe.
-  const withComparatives = attachComparativeStatements(
-    parsed.data,
-    buildComparativeStatementsBasis(preprocessed, language),
-    deterministicCashFlow,
+  const withComparatives = withOriNotMeasurableNote(
+    attachComparativeStatements(
+      parsed.data,
+      buildComparativeStatementsBasis(preprocessed, language),
+      deterministicCashFlow,
+    ),
+    preprocessed,
+    language,
   );
 
   // Segunda pasada del reconciliador, ahora sobre el reporte completo: Pass-2
