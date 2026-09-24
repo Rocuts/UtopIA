@@ -122,13 +122,20 @@ curl -X POST $BASE/api/v1/trial-balances \
 
 - Acepta `csv` (mismos alias de columnas que la plataforma: codigo/cuenta, saldo/débito/
   crédito, años en headers, normalización de convención de signos automática) **o** `rows[]`
-  estructuradas. `period_label` opcional cuando el archivo no trae año.
+  estructuradas. `rows[]` pasa por la **misma normalización** que `csv` (convención de signos
+  algebraica → natural, hojas estructurales): la misma data por cualquiera de las dos entradas
+  da los mismos totales y el mismo `status`. `period_label` opcional cuando el archivo no trae año.
 - Responde `201` con `status: balanced|unbalanced`, `control_totals` en centavos-string
   (activo, pasivo, patrimonio, ingresos_netos, `equation_delta`) y conteo de findings.
+  `balanced` exige `equation_delta = 0` **y** ningún motivo de integridad; `unbalanced` cubre
+  el descuadre del archivo de origen y también los motivos de integridad aunque la ecuación
+  cuadre (importes ilegibles, columnas de saldo ambiguas, filas desplazadas, códigos que no son
+  cuentas PUC), que el detalle lista en `validation_reasons[]` (spec `api-clientes-v1` §7).
   **Un balance descuadrado NO es error**: el propósito del recurso es reportarlo.
 - `GET /v1/trial-balances/{id}` **recomputa** desde las filas crudas con el preprocesador
   vigente (filosofía anti-desync del repo: no se persiste el `PreprocessedBalance`) y añade
-  `discrepancies[]` + `curator_findings[]`. `preprocessor_version` viaja en cada respuesta.
+  `validation_reasons[]` + `discrepancies[]` + `curator_findings[]`. `preprocessor_version`
+  viaja en cada respuesta.
 - Las filas crudas se guardan **cifradas** con el vault AES-256-GCM (Ley 1581 — la
   contabilidad puede contener nombres de personas naturales). El `summary` persistido no
   lleva PII.

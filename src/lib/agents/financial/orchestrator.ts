@@ -48,10 +48,8 @@ import {
   reconcileActaArithmetic,
   describeActaQualifications,
 } from './contracts/base';
-import {
-  buildActaExpectedArithmetic,
-  normalizeTipoSocietario as normalizeTipoSocietarioActa,
-} from './prompts/governance-specialist.prompt';
+import { buildActaExpectedArithmetic } from './prompts/governance-specialist.prompt';
+import { normalizeTipoSocietarioParaGate } from './split-consolidation';
 import { buildPeriodAnchors, moneyCopToken } from './contracts/anchors';
 import {
   fillComparativeBreakdownFromSnapshot,
@@ -95,6 +93,10 @@ import type {
 } from '@/lib/agents/repair/types';
 import { applyAdjustments, revalidate } from '@/lib/agents/repair/adjustments';
 import { getHechosEmpresaBlock } from '@/lib/facts/report-facts';
+import { computeEbitda } from '@/lib/pillars/ebitda';
+import type { KpiNdMotivos } from '@/lib/preprocessing/trial-balance';
+import type { MacroSnapshot } from './valuation/macro-context';
+import { getMacroSnapshotForPrompts } from '@/lib/macro/prompt-snapshot';
 
 export interface OrchestrateFinancialOptions {
   onProgress?: (event: FinancialProgressEvent) => void;
@@ -671,6 +673,44 @@ function anchorSubLine(
   return '  ' + anchorLine(label, pesos, cents);
 }
 
+/** Marcador interno: el KPI depende del P&G del periodo (saldos de apertura → N/D). */
+const PYG_FLOW = '__pyg_flow__';
+
+/** Motivo de un KPI de resultados en un periodo de saldos de apertura (ingesta-09). */
+const MOTIVO_PYG_APERTURA_BLOQUE =
+  'N/D — saldos de apertura (columna de saldo inicial/anterior): sin P&G del periodo';
+
+/** Rótulo de las cifras de resultados de un periodo de saldos de apertura. */
+const PYG_APERTURA_TAG =
+  '[columna de saldo inicial/anterior: NO es P&G comparativo — en la prosa, N/D y sin variaciones]';
+
+/**
+ * EBITDA del bloque vinculante con la definición ÚNICA de `pillars/ebitda.ts`
+ * (`computeEbitda`: EBIT + D&A 5160/5165/5260/5265/7360/7365), la misma que
+ * publica el preprocesador en `controlTotals.ebitda` (ratios-kpis-05). Sin
+ * base verificable sale N/D con su motivo; con D&A no identificada se
+ * advierte que EBITDA = utilidad operacional.
+ */
+function renderEbitdaLines(
+  snap: PeriodSnapshot,
+  published: number | null | undefined,
+  motivo: string | undefined,
+  pygApertura: boolean,
+): string[] {
+  const label = 'EBITDA (EBIT + D&A 5160/5165/5260/5265/7360/7365 — definición única del preprocesador)';
+  if (pygApertura) {
+    return [`- ${label}: ${motivo ?? MOTIVO_PYG_APERTURA_BLOQUE}`];
+  }
+  const res = computeEbitda(snap);
+  const value = published !== undefined ? published : res.ebitda;
+  if (value === null || !Number.isFinite(value)) {
+    const reason = motivo ?? (res.reason ? `N/D — ${res.reason}` : 'N/D');
+    return [`- ${label}: ${reason}`];
+  }
+  const note = !res.daIdentificada && res.reason ? ` (${res.reason})` : '';
+  return [anchorLine(label, value, undefined, note)];
+}
+
 /**
  * Renderiza un PeriodSnapshot a lineas Markdown. Helper usado por
  * `buildBindingTotalsBlock` en single-period y multi-period.
@@ -696,6 +736,20 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
   if (snap.periodoTipo) {
     lines.push(`- Tipo de período: ${snap.periodoTipo}`);
   }
+  // ingesta-09: un periodo leído de la columna de saldo inicial/anterior del
+  // archivo tiene ESF de apertura pero NO P&G del periodo. Sus cifras de
+  // resultados se rotulan como tales y sus KPIs de resultados salen N/D.
+  const pygApertura = snap.saldosDeApertura === true;
+  if (pygApertura) {
+    lines.push(
+      '- Saldos de apertura: este periodo proviene de una columna de saldo inicial/anterior del ' +
+        'archivo, no de un cierre. Su estado de situación financiera es el de apertura; NO es un ' +
+        'estado de resultados comparativo: las cifras de resultados de este periodo se copian en ' +
+        'los campos *Comparative sólo por contrato, en la prosa el P&G comparativo es N/D y no se ' +
+        'calculan ni comentan variaciones de resultados.',
+    );
+  }
+  const pygTag = pygApertura ? ` ${PYG_APERTURA_TAG}` : '';
   const cts = (totals as ControlTotalsInput & { cents?: Record<string, bigint> }).cents;
   lines.push(anchorLine('Total Activo', totals.activo, cts?.activo));
   if (typeof totals.activoCorriente === 'number') {
@@ -715,7 +769,7 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
   // Wave 2.F4 — Parte 1.3 spec v2.0: emitir Ingresos BRUTO y NETO de
   // devoluciones 4175 con etiquetas inequívocas para que el LLM NUNCA confunda
   // qué cifra usar en el P&L. NIIF 15 §47 obliga presentación neta.
-  lines.push(anchorLine('Total Ingresos (bruto Clase 4)', totals.ingresos, cts?.ingresos));
+  lines.push(anchorLine('Total Ingresos (bruto Clase 4)', totals.ingresos, cts?.ingresos, pygTag));
   const totalsForRev = totals as ControlTotalsInput & {
     ingresosNetos?: number;
     totalDevoluciones?: number;
@@ -730,11 +784,11 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
         'Total Ingresos Netos (neto de devoluciones 4175)',
         totalsForRev.ingresosNetos,
         cts?.ingresosNetos,
-        ` (devoluciones 4175 detectadas: ${fmtCop(devs)} COP; NIIF 15 §47)`,
+        ` (devoluciones 4175 detectadas: ${fmtCop(devs)} COP; NIIF 15 §47)${pygTag}`,
       ),
     );
   }
-  lines.push(anchorLine('Total Gastos', totals.gastos, cts?.gastos));
+  lines.push(anchorLine('Total Gastos', totals.gastos, cts?.gastos, pygTag));
   // Bloque de impuesto vinculante (Bug 2 fix): UAI + impuesto + utilidad neta
   // SIEMPRE explícitos para que el Agente 1 NO confunda el signo del impuesto.
   // Lee desde `controlTotals.cents` (BigInt centavos) si está disponible — es
@@ -772,6 +826,7 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
         'Utilidad Antes de Impuestos (UAI)',
         uaiNumber,
         totalsExt.cents?.utilidadAntesImpuestos,
+        pygTag,
       ),
     );
   }
@@ -781,12 +836,12 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
         'Impuesto de Renta causado del periodo (clase 54)',
         impuestoNumber,
         totalsExt.cents?.impuestoCausado,
-        ' [presentar en P&L precedido de "(-)"; SIEMPRE RESTA de UAI]',
+        ' [presentar en P&L precedido de "(-)"; SIEMPRE RESTA de UAI]' + pygTag,
       ),
     );
   }
   lines.push(
-    anchorLine('Utilidad Neta (P&L) [= UAI − Impuesto]', totals.utilidadNeta, cts?.utilidadNeta),
+    anchorLine('Utilidad Neta (P&L) [= UAI − Impuesto]', totals.utilidadNeta, cts?.utilidadNeta, pygTag),
   );
 
   // ITEM 2 ORDEN DE CIERRE — Impuesto Renta Neto a Pagar (Curator R16).
@@ -869,6 +924,14 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
   // y la línea sale como "ND" para que el LLM NO invente cifras.
   // ---------------------------------------------------------------------------
   const totalsKpi = totals as ControlTotalsInput & {
+    margenBruto?: number | null;
+    ebitda?: number | null;
+    capitalTrabajo?: number;
+    cicloConversionEfectivo?: number | null;
+    clientesNetos?: number | null;
+    clasificacionSupuesta?: string;
+    kpiBaseNota?: string;
+    kpiNdMotivos?: KpiNdMotivos;
     razonCorriente?: number | null;
     pruebaAcida?: number | null;
     endeudamientoTotal?: number | null;
@@ -919,7 +982,10 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
       return `${rounded} días`;
     };
 
-    // Detectar costos anómalos para etiquetar ND en días inv/prov con razón.
+    // Motivo de cada N/D (ratios-kpis-24): el preprocesador publica la causa en
+    // `kpiNdMotivos` (patrimonio ≤ 0, sin clientes 1305/1310, costos
+    // anómalos, periodo no anualizable, saldos de apertura…). Para snapshots
+    // sin ese campo se conservan las causas locales históricas.
     const ingNetos = totalsKpi.ingresosNetos ?? 0;
     const costoTotal = (totalsKpi.costoVentas6 ?? 0) + (totalsKpi.costoProduccion7 ?? 0);
     const costsAnomalous =
@@ -928,57 +994,136 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
     const revenueND = ingNetos === 0 ? 'sin ingresos' : undefined;
     const interestND =
       totalsKpi.coberturaIntereses === null ? 'sin gasto financiero' : undefined;
+    const ndMotivos: KpiNdMotivos = totalsKpi.kpiNdMotivos ?? {};
+    const isNd = (value: number | null | undefined) =>
+      value === null || value === undefined || !Number.isFinite(value);
+    /** Valor formateado, o el motivo del N/D (preprocesador → causa local → "ND"). */
+    const withNdMotivo = (
+      value: number | null | undefined,
+      motivo: string | undefined,
+      formatted: string,
+      fallbackReason?: string,
+    ): string => {
+      if (!isNd(value)) return formatted;
+      if (motivo) return motivo;
+      if (pygApertura && fallbackReason === PYG_FLOW) return MOTIVO_PYG_APERTURA_BLOQUE;
+      return fallbackReason && fallbackReason !== PYG_FLOW ? `ND (${fallbackReason})` : 'ND';
+    };
 
     lines.push('');
     lines.push(
       '## KPIs PRE-CALCULADOS (preprocessor — fuente única, NO recalcular)',
     );
+    if (totalsKpi.kpiBaseNota) {
+      lines.push(`- Base de los KPIs: ${totalsKpi.kpiBaseNota}`);
+    }
     lines.push(`- Razón Corriente: ${fmtRatio(totalsKpi.razonCorriente)}`);
     lines.push(`- Prueba Ácida: ${fmtRatio(totalsKpi.pruebaAcida)}`);
     lines.push(`- Endeudamiento Total: ${fmtPct(totalsKpi.endeudamientoTotal)}`);
-    // Motivo del N/D (ratios-kpis-07): con patrimonio ≤ 0 el preprocesador
-    // publica ROE / apalancamiento en null con su causa en `kpiNdMotivos`.
-    const ndMotivos = (totals as ControlTotalsInput & {
-      kpiNdMotivos?: Partial<Record<'roe' | 'apalancamientoFinanciero', string>>;
-    }).kpiNdMotivos;
-    const withNdMotivo = (
-      value: number | null | undefined,
-      motivo: string | undefined,
-      formatted: string,
-    ): string =>
-      (value === null || value === undefined || !Number.isFinite(value)) && motivo
-        ? motivo
-        : formatted;
     lines.push(
       `- Apalancamiento Financiero: ${withNdMotivo(
         totalsKpi.apalancamientoFinanciero,
-        ndMotivos?.apalancamientoFinanciero,
+        ndMotivos.apalancamientoFinanciero,
         fmtRatio(totalsKpi.apalancamientoFinanciero),
       )}`,
     );
     lines.push(
       `- Cobertura de Intereses: ${
-        interestND
-          ? `ND — ${interestND}`
-          : fmtRatio(totalsKpi.coberturaIntereses)
+        pygApertura && isNd(totalsKpi.coberturaIntereses)
+          ? MOTIVO_PYG_APERTURA_BLOQUE
+          : interestND
+            ? `ND — ${interestND}`
+            : fmtRatio(totalsKpi.coberturaIntereses)
       }`,
     );
-    lines.push(`- Margen Operativo: ${fmtPct(totalsKpi.margenOperativo)}`);
-    lines.push(`- Margen Neto: ${fmtPct(totalsKpi.margenNeto)}`);
-    lines.push(`- ROE: ${withNdMotivo(totalsKpi.roe, ndMotivos?.roe, fmtPct(totalsKpi.roe))}`);
-    lines.push(`- ROA: ${fmtPct(totalsKpi.roa)}`);
-    lines.push(`- Rotación de Activos: ${fmtRatio(totalsKpi.rotacionActivos)}`);
+    if (totalsKpi.margenBruto !== undefined) {
+      lines.push(
+        `- Margen Bruto (utilidad bruta / ingresos operacionales netos 41 − 4175): ${withNdMotivo(
+          totalsKpi.margenBruto,
+          ndMotivos.margenBruto,
+          fmtPct(totalsKpi.margenBruto),
+          PYG_FLOW,
+        )}`,
+      );
+    }
     lines.push(
-      `- Días de Cartera: ${fmtDays(totalsKpi.diasCartera, revenueND)}`,
+      `- Margen Operativo: ${withNdMotivo(
+        totalsKpi.margenOperativo,
+        ndMotivos.margenOperativo,
+        fmtPct(totalsKpi.margenOperativo),
+        PYG_FLOW,
+      )}`,
     );
     lines.push(
-      `- Días de Inventario: ${fmtDays(totalsKpi.diasInventario, costsND)}`,
+      `- Margen Neto: ${withNdMotivo(totalsKpi.margenNeto, undefined, fmtPct(totalsKpi.margenNeto), PYG_FLOW)}`,
+    );
+    lines.push(`- ROE: ${withNdMotivo(totalsKpi.roe, ndMotivos.roe, fmtPct(totalsKpi.roe), PYG_FLOW)}`);
+    lines.push(`- ROA: ${withNdMotivo(totalsKpi.roa, ndMotivos.roa, fmtPct(totalsKpi.roa), PYG_FLOW)}`);
+    lines.push(
+      `- Rotación de Activos: ${withNdMotivo(
+        totalsKpi.rotacionActivos,
+        ndMotivos.rotacionActivos,
+        fmtRatio(totalsKpi.rotacionActivos),
+        PYG_FLOW,
+      )}`,
+    );
+    // Base de los días de cartera (niif-preproceso-25): cartera comercial neta
+    // sobre ingresos operacionales netos anualizados. Snapshots anteriores al
+    // campo `clientesNetos` conservan el rótulo histórico.
+    const carteraLabel =
+      totalsKpi.clientesNetos !== undefined
+        ? 'Días de Cartera (cartera neta 1305 + 1310 − 1399 / ingresos operacionales netos 41 − 4175 anualizados × 365)'
+        : 'Días de Cartera';
+    lines.push(
+      `- ${carteraLabel}: ${withNdMotivo(
+        totalsKpi.diasCartera,
+        ndMotivos.diasCartera,
+        fmtDays(totalsKpi.diasCartera),
+        revenueND ?? PYG_FLOW,
+      )}`,
     );
     lines.push(
-      `- Días de Proveedores: ${fmtDays(totalsKpi.diasProveedores, costsND)}`,
+      `- Días de Inventario: ${withNdMotivo(
+        totalsKpi.diasInventario,
+        ndMotivos.diasInventario,
+        fmtDays(totalsKpi.diasInventario),
+        costsND ?? PYG_FLOW,
+      )}`,
     );
     lines.push(
-      '- AUTORIDAD: estos KPIs son VINCULANTES. NO los recalcules. Cita los valores LITERALMENTE; cuando un KPI sea "ND", DECLARA "ND" y justifica brevemente la causa — NUNCA inventes un valor de respaldo.',
+      `- Días de Proveedores: ${withNdMotivo(
+        totalsKpi.diasProveedores,
+        ndMotivos.diasProveedores,
+        fmtDays(totalsKpi.diasProveedores),
+        costsND ?? PYG_FLOW,
+      )}`,
+    );
+    if (totalsKpi.cicloConversionEfectivo !== undefined) {
+      lines.push(
+        `- Ciclo de Conversión del Efectivo (días cartera + días inventario − días proveedores): ${withNdMotivo(
+          totalsKpi.cicloConversionEfectivo,
+          ndMotivos.cicloConversionEfectivo,
+          fmtDays(totalsKpi.cicloConversionEfectivo),
+          PYG_FLOW,
+        )}`,
+      );
+    }
+    if (typeof totalsKpi.capitalTrabajo === 'number') {
+      lines.push(anchorLine('Capital de Trabajo (Activo Corriente − Pasivo Corriente)', totalsKpi.capitalTrabajo, undefined));
+    }
+    if (totalsKpi.clientesNetos !== undefined) {
+      lines.push(
+        totalsKpi.clientesNetos === null
+          ? '- Cartera comercial neta (1305 + 1310 − 1399): N/D — el balance no trae cuentas de clientes 1305 / 1310'
+          : anchorLine('Cartera comercial neta (1305 + 1310 − 1399)', totalsKpi.clientesNetos, undefined),
+      );
+    }
+    lines.push(...renderEbitdaLines(snap, totalsKpi.ebitda, ndMotivos.ebitda, pygApertura));
+    if (totalsKpi.clasificacionSupuesta) {
+      lines.push(`- Supuesto de clasificación corriente / no corriente: ${totalsKpi.clasificacionSupuesta}`);
+    }
+    lines.push(
+      '- AUTORIDAD: estos KPIs son VINCULANTES. NO los recalcules. Cita los valores LITERALMENTE; cuando un KPI sea "ND"/"N/D", DECLARA "N/D" con el motivo publicado junto a él — NUNCA inventes un valor de respaldo.',
     );
   }
 
@@ -1278,6 +1423,12 @@ function buildBindingTotalsBlock(preprocessed: unknown): string {
 
     const pT = deriveControlTotalsFromSnapshot(primary);
     const cT = deriveControlTotalsFromSnapshot(comparative);
+    // ingesta-09: sin P&G del comparativo (saldos de apertura) no hay
+    // variación de resultados; los saldos del ESF sí son comparables.
+    const pygYoY = (label: string, current: number | undefined, base: number | undefined) =>
+      comparative.saldosDeApertura === true
+        ? `- ${label}: ND (el comparativo ${comparative.period} es de saldos de apertura: sin P&G del periodo)`
+        : `- ${label}: ${absDelta(current, base)} (${pctYoY(current, base)})`;
     if (pT && cT) {
       lines.push('');
       lines.push(`=== Variacion YoY (${primary.period} vs ${comparative.period}) ===`);
@@ -1290,20 +1441,21 @@ function buildBindingTotalsBlock(preprocessed: unknown): string {
       lines.push(
         `- Patrimonio: ${absDelta(pT.patrimonio, cT.patrimonio)} (${pctYoY(pT.patrimonio, cT.patrimonio)})`,
       );
-      lines.push(
-        `- Ingresos: ${absDelta(pT.ingresos, cT.ingresos)} (${pctYoY(pT.ingresos, cT.ingresos)})`,
-      );
-      lines.push(
-        `- Gastos: ${absDelta(pT.gastos, cT.gastos)} (${pctYoY(pT.gastos, cT.gastos)})`,
-      );
-      lines.push(
-        `- Utilidad Neta: ${absDelta(pT.utilidadNeta, cT.utilidadNeta)} (${pctYoY(pT.utilidadNeta, cT.utilidadNeta)})`,
-      );
+      lines.push(pygYoY('Ingresos', pT.ingresos, cT.ingresos));
+      lines.push(pygYoY('Gastos', pT.gastos, cT.gastos));
+      lines.push(pygYoY('Utilidad Neta', pT.utilidadNeta, cT.utilidadNeta));
     }
     lines.push('');
     lines.push(
       'REGLA MULTIPERIODO: las cifras de cada periodo son AUTORITARIAS para ese periodo. Tus estados financieros, KPIs y notas DEBEN producir DOS columnas (actual + comparativo) + variacion. Si una cifra del comparativo es 0, declarala como $0,00. Si NO existe, declarala como ND. NUNCA omitas el periodo comparativo silenciosamente.',
     );
+    if (comparative.saldosDeApertura === true) {
+      lines.push(
+        `REGLA SALDOS DE APERTURA: el comparativo ${comparative.period} proviene de la columna de saldo inicial/anterior. ` +
+          'Presenta su estado de situación financiera (apertura), pero su estado de resultados comparativo, ' +
+          'sus KPIs de resultados y las variaciones de resultados son N/D — nunca $0,00 ni una variación calculada.',
+      );
+    }
   } else {
     lines.push('');
     lines.push(
@@ -1517,7 +1669,11 @@ export async function prepareFinancialContext(
         onProgress?.({ type: 'stage_progress', stage: 1, detail: `Ingesta: ${w}` });
       }
       if (parsedRaw.rows.length > 0) {
-        preprocessed = preprocessTrialBalance(parsedRaw.rows);
+        // ingesta-09: la columna de saldo inicial/anterior se marca como
+        // apertura (P&G comparativo y KPIs de resultados N/D).
+        preprocessed = preprocessTrialBalance(parsedRaw.rows, {
+          openingPeriods: parsedRaw.openingPeriods,
+        });
       }
     } catch (err) {
       if (err instanceof TrialBalanceIngestError) {
@@ -2148,6 +2304,12 @@ export interface PhaseHandoffInput {
     actividadInferida?: { sectorCIIU: string; descripcion: string; evidencia?: string };
     /** Bloque <hechos_empresa> pre-renderizado (Ola 2). '' o undefined = no se inyecta. */
     hechosEmpresa?: string | null;
+    /**
+     * Variables macro con valor, vigencia y fuente (valoracion-18). `undefined`
+     * = Estrategia las pide al servicio macro; `null` = sin dato (bloque
+     * <macro_vigente> en N/D).
+     */
+    macro?: MacroSnapshot | null;
   };
   /**
    * Modo del reporte v8.1 §2 — pre-derivado en `prepareFinancialContext`.
@@ -2174,12 +2336,28 @@ function resolvePhaseReportMode(
 }
 
 /**
+ * Espera máxima por el servicio macro antes de correr Estrategia con
+ * <macro_vigente> en N/D. El servicio responde desde su caché (24 h) en el caso
+ * normal; una consulta en frío que tarde más sigue en segundo plano y deja el
+ * dato persistido para la próxima corrida.
+ */
+const STRATEGY_MACRO_TIMEOUT_MS = 5_000;
+
+/**
  * Stage 2: Strategy Director. Consume el NIIF + bindingTotals y produce KPIs.
  * Emite SSE stage_start/stage_complete (stage=2).
  */
 export async function runStrategyPhase(
   input: PhaseHandoffInput,
-  options: Pick<OrchestrateFinancialOptions, 'onProgress'> = {},
+  options: Pick<OrchestrateFinancialOptions, 'onProgress'> & {
+    /**
+     * Fuente del snapshot macro cuando el caller no lo entrega en
+     * `elite.macro`. Default: el servicio macro (`getMacroSnapshotForPrompts`
+     * con espera máxima `STRATEGY_MACRO_TIMEOUT_MS`; nunca lanza: ante error
+     * o demora devuelve null → N/D).
+     */
+    resolveMacro?: () => Promise<MacroSnapshot | null>;
+  } = {},
 ): Promise<QualifiedStrategicAnalysisResult> {
   const { niifResult, bindingTotals, preprocessed, company, language, instructions, elite, reportMode } = input;
   const { onProgress } = options;
@@ -2189,6 +2367,12 @@ export async function runStrategyPhase(
 
   onProgress?.({ type: 'stage_start', stage: 2, label: stageLabel });
 
+  // valoracion-18: inflación, tasa de política y TRM con valor, vigencia y
+  // fuente por campo para <macro_vigente>. Sin dato verificado → N/D.
+  const resolveMacro =
+    options.resolveMacro ?? (() => getMacroSnapshotForPrompts(STRATEGY_MACRO_TIMEOUT_MS));
+  const macro = elite?.macro !== undefined ? elite.macro : await resolveMacro().catch(() => null);
+
   const strategy = await runStrategyDirector(
     niifResult,
     company,
@@ -2197,7 +2381,7 @@ export async function runStrategyPhase(
     bindingTotals,
     preprocessed,
     onProgress,
-    elite,
+    { ...elite, macro },
     AbortSignal.timeout(720_000),
     resolvePhaseReportMode(preprocessed, reportMode),
   );
@@ -2851,19 +3035,14 @@ function getExtractedMetadataFromPreprocessed(
 }
 
 /**
- * Tipo societario para el gate. SAS / S.A. / Ltda. se normalizan con la MISMA
- * función que usa el acta (`normalizeTipoSocietario` del prompt de Gobierno:
- * tolera "S. A. S.", "Sociedad Anónima", "Limitada"), para que gate y acta no
- * lean tipos distintos (prompts-normativa-08). Se conservan aquí la E.U. y el
- * vacío → `undefined` (tri-estado del gate: no se asume SAS).
+ * Tipo societario para el gate: la misma función que el consolidado partido
+ * (`normalizeTipoSocietarioParaGate`, que delega en el normalizador del acta),
+ * para que ningún camino lea un tipo distinto (prompts-normativa-08).
  */
 function normalizeTipoSocietario(
   raw: string | undefined,
 ): AuditCompanyContext['tipoSocietario'] {
-  if (!raw || !raw.trim()) return undefined;
-  const compact = raw.toUpperCase().replace(/[.\s]/g, '');
-  if (compact === 'EU' || compact === 'EMPRESAUNIPERSONAL') return 'EU';
-  return normalizeTipoSocietarioActa(raw);
+  return normalizeTipoSocietarioParaGate(raw);
 }
 
 function getEstatutosFlag(

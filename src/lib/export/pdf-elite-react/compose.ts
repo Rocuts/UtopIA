@@ -669,8 +669,25 @@ function buildMeta(
     typeof preprocessed === 'object' &&
     (preprocessed as { comparativos_impracticables?: boolean }).comparativos_impracticables === true;
 
+  // pipeline-flujo-14 (defensa en profundidad): /export responde 422 para un
+  // informe sin Partes II/III; si el composer se invoca igual, la portada no
+  // puede presentarlo como completo.
+  const isEmptyPart = (part: { fullContent?: unknown } | null | undefined) =>
+    !part || typeof part.fullContent !== 'string' || part.fullContent.trim().length === 0;
+  const missingParts: string[] = [];
+  if (isEmptyPart(report.strategicAnalysis)) {
+    missingParts.push(language === 'en' ? 'Part II (Strategy)' : 'Parte II (Estrategia)');
+  }
+  if (isEmptyPart(report.governance)) {
+    missingParts.push(language === 'en' ? 'Part III (Governance)' : 'Parte III (Gobierno)');
+  }
+
   if (emittable && emittable.ok === false) {
     watermark = 'BLOQUEADO';
+  } else if (missingParts.length > 0) {
+    watermark = 'INCOMPLETO';
+    watermarkSubtitle =
+      (language === 'en' ? 'MISSING: ' : 'FALTA: ') + missingParts.join(' · ');
   } else if (comparativosImpracticables) {
     watermark = 'BORRADOR';
     watermarkSubtitle = language === 'en'
@@ -1239,7 +1256,18 @@ function statementContext(
     | { primary?: Partial<PeriodSnapshot> | null; comparative?: Partial<PeriodSnapshot> | null }
     | null
     | undefined;
-  return resolvePeriodoTipos(fiscalPeriod, comparativePeriod, pp?.primary, pp?.comparative);
+  const comparative = pp?.comparative;
+  // ingesta-09: comparativo de saldos de apertura, sólo si el snapshot es el
+  // del periodo comparativo que declara el JSON (misma regla que el tipo).
+  const comparativeSaldosDeApertura =
+    !!comparativePeriod &&
+    comparative?.saldosDeApertura === true &&
+    typeof comparative.period === 'string' &&
+    comparative.period.includes(comparativePeriod);
+  return {
+    ...resolvePeriodoTipos(fiscalPeriod, comparativePeriod, pp?.primary, comparative),
+    ...(comparativeSaldosDeApertura ? { comparativeSaldosDeApertura: true } : {}),
+  };
 }
 
 // ─── Notes ────────────────────────────────────────────────────────────────────

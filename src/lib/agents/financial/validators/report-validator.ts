@@ -55,6 +55,9 @@ export function parseCopAmount(input: string): number | null {
   let s = input.trim();
   if (!s) return null;
 
+  // "$(1.234)" — signo pesos antes del paréntesis contable (reportes-export-01).
+  s = s.replace(/^\$\s*(?=\()/, '');
+
   // Detectar parentheses como negativo contable
   let negative = false;
   const parenMatch = s.match(/^\(\s*(.+?)\s*\)$/);
@@ -96,6 +99,22 @@ export function parseCopAmount(input: string): number | null {
 }
 
 /**
+ * Montos dentro de una línea del Markdown. La primera alternativa captura el
+ * negativo NIIF que imprime el renderer, con el signo pesos DENTRO del
+ * paréntesis ("($1.234.567,89)", `formatCopFromCents(cents, false)`): sin ella
+ * el patrón empezaba en "$" y leía la cifra como positiva (reportes-export-01).
+ * Las otras dos conservan el patrón histórico ("$1.234", "(1.234)", "-1.234").
+ */
+const AMOUNT_SOURCE =
+  String.raw`\(\s*\$\s*-?\s*(?:\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*\)` +
+  String.raw`|\$?\s*\(?-?\s*\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?\)?` +
+  String.raw`|\$?\s*\(?-?\s*\d+(?:[.,]\d{1,2})?\)?`;
+
+function amountRegex(): RegExp {
+  return new RegExp(AMOUNT_SOURCE, 'g');
+}
+
+/**
  * Formatea un monto a COP legible (para mensajes de error/warning).
  */
 function formatCop(n: number): string {
@@ -112,19 +131,21 @@ function formatCop(n: number): string {
 function extractTotalsMentions(
   markdown: string,
   label: RegExp,
+  isLossLine?: (line: string) => boolean,
 ): number[] {
   const found: number[] = [];
   const lines = markdown.split(/\r?\n/);
   for (const line of lines) {
     if (!label.test(line)) continue;
     // Buscar montos: patron amplio que acepta $ opcional, parentheses y decimales
-    const numMatches = line.match(
-      /\$?\s*\(?-?\s*\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?\)?|\$?\s*\(?-?\s*\d+(?:[.,]\d{1,2})?\)?/g,
-    );
+    const numMatches = line.match(amountRegex());
     if (!numMatches) continue;
+    // "PÉRDIDA NETA" rotula un resultado negativo: su cifra puede venir en
+    // magnitud ("$5.000") o firmada ("($5.000)"); ambas se leen negativas.
+    const loss = isLossLine?.(line) === true;
     for (const raw of numMatches) {
       const n = parseCopAmount(raw);
-      if (n !== null) found.push(n);
+      if (n !== null) found.push(loss ? -Math.abs(n) : n);
     }
   }
   return found;
@@ -141,8 +162,7 @@ function extractHeadlineTotal(markdown: string, pattern: RegExp): number | null 
   // Auditoría 2026-09 (niif-contrato-16): antes se tomaba la ÚLTIMA cifra de
   // la fila, que en un estado comparativo es la columna del año anterior. La
   // cifra del periodo actual es la PRIMERA celda numérica después del rótulo.
-  const NUM_RE =
-    /\$?\s*\(?-?\s*\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?\)?|\$?\s*\(?-?\s*\d+(?:[.,]\d{1,2})?\)?/g;
+  const NUM_RE = amountRegex();
   const lines = markdown.split(/\r?\n/);
   for (const rawLine of lines) {
     const line = rawLine.replace(/\*+/g, '').trim();
@@ -263,7 +283,12 @@ export function validateConsolidatedReport(
     {
       label: 'Utilidad Neta',
       expected: totals.utilidadNeta,
-      pattern: /utilidad\s*(?:neta|del\s*ejercicio)\b/i,
+      // El renderer rotula "PÉRDIDA NETA DEL PERÍODO" cuando el resultado es
+      // negativo (paridad de superficies, reportes-export-01): sin esa
+      // alternativa una pérdida mal reportada no entraba al chequeo.
+      pattern: /(?:utilidad|p[eé]rdida)\s*(?:neta|del\s*ejercicio)\b/i,
+      isLossLine: (line: string) =>
+        /p[eé]rdida\s*(?:neta|del\s*ejercicio)\b/i.test(line) && !/utilidad/i.test(line),
     },
   ];
 
@@ -283,7 +308,11 @@ export function validateConsolidatedReport(
         ? lines.filter((l) => l.includes(restrictToPeriod)).join('\n')
         : consolidatedMarkdown;
 
-      const mentions = extractTotalsMentions(filteredText, check.pattern);
+      const mentions = extractTotalsMentions(
+        filteredText,
+        check.pattern,
+        'isLossLine' in check ? check.isLossLine : undefined,
+      );
       if (mentions.length === 0) continue;
       const expected = check.expected;
       const absExpected = Math.abs(expected);

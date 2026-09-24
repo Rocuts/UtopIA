@@ -67,6 +67,12 @@ export type BuildRowsResult =
       source: 'csv' | 'rows';
       /** Convención de signos detectada en la entrada (antes de normalizar). */
       signConvention: SignConvention;
+      /**
+       * ingesta-09: periodos leídos SÓLO de columnas de saldo inicial/anterior
+       * del CSV (`balanceColumns` con `kind === 'opening'`). `rows` no trae
+       * metadatos de columna: lista vacía.
+       */
+      openingPeriods: string[];
     }
   | { ok: false; code: 'empty_trial_balance' };
 
@@ -86,11 +92,22 @@ export function buildRawRowsFromInput(input: {
       currentYear: input.period_label,
     });
     if (parsed.rows.length === 0) return { ok: false, code: 'empty_trial_balance' };
+    const closing = new Set(
+      parsed.balanceColumns.filter((c) => c.kind !== 'opening').map((c) => c.period),
+    );
+    const openingPeriods = [
+      ...new Set(
+        parsed.balanceColumns
+          .filter((c) => c.kind === 'opening' && !closing.has(c.period))
+          .map((c) => c.period),
+      ),
+    ].sort();
     return {
       ok: true,
       rows: parsed.rows,
       source: 'csv',
       signConvention: parsed.signConvention?.convention ?? 'natural',
+      openingPeriods,
     };
   }
 
@@ -110,7 +127,27 @@ export function buildRawRowsFromInput(input: {
     rows: normalized.rows,
     source: 'rows',
     signConvention: normalized.detection.convention,
+    openingPeriods: [],
   };
+}
+
+/**
+ * Preprocesado de una remisión recién construida: el periodo por defecto del
+ * cliente y, del CSV, los periodos de apertura (ingesta-09) para que el
+ * comparativo leído de la columna de saldo inicial se marque
+ * `saldosDeApertura` (sus KPIs de resultados salen N/D). El recompute del
+ * detalle (`getTrialBalanceDetail`) parte de las filas persistidas, que no
+ * guardan metadatos de columna; el contrato público sólo expone el periodo
+ * primario, al que la marca no afecta.
+ */
+export function preprocessBuiltRows(
+  built: Extract<BuildRowsResult, { ok: true }>,
+  periodLabel: string | undefined,
+): PreprocessedBalance {
+  return preprocessTrialBalance(built.rows, {
+    defaultPeriod: periodLabel,
+    openingPeriods: built.openingPeriods,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -316,9 +353,7 @@ export async function createTrialBalance(
     return { status: 422, problem: 'empty_trial_balance' };
   }
 
-  const pre = preprocessTrialBalance(built.rows, {
-    defaultPeriod: parsed.data.period_label,
-  });
+  const pre = preprocessBuiltRows(built, parsed.data.period_label);
   const summary = summarize(pre, { signConvention: built.signConvention });
 
   const { id: publicId, uuid } = newTypeId(ID_PREFIXES.trialBalance);

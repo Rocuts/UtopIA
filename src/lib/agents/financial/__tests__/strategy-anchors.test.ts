@@ -13,6 +13,8 @@ let nextJson: unknown = null;
 vi.mock('@/lib/agents/financial/agents/runtime', () => ({
   callFinancialAgent: vi.fn(async () => ({ json: nextJson, meta: {} })),
 }));
+// runStrategyPhase consulta el servicio macro (valoracion-18): sin red en tests.
+vi.mock('@/lib/macro/prompt-snapshot', () => ({ getMacroSnapshotForPrompts: vi.fn(async () => null) }));
 
 import { runStrategyPhase } from '@/lib/agents/financial/orchestrator';
 import {

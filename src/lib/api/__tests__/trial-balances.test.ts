@@ -13,6 +13,7 @@ import {
   buildRawRowsFromInput,
   centsToMoney,
   PREPROCESSOR_CONTRACT_VERSION,
+  preprocessBuiltRows,
   serializeTrialBalance,
   serializeTrialBalanceDetail,
   summarize,
@@ -310,5 +311,34 @@ describe('API v1 — columnas de saldo y motivos de validación', () => {
     expect(s.status).toBe('unbalanced');
     const detail = serializeTrialBalanceDetail({}, pre);
     expect(JSON.stringify(detail.validation_reasons)).toMatch(/111005/);
+  });
+});
+
+// ingesta-09 (W3-A): la columna "Saldo Inicial" produce el comparativo desde la
+// apertura; el preprocesado del recurso lo marca `saldosDeApertura`.
+describe('API v1 — columna de saldo inicial como apertura (ingesta-09)', () => {
+  const csv = [
+    'Cuenta,Nombre,Saldo Inicial,Débitos,Créditos,Saldo Final',
+    '11050501,Caja,800000,300000,100000,1000000',
+    '21050501,Obligaciones,300000,0,100000,400000',
+    '31050501,Capital,500000,0,100000,600000',
+  ].join('\n');
+
+  it('csv: publica el periodo de apertura y el preprocesado lo marca', () => {
+    const built = buildRawRowsFromInput({ csv, period_label: '2025' });
+    if (!built.ok) throw new Error('fixture inválido');
+    expect(built.openingPeriods).toEqual(['2024']);
+    const pre = preprocessBuiltRows(built, '2025');
+    expect(pre.primary.period).toBe('2025');
+    expect(pre.comparative?.saldosDeApertura).toBe(true);
+    expect(summarize(pre).status).toBe('balanced');
+  });
+
+  it('rows estructuradas: sin metadatos de columna, no hay apertura', () => {
+    const built = buildRawRowsFromInput({
+      rows: [{ code: '1105', name: 'Caja', balances_by_period: { '2025': 1 } }] as never,
+    });
+    if (!built.ok) throw new Error('fixture inválido');
+    expect(built.openingPeriods).toEqual([]);
   });
 });

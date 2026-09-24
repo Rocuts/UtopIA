@@ -8,7 +8,11 @@
 
 export type AreaKey = 'escudo' | 'valor' | 'verdad' | 'futuro';
 
-export type WatermarkKind = 'BORRADOR' | 'BLOQUEADO';
+/**
+ * BORRADOR: provisional / comparativos impracticables. BLOQUEADO: gate de
+ * emitibilidad. INCOMPLETO: faltan las Partes II/III (pipeline-flujo-14).
+ */
+export type WatermarkKind = 'BORRADOR' | 'BLOQUEADO' | 'INCOMPLETO';
 
 export interface NormCitation {
   /** Texto del chip ("NIIF Secc. 17", "Art. 240 ET", "Decreto 2420/2015"). */
@@ -315,7 +319,7 @@ export interface ReportMeta {
   niifGroup?: 1 | 2 | 3 | null;
   generatedAt: string;
   language: 'es' | 'en';
-  /** Si presente, modifica el CoverPage (BORRADOR amarillo, BLOQUEADO bordeaux). */
+  /** Si presente, modifica el CoverPage (BORRADOR / INCOMPLETO amarillo, BLOQUEADO bordeaux). */
   watermark?: WatermarkKind;
   /**
    * Subtitulo del watermark — se renderiza debajo del titulo en CoverPage cuando

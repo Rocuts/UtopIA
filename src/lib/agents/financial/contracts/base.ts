@@ -339,7 +339,13 @@ export interface ActaArithmeticInput {
   netIncomeCents: bigint;
   /** Pérdidas de ejercicios anteriores pendientes de enjugar, MAGNITUD POSITIVA (Art. 151 C.Co.). */
   accumulatedLossesCents: bigint;
-  /** Capital suscrito y pagado (PUC 3115+3120). `null` si la Clase 3 no lo declara. */
+  /**
+   * Capital suscrito y pagado: Σ de las hojas del PUC grupo 31 (3105 capital
+   * suscrito y pagado, neto de 310510 por suscribir y 310515 suscrito por
+   * cobrar, + 3115 aportes sociales + 3120 capital asignado + 3125 inversión
+   * suplementaria…), como lo calcula `equityBreakdown.capitalSuscritoPagado`
+   * en el preprocesador. `null` si la Clase 3 no lo declara.
+   */
   capitalSuscritoPagadoCents: bigint | null;
   /** Reserva legal ya acumulada (PUC 3305). `null` si no se identifica. */
   reservaLegalAcumuladaCents: bigint | null;

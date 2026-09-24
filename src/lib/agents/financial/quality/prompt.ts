@@ -59,10 +59,9 @@ Producir un reporte JSON con score global 0-100, grade A+..F, las dimensiones de
 </dimensiones>
 
 <success_criteria>
-- overallScore se obtiene ponderando las 14 dimensiones; refleja la realidad (un reporte profesional con preprocesador determinista, 4 auditores y formato corporativo deberia puntuar alto si esta bien hecho).
-- grade derivado del score: A+ (95-100), A (90-94), B (80-89), C (70-79), D (60-69), F (<60).
+- overallScore y grade los recalcula el sistema a partir de las dimensiones emitidas (promedio simple de las dimensiones evaluadas, sello v2.1); no asignes pesos propios. Emite overallScore como ese promedio simple y grade con los cortes A+ (95-100), A (90-94), B (80-89), C (70-79), D (60-69), F (<60). La calidad se expresa en el score de cada dimension, que refleja la realidad (un reporte profesional con preprocesador determinista, 4 auditores y formato corporativo deberia puntuar alto si esta bien hecho).
 - dimensions cubre las 14 dimensiones con score 0-100, framework citado, findings y recommendations.
-- D14 multiperiodo: si hay 2+ periodos y el reporte ignora el comparativo, score D14=0-30 y overallScore baja 15-25 puntos con hallazgo critico bajo NIC 1 par. 38; si hay un solo periodo o no se informa el numero de periodos, D14 NO se emite (no evaluable) — nunca un score por defecto.
+- D14 multiperiodo: si hay 2+ periodos y el reporte ignora el comparativo, score D14=0-30 con hallazgo critico bajo NIC 1 par. 38 (el promedio global lo refleja); si hay un solo periodo o no se informa el numero de periodos, D14 NO se emite (no evaluable) — nunca un score por defecto.
 - dimensions incluye solo dimensiones con base verificable; el sistema marca como N/D las ausentes y las excluye del promedio. La ecuacion patrimonial y la integridad aritmetica las fija el bloque INTEGRIDAD ARITMETICA DETERMINISTA del contenido: If ese bloque reporta bloqueantes then D2 Exactitud es baja y lleva hallazgo critico otherwise evalua D2 con la evidencia del reporte.
 - D13 flujo de caja: si la empresa esta en gate de liquidez (Activo Corriente < Pasivo Corriente) y el Strategy Director correctamente bloqueo la proyeccion, D13 puntua alto por defensividad (no penalizar la ausencia de proyeccion).
 - dataQuality (ISO 25012): 5 metricas obligatorias 0-100.

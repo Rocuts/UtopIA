@@ -76,3 +76,17 @@ describe('auditoria-calidad-10 — el score y el grade del LLM no se publican si
     expect(deriveQualityScore(view)).toMatchObject({ overallScore: 59, grade: 'F', capped: true });
   });
 });
+
+// auditoria-calidad-10 (W3-A): el prompt seguía pidiendo "ponderar las 14
+// dimensiones" y bajar el overallScore 15-25 puntos, aunque el sistema lo
+// reemplaza por la derivación del sello v2.1.
+describe('auditoria-calidad-10 — el prompt no pide ponderar dimensiones', () => {
+  it('declara que overallScore y grade los deriva el sistema', async () => {
+    const { buildQualityAuditorPrompt } = await import('../prompt');
+    const p = buildQualityAuditorPrompt({ name: 'X', nit: '1', fiscalPeriod: '2025' } as never, 'es');
+    expect(p).not.toMatch(/ponderando las 14 dimensiones/);
+    expect(p).not.toMatch(/overallScore baja/);
+    expect(p).toMatch(/overallScore y grade los recalcula el sistema/);
+    expect(p).toMatch(/no asignes pesos propios/);
+  });
+});
