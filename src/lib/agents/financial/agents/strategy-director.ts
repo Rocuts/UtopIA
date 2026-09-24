@@ -18,6 +18,11 @@ import {
 import { formatCopFromCents, parseMoneyCop } from '../contracts/money';
 import { buildDegradationNotice } from './reconcile-anchors';
 import {
+  deterministicTrends,
+  fmtTrendPct,
+  strategyAnchorSources,
+} from '../validators/strategy-anchors';
+import {
   buildStrategyDirectorPrompt,
   type StrategyDirectorEliteContext,
 } from '../prompts/strategy-director.prompt';
@@ -98,6 +103,7 @@ export async function runStrategyDirector(
   });
 
   const verified = reconcileStrategyReport(result.json, strategyAnchorsFrom(preprocessed));
+  applyDeterministicTrends(verified, preprocessed);
   const strategic = toStrategicAnalysisResult(verified.json, verified.checks);
   if (result.meta?.degraded === true) {
     const notice = buildDegradationNotice(
@@ -136,6 +142,15 @@ export interface StrategyChecks {
   breakEvenUndefinedReason: string | null;
   /** Observaciones visibles por escenario (conciliación de la tabla). */
   scenarioIssues: Record<string, string[]>;
+  /**
+   * Procedencia de las tendencias (e2e-niif-14/-17): 'deterministic' cuando
+   * las variaciones se calcularon desde las anclas de ambos cortes.
+   */
+  trendsSource?: 'deterministic';
+  /** Motivo de las tendencias N/D (base cero, comparativo de apertura…). */
+  trendsNdMotivo?: string | null;
+  /** Por qué no hay tendencias (sin comparativo / comparativo impracticable). */
+  noTrendsReason?: string | null;
 }
 
 function pesosToCents(v: unknown): bigint | null {
@@ -267,6 +282,51 @@ export function reconcileStrategyReport(
 }
 
 // ---------------------------------------------------------------------------
+// Tendencias deterministas (e2e-niif-14 / e2e-niif-17)
+// ---------------------------------------------------------------------------
+// Las variaciones interanuales son aritmética pura de dos cortes que el
+// preprocesador ya conoce: el código las produce y el modelo sólo redacta el
+// comentario. Con comparativo, cada variación es la determinista (o N/D con
+// motivo cuando no hay base); el Δ de margen, cuyo margen no está definido, no
+// se imprime como cifra. Sin comparativo no hay tendencias, las haya escrito o
+// no el modelo. Antes: con trends=null se imprimía "Sin periodo comparativo
+// disponible" en un informe "2025 vs 2024", y una tendencia "+33,3 %" de una
+// pérdida que pasó de −$30M a −$40M salía como verificada.
+// ---------------------------------------------------------------------------
+
+function applyDeterministicTrends(
+  verified: { json: StrategyReportJson; checks: StrategyChecks },
+  preprocessed: PreprocessedBalance | undefined,
+): void {
+  if (!preprocessed?.primary) return; // sin anclas no se sustituye nada
+  const { json, checks } = verified;
+  const sources = strategyAnchorSources(preprocessed, null);
+  if (!sources.comparative) {
+    json.trends = null;
+    checks.noTrendsReason =
+      preprocessed.comparative && preprocessed.comparativos_impracticables === true
+        ? 'Comparativo impracticable (NIIF para las PYMES 3.14 / 10.21): no se presentan variaciones interanuales.'
+        : 'Sin periodo comparativo disponible.';
+    return;
+  }
+  const t = deterministicTrends(sources);
+  const fmtOrNd = (v: number | null | undefined) => (typeof v === 'number' ? fmtTrendPct(v) : 'N/D');
+  const periods = `${sources.primary?.period ?? ''} vs ${sources.comparative.period ?? ''}`.trim();
+  json.trends = {
+    yoyRevenue: fmtOrNd(t.revenue),
+    yoyEbitda: fmtOrNd(t.ebitda),
+    yoyNetIncome: fmtOrNd(t.netIncome),
+    yoyEquity: fmtOrNd(t.equity),
+    marginDeltaPp: json.trends?.marginDeltaPp ? 'N/D' : null,
+    qualitativeCommentary:
+      json.trends?.qualitativeCommentary?.trim() ||
+      `Periodo ${periods}: el análisis no redactó comentario sobre las variaciones.`,
+  };
+  checks.trendsSource = 'deterministic';
+  checks.trendsNdMotivo = t.motivo;
+}
+
+// ---------------------------------------------------------------------------
 // Adapter local privado: StrategyReportJson -> StrategicAnalysisResult legacy
 // ---------------------------------------------------------------------------
 // Convierte el JSON estricto en el struct Markdown que consumen Governance
@@ -381,9 +441,17 @@ function renderTrendsAndBreakEven(json: StrategyReportJson, checks?: StrategyChe
     if (json.trends.yoyNetIncome) lines.push(`- Utilidad Neta YoY: ${json.trends.yoyNetIncome}`);
     if (json.trends.yoyEquity) lines.push(`- Patrimonio YoY: ${json.trends.yoyEquity}`);
     if (json.trends.marginDeltaPp) lines.push(`- Δ Margen (pp): ${json.trends.marginDeltaPp}`);
+    if (checks?.trendsSource === 'deterministic') {
+      lines.push(
+        '',
+        `_Variaciones calculadas por el sistema desde el balance preprocesado de ambos periodos: ` +
+          `(actual − comparativo) / |comparativo|.${checks.trendsNdMotivo ? ` N/D: ${checks.trendsNdMotivo}.` : ''}` +
+          `${json.trends.marginDeltaPp === 'N/D' ? ' Δ margen: N/D (margen no definido por el modelo).' : ''}_`,
+      );
+    }
     lines.push('', json.trends.qualitativeCommentary);
   } else {
-    lines.push('', '_Sin periodo comparativo disponible._');
+    lines.push('', `_${checks?.noTrendsReason ?? 'Sin periodo comparativo disponible.'}_`);
   }
   const be = json.breakEven;
   lines.push(
