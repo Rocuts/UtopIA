@@ -12,7 +12,9 @@
 // ---------------------------------------------------------------------------
 import { describe, expect, it } from 'vitest';
 
+import { makeExportableReport } from '@/lib/agents/financial/__fixtures__/coherent-niif-report';
 import { BalanceValidationError, prepareFinancialContext } from '@/lib/agents/financial/orchestrator';
+import { composeEditorialReport } from '@/lib/export/pdf-elite-react';
 import { escribirDirectivasIngesta } from '@/lib/upload/ingest-directives';
 import {
   parseUploadedTrialBalanceText,
@@ -177,5 +179,19 @@ describe('P4 (a) — unidad confirmada por el usuario', () => {
     const antes = preprocessTrialBalance(parseTrialBalanceCSVWithMeta(csv).rows).primary;
     expect(antes.controlTotals.cents!.activo).toBe(BigInt(57_000_000));
     expect(antes.validation.adjustments.some((a) => /reexpresad/.test(a))).toBe(false);
+  });
+
+  it('la nota "cifras reexpresadas … por confirmación del usuario" llega al anexo del informe PDF', () => {
+    const pre = pp(CSV_MILES, 'miles');
+    const doc = composeEditorialReport({
+      report: makeExportableReport(),
+      preprocessed: pre,
+      pillars: null,
+      language: 'es',
+    });
+    const avisos = doc.appendix.validationWarnings ?? [];
+    expect(avisos.some((w) => /cifras reexpresadas de miles de pesos a pesos .*por confirmación del usuario/.test(w))).toBe(
+      true,
+    );
   });
 });
