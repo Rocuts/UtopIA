@@ -49,6 +49,12 @@ import {
   buildQualificationSeal,
 } from './agents/reconcile-anchors';
 import { toNiifAnalysisResult } from './agents/renderer';
+import {
+  reconcileStrategyAnchors,
+  type QualifiedStrategicAnalysisResult,
+  type StrategyAnchorSources,
+  type StrategyQualifications,
+} from './validators/strategy-anchors';
 import type { NiifReportJson } from './contracts/niif-report';
 
 /** Serializa centavos a MoneyCop, o `undefined` si el ancla no existe. */
@@ -2030,7 +2036,7 @@ function resolvePhaseReportMode(
 export async function runStrategyPhase(
   input: PhaseHandoffInput,
   options: Pick<OrchestrateFinancialOptions, 'onProgress'> = {},
-): Promise<StrategicAnalysisResult> {
+): Promise<QualifiedStrategicAnalysisResult> {
   const { niifResult, bindingTotals, preprocessed, company, language, instructions, elite, reportMode } = input;
   const { onProgress } = options;
 
@@ -2052,9 +2058,102 @@ export async function runStrategyPhase(
     resolvePhaseReportMode(preprocessed, reportMode),
   );
 
+  // Validación determinista post-LLM (pipeline-flujo-05): el JSON del Director
+  // de Estrategia salía tal cual. Se cruza con tolerancia exacta todo lo que
+  // tiene ancla (rubros del dashboard, KPIs precalculados, DuPont, gate de
+  // liquidez) y se declara lo que no la tiene.
+  const qualified = qualifyStrategyResult(
+    strategy,
+    {
+      primary: preprocessed?.primary,
+      comparative: preprocessed ? (preprocessed.comparative ?? null) : undefined,
+      niif: niifResult.json ?? null,
+    },
+    language,
+    onProgress,
+  );
+
   onProgress?.({ type: 'stage_complete', stage: 2, label: completeLabel });
 
-  return strategy;
+  return qualified;
+}
+
+/**
+ * Sella la Parte II cuando alguna cifra anclada no coincide y deja constancia
+ * de lo que no pudo verificarse. El veredicto viaja en
+ * `strategyQualifications` (análogo a `actaQualifications`); el sello va en el
+ * cuerpo porque un evento SSE `warning` no llega al entregable.
+ */
+function qualifyStrategyResult(
+  strategy: StrategicAnalysisResult,
+  sources: StrategyAnchorSources,
+  language: 'es' | 'en',
+  onProgress: ((event: FinancialProgressEvent) => void) | undefined,
+): QualifiedStrategicAnalysisResult {
+  const es = language === 'es';
+  let qualifications: StrategyQualifications;
+  let verifiedCount = 0;
+  if (!strategy.json) {
+    qualifications = {
+      clean: false,
+      motivos: [
+        es
+          ? 'El Director de Estrategia no devolvió cifras estructuradas: la Parte II no pudo verificarse contra el balance.'
+          : 'The Strategy Director returned no structured figures: Part II could not be verified against the trial balance.',
+      ],
+      noVerificables: [],
+    };
+  } else {
+    const check = reconcileStrategyAnchors(strategy.json, sources, language);
+    verifiedCount = check.verifiedCount;
+    qualifications = {
+      clean: check.deviations.length === 0,
+      motivos: check.deviations,
+      noVerificables: check.unverifiable,
+    };
+  }
+
+  if (!qualifications.clean) {
+    onProgress?.({
+      type: 'warning',
+      warnings: qualifications.motivos.map((m) => `[Estrategia — anclas] ${m}`),
+    });
+    const seal = [
+      es
+        ? '> ## ANÁLISIS ESTRATÉGICO CON SALVEDADES — CIFRAS SIN RESPALDO'
+        : '> ## STRATEGIC ANALYSIS WITH QUALIFICATIONS — UNSUPPORTED FIGURES',
+      '>',
+      es
+        ? '> Cifras de la Parte II no coinciden con el balance preprocesado. Esta sección NO es emitible tal como está:'
+        : '> Part II figures do not match the preprocessed trial balance. This section is NOT issuable as is:',
+      '>',
+      ...qualifications.motivos.map((m) => `> - ${m}`),
+      '',
+    ].join('\n');
+    strategy.kpiDashboard = `${seal}\n${strategy.kpiDashboard}`;
+    strategy.fullContent = `${seal}\n${strategy.fullContent}`;
+  }
+
+  if (qualifications.noVerificables.length > 0) {
+    const MAX = 12;
+    const shown = qualifications.noVerificables.slice(0, MAX);
+    const rest = qualifications.noVerificables.length - shown.length;
+    const note = [
+      '',
+      es ? '### Verificación determinista de la Parte II' : '### Deterministic verification of Part II',
+      es
+        ? `- Cifras cruzadas contra el balance preprocesado: ${verifiedCount}.`
+        : `- Figures cross-checked against the preprocessed trial balance: ${verifiedCount}.`,
+      (es
+        ? '- No verificables contra anclas deterministas (estimaciones del modelo, no cifras del balance): '
+        : '- Not verifiable against deterministic anchors (model estimates, not trial-balance figures): ') +
+        shown.join('; ') +
+        (rest > 0 ? (es ? `; y ${rest} más.` : `; and ${rest} more.`) : '.'),
+    ].join('\n');
+    strategy.fullContent = `${strategy.fullContent}\n${note}`;
+  }
+
+  return Object.assign(strategy, { strategyQualifications: qualifications });
 }
 
 /**
