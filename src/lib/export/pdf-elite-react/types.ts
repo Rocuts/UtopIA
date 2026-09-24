@@ -27,14 +27,23 @@ export interface PortraitSpec {
   areaAccent: AreaKey;
 }
 
+/**
+ * Categoría de un KPI por su NATURALEZA (reportes-export-18): la página agrupa
+ * por este campo, nunca por la posición en el array.
+ */
+export type KpiCategory = 'estructura' | 'resultados' | 'rentabilidad' | 'liquidez';
+
 export interface KpiCell {
   label: string;
-  /** Cifra ya formateada en COP ($1.234.567,89) o ratio (12,3%). */
+  /** Cifra ya formateada en COP ($1.234.567,89) o ratio (12,3%). "N/D" si no hay base verificada. */
   value: string;
   unit?: string;
   /** Variación porcentual vs comparativo (firmada). */
   deltaPct?: number;
   status?: 'positive' | 'warning' | 'critical' | 'neutral';
+  category?: KpiCategory;
+  /** Nota visible bajo el KPI (p. ej. "△ sobre patrimonio de cierre", motivo del N/D). */
+  note?: string;
 }
 
 export interface WaterfallItem {
@@ -46,7 +55,18 @@ export interface WaterfallItem {
 
 export interface DialGaugeSpec {
   label: string;
+  /** Posición de la AGUJA, recortada a [min, max]. No es la cifra que se imprime. */
   value: number;
+  /**
+   * Cifra real que se imprime (es-CO, sin recorte), p. ej. "10,00" o "10,0%".
+   * "N/D" cuando no hay base (reportes-export-05). Sin este campo el componente
+   * formatea `value` (compat con fixtures antiguos).
+   */
+  displayValue?: string;
+  /** Sin dato: no se dibuja aguja y se imprime `displayValue` ("N/D"). */
+  noData?: boolean;
+  /** La cifra real cae fuera de [min, max]: la aguja está recortada y se rotula. */
+  outOfScale?: boolean;
   min: number;
   max: number;
   /** [low, mid, high] — define las 3 zonas de color del arco. */
@@ -292,7 +312,7 @@ export interface DirectorLetterSpec {
 }
 
 export interface KpiGridSpec {
-  /** Máx 12 KPIs (4×3). */
+  /** Hasta 13 KPIs agrupados por `category` (4 grupos de 3-4). Nunca se recortan en silencio. */
   kpis: KpiCell[];
 }
 

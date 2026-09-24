@@ -53,7 +53,7 @@ export function DialGauge({ gauge, size = 180 }: Props) {
   // Spec §3.8: arc width 14pt. Scale with gauge size proportionally from 180pt base.
   const arcThickness = Math.round(14 * (size / 180));
 
-  const { value, min, max, thresholds, label, caption } = gauge;
+  const { value, min, max, thresholds, label, caption, noData, outOfScale } = gauge;
   const [low, mid, high] = thresholds;
 
   function valueToAngle(v: number): number {
@@ -74,12 +74,15 @@ export function DialGauge({ gauge, size = 180 }: Props) {
   // Spec §3.8: numeral Fraunces 32pt FOREST_900 (from size 180 baseline)
   const numeralSize = Math.round(32 * (size / 180));
 
+  // La cifra impresa es la REAL (`displayValue`, es-CO, sin recorte) — la
+  // aguja es la única que se recorta a la escala (reportes-export-05). Sin
+  // `displayValue` (fixtures antiguos) se formatea `value` con coma decimal.
   const valueText =
-    Math.abs(value) >= 100
-      ? value.toFixed(0)
-      : Math.abs(value) >= 10
-        ? value.toFixed(1)
-        : value.toFixed(2);
+    gauge.displayValue ??
+    value.toLocaleString('es-CO', {
+      minimumFractionDigits: Math.abs(value) >= 100 ? 0 : Math.abs(value) >= 10 ? 1 : 2,
+      maximumFractionDigits: Math.abs(value) >= 100 ? 0 : Math.abs(value) >= 10 ? 1 : 2,
+    });
 
   return (
     <Svg width={W} height={H + 36}>
@@ -107,16 +110,35 @@ export function DialGauge({ gauge, size = 180 }: Props) {
         );
       })}
 
-      {/* Needle — FOREST_900 (spec §3.8) */}
-      <Line
-        x1={cx}
-        y1={cy}
-        x2={needleEnd.x}
-        y2={needleEnd.y}
-        stroke={FOREST_900}
-        strokeWidth={2}
-      />
-      <Circle cx={cx} cy={cy} r={4} fill={FOREST_900} />
+      {/* Needle — FOREST_900 (spec §3.8). Sin dato no hay aguja: un N/D no
+          se pinta en ninguna zona. */}
+      {!noData && (
+        <Line
+          x1={cx}
+          y1={cy}
+          x2={needleEnd.x}
+          y2={needleEnd.y}
+          stroke={FOREST_900}
+          strokeWidth={2}
+        />
+      )}
+      {!noData && <Circle cx={cx} cy={cy} r={4} fill={FOREST_900} />}
+
+      {/* Aguja recortada: la cifra real está fuera de la escala del dial. */}
+      {outOfScale && (
+        <SvgText
+          x={cx}
+          y={cy - radius - 2}
+          style={{
+            fontFamily: 'Geist',
+            fontSize: Math.round(8 * (size / 180)),
+            fill: CHARCOAL_700,
+            textAnchor: 'middle',
+          }}
+        >
+          aguja fuera de escala
+        </SvgText>
+      )}
 
       {/* Numeral — Fraunces, FOREST_900 (spec §3.8) */}
       <SvgText

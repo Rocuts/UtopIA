@@ -33,6 +33,7 @@ import {
   type PeriodoTipo,
 } from './statement-presentation';
 import { formatStatementNote } from './pdf-elite-react/compose-statements-from-json';
+import { revenueBreakdown } from './revenue';
 import type {
   ControlTotals,
   PreprocessedBalance,
@@ -80,7 +81,9 @@ const FONT_MAIN = 'Calibri';
 // (Art. 457 num. 2 C.Co.) y debe verse como tal.
 const NUM_FMT_COP = '[$-es-CO]"$"#,##0.00;[$-es-CO]("$"#,##0.00)';
 const NUM_FMT_COP_INT = '[$-es-CO]"$"#,##0;[$-es-CO]("$"#,##0)';
-const NUM_FMT_PCT = '0.00%;-0.00%;"—"';
+// Sin sección de cero "—": un 0 % real y un N/D se veían idénticos
+// (reportes-export-12). N/D se escribe ahora como texto "N/D".
+const NUM_FMT_PCT = '0.00%;-0.00%;0.00%';
 
 /**
  * MoneyCop (string de centavos) → pesos como `number` para la celda de Excel.
@@ -922,15 +925,22 @@ function addIncomeStatement(
 
     row = addStatementColumnHeader(ws, row, primary.period, comparative?.period ?? null);
 
-    // INGRESOS
-    row = addSectionHeader(ws, row, 'INGRESOS OPERACIONALES', isMultiPeriod);
+    // INGRESOS — detalle de la clase 4 tal cual la balanza, y debajo los
+    // ingresos operacionales netos (41 − 4175) que sostienen la utilidad
+    // bruta. La Σ de la clase 4 no es "total ingresos": mezcla devoluciones y
+    // no operacionales (ratios-kpis-04). Grupo 42 va debajo del resultado
+    // operacional (decisión de negocio del coordinador).
+    const revP = revenueBreakdown(primary);
+    const revC = comparative ? revenueBreakdown(comparative) : null;
+    const nd = (v: number | null | undefined) => (v === null || v === undefined ? Number.NaN : v);
+    row = addSectionHeader(ws, row, 'INGRESOS (CLASE 4 — SALDOS DE LA BALANZA)', isMultiPeriod);
     row = addClassRows(ws, row, primary, comparative, 4);
     row = addStatementTotalRow(
       ws,
       row,
-      'TOTAL INGRESOS',
-      primary.summary.totalRevenue,
-      comparative?.summary.totalRevenue,
+      'INGRESOS OPERACIONALES NETOS (41 − 4175)',
+      nd(revP.operacionalesNetos),
+      revC ? nd(revC.operacionalesNetos) : undefined,
       isMultiPeriod,
     );
     row++;
@@ -951,14 +961,27 @@ function addIncomeStatement(
     // UTILIDAD BRUTA — ingresos menos costo de ventas (clase 6) Y costo de
     // producción (clase 7). Omitir la clase 7 sobreestimaba la utilidad bruta
     // de cualquier empresa manufacturera respecto del HTML/PDF.
-    const grossOf = (s: PeriodView['summary']) =>
-      s.totalRevenue - s.totalCosts - s.totalProduction;
+    const grossOf = (s: PeriodView['summary'], opNetos: number | null | undefined) =>
+      opNetos === null || opNetos === undefined
+        ? Number.NaN
+        : opNetos - s.totalCosts - s.totalProduction;
     row = addStatementTotalRow(
       ws,
       row,
       'UTILIDAD BRUTA',
-      grossOf(primary.summary),
-      comparative ? grossOf(comparative.summary) : undefined,
+      grossOf(primary.summary, revP.operacionalesNetos),
+      comparative ? grossOf(comparative.summary, revC?.operacionalesNetos) : undefined,
+      isMultiPeriod,
+    );
+    row++;
+
+    // Otros ingresos no operacionales (grupo 42 y demás de la clase 4).
+    row = addStatementTotalRow(
+      ws,
+      row,
+      'OTROS INGRESOS NO OPERACIONALES',
+      nd(revP.noOperacionales),
+      revC ? nd(revC.noOperacionales) : undefined,
       isMultiPeriod,
     );
     row++;
@@ -1054,6 +1077,21 @@ function addKPISheet(
   ws.getColumn(5).width = 14;
 }
 
+/** Escribe una cifra de KPI: número con formato, o "N/D" como TEXTO (nunca 0). */
+function writeKpiCell(cell: ExcelJS.Cell, value: number | null, numFmt: string): void {
+  if (value === null || !Number.isFinite(value)) {
+    cell.value = 'N/D';
+    cell.alignment = { horizontal: 'right' };
+    return;
+  }
+  cell.value = value;
+  cell.numFmt = numFmt;
+}
+
+function kpiNumFmt(k: KPIRow): string {
+  return k.isPct ? NUM_FMT_PCT : k.isMoney ? NUM_FMT_COP_INT : '0.00';
+}
+
 /**
  * Tabla comparativa de KPIs deterministicos derivados del preprocessed.
  * Layout: KPI | <comparative.period> | <primary.period> | Variacion $ | Variacion %
@@ -1086,25 +1124,15 @@ function addKPIComparativeBlock(
     const r = ws.getRow(row);
     r.getCell(1).value = k.label;
     r.getCell(1).font = { name: FONT_MAIN, size: 10 };
-    r.getCell(2).value = k.prev;
-    r.getCell(3).value = k.curr;
-    r.getCell(4).value = k.delta;
-    r.getCell(5).value = k.deltaPct;
-
-    if (k.isPct) {
-      r.getCell(2).numFmt = NUM_FMT_PCT;
-      r.getCell(3).numFmt = NUM_FMT_PCT;
-      r.getCell(4).numFmt = NUM_FMT_PCT;
-    } else if (k.isMoney) {
-      r.getCell(2).numFmt = NUM_FMT_COP_INT;
-      r.getCell(3).numFmt = NUM_FMT_COP_INT;
-      r.getCell(4).numFmt = NUM_FMT_COP_INT;
-    } else {
-      r.getCell(2).numFmt = '0.00';
-      r.getCell(3).numFmt = '0.00';
-      r.getCell(4).numFmt = '0.00';
+    const fmt = kpiNumFmt(k);
+    writeKpiCell(r.getCell(2), k.prev, fmt);
+    writeKpiCell(r.getCell(3), k.curr, fmt);
+    writeKpiCell(r.getCell(4), k.delta, fmt);
+    writeKpiCell(r.getCell(5), k.deltaPct, NUM_FMT_PCT);
+    if (k.note) {
+      r.getCell(6).value = k.note;
+      r.getCell(6).font = { name: FONT_MAIN, size: 8, italic: true, color: { argb: COLORS.orange } };
     }
-    r.getCell(5).numFmt = NUM_FMT_PCT;
 
     if (row % 2 === 0) {
       for (let i = 1; i <= 5; i++) {
@@ -1142,14 +1170,10 @@ function addKPISinglePeriodBlock(
   for (const k of kpis) {
     const r = ws.getRow(row);
     r.getCell(1).value = k.label;
-    r.getCell(2).value = k.curr;
-
-    if (k.isPct) {
-      r.getCell(2).numFmt = NUM_FMT_PCT;
-    } else if (k.isMoney) {
-      r.getCell(2).numFmt = NUM_FMT_COP_INT;
-    } else {
-      r.getCell(2).numFmt = '0.00';
+    writeKpiCell(r.getCell(2), k.curr, kpiNumFmt(k));
+    if (k.note) {
+      r.getCell(3).value = k.note;
+      r.getCell(3).font = { name: FONT_MAIN, size: 8, italic: true, color: { argb: COLORS.orange } };
     }
 
     if (row % 2 === 0) {
@@ -1165,18 +1189,26 @@ function addKPISinglePeriodBlock(
 
 interface KPIRow {
   label: string;
-  curr: number;
-  prev: number;
-  delta: number;
-  deltaPct: number;
+  /** `null` = N/D (sin base verificada). Nunca se sustituye por 0. */
+  curr: number | null;
+  prev: number | null;
+  delta: number | null;
+  deltaPct: number | null;
   isPct: boolean;
   isMoney: boolean;
+  /** Marca visible junto a la fila (spec v10.1: △ base de cierre / bases distintas). */
+  note?: string;
 }
 
 /**
  * Ratio de un periodo, con la MISMA precedencia que usan el PDF y el HTML:
- * primero el campo pre-calculado de `controlTotals` (Wave 2.F4, fuente única),
- * y sólo si viene null/ausente —balances cacheados pre-F4— el cálculo local.
+ * primero el campo pre-calculado de `controlTotals` (Wave 2.F4, fuente única).
+ *
+ * Auditoría 2026-09 (reportes-export-12): `null` en `controlTotals` significa
+ * "denominador nulo o anómalo → N/D", y NO debe caer al cálculo local (que
+ * producía, p. ej., un ROE de 200 % sobre el patrimonio de cierre). Sólo un
+ * campo AUSENTE (`undefined`, balances cacheados pre-F4) usa el fallback, y el
+ * fallback también devuelve `null` cuando su denominador es 0.
  *
  * `controlTotals` guarda los porcentajes en escala 0-100; las celdas de Excel
  * llevan `NUM_FMT_PCT`, que espera una fracción, de ahí el /100.
@@ -1184,80 +1216,136 @@ interface KPIRow {
 function ratioFromControlTotals(
   view: PeriodView | null,
   pick: (ct: ControlTotals) => number | null | undefined,
-  fallback: () => number,
+  fallback: () => number | null,
   isPercentScale: boolean,
-): number {
+): number | null {
   const ct = view?.controlTotals;
-  const pre = ct ? pick(ct) : null;
-  if (typeof pre === 'number' && Number.isFinite(pre)) {
+  const pre = ct ? pick(ct) : undefined;
+  if (pre === null) return null;
+  if (typeof pre === 'number') {
+    if (!Number.isFinite(pre)) return null;
     return isPercentScale ? pre / 100 : pre;
   }
   return fallback();
 }
 
+const safeDiv = (num: number, den: number): number | null =>
+  den === 0 || !Number.isFinite(num) || !Number.isFinite(den) ? null : num / den;
+
+/**
+ * Base del ROE/ROA de un periodo: 'promedio' sólo cuando el preprocesador
+ * calculó el ratio sobre el promedio con el comparativo (promedio ≠ cierre).
+ * Spec v10.1 §KPIs: △ cuando se calcula sobre el saldo de cierre.
+ */
+function ratioBasis(
+  view: PeriodView | null,
+  field: 'roe' | 'roa',
+): 'promedio' | 'cierre' | 'desconocida' {
+  const ct = view?.controlTotals;
+  // Campo ausente → el fallback local divide por el saldo de CIERRE.
+  if (!ct || ct[field] === undefined) return 'cierre';
+  const avg = field === 'roe' ? ct.patrimonioPromedio : ct.activoPromedio;
+  const close = field === 'roe' ? ct.patrimonio : ct.activo;
+  if (typeof avg !== 'number') return 'desconocida';
+  return avg !== close ? 'promedio' : 'cierre';
+}
+
 function computeKPIs(primary: PeriodView, comparative: PeriodView | null): KPIRow[] {
-  const kpiOf = (label: string, currVal: number, prevVal: number, opts: { isPct?: boolean; isMoney?: boolean }): KPIRow => {
-    const delta = currVal - prevVal;
-    const deltaPct = prevVal !== 0 ? delta / Math.abs(prevVal) : 0;
+  const kpiOf = (
+    label: string,
+    currVal: number | null,
+    prevVal: number | null,
+    opts: { isPct?: boolean; isMoney?: boolean; comparable?: boolean },
+  ): KPIRow => {
+    const comparable = opts.comparable ?? true;
+    const delta = comparable && currVal !== null && prevVal !== null ? currVal - prevVal : null;
+    const deltaPct =
+      delta !== null && prevVal !== null && prevVal !== 0 ? delta / Math.abs(prevVal) : null;
     return { label, curr: currVal, prev: prevVal, delta, deltaPct, isPct: !!opts.isPct, isMoney: !!opts.isMoney };
   };
 
   const p = primary.summary;
-  const c = comparative?.summary ?? {
-    totalAssets: 0, totalLiabilities: 0, totalEquity: 0, totalRevenue: 0,
-    totalExpenses: 0, totalCosts: 0, totalProduction: 0, netIncome: 0,
-    equationBalance: 0, equationBalanced: true,
-  };
+  const c = comparative?.summary ?? null;
+
+  // "Ingresos" = ingresos operacionales netos (41 − 4175), nunca la Σ de la
+  // clase 4 (ratios-kpis-04). El margen neto usa los ingresos NETOS de
+  // devoluciones, misma base que `controlTotals.margenNeto`.
+  const revP = revenueBreakdown(primary);
+  const revC = comparative ? revenueBreakdown(comparative) : null;
 
   const margenNetoP = ratioFromControlTotals(
     primary, (ct) => ct.margenNeto,
-    () => (p.totalRevenue !== 0 ? p.netIncome / p.totalRevenue : 0), true,
+    () => (revP.netosTotales === null ? null : safeDiv(p.netIncome, revP.netosTotales)), true,
   );
-  const margenNetoC = ratioFromControlTotals(
-    comparative, (ct) => ct.margenNeto,
-    () => (c.totalRevenue !== 0 ? c.netIncome / c.totalRevenue : 0), true,
-  );
+  const margenNetoC = comparative
+    ? ratioFromControlTotals(
+        comparative, (ct) => ct.margenNeto,
+        () => (revC?.netosTotales == null || !c ? null : safeDiv(c.netIncome, revC.netosTotales)), true,
+      )
+    : null;
 
   const endeudamientoP = ratioFromControlTotals(
     primary, (ct) => ct.endeudamientoTotal,
-    () => (p.totalAssets !== 0 ? p.totalLiabilities / p.totalAssets : 0), true,
+    () => safeDiv(p.totalLiabilities, p.totalAssets), true,
   );
-  const endeudamientoC = ratioFromControlTotals(
-    comparative, (ct) => ct.endeudamientoTotal,
-    () => (c.totalAssets !== 0 ? c.totalLiabilities / c.totalAssets : 0), true,
-  );
+  const endeudamientoC = comparative && c
+    ? ratioFromControlTotals(
+        comparative, (ct) => ct.endeudamientoTotal,
+        () => safeDiv(c.totalLiabilities, c.totalAssets), true,
+      )
+    : null;
 
   const roaP = ratioFromControlTotals(
     primary, (ct) => ct.roa,
-    () => (p.totalAssets !== 0 ? p.netIncome / p.totalAssets : 0), true,
+    () => safeDiv(p.netIncome, p.totalAssets), true,
   );
-  const roaC = ratioFromControlTotals(
-    comparative, (ct) => ct.roa,
-    () => (c.totalAssets !== 0 ? c.netIncome / c.totalAssets : 0), true,
-  );
+  const roaC = comparative && c
+    ? ratioFromControlTotals(comparative, (ct) => ct.roa, () => safeDiv(c.netIncome, c.totalAssets), true)
+    : null;
 
   // ROE: `controlTotals.roe` usa patrimonio PROMEDIO. Recalcularlo aquí sobre
   // el patrimonio de cierre imprimía en el .xlsx un ROE distinto al del HTML y
   // al del PDF para el mismo informe.
   const roeP = ratioFromControlTotals(
     primary, (ct) => ct.roe,
-    () => (p.totalEquity !== 0 ? p.netIncome / p.totalEquity : 0), true,
+    () => safeDiv(p.netIncome, p.totalEquity), true,
   );
-  const roeC = ratioFromControlTotals(
-    comparative, (ct) => ct.roe,
-    () => (c.totalEquity !== 0 ? c.netIncome / c.totalEquity : 0), true,
-  );
+  const roeC = comparative && c
+    ? ratioFromControlTotals(comparative, (ct) => ct.roe, () => safeDiv(c.netIncome, c.totalEquity), true)
+    : null;
+
+  // Rótulo de la base (△) y comparabilidad: el periodo más antiguo no tiene
+  // comparativo propio, así que su ROE/ROA es sobre saldo de cierre; restarlo
+  // de un ROE sobre promedio mezcla bases (reportes-export-12).
+  const basisNote = (field: 'roe' | 'roa') => {
+    const bp = ratioBasis(primary, field);
+    const bc = comparative ? ratioBasis(comparative, field) : bp;
+    const noun = field === 'roe' ? 'patrimonio' : 'activo';
+    const describe = (b: typeof bp) => (b === 'cierre' ? `${noun} de cierre` : `${noun} promedio`);
+    if (comparative && bp !== bc && bp !== 'desconocida' && bc !== 'desconocida') {
+      return {
+        note: `△ Bases distintas: ${comparative.period} sobre ${describe(bc)}, ${primary.period} sobre ${describe(bp)}; variación no calculada`,
+        comparable: false,
+      };
+    }
+    return {
+      note: bp === 'cierre' ? `△ Calculado sobre ${noun} de cierre` : undefined,
+      comparable: true,
+    };
+  };
+  const roeMeta = basisNote('roe');
+  const roaMeta = basisNote('roa');
 
   return [
-    kpiOf('Total Activo', p.totalAssets, c.totalAssets, { isMoney: true }),
-    kpiOf('Total Pasivo', p.totalLiabilities, c.totalLiabilities, { isMoney: true }),
-    kpiOf('Total Patrimonio', p.totalEquity, c.totalEquity, { isMoney: true }),
-    kpiOf('Total Ingresos', p.totalRevenue, c.totalRevenue, { isMoney: true }),
-    kpiOf('Utilidad Neta', p.netIncome, c.netIncome, { isMoney: true }),
+    kpiOf('Total Activo', p.totalAssets, c?.totalAssets ?? null, { isMoney: true }),
+    kpiOf('Total Pasivo', p.totalLiabilities, c?.totalLiabilities ?? null, { isMoney: true }),
+    kpiOf('Total Patrimonio', p.totalEquity, c?.totalEquity ?? null, { isMoney: true }),
+    kpiOf('Ingresos operacionales netos', revP.operacionalesNetos, revC?.operacionalesNetos ?? null, { isMoney: true }),
+    kpiOf('Utilidad Neta', p.netIncome, c?.netIncome ?? null, { isMoney: true }),
     kpiOf('Margen Neto', margenNetoP, margenNetoC, { isPct: true }),
     kpiOf('Endeudamiento', endeudamientoP, endeudamientoC, { isPct: true }),
-    kpiOf('ROA', roaP, roaC, { isPct: true }),
-    kpiOf('ROE', roeP, roeC, { isPct: true }),
+    { ...kpiOf('ROA', roaP, roaC, { isPct: true, comparable: roaMeta.comparable }), note: roaMeta.note },
+    { ...kpiOf('ROE', roeP, roeC, { isPct: true, comparable: roeMeta.comparable }), note: roeMeta.note },
   ];
 }
 
@@ -1416,11 +1504,17 @@ function addComparativeSummaryBlock(
   ws.getRow(row).getCell(1).font = { name: FONT_MAIN, bold: true, size: 13, color: { argb: COLORS.gold } };
   row += 2;
 
-  const lines: Array<[string, number, number]> = [
+  // "Ingresos" = ingresos operacionales netos (41 − 4175), no la Σ de la
+  // clase 4 (ratios-kpis-04). Sin detalle PUC → N/D.
+  const lines: Array<[string, number | null, number | null]> = [
     ['Total Activo', comparative.summary.totalAssets, primary.summary.totalAssets],
     ['Total Pasivo', comparative.summary.totalLiabilities, primary.summary.totalLiabilities],
     ['Total Patrimonio', comparative.summary.totalEquity, primary.summary.totalEquity],
-    ['Ingresos', comparative.summary.totalRevenue, primary.summary.totalRevenue],
+    [
+      'Ingresos operacionales netos',
+      revenueBreakdown(comparative).operacionalesNetos,
+      revenueBreakdown(primary).operacionalesNetos,
+    ],
     ['Utilidad Neta', comparative.summary.netIncome, primary.summary.netIncome],
   ];
 
@@ -1439,14 +1533,15 @@ function addComparativeSummaryBlock(
   for (const [label, prev, curr] of lines) {
     const r = ws.getRow(row);
     r.getCell(1).value = label;
-    r.getCell(2).value = prev;
-    r.getCell(2).numFmt = NUM_FMT_COP_INT;
-    r.getCell(3).value = curr;
-    r.getCell(3).numFmt = NUM_FMT_COP_INT;
-    r.getCell(4).value = curr - prev;
-    r.getCell(4).numFmt = NUM_FMT_COP_INT;
-    r.getCell(5).value = prev !== 0 ? (curr - prev) / Math.abs(prev) : 0;
-    r.getCell(5).numFmt = NUM_FMT_PCT;
+    const delta = prev !== null && curr !== null ? curr - prev : null;
+    writeKpiCell(r.getCell(2), prev, NUM_FMT_COP_INT);
+    writeKpiCell(r.getCell(3), curr, NUM_FMT_COP_INT);
+    writeKpiCell(r.getCell(4), delta, NUM_FMT_COP_INT);
+    writeKpiCell(
+      r.getCell(5),
+      delta !== null && prev !== null && prev !== 0 ? delta / Math.abs(prev) : null,
+      NUM_FMT_PCT,
+    );
     if (row % 2 === 0) {
       for (let i = 1; i <= 5; i++) {
         r.getCell(i).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.lightGray } };
@@ -1758,6 +1853,21 @@ function addStatementTotalRow(
   const r = ws.getRow(row);
   r.getCell(2).value = label;
   r.getCell(2).font = { name: FONT_MAIN, bold: true, size: 10, color: { argb: COLORS.darkNavy } };
+
+  // Cifra sin base (NaN) → "N/D" como texto, nunca 0.
+  if (!Number.isFinite(primaryAmount) || (comparativeAmount !== undefined && !Number.isFinite(comparativeAmount))) {
+    const put = (col: number, v: number | undefined) => {
+      if (v === undefined) return;
+      writeKpiCell(r.getCell(col), Number.isFinite(v) ? v : null, NUM_FMT_COP);
+    };
+    if (isMultiPeriod && comparativeAmount !== undefined) {
+      put(3, comparativeAmount);
+      put(4, primaryAmount);
+    } else {
+      put(3, primaryAmount);
+    }
+    return row + 1;
+  }
 
   if (isMultiPeriod && comparativeAmount !== undefined) {
     r.getCell(3).value = comparativeAmount;

@@ -34,7 +34,6 @@ import {
   S1,
   S2,
   S3,
-  S4,
   S5,
   S6,
   SAGE_100,
@@ -85,8 +84,11 @@ function formatDelta(deltaPct?: number): string | null {
 
 // ─── Single KPI badge (ref p.80 circle icon badge) ───────────────────────────
 // Outer sage ring + inner forest/sage circle + KPI value below + label.
-const BADGE_OUTER_R = 42;
-const BADGE_INNER_R = 32;
+// Compact badges: la grilla muestra hasta 12 KPIs en 4 grupos (2×2); el
+// tamaño completo sólo cabía para 9 y los KPIs 10–12 se descartaban
+// (reportes-export-18).
+const BADGE_OUTER_R = 16;
+const BADGE_INNER_R = 12;
 const BADGE_SVG_W = BADGE_OUTER_R * 2 + 8;
 const BADGE_SVG_H = BADGE_OUTER_R * 2 + 8;
 
@@ -101,9 +103,9 @@ function KpiBadge({ kpi, index }: { kpi: KpiCell; index: number }) {
       style={{
         alignItems: 'center',
         flex: 1,
-        minWidth: 100,
-        maxWidth: 130,
-        paddingHorizontal: S2,
+        minWidth: 76,
+        maxWidth: 88,
+        paddingHorizontal: S1,
       }}
     >
       {/* Circle badge */}
@@ -113,7 +115,7 @@ function KpiBadge({ kpi, index }: { kpi: KpiCell; index: number }) {
         {/* Inner colored disc */}
         <SvgCircle cx={cx} cy={cy} r={BADGE_INNER_R} fill={fills.circle} />
         {/* Tiny white icon placeholder — initials of label */}
-        <SvgCircle cx={cx} cy={cy} r={10} fill="rgba(251,248,241,0.18)" />
+        <SvgCircle cx={cx} cy={cy} r={5} fill="rgba(251,248,241,0.18)" />
       </Svg>
 
       {/* Value */}
@@ -121,9 +123,9 @@ function KpiBadge({ kpi, index }: { kpi: KpiCell; index: number }) {
         style={{
           fontFamily: FONT_DISPLAY,
           fontWeight: 'bold',
-          fontSize: 18,
+          fontSize: 10,
           color: FOREST_900,
-          marginTop: S2,
+          marginTop: 2,
           textAlign: 'center',
         }}
       >
@@ -155,6 +157,19 @@ function KpiBadge({ kpi, index }: { kpi: KpiCell; index: number }) {
       >
         {kpi.label}
       </Text>
+      {kpi.note ? (
+        <Text
+          style={{
+            fontFamily: FONT_SANS,
+            fontSize: 6,
+            color: CHARCOAL_700,
+            textAlign: 'center',
+            marginTop: 1,
+          }}
+        >
+          {kpi.note}
+        </Text>
+      ) : null}
 
       {/* Delta pill */}
       {delta && (
@@ -191,7 +206,7 @@ function CategoryLabel({ label }: { label: string }) {
         borderColor: FOREST_900,
         paddingHorizontal: S3,
         paddingVertical: S1,
-        marginBottom: S3,
+        marginBottom: S2,
         alignSelf: 'center',
       }}
     >
@@ -262,16 +277,30 @@ function HeroKpi({ kpi }: { kpi: KpiCell }) {
   );
 }
 
+// ─── Agrupación por categoría (reportes-export-18) ─────────────────────────────
+// Antes los grupos se cortaban por POSICIÓN (0-3, 3-6, 6-9) con rótulos fijos:
+// Activo/Pasivo/Patrimonio salían bajo "Indicadores de Rentabilidad" y los KPIs
+// 10–12 se descartaban. Ahora cada KPI declara su categoría y ninguno se pierde.
+const CATEGORY_ORDER: Array<{ key: NonNullable<KpiCell['category']> | 'otros'; label: string }> = [
+  { key: 'estructura', label: 'Estructura financiera' },
+  { key: 'resultados', label: 'Resultados del periodo' },
+  { key: 'rentabilidad', label: 'Rentabilidad y crecimiento' },
+  { key: 'liquidez', label: 'Liquidez y solvencia' },
+  { key: 'otros', label: 'Otros indicadores' },
+];
+
+export function groupKpisByCategory(kpis: KpiCell[]): Array<{ label: string; kpis: KpiCell[] }> {
+  return CATEGORY_ORDER.map(({ key, label }) => ({
+    label,
+    kpis: kpis.filter((k) => (k.category ?? 'otros') === key),
+  })).filter((g) => g.kpis.length > 0);
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export function KPIGridPage({ doc, pageNumber = 1 }: Props) {
-  const kpis = doc.kpiGrid.kpis.slice(0, 12);
+  const kpis = doc.kpiGrid.kpis;
   const isMega = kpis.length <= 2;
-
-  // For badge row: split into groups of up to 3 (mimicking ESLOP p.80 category groups)
-  // Group 1: first 3 (Rentabilidad), Group 2: next 3 (Eficiencia), Group 3: last remainder
-  const group1 = kpis.slice(0, Math.min(3, kpis.length));
-  const group2 = kpis.slice(3, Math.min(6, kpis.length));
-  const group3 = kpis.slice(6, Math.min(9, kpis.length));
+  const groups = groupKpisByCategory(kpis);
 
   return (
     <Page
@@ -330,35 +359,24 @@ export function KPIGridPage({ doc, pageNumber = 1 }: Props) {
       {/* ── Badge-row mode (3–12 KPIs) — mirrors ESLOP p.80 ─────────────── */}
       {!isMega && (
         <View style={{ flex: 1 }}>
-          {/* Category group row 1 */}
-          {group1.length > 0 && (
-            <View style={{ marginBottom: S4 }}>
-              <CategoryLabel label="Indicadores de Rentabilidad" />
-              <View style={{ flexDirection: 'row', justifyContent: 'center' }}>
-                {group1.map((k, i) => <KpiBadge key={i} kpi={k} index={i} />)}
-              </View>
-            </View>
-          )}
-
-          {/* Category group row 2 */}
-          {group2.length > 0 && (
-            <View style={{ marginBottom: S4 }}>
-              <CategoryLabel label="Indicadores de Eficiencia" />
-              <View style={{ flexDirection: 'row', justifyContent: 'center' }}>
-                {group2.map((k, i) => <KpiBadge key={i + 3} kpi={k} index={i + 3} />)}
-              </View>
-            </View>
-          )}
-
-          {/* Category group row 3 */}
-          {group3.length > 0 && (
-            <View style={{ marginBottom: S4 }}>
-              <CategoryLabel label="Indicadores de Liquidez" />
-              <View style={{ flexDirection: 'row', justifyContent: 'center' }}>
-                {group3.map((k, i) => <KpiBadge key={i + 6} kpi={k} index={i + 6} />)}
-              </View>
-            </View>
-          )}
+          {/* Grupos por categoría en grilla 2×2 */}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+            {(() => {
+              let offset = 0;
+              return groups.map((g) => {
+                const base = offset;
+                offset += g.kpis.length;
+                return (
+                  <View key={g.label} style={{ width: '49%', marginBottom: S2 }}>
+                    <CategoryLabel label={g.label} />
+                    <View style={{ flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap' }}>
+                      {g.kpis.map((k, i) => <KpiBadge key={i} kpi={k} index={base + i} />)}
+                    </View>
+                  </View>
+                );
+              });
+            })()}
+          </View>
 
           {/* Forest connector line (ref p.80 horizontal dotted line through badge centers) */}
           <View

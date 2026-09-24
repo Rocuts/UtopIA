@@ -249,7 +249,9 @@ describe('composeEditorialReport', () => {
     expect(out.meta.language).toBe('es');
     expect(out.meta.watermark).toBeUndefined();
 
-    expect(out.kpiGrid.kpis.length).toBeLessThanOrEqual(12);
+    // 10 KPIs del balance + hasta 3 de pilares; ya no se recortan a 12 en
+    // silencio (reportes-export-18).
+    expect(out.kpiGrid.kpis.length).toBeLessThanOrEqual(13);
     expect(out.kpiGrid.kpis.length).toBeGreaterThan(0);
 
     expect(out.waterfall.items.length).toBeGreaterThanOrEqual(3);

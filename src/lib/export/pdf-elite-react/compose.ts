@@ -64,6 +64,7 @@ import {
 } from './compose-statements-from-json';
 import { formatCopFromCents } from '@/lib/agents/financial/contracts/money';
 import { resolvePeriodoTipos } from '../statement-presentation';
+import { revenueBreakdown, type RevenueBreakdown } from '../revenue';
 
 // ─── v2.2 — Scrubber de metadatos internos (correcciones #6, #11, #12) ───────
 //
@@ -180,8 +181,12 @@ export function composeEditorialReport(input: ComposeInput): EditorialReport {
   const toc = { entries: buildTocEntries(language, !!pillars) };
   const directorLetter = buildDirectorLetter(report, language);
   const totals = readControlTotals(preprocessed);
-  const kpiGrid = buildKpiGrid(totals, pillars ?? null);
-  const waterfall = { items: buildWaterfall(totals) };
+  const revenue = revenueBreakdown(
+    (preprocessed as { primary?: PeriodSnapshot } | null | undefined)?.primary ?? null,
+    report.niifAnalysis?.json ?? null,
+  );
+  const kpiGrid = buildKpiGrid(totals, pillars ?? null, revenue);
+  const waterfall = { items: buildWaterfall(totals, revenue) };
   const dialGauges = { gauges: buildDialGauges(totals) };
   const pillarsSpec = buildPillarsSpec(pillars ?? null);
   const statements = buildStatements(report, preprocessed);
@@ -665,8 +670,15 @@ function readControlTotals(
 // y ninguno coincidía con el HTML, que consume `controlTotals` por contrato
 // (`html-editor.prompt.ts`: "ROE consistente ... fórmula única de
 // controlTotals.roe"). Este resolver es el único punto donde se decide de dónde
-// sale cada ratio: primero el campo pre-calculado del preprocesador, y sólo si
-// viene null/ausente (balances cacheados pre-F4) se recurre al fallback local.
+// sale cada ratio.
+//
+// Auditoría 2026-09 (reportes-export-12): `null` y "ausente" NO son lo mismo.
+// `controlTotals` declara `null` cuando el denominador es 0/anómalo "para que
+// el renderer pinte ND, NUNCA un fallback silencioso"; el resolver anterior
+// usaba `??` y convertía ese null en un cálculo local distinto (patrimonio
+// promedio 0 → ROE 200 % sobre el patrimonio de cierre). Ahora:
+//   - campo `undefined` (balance cacheado pre-F4) → fallback local, rotulado;
+//   - campo `null` → N/D.
 //
 // Convención de escala, la misma que `ControlTotals`:
 //   - `*Pct`   → porcentaje 0-100 (ej. 40 = 40 %).
@@ -681,6 +693,18 @@ interface ResolvedRatios {
   margenNetoPct: number | null;
   /** ROE en PORCENTAJE (0-100). */
   roePct: number | null;
+  /** true cuando el ROE está calculado sobre patrimonio de CIERRE (spec v10.1: marca △). */
+  roeOnClosingEquity: boolean;
+}
+
+/** `undefined` → fallback (legado); `null` → N/D; número finito → tal cual. */
+function preferField(
+  field: number | null | undefined,
+  fallback: () => number | null,
+): number | null {
+  if (field === undefined) return fallback();
+  if (field === null || !Number.isFinite(field)) return null;
+  return field;
 }
 
 function resolveRatios(totals: ControlTotals): ResolvedRatios {
@@ -692,67 +716,120 @@ function resolveRatios(totals: ControlTotals): ResolvedRatios {
     return r === null ? null : r * 100;
   };
 
+  // Margen neto: el denominador es el ingreso NETO de devoluciones (misma base
+  // que `controlTotals.margenNeto`), nunca la Σ de la clase 4.
+  const ingresosNetos =
+    totals.ingresosNetos ??
+    (totals.cents ? Number(totals.cents.ingresosNetos) / 100 : undefined);
+
+  const roePct = preferField(totals.roe, () => pctOf(totals.utilidadNeta, totals.patrimonio));
+  const roeOnClosingEquity =
+    totals.roe === undefined ||
+    (typeof totals.patrimonioPromedio === 'number' && totals.patrimonioPromedio === totals.patrimonio);
+
   return {
-    razonCorriente:
-      totals.razonCorriente ?? div(totals.activoCorriente, totals.pasivoCorriente),
-    pruebaAcida:
-      totals.pruebaAcida ??
+    razonCorriente: preferField(totals.razonCorriente, () =>
+      div(totals.activoCorriente, totals.pasivoCorriente),
+    ),
+    pruebaAcida: preferField(totals.pruebaAcida, () =>
       div(totals.activoCorriente - (totals.inventarios14 ?? 0), totals.pasivoCorriente),
-    endeudamientoPct: totals.endeudamientoTotal ?? pctOf(totals.pasivo, totals.activo),
+    ),
+    endeudamientoPct: preferField(totals.endeudamientoTotal, () => pctOf(totals.pasivo, totals.activo)),
     // `coberturaIntereses === null` significa "sin gasto financiero" (no es 0).
     // Sin el campo (balances pre-F4) tampoco hay denominador para calcularlo.
-    coberturaIntereses: totals.coberturaIntereses ?? null,
-    margenNetoPct: totals.margenNeto ?? pctOf(totals.utilidadNeta, totals.ingresos),
-    roePct: totals.roe ?? pctOf(totals.utilidadNeta, totals.patrimonio),
+    coberturaIntereses: preferField(totals.coberturaIntereses, () => null),
+    margenNetoPct: preferField(totals.margenNeto, () =>
+      typeof ingresosNetos === 'number' ? pctOf(totals.utilidadNeta, ingresosNetos) : null,
+    ),
+    roePct,
+    roeOnClosingEquity: roePct !== null && roeOnClosingEquity,
   };
 }
 
 // ─── KPI grid ─────────────────────────────────────────────────────────────────
 
+const ND = 'N/D';
+
 function buildKpiGrid(
   totals: ControlTotals | null,
   pillars: PillarsResult | null,
+  revenue: RevenueBreakdown,
 ): KpiGridSpec {
   const kpis: KpiCell[] = [];
   if (totals) {
     const ratios = resolveRatios(totals);
 
-    push(kpis, 'Activo Total', formatCop(totals.activo));
-    push(kpis, 'Pasivo Total', formatCop(totals.pasivo));
-    push(kpis, 'Patrimonio', formatCop(totals.patrimonio));
-    push(kpis, 'Ingresos', formatCop(totals.ingresos));
-    push(kpis, 'Gastos + Costos', formatCop(totals.gastos));
-    push(kpis, 'Utilidad Neta', formatCop(totals.utilidadNeta));
+    push(kpis, 'Activo Total', formatCop(totals.activo), 'estructura');
+    push(kpis, 'Pasivo Total', formatCop(totals.pasivo), 'estructura');
+    push(kpis, 'Patrimonio', formatCop(totals.patrimonio), 'estructura');
+    // "Ingresos" = ingresos operacionales netos (41 − 4175), nunca la Σ de la
+    // clase 4 con devoluciones y no operacionales (ratios-kpis-04).
+    push(
+      kpis,
+      'Ingresos operacionales netos',
+      revenue.operacionalesNetos === null ? ND : formatCop(revenue.operacionalesNetos),
+      'resultados',
+      revenue.operacionalesNetos === null ? 'Sin detalle PUC de la clase 4 para separar el grupo 41' : undefined,
+    );
+    push(kpis, 'Gastos + Costos', formatCop(totals.gastos), 'resultados');
+    push(kpis, 'Utilidad Neta', formatCop(totals.utilidadNeta), 'resultados');
 
-    if (ratios.margenNetoPct !== null) {
-      push(kpis, 'Margen Neto', formatPct(ratios.margenNetoPct / 100));
-    }
-    if (ratios.roePct !== null) {
-      push(kpis, 'ROE', formatPct(ratios.roePct / 100));
-    }
-    if (ratios.razonCorriente !== null) {
-      push(kpis, 'Razón Corriente', formatRatio(ratios.razonCorriente));
-    }
-    if (ratios.endeudamientoPct !== null) {
-      push(kpis, 'Endeudamiento', formatPct(ratios.endeudamientoPct / 100));
-    }
+    // Ratios: un null del preprocesador se imprime N/D (reportes-export-12),
+    // nunca se omite en silencio ni se sustituye.
+    push(
+      kpis,
+      'Margen Neto',
+      ratios.margenNetoPct === null ? ND : formatPct(ratios.margenNetoPct / 100),
+      'rentabilidad',
+    );
+    push(
+      kpis,
+      'ROE',
+      ratios.roePct === null ? ND : formatPct(ratios.roePct / 100),
+      'rentabilidad',
+      ratios.roePct === null
+        ? 'Patrimonio promedio nulo o anómalo'
+        : ratios.roeOnClosingEquity
+          ? '△ sobre patrimonio de cierre (sin promedio con el comparativo)'
+          : undefined,
+    );
+    push(
+      kpis,
+      'Razón Corriente',
+      ratios.razonCorriente === null ? ND : formatRatio(ratios.razonCorriente),
+      'liquidez',
+    );
+    push(
+      kpis,
+      'Endeudamiento',
+      ratios.endeudamientoPct === null ? ND : formatPct(ratios.endeudamientoPct / 100),
+      'liquidez',
+    );
   }
 
   // Pillar-derived cards (pick the headline KPI from each pilar.kpis if present).
   if (pillars) {
     const ebitda = findCardValue(pillars.valor, 'ebitda');
-    if (ebitda !== null) push(kpis, 'EBITDA', formatCop(ebitda));
+    if (ebitda !== null) push(kpis, 'EBITDA', formatCop(ebitda), 'resultados');
     const autonomia = findCardValue(pillars.escudo, 'autonomia');
-    if (autonomia !== null) push(kpis, 'Días Autonomía', `${Math.round(autonomia)} días`);
+    if (autonomia !== null) push(kpis, 'Días Autonomía', `${Math.round(autonomia)} días`, 'liquidez');
     const cagr = findCardValue(pillars.futuro, 'cagr');
-    if (cagr !== null) push(kpis, 'Crecimiento Ingresos', formatPct(cagr));
+    if (cagr !== null) push(kpis, 'Crecimiento Ingresos', formatPct(cagr), 'rentabilidad');
   }
 
-  return { kpis: kpis.slice(0, 12) };
+  // Sin recorte silencioso (reportes-export-18): compose emite a lo sumo 13
+  // KPIs (10 del balance + 3 de pilares) y la página los agrupa por categoría.
+  return { kpis };
 }
 
-function push(arr: KpiCell[], label: string, value: string): void {
-  arr.push({ label, value });
+function push(
+  arr: KpiCell[],
+  label: string,
+  value: string,
+  category: KpiCell['category'],
+  note?: string,
+): void {
+  arr.push({ label, value, category, ...(note ? { note } : {}) });
 }
 
 function findCardValue(
@@ -782,7 +859,8 @@ function findCardValue(
 // ─── Waterfall ────────────────────────────────────────────────────────────────
 
 /**
- * Puente Ingresos → (Gastos + Costos) → (Impuestos) → Utilidad Neta.
+ * Puente Ingresos operacionales netos → (+ Otros ingresos no operacionales) →
+ * (Gastos + Costos) → (Impuestos) → Utilidad Neta.
  *
  * Invariante que este builder debe cumplir: la suma acumulada de las barras
  * intermedias tiene que aterrizar EXACTAMENTE en la barra total. El gráfico
@@ -790,21 +868,41 @@ function findCardValue(
  * puente descuadrado: el error se vuelve invisible y el cliente lee un nivel
  * intermedio falso.
  *
- * El defecto anterior: la barra "(Impuestos)" restaba `impuestosCuenta24`, que
- * es el SALDO del pasivo fiscal (PUC 24 — lo que se le debe a la DIAN al
- * cierre), no el GASTO de impuestos del periodo. Además `controlTotals.gastos`
- * (Clase 5+6+7) YA incluye el gasto de impuestos del grupo 54 y
- * `utilidadNeta = ingresos − gastos`, de modo que la barra extra doble-contaba.
+ * Auditoría 2026-08: la barra "(Impuestos)" restaba el SALDO del pasivo fiscal
+ * (PUC 24); ahora usa el impuesto causado real (`cents.impuestoCausado`, grupo
+ * 54) separado de `gastos`, que ya lo incluye.
  *
- * Corrección: el impuesto se SEPARA de la barra de gastos usando el impuesto
- * causado real del periodo (`cents.impuestoCausado`, grupo 54). Cuando ese
- * ancla no está disponible (balances cacheados pre-cents) el puente se emite
- * con una sola barra de deducción, que sigue cerrando contra Utilidad Neta.
+ * Auditoría 2026-09 (ratios-kpis-04): la barra inicial era `controlTotals
+ * .ingresos` (Σ clase 4 = bruto + devoluciones + no operacionales) y el puente
+ * no cerraba contra la utilidad neta, que el preprocesador calcula sobre los
+ * ingresos NETOS. Ahora arranca en los ingresos operacionales netos (41 − 4175)
+ * y los no operacionales (grupo 42) van en su propia barra.
  */
-function buildWaterfall(totals: ControlTotals | null): WaterfallItem[] {
+function buildWaterfall(totals: ControlTotals | null, revenue: RevenueBreakdown): WaterfallItem[] {
   if (!totals) return [];
   const items: WaterfallItem[] = [];
-  items.push({ label: 'Ingresos', amount: totals.ingresos, sign: 'pos' });
+
+  if (revenue.operacionalesNetos !== null && revenue.noOperacionales !== null) {
+    items.push({ label: 'Ingresos operacionales netos', amount: revenue.operacionalesNetos, sign: 'pos' });
+    if (revenue.noOperacionales !== 0) {
+      items.push(
+        revenue.noOperacionales > 0
+          ? { label: 'Otros ingresos (no operacionales)', amount: revenue.noOperacionales, sign: 'pos' }
+          : { label: '(Otros ingresos netos negativos)', amount: revenue.noOperacionales, sign: 'neg' },
+      );
+    }
+  } else if (revenue.netosTotales !== null) {
+    // Sin detalle para separar el grupo 41 se rotula lo que es: el total de la
+    // clase 4 neto de devoluciones, incluidos los no operacionales.
+    items.push({
+      label: 'Ingresos netos totales (incl. no operacionales)',
+      amount: revenue.netosTotales,
+      sign: 'pos',
+    });
+  } else {
+    // Balance legado sin `ingresosNetos`: única cifra disponible, rotulada.
+    items.push({ label: 'Ingresos (Σ clase 4)', amount: totals.ingresos, sign: 'pos' });
+  }
 
   // `cents` viaja en centavos (BigInt) — a pesos para la misma unidad que el
   // resto de `controlTotals`.
@@ -833,6 +931,14 @@ function buildWaterfall(totals: ControlTotals | null): WaterfallItem[] {
 
 // ─── Dial gauges ──────────────────────────────────────────────────────────────
 
+/**
+ * Auditoría 2026-09 (reportes-export-05): el dial imprimía el valor RECORTADO a
+ * la escala (una razón corriente de 10 salía "5.00"), convertía los ratios null
+ * en 0 (zona crítica) y usaba punto decimal y fracción ("0.10") junto a la
+ * tarjeta "10,0 %" del mismo PDF. Ahora la aguja se recorta pero la cifra
+ * impresa es la real, en es-CO y en la misma unidad que la tarjeta; sin dato →
+ * "N/D" sin aguja.
+ */
 function buildDialGauges(totals: ControlTotals | null): DialGaugeSpec[] {
   if (!totals) return [];
 
@@ -840,65 +946,63 @@ function buildDialGauges(totals: ControlTotals | null): DialGaugeSpec[] {
   // indicador para que el dial y la tarjeta no puedan contradecirse.
   const ratios = resolveRatios(totals);
 
-  const razonCorriente = ratios.razonCorriente ?? 0;
-  const pruebaAcida = ratios.pruebaAcida ?? 0;
+  // `endeudamientoTotal` tiene escala definida POR CONTRATO: porcentaje 0-100.
+  // El dial trabaja en fracción 0-1 (umbrales 0,3 / 0,5 / 0,7) pero imprime el
+  // porcentaje, igual que la tarjeta.
+  const endeudamientoFrac =
+    ratios.endeudamientoPct === null ? null : ratios.endeudamientoPct / 100;
 
-  // `endeudamientoTotal` tiene escala definida POR CONTRATO: porcentaje 0-100
-  // (`computeDerivedKpis` multiplica la razón por 100). El código anterior
-  // aplicaba la heurística `> 1 ? /100 : v`, que asume que todo porcentaje es
-  // mayor que 1: una SAS capitalizada con 0,8 % de endeudamiento entraba como
-  // 0,8 en una escala 0-1 con umbrales [0,3 / 0,5 / 0,7] y el dial la pintaba
-  // en zona crítica al 80 %, contradiciendo el bloque de KPIs del mismo PDF.
-  const endeudamiento = (ratios.endeudamientoPct ?? 0) / 100;
+  const dial = (
+    base: Omit<DialGaugeSpec, 'value' | 'displayValue' | 'noData' | 'outOfScale'>,
+    real: number | null,
+    display: (v: number) => string,
+    noDataCaption?: string,
+  ): DialGaugeSpec => {
+    if (real === null) {
+      return {
+        ...base,
+        value: base.min,
+        displayValue: ND,
+        noData: true,
+        ...(noDataCaption ? { caption: noDataCaption } : {}),
+      };
+    }
+    const needle = clampForGauge(real, base.min, base.max);
+    return {
+      ...base,
+      value: needle,
+      displayValue: display(real),
+      ...(needle !== real ? { outOfScale: true } : {}),
+    };
+  };
 
-  // Cobertura de Intereses — null significa "sin gasto financiero"
-  // (gastoFinanciero5305 === 0); se renderiza como "N/A" en lugar de 0, que
-  // sería información falsa.
-  const coberturaIntereses = ratios.coberturaIntereses;
-
-  // Construir array de gauges; Cobertura Intereses solo se incluye cuando el
-  // ratio es computable (not null) — evita mostrar dial con valor 0 cuando el
-  // KPI no aplica para la empresa.
-  const gauges: DialGaugeSpec[] = [
-    {
-      label: 'Razón Corriente',
-      value: clampForGauge(razonCorriente, 0, 5),
-      min: 0,
-      max: 5,
-      thresholds: [1.0, 1.5, 2.5],
-      areaAccent: 'escudo' as AreaKey,
-      caption: 'Óptimo ≥ 1,5',
-    },
-    {
-      label: 'Prueba Ácida',
-      value: clampForGauge(pruebaAcida, 0, 3),
-      min: 0,
-      max: 3,
-      thresholds: [0.7, 1.0, 2.0],
-      areaAccent: 'escudo' as AreaKey,
-      caption: 'Óptimo ≥ 1,0',
-    },
-    {
-      label: 'Endeudamiento',
-      value: clampForGauge(endeudamiento, 0, 1),
-      min: 0,
-      max: 1,
-      thresholds: [0.3, 0.5, 0.7],
-      areaAccent: 'verdad' as AreaKey,
-      caption: 'Óptimo ≤ 0,5',
-    },
-    {
-      label: 'Cobertura Intereses',
-      value: coberturaIntereses != null ? clampForGauge(coberturaIntereses, 0, 10) : 0,
-      min: 0,
-      max: 10,
-      thresholds: [1.5, 3.0, 6.0],
-      areaAccent: 'futuro' as AreaKey,
-      caption: coberturaIntereses != null ? 'Óptimo ≥ 3,0' : 'Sin gasto financiero',
-    },
+  return [
+    dial(
+      { label: 'Razón Corriente', min: 0, max: 5, thresholds: [1.0, 1.5, 2.5], areaAccent: 'escudo' as AreaKey, caption: 'Óptimo ≥ 1,5' },
+      ratios.razonCorriente,
+      formatRatio,
+      'Sin pasivo corriente o dato no disponible',
+    ),
+    dial(
+      { label: 'Prueba Ácida', min: 0, max: 3, thresholds: [0.7, 1.0, 2.0], areaAccent: 'escudo' as AreaKey, caption: 'Óptimo ≥ 1,0' },
+      ratios.pruebaAcida,
+      formatRatio,
+      'Sin pasivo corriente o dato no disponible',
+    ),
+    dial(
+      { label: 'Endeudamiento', min: 0, max: 1, thresholds: [0.3, 0.5, 0.7], areaAccent: 'verdad' as AreaKey, caption: 'Óptimo ≤ 50 %' },
+      endeudamientoFrac,
+      (v) => formatPct(v),
+      'Activo nulo o dato no disponible',
+    ),
+    dial(
+      { label: 'Cobertura Intereses', min: 0, max: 10, thresholds: [1.5, 3.0, 6.0], areaAccent: 'futuro' as AreaKey, caption: 'Óptimo ≥ 3,0' },
+      ratios.coberturaIntereses,
+      formatRatio,
+      // `null` = sin gasto financiero (5305): el indicador no aplica.
+      'Sin gasto financiero: no aplica',
+    ),
   ];
-
-  return gauges;
 }
 
 function clampForGauge(v: number, min: number, max: number): number {
@@ -1248,7 +1352,12 @@ function formatBindingTotals(t: ControlTotals): string {
   lines.push(`    Corriente:     ${formatCop(t.pasivoCorriente)}`);
   lines.push(`    No corriente:  ${formatCop(t.pasivoNoCorriente)}`);
   lines.push(`  Patrimonio:    ${formatCop(t.patrimonio)}`);
-  lines.push(`  Ingresos:      ${formatCop(t.ingresos)}`);
+  // Σ clase 4 tal cual la balanza (bruto + devoluciones + no operacionales): se
+  // rotula como tal para no confundirla con los ingresos operacionales.
+  lines.push(`  Σ clase 4:     ${formatCop(t.ingresos)}`);
+  if (typeof t.ingresosNetos === 'number') {
+    lines.push(`  Ingresos netos (clase 4 − 4175): ${formatCop(t.ingresosNetos)}`);
+  }
   lines.push(`  Gastos+Costos: ${formatCop(t.gastos)}`);
   lines.push(`  Utilidad Neta: ${formatCop(t.utilidadNeta)}`);
   return lines.join('\n');
