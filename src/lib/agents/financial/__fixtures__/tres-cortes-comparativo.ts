@@ -58,15 +58,31 @@ export function csvDosCortes(): string {
     .join('\n');
 }
 
+/**
+ * El balance de tres cortes con valorizaciones (grupo 19) y su superávit
+ * (grupo 38, ORI) por los saldos dados para 2023, 2024 y 2025 (en pesos).
+ * El 19 y el 38 se mueven juntos: el EFE no cambia (partida no monetaria,
+ * NIC 7 ¶43) y la ecuación patrimonial sigue cuadrando en cada corte.
+ */
+export function csvTresCortesConValorizaciones(
+  saldos: readonly [number, number, number],
+  csv = csvTresCortes(),
+): string {
+  const [a, b, c] = saldos;
+  return csv
+    .replace('159205,', `190505,Valorizaciones de inversiones,Auxiliar,1,${a},${b},${c}\n159205,`)
+    .replace('370505,', `381005,Superavit por valorizaciones de inversiones,Auxiliar,1,${a},${b},${c}\n370505,`);
+}
+
 export function preprocesarTresCortes(csv = csvTresCortes()): PreprocessedBalance {
   return preprocessTrialBalance(parseTrialBalanceCSV(csv));
 }
 
 /**
- * Informe NIIF honesto (anclas copiadas, ESF/ERI por grupo PUC, EFE = el
- * determinista, ECP = el determinista de los dos últimos cortes) con los
- * comparativos del EFE y del ECP adjuntos por el código, como los deja
- * `runNiifAnalyst`.
+ * Informe NIIF honesto (anclas copiadas, ESF/ERI por grupo PUC, ORI = Δ grupo
+ * 38 de cada periodo, EFE = el determinista, ECP = el determinista de los dos
+ * últimos cortes) con los comparativos del EFE y del ECP adjuntos por el
+ * código, como los deja `runNiifAnalyst`.
  */
 export function informeTresCortes(pp: PreprocessedBalance): NiifReportJson {
   const base = informeHonesto(pp);

@@ -187,6 +187,15 @@ export interface LedgerLeaf {
   /** Clase PUC bajo la que el snapshot publica la cuenta (1..7). */
   classCode: number;
   cents: bigint;
+  /**
+   * Clases 1 y 2: plazo con el que el preprocesador cuenta la hoja en
+   * `controlTotals.activoCorriente` / `pasivoCorriente` (excepción de
+   * vencimiento declarada, virtual de R1 por su origen, grupo PUC); `null` si
+   * no es determinable. Ausente en el resto de clases y en hojas construidas a
+   * mano. Con él, E27 contrasta los subtotales corriente / no corriente del ESF
+   * contra esas anclas (integración I4).
+   */
+  term?: BalanceTerm | null;
 }
 
 /**
@@ -196,13 +205,23 @@ export interface LedgerLeaf {
  */
 export function buildLedgerLeaves(snapshot: PeriodSnapshot): LedgerLeaf[] {
   const out: LedgerLeaf[] = [];
+  const declared = {
+    assets: declaredTermsOf(snapshot, 'assets'),
+    liabilities: declaredTermsOf(snapshot, 'liabilities'),
+  };
   for (const puc of snapshot.classes ?? []) {
     if (puc.code < 1 || puc.code > 7) continue;
+    const section = puc.code === 1 ? 'assets' : puc.code === 2 ? 'liabilities' : null;
     for (const account of puc.accounts) {
       if (!account.isLeaf) continue;
-      const code = String(account.code).replace(/\D/g, '');
+      const rawCode = String(account.code).trim();
+      const code = rawCode.replace(/\D/g, '');
       if (code.length === 0) continue;
-      out.push({ code, classCode: puc.code, cents: pesosToCents(account.balance) });
+      const leaf: LedgerLeaf = { code, classCode: puc.code, cents: pesosToCents(account.balance) };
+      if (section) {
+        leaf.term = code.length < 2 ? null : termOfAccount(section, rawCode, code.slice(0, 2), declared[section]);
+      }
+      out.push(leaf);
     }
   }
   return out;
@@ -1547,6 +1566,13 @@ export interface ComparativeStatementsBasis {
   equityRows: EquityChangeRowJson[] | null;
   /** Nota del ECP comparativo no presentado; `null` cuando se presenta. */
   equityNote: string | null;
+  /**
+   * ORI del periodo comparativo = Δ grupo 38 entre el corte de apertura y el
+   * comparativo (enmienda 12, spec v2.1). `null` cuando no hay apertura
+   * utilizable: la variación no es medible. Opcional por compatibilidad con
+   * bases construidas a mano (se lee como no medible).
+   */
+  oriCents?: bigint | null;
   /** Idioma de las notas (default `'es'`). */
   language?: ComparativeNoteLanguage;
 }
@@ -1733,6 +1759,92 @@ function equityColumnsOfSnapshot(snapshot: PeriodSnapshot): {
   return { cols, unmappedGroups };
 }
 
+// ---------------------------------------------------------------------------
+// ORI del periodo (enmienda 12, spec v2.1 — integración I4)
+// ---------------------------------------------------------------------------
+// Una sola regla para el ERI, el ECP y el validador: el Otro Resultado
+// Integral del periodo es la VARIACIÓN del grupo PUC 38 (superávit por
+// valorizaciones / ORI; Decreto 2650/1993) entre el corte de apertura y el de
+// cierre del periodo. Es la misma cifra que mueve la columna ORI del ECP
+// (NIIF para las PYMES, Secciones 5 y 6 — 6.3(c): el ORI del estado del
+// resultado integral es el cambio de ese componente del patrimonio). Antes, el
+// ECP determinista registraba Δ38 en la columna ORI mientras E6b exigía ORI $0
+// en el ERI: con un grupo 38 que se movió en el año, ninguna cifra del ERI
+// satisfacía las dos reglas y el informe honesto salía sellado.
+//
+// El PUC no distingue las partidas que se reclasifican a resultados de las que
+// no (ORI_COMPONENT_MAP sigue vacío): el ORI se presenta en UNA línea. Un
+// traslado del superávit a resultados acumulados (realización) tampoco se
+// distingue en un balance de prueba de saldos: el código presenta Δ38 como ORI
+// y la revelación del traslado queda a cargo del contador.
+// ---------------------------------------------------------------------------
+
+/** Σ en centavos de las hojas del grupo PUC 38 de un corte. */
+export function group38Cents(snapshot: PeriodSnapshot): bigint {
+  return equityColumnsOfSnapshot(snapshot).cols.ori;
+}
+
+/** ORI del periodo = Δ grupo 38 entre el corte de apertura y el de cierre. */
+export function oriOfPeriodCents(opening: PeriodSnapshot, closing: PeriodSnapshot): bigint {
+  return group38Cents(closing) - group38Cents(opening);
+}
+
+/**
+ * Ancla del ORI de un periodo:
+ *   - `measured`: hay corte de apertura utilizable; el ORI es Δ38.
+ *   - `noGroup38`: sin apertura y sin saldo en el grupo 38 al cierre: no hay
+ *     ORI acumulado del cual medir un movimiento; se presenta $0.
+ *   - `notMeasurable`: sin apertura y con saldo en el grupo 38: la variación
+ *     no es medible. En el comparativo se presenta N/D (null); en el periodo
+ *     actual (un solo corte) el contrato no admite N/D y rige $0 con la
+ *     limitación revelada.
+ */
+export type OriAnchor =
+  | { kind: 'measured'; cents: bigint; openingPeriod: string; closingPeriod: string }
+  | { kind: 'noGroup38'; cents: bigint }
+  | { kind: 'notMeasurable'; group38Cents: bigint; period: string };
+
+function unmeasuredOriAnchor(closing: PeriodSnapshot): OriAnchor {
+  const g38 = group38Cents(closing);
+  return g38 === ZERO
+    ? { kind: 'noGroup38', cents: ZERO }
+    : { kind: 'notMeasurable', group38Cents: g38, period: closing.period };
+}
+
+/**
+ * Anclas del ORI de los dos periodos del informe. `primary` usa el corte
+ * comparativo como apertura (el mismo que abre el ECP y el EFE del periodo);
+ * `comparative` usa el corte anterior al comparativo con las mismas
+ * condiciones que la base comparativa del EFE/ECP (`comparativeOpeningOf`).
+ * `comparative` es `null` si el informe no tiene periodo comparativo.
+ */
+export function buildOriAnchors(
+  source: (ComparativeStatementsSource & { primary?: PeriodSnapshot | null }) | null | undefined,
+): { primary: OriAnchor | null; comparative: OriAnchor | null } {
+  const primary = source?.primary && typeof source.primary === 'object' ? source.primary : null;
+  if (!primary) return { primary: null, comparative: null };
+  const opening = comparativeOpeningOf(source);
+  if (!opening) return { primary: unmeasuredOriAnchor(primary), comparative: null };
+  const { comparative, opening: prior, gap } = opening;
+  return {
+    primary: {
+      kind: 'measured',
+      cents: oriOfPeriodCents(comparative, primary),
+      openingPeriod: comparative.period,
+      closingPeriod: primary.period,
+    },
+    comparative:
+      gap === null && prior
+        ? {
+            kind: 'measured',
+            cents: oriOfPeriodCents(prior, comparative),
+            openingPeriod: prior.period,
+            closingPeriod: comparative.period,
+          }
+        : unmeasuredOriAnchor(comparative),
+  };
+}
+
 function equityRow(
   kind: EquityChangeRowJson['kind'],
   label: string,
@@ -1755,7 +1867,8 @@ function equityRow(
  *   - traslado del resultado anterior (Dr 3605 / Cr 37, total $0) cuando la
  *     apertura arrastra resultado del ejercicio;
  *   - resultado del ejercicio = utilidad neta del periodo;
- *   - ORI = variación del grupo 38, si la hubo;
+ *   - ORI = variación del grupo 38, si la hubo (`oriOfPeriodCents`: la misma
+ *     cifra que el ERI presenta como ORI del periodo — enmienda 12);
  *   - lo que el resultado no explica, en UNA fila cuyo tipo sale del signo
  *     del flujo con los socios del EFE determinista (aportes, distribuciones
  *     pendientes de soporte, partida no conciliada o traslados internos de
@@ -1824,7 +1937,7 @@ export function buildDeterministicEquityChanges(
   );
   apply({ resultadoEjercicio: netIncome });
 
-  const oriDelta = c.cols.ori - o.cols.ori;
+  const oriDelta = oriOfPeriodCents(opening, closing);
   if (oriDelta !== ZERO) {
     rows.push(
       equityRow(
@@ -1892,6 +2005,33 @@ export function buildDeterministicEquityChanges(
 }
 
 /**
+ * Corte comparativo del informe y su apertura: el corte anterior al
+ * comparativo en `periods`, con el motivo por el que no sirve de apertura
+ * (`gap`, `null` si sirve). `null` cuando el informe no tiene periodo
+ * comparativo (un solo corte, o comparativo impracticable según el
+ * preprocesador). Lo comparten la base del EFE/ECP comparativos y el ancla del
+ * ORI comparativo, para que las dos midan desde el mismo corte.
+ */
+function comparativeOpeningOf(source: ComparativeStatementsSource | null | undefined): {
+  comparative: PeriodSnapshot;
+  opening: PeriodSnapshot | null;
+  cy: string;
+  priorYear: string | null;
+  gap: ComparativeGap | null;
+} | null {
+  const comparative = source?.comparative;
+  if (!comparative || typeof comparative !== 'object' || source?.comparativos_impracticables === true) {
+    return null;
+  }
+  const cy = yearOfPeriodLabel(comparative.period) ?? comparative.period;
+  const priorYear = /^\d{4}$/.test(cy) ? String(Number(cy) - 1) : null;
+  const periods: readonly PeriodSnapshot[] = Array.isArray(source?.periods) ? source.periods : [];
+  const idx = periods.findIndex((p) => p && p.period === comparative.period);
+  const opening = idx > 0 ? periods[idx - 1] : null;
+  return { comparative, opening, cy, priorYear, gap: comparativeOpeningGap(comparative, opening, cy, priorYear) };
+}
+
+/**
  * Base determinista de los comparativos del EFE y del ECP a partir del
  * preprocesado. `null` cuando el informe no tiene periodo comparativo (un solo
  * corte, o comparativo impracticable según el preprocesador — el mismo
@@ -1902,17 +2042,9 @@ export function buildComparativeStatementsBasis(
   source: ComparativeStatementsSource | null | undefined,
   language: ComparativeNoteLanguage = 'es',
 ): ComparativeStatementsBasis | null {
-  const comparative = source?.comparative;
-  if (!comparative || typeof comparative !== 'object' || source?.comparativos_impracticables === true) {
-    return null;
-  }
-  const cy = yearOfPeriodLabel(comparative.period) ?? comparative.period;
-  const priorYear = /^\d{4}$/.test(cy) ? String(Number(cy) - 1) : null;
-  const periods: readonly PeriodSnapshot[] = Array.isArray(source?.periods) ? source.periods : [];
-  const idx = periods.findIndex((p) => p && p.period === comparative.period);
-  const opening = idx > 0 ? periods[idx - 1] : null;
-
-  const openingGap = comparativeOpeningGap(comparative, opening, cy, priorYear);
+  const resolved = comparativeOpeningOf(source);
+  if (!resolved) return null;
+  const { comparative, opening, cy, gap: openingGap } = resolved;
   let cashFlow: DeterministicCashFlow | null = null;
   let cashFlowGap = openingGap;
   let equityRows: EquityChangeRowJson[] | null = null;
@@ -1951,6 +2083,7 @@ export function buildComparativeStatementsBasis(
     equityNote: equityRows
       ? null
       : comparativeNotPresentedNote('equity', cy, equityGap ?? fallback, language),
+    oriCents: openingGap === null && opening ? oriOfPeriodCents(opening, comparative) : null,
     language,
   };
 }

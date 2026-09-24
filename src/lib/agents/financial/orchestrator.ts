@@ -453,7 +453,8 @@ export function buildNiifValidatorOptions(preprocessed: unknown): NiifJsonValida
     // Comparativos del EFE y del ECP (auditoría 2026-09-24, pendiente #3):
     // la columna comparativa del EFE y las filas del ECP del periodo
     // comparativo se cruzan contra el cálculo desde el corte anterior al
-    // comparativo; sin ese corte, presentarlas es error (NIIF PYMES 3.14/10.21).
+    // comparativo; sin ese corte no se presentan (nota que lo pide, NIIF PYMES
+    // 3.14) y presentarlas es error.
     comparativeStatements: primarySnap
       ? buildComparativeStatementsBasis(preprocessed as ComparativeStatementsSource)
       : undefined,
@@ -1523,7 +1524,7 @@ function renderIngestaLines(preprocessed: unknown, rawData: string): string[] {
  * (auditoría 2026-09-24, pendiente #3 — NIIF para las PYMES 3.14). Estrategia
  * y Gobierno citan tendencias de flujo de efectivo o de patrimonio sólo desde
  * aquí: cifras calculadas desde el corte anterior al comparativo, o la nota
- * de impracticabilidad cuando el balance no lo trae.
+ * de comparativo no presentado (pide ese corte) cuando el balance no lo trae.
  */
 function renderComparativeStatementsLines(basis: ComparativeStatementsBasis | null): string[] {
   if (!basis) return [];

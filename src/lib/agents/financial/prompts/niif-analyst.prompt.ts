@@ -38,7 +38,9 @@ import { buildResilienceSection0 } from './resilience-section0';
 import { buildPresentationV3, type PresentationV3Data } from './presentation-v3';
 import {
   buildDeterministicCashFlow,
+  buildOriAnchors,
   type DeterministicCashFlow,
+  type OriAnchor,
 } from '../contracts/deterministic-breakdown';
 import { formatCopFromCents } from '../contracts/money';
 import {
@@ -320,6 +322,12 @@ interface SharedPromptContext {
    * 2026-09-24: el grupo 42 va debajo de la utilidad operacional.
    */
   pnlAnchors: ReportAnchors;
+  /**
+   * Ancla del ORI de cada periodo = Δ grupo PUC 38 entre el corte de apertura
+   * y el de cierre (enmienda 12, spec v2.1). La misma cifra que mueve la
+   * columna ORI del ECP y que el validador exige en el ERI (E6/E6b).
+   */
+  oriAnchors: { primary: OriAnchor | null; comparative: OriAnchor | null };
   // Corrección v2.4 — Saldo INICIAL de Cta.3605 (= utilidad del ejercicio del
   // periodo comparativo, que entra como utilidad acumulada en el patrimonio
   // de apertura del periodo actual). Si > $0 material, debe traviajar como
@@ -450,6 +458,10 @@ function buildSharedContext(
     ? buildReportAnchors(preprocessed.primary, preprocessed.comparative ?? undefined)
     : { primary: null, comparative: null };
 
+  // Enmienda 12 (spec v2.1): ORI del periodo = Δ grupo 38, calculado por el
+  // código para los dos periodos.
+  const oriAnchors = buildOriAnchors(preprocessed);
+
   // Corrección v2.4 — utilidad del ejercicio del periodo comparativo,
   // que para el periodo ACTUAL representa el saldo INICIAL de Cta.3605
   // (utilidad acumulada arrastrada en el patrimonio de apertura).
@@ -495,6 +507,7 @@ function buildSharedContext(
     efeVarCxP,
     deterministicCashFlow,
     pnlAnchors,
+    oriAnchors,
     openingUtilidadEjercicio3605,
     fmtCop,
     company,
@@ -656,13 +669,38 @@ Saldo a favor de renta identificado por el preprocesador: $${ctx.fmtCop(ctx.sald
  * `buildPeriodAnchors`. Con la enmienda spec v2.1 del 2026-09-24 el grupo 42
  * va DEBAJO del resultado operacional; este bloque publica esa cascada.
  */
+/**
+ * Renglón del ORI del bloque de la cascada (enmienda 12, spec v2.1): Δ grupo
+ * 38 con su token, $0 sin grupo 38, o N/D cuando la variación no es medible.
+ */
+function oriLine(anchor: OriAnchor | null, primary: boolean): string {
+  const field = primary ? 'oriPrimary' : 'oriComparative';
+  if (anchor === null) return `- Otro resultado integral (ORI): N/D → ${field}`;
+  if (anchor.kind === 'measured') {
+    return (
+      `- Otro resultado integral del periodo (variación del grupo 38, superávit por valorizaciones / ORI, ` +
+      `entre los cortes ${anchor.openingPeriod} y ${anchor.closingPeriod}): ${formatCopFromCents(anchor.cents)} COP ` +
+      `${moneyCopToken(anchor.cents)} → ${field}`
+    );
+  }
+  if (anchor.kind === 'noGroup38') {
+    return `- Otro resultado integral (el balance no registra grupo 38): $0,00 COP ${moneyCopToken(BigInt(0))} → ${field}`;
+  }
+  return primary
+    ? `- Otro resultado integral: sin corte de apertura la variación del grupo 38 (saldo ${formatCopFromCents(anchor.group38Cents)}) ` +
+        `no es medible; ${field} = "0" y la limitación se declara en incomeStatement.notes`
+    : `- Otro resultado integral: sin corte de apertura utilizable del periodo ${anchor.period} la variación del grupo 38 ` +
+        `(saldo ${formatCopFromCents(anchor.group38Cents)}) no es medible → ${field} = null (N/D)`;
+}
+
 function renderPnlCascadeBlock(ctx: SharedPromptContext): string {
   const renderPeriod = (label: string, a: PeriodAnchors | null): string | null => {
     if (!a) return null;
     const c = a.cents;
     if (c.utilidadBruta === undefined || c.ebit === undefined) {
       return `=== ${label} (${a.period}) ===
-- La cascada no es derivable al centavo desde el balance de prueba de este periodo: construye la Utilidad Bruta y el EBIT con la definición del mapeo PUC (grupo 42 debajo del EBIT) y declara la limitación en incomeStatement.notes.`;
+- La cascada no es derivable al centavo desde el balance de prueba de este periodo: construye la Utilidad Bruta y el EBIT con la definición del mapeo PUC (grupo 42 debajo del EBIT) y declara la limitación en incomeStatement.notes.
+${oriLine(label === 'Periodo actual' ? ctx.oriAnchors.primary : ctx.oriAnchors.comparative, label === 'Periodo actual')}`;
     }
     const line = (name: string, v: bigint | undefined, target: string): string =>
       v === undefined ? `- ${name}: N/D` : `- ${name}: ${formatCopFromCents(v)} COP ${moneyCopToken(v)}${target}`;
@@ -676,13 +714,14 @@ function renderPnlCascadeBlock(ctx: SharedPromptContext): string {
       line('Utilidad antes de impuestos (UAI)', c.utilidadAntesImpuestos, ''),
       line('(−) Impuesto de renta (grupo 54)', c.impuestoCausado, ''),
       line('Utilidad Neta', c.utilidadNeta, ` → netIncome${label === 'Periodo actual' ? 'Primary' : 'Comparative'}`),
+      oriLine(label === 'Periodo actual' ? ctx.oriAnchors.primary : ctx.oriAnchors.comparative, label === 'Periodo actual'),
     ].join('\n');
   };
   const primary = renderPeriod('Periodo actual', ctx.pnlAnchors.primary);
   if (!primary) return '';
   const comparative = ctx.isComparative ? renderPeriod('Periodo comparativo', ctx.pnlAnchors.comparative) : null;
   return `## CASCADA VINCULANTE DEL P&G (enmienda spec v2.1 2026-09-24 — grupo 42 debajo del EBIT)
-Cifras exactas del preprocesador. Los subtotales del P&G copian el token [MoneyCop: N]; los renglones con código PUC deben sumar estos escalones (UB = 41 − 4175 − 6 − 7; EBIT = UB − 51 − 52; UAI = EBIT + 42 − 53; UN = UAI − 54).
+Cifras exactas del preprocesador. Los subtotales del P&G copian el token [MoneyCop: N]; los renglones con código PUC deben sumar estos escalones (UB = 41 − 4175 − 6 − 7; EBIT = UB − 51 − 52; UAI = EBIT + 42 − 53; UN = UAI − 54). El ORI del periodo es la variación del grupo 38 (enmienda 12, spec v2.1): la línea única de ORI del modo simple de PresentationV3 lleva esa cifra ($0,00 sólo cuando el ancla es $0).
 ${primary}${comparative ? `\n${comparative}` : ''}`;
 }
 
@@ -1011,6 +1050,7 @@ ${ctx.niifDisclosures}
 
 <success_criteria>
 - Activo = Pasivo + Patrimonio, tolerancia $0 (centavo).
+- Los subtotales corriente / no corriente del Balance ("Total activo corriente", "Total activo no corriente", "Total pasivo corriente", "Total pasivo no corriente") coinciden al centavo con Activo Corriente, Activo No Corriente, Pasivo Corriente y Pasivo No Corriente de TOTALES VINCULANTES en cada periodo (validador E27): cada cuenta va en el bloque en que el preprocesador la cuenta, incluidas las excepciones de vencimiento declaradas por el usuario.
 - Ingresos de actividades ordinarias del P&L = grupo 41 neto de devoluciones 4175. El grupo 42 (ingresos no operacionales) se presenta en renglón(es) propio(s) DEBAJO del resultado operacional, con su código PUC. Toda la clase 4 queda presentada: 41 arriba, 42 abajo.
 - grossProfitPrimary, operatingProfitPrimary y la UAI coinciden al centavo con el bloque "CASCADA VINCULANTE DEL P&G".
 - Utilidad Neta del P&L coincide al centavo con TOTALES VINCULANTES (será el anchor para el closing_balance del ECP en Pass-2).
@@ -1019,6 +1059,7 @@ ${ctx.niifDisclosures}
 - EBIT (operatingProfitPrimary) = grossProfit − Grupo 51 − Grupo 52. NO incluye el grupo 42 ni deduce el Grupo 53. Tolerancia $0.
 - UAI (utilidad antes de impuestos) = operatingProfitPrimary + otros ingresos (Grupo 42) − Grupo 53.
 - netIncomePrimary = UAI − impuestoRenta. operatingProfitPrimary ≠ netIncomePrimary salvo cuando Grupo 53 = $0 e impuesto = $0.
+- oriPrimary (y oriComparative) copian el renglón "Otro resultado integral" del bloque "CASCADA VINCULANTE DEL P&G": la variación del grupo 38 del periodo, tolerancia $0; null en oriComparative sólo cuando ese bloque lo declara N/D.
 - curatorFlags refleja LITERALMENTE el bloque vinculante (sin re-cálculo).
 ${ctx.isComparative ? `- Balance y P&L presentan amountPrimary (${ctx.primaryPeriod}) Y amountComparative (${ctx.comparativePeriod}); cuando un saldo comparativo no exista, amountComparative = null y se documenta en balanceSheet.notes / incomeStatement.notes.
 - COMPARATIVO COMPLETO (Wave 5 — 2026-05-14): los SEIS totales globales del periodo comparativo (${ctx.comparativePeriod}) — totalAssetsComparative, totalLiabilitiesComparative, totalEquityComparative, grossProfitComparative, operatingProfitComparative, netIncomeComparative — DEBEN viajar como MoneyCop string (NUNCA null) y coincidir al centavo con el bloque "=== Periodo comparativo (${ctx.comparativePeriod}) ===" de TOTALES VINCULANTES. El validator E9 rechaza el reporte si cualquiera de ellos viaja null.
@@ -1216,7 +1257,7 @@ ${ctx.niifDisclosures}
 - Corrección v2.5 (ECP cuadre matricial): equityChanges.rows SIEMPRE incluye una fila kind="profit_for_period" cuyo resultadoEjercicio == netIncomePrimary del Pass-1 anchor (al centavo). Esta fila es la fuente autoritativa del resultado registrado en el ECP — NO se infiere del delta closing − opening. Si opening_balance.resultadoEjercicio es material (|saldo| > $1.000.000 COP), equityChanges.rows ADEMÁS incluye una fila kind="prior_period_result_cancellation" que TRASLADA ese saldo a resultados acumulados (Dr 3605 / Cr 37): resultadoEjercicio = -opening_balance.resultadoEjercicio, resultadosAcumulados = +el mismo monto, total = "0". La suma matricial columna a columna (opening + Σ movement rows = closing) cierra exactamente, tolerancia $0.
 - Saldo inicial del ECP: opening_balance.total == totalEquityComparative del Pass-1 anchor (cuando existe), tolerancia $0 (NIIF PYMES 6.3).
 - Saldo final del ECP por columna == renglones de patrimonio del Balance: capitalSocial = grupo 31, primaColocacion = 32, reservaLegal + otrasReservas = 33, resultadoEjercicio = 36, resultadosAcumulados = 37, ori = 38.
-- La variación de la columna ori del ECP == oriPrimary del P&G. Sin componentes ORI en "PresentationV3 anchors", oriPrimary = "0".
+- La variación de la columna ori del ECP == oriPrimary del P&G (= variación del grupo 38 entre la apertura y el cierre, enmienda 12 spec v2.1). If oriPrimary ≠ "0" then equityChanges.rows incluye una fila kind="other_comprehensive_income" con ori = oriPrimary, total = oriPrimary y el resto de columnas en "0"; otherwise no hay fila de ORI.
 - EFE Método Indirecto presenta las 3 secciones operating / investing / financing con sus respectivas líneas y subtotales.
 - INVARIANTE ARITMÉTICA DEL EFE, tolerancia $0 al centavo, comprobada antes de devolver el JSON — las tres a la vez:
   (i) para CADA sección: Σ lines[].amountPrimary == netFlow de esa sección. Una sección sin renglones DEBE tener netFlow "0"; un netFlow distinto de "0" con \`lines: []\` es un estado financiero inválido.

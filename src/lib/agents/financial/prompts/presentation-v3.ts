@@ -6,7 +6,8 @@
 //   Mejora 1 — EFE: linea D&A explicita cuando hay depreciacion, amortizacion
 //              o deterioro material; omision limpia cuando todo es $0.
 //   Mejora 2 — ORI: desglose condicional en sub-partidas reclassifiable /
-//              no-reclassifiable cuando hay componentes; una linea cuando $0.
+//              no-reclassifiable cuando hay componentes; una linea (ancla
+//              Δ grupo 38, enmienda 12 spec v2.1) cuando no los hay.
 //   Mejora 3 — ECP: columnas inteligentes (mostrar solo las que tienen valor
 //              en cualquiera de los dos periodos).
 //
@@ -175,7 +176,8 @@ export function mergeDepreciation(snapshot: PeriodSnapshot): DepreciationInfo {
  * El PUC no tiene un grupo de ORI bajo NIIF: sólo un mapeo explícito de las
  * cuentas ORI de cada entidad, medido como MOVIMIENTO del periodo, permite
  * desglosarlo. Mientras ese mapeo no exista el mapa queda vacío y la doctrina
- * opera en modo simple (ORI en una sola línea, anclado a $0 por E6b).
+ * opera en modo simple (ORI en una sola línea, anclado por E6b a la variación
+ * del grupo 38 — enmienda 12, spec v2.1).
  */
 const ORI_COMPONENT_MAP: ReadonlyArray<{
   pucPrefix: string;
@@ -353,9 +355,9 @@ Resultado neto + D&A + roU amortization + impairment +/- cambios capital trabajo
 Lee \`oriComponents\` del bloque TOTALES VINCULANTES — es un arreglo de objetos \`{ pucCode, label, amountPrimary, amountComparative, reclassifiable }\`.
 
 If \`oriComponents.length === 0\`:
-- MODO SIMPLE — presenta UNA SOLA linea en el P&L:
-  \`| OTRO RESULTADO INTEGRAL (ORI) | $0,00 | $0,00 |\`
-- Sin sub-partidas, sin nota adicional requerida.
+- MODO SIMPLE — presenta UNA SOLA linea en el P&L con el ORI del periodo, que es la cifra del renglon "Otro resultado integral" del bloque "CASCADA VINCULANTE DEL P&G" (variacion del grupo PUC 38, enmienda 12 spec v2.1):
+  \`| OTRO RESULTADO INTEGRAL (ORI) | <ORI del periodo actual> | <ORI del periodo comparativo, o N/D si ese bloque lo declara N/D> |\`
+- Sin sub-partidas. If el ancla es $0,00 then la linea lleva $0,00; otherwise lleva la variacion del grupo 38 al centavo.
 
 Else (uno o mas componentes con saldo material):
 - MODO DETALLADO — presenta la siguiente estructura:
@@ -422,7 +424,7 @@ Ejemplo COMPLETO (todas las columnas activas — empresas con capital, reservas,
 | :---                                     | :---                                                |
 | daCop + roU + impairment < 1.000 COP     | Omitir linea D&A en EFE + nota tecnica al pie       |
 | daCop + roU + impairment ≥ 1.000 COP     | Mostrar lineas D&A con subtitulos en EFE            |
-| oriComponents.length === 0               | ORI en una sola linea ($0)                          |
+| oriComponents.length === 0               | ORI en una sola linea (ancla Δ grupo 38)            |
 | oriComponents.length > 0                 | Desgloce reclassifiable / no-reclassifiable en P&L  |
 | ecpColumns.<flag> === true               | Mostrar columna en ECP                              |
 | ecpColumns.<flag> === false              | Omitir columna en ECP                               |

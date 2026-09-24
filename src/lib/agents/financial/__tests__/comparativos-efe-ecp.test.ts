@@ -559,11 +559,13 @@ describe('E6 del periodo comparativo — ORI del ERI comparativo == Δ ORI del E
     expect(validar(tres, pp).errors.filter((e) => e.startsWith('E6. ECP (periodo comparativo'))).toEqual([]);
   });
 
-  it('revisión I2: un grupo 38 que se movió sólo en el comparativo no bloquea el informe honesto (ORI del ERI $0 por E6b)', () => {
+  it('revisión I2 / enmienda 12: un grupo 38 que se movió sólo en el comparativo no bloquea el informe honesto (ORI comparativo = Δ38)', () => {
     // 3810 (superávit por valorizaciones) aparece en 2024 con su contrapartida
     // en 1905; 2025 no la mueve. El ECP comparativo (determinista) lleva la Δ38
-    // en la columna ORI y E6b exige ORI $0 en el ERI: antes el E6 comparativo
-    // bloqueaba un informe que no puede satisfacer ambas reglas.
+    // en la columna ORI. La revisión I2 fijó aquí ORI comparativo $0 en el ERI
+    // porque E6b lo exigía; esa cifra contradecía al ECP comparativo (NIIF para
+    // las PYMES 6.3(c)). Con la enmienda 12 (spec v2.1) el ORI del ERI es la
+    // Δ38 de cada periodo: el informe honesto presenta $5.000.000 y $0 es error.
     const csv = csvTresCortes()
       .replace('159205,', '190505,Valorizaciones,Auxiliar,1,0,5000000,5000000\n159205,')
       .replace('370505,', '381005,Superavit por valorizaciones,Auxiliar,1,0,5000000,5000000\n370505,');
@@ -571,8 +573,12 @@ describe('E6 del periodo comparativo — ORI del ERI comparativo == Δ ORI del E
     const json = informeTresCortes(pp38);
     const cmpOri = json.equityChanges.comparativeRows!.find((r) => r.kind === 'other_comprehensive_income');
     expect(cmpOri?.ori).toBe(M(5_000_000));
-    expect(json.incomeStatement.oriComparative).toBe('0');
+    expect(json.incomeStatement.oriComparative).toBe(M(5_000_000));
+    expect(json.incomeStatement.oriPrimary).toBe('0');
     const errors = validar(json, pp38).errors;
     expect(errors.filter((e) => /^E6/.test(e))).toEqual([]);
+    const cero = clonar(json);
+    cero.incomeStatement.oriComparative = '0';
+    expect(validar(cero, pp38).errors.some((e) => e.startsWith('E6b.'))).toBe(true);
   });
 });

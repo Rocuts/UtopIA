@@ -218,7 +218,7 @@ Grid `col-main` + `col-side`.
 - Eyebrow `Estado Financiero 02 · NIIF Pymes Sec. 5 · IAS 1.81 · Art. 26, 240 E.T.`.
 - H1 `Estado de Resultados Integrales` + cap.
 - Tabla con tr.grp por subtotal (ingresos operacionales / utilidad bruta / utilidad operacional / utilidad antes de impuestos), tr.sub para líneas.
-- **Devoluciones (Cta 4175) en LÍNEA SEPARADA**, marcada `(−) Devoluciones y descuentos en ventas`, color negative. NIIF 15 §47.
+- **Devoluciones (Cta 4175) en LÍNEA SEPARADA**, marcada `(−) Devoluciones y descuentos en ventas`, color negative: ingresos operacionales netos = 41 − 4175, con la cifra de la 4175 revelada en su propia línea. Es un criterio de presentación de UtopIA y se presenta sin cita normativa.
 - **Si la tasa efectiva de impuesto está fuera del rango (35% nominal vs efectiva):** fila con `tr.anomaly` y `<sup class="n">△</sup>` adyacente al label.
 - **Si UAI − Impuesto ≠ Utilidad neta reportada:** fila adicional `(UAI − Impuesto)` con valor calculado en color muted italic + tfoot con tr.total mostrando la utilidad reportada con `<sup class="n">†</sup>` y nota al pie aclarando la diferencia aritmética.
 

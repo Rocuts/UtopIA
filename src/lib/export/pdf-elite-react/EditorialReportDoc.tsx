@@ -113,6 +113,7 @@ export function EditorialReportDoc({ doc, onTocAnchor }: Props) {
           areaAccent="valor"
           sectionTitle="Estados"
           sectionEmphasis="financieros"
+          tocAnchor="statements"
         />
       )}
       {/* StatementsPages returns array of 4 <Page> elements */}

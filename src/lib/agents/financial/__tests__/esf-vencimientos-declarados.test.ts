@@ -138,10 +138,11 @@ function validationErrors(json: NiifReportJson, pp: PreprocessedBalance): string
       comparative: pp.comparative ? buildLedgerLeaves(pp.comparative) : null,
     },
   });
-  // E15 (subtotales/columna comparativa del ESF), E21 y E22 del ESF. El ERI
-  // del informe base es sintético y no se ancla a este balance.
+  // E15 (subtotales/columna comparativa del ESF), E21, E22 y E27 (subtotales
+  // de plazo == controlTotals, integración I4) del ESF. El ERI del informe
+  // base es sintético y no se ancla a este balance.
   return [...r.errors, ...r.warnings].filter(
-    (m) => /^E15/.test(m) || (/^E2[12]\b/.test(m) && /Situación Financiera/.test(m)),
+    (m) => /^E15|^E27/.test(m) || (/^E2[12]\b/.test(m) && /Situación Financiera/.test(m)),
   );
 }
 
@@ -344,6 +345,15 @@ function sumByTerm(snap: PeriodSnapshot, section: 'assets' | 'liabilities') {
   return acc;
 }
 
+/** Lo mismo desde las hojas con plazo que usa E27 (`LedgerLeaf.term`). */
+function sumLeavesByTerm(snap: PeriodSnapshot, classCode: 1 | 2) {
+  const acc = { current: ZERO, nonCurrent: ZERO, none: ZERO };
+  for (const l of buildLedgerLeaves(snap)) {
+    if (l.classCode === classCode) acc[l.term ?? 'none'] += l.cents;
+  }
+  return acc;
+}
+
 describe('buildDeterministicBreakdownByTerm — barrido de fixtures', () => {
   it('en cada snapshot de cada fixture, Σ por plazo = controlTotals y Σ por grupo = desglose por grupo', async () => {
     const fixtures = [...csvFixtures(), ['grupo-empresarial-2tres-sas.xlsx', await loadRealBalanceCsv()] as [string, string]];
@@ -374,6 +384,9 @@ describe('buildDeterministicBreakdownByTerm — barrido de fixtures', () => {
           a: pesosToCents(ct.pasivoCorriente),
           b: pesosToCents(ct.pasivoNoCorriente),
         });
+        // E27 (integración I4) reconstruye las mismas anclas desde las hojas.
+        expect({ ctx, leaves: sumLeavesByTerm(snap, 1) }).toEqual({ ctx, leaves: a });
+        expect({ ctx, leaves: sumLeavesByTerm(snap, 2) }).toEqual({ ctx, leaves: p });
 
         const hasR1 = (snap.classes.find((c) => c.code === 2)?.accounts ?? []).some((x) => /-\d/.test(x.code));
         if (hasR1) conR1++;
@@ -398,6 +411,24 @@ describe('buildDeterministicBreakdownByTerm — barrido de fixtures', () => {
     }
     expect(snapshots).toBeGreaterThanOrEqual(12);
     expect(conR1).toBeGreaterThan(0);
+  });
+
+  it('E27 no dispara sobre el ESF completado por el código en ningún fixture (incluido el balance real)', async () => {
+    const fixtures = [...csvFixtures(), ['grupo-empresarial-2tres-sas.xlsx', await loadRealBalanceCsv()] as [string, string]];
+    let checked = 0;
+    for (const [name, csv] of fixtures) {
+      let pp: PreprocessedBalance;
+      try {
+        pp = preprocessTrialBalance(parseTrialBalanceCSV(csv));
+      } catch {
+        continue;
+      }
+      const done = completar(pp);
+      if (!done.balanceSheet.assets.some((l) => l.account === null)) continue;
+      checked++;
+      expect({ name, e27: validationErrors(done, pp).filter((m) => m.startsWith('E27.')) }).toEqual({ name, e27: [] });
+    }
+    expect(checked).toBeGreaterThanOrEqual(10);
   });
 });
 

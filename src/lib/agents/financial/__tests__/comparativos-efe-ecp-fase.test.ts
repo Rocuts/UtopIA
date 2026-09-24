@@ -129,4 +129,17 @@ describe('runNiifPhase — comparativos del EFE y del ECP', () => {
     expect(json.equityChanges.comparativeNote).toMatch(/Estado de cambios en el patrimonio/);
     expect(phase.niif.reconciliation?.clean).toBe(true);
   });
+
+  it('integración I4: en un informe en inglés la nota del comparativo no presentado sale en inglés', async () => {
+    const csv = csvDosCortes();
+    const pp = preprocesarTresCortes(csv);
+    mockPasses(informeTresCortes(pp));
+    const phase = await runNiifPhase({ rawData: csv, company: COMPANY, language: 'en' }, { preprocessed: pp });
+    const json = phase.niif.json!;
+    expect(json.cashFlow.comparativeNote).toMatch(
+      /^Statement of cash flows — 2024 comparative not presented: .*IFRS for SMEs 3\.14 requires comparative information — provide that cut\./,
+    );
+    expect(json.equityChanges.comparativeNote).toMatch(/^Statement of changes in equity — 2024 comparative not presented/);
+    expect(`${json.cashFlow.comparativeNote} ${json.equityChanges.comparativeNote}`).not.toMatch(/no presentado|suministre/);
+  });
 });

@@ -15,6 +15,8 @@
 //   E5. Coherencia Net Income ↔ Operating Profit ↔ Gross Profit
 //   E6. ORI Income Statement coincide con ORI Equity Changes (también en el
 //       periodo comparativo cuando hay ECP comparativo)
+//  E6b. ORI del ERI == Δ grupo PUC 38 del balance de prueba en cada periodo
+//       (enmienda 12, spec v2.1); sin corte de apertura, $0 o N/D
 //   E9. Comparativo completo: cuando comparativePeriod != null TODOS los
 //       6 totales *Comparative (3 Balance + 3 P&L) son non-null y cuadran la
 //       ecuación patrimonial al centavo. Si el preprocesador suministra
@@ -33,6 +35,8 @@
 //       ajustes son partidas no monetarias y cambios en WC, no transferencias
 //       contables internas). Defensa Art. 647 E.T.: la salida ficticia
 //       distorsiona el flujo informado a la DIAN sin sustento documental.
+//  E27. Subtotales corriente / no corriente del ESF == controlTotals
+//       (activo/pasivo corriente y no corriente, ambos periodos; integración I4)
 //
 // El validator legacy `validateConsolidatedReport` queda en uso para reglas
 // que tocan estructura Markdown (placeholders, secciones PARTE I/II/III) que
@@ -64,6 +68,7 @@ import { moneyCopEquals, parseMoneyCop, serializeMoneyCop } from '../contracts/m
 import type { NiifReportJson, EquityChangeRowJson } from '../contracts/niif-report';
 import type { ReportValidationResult } from '../types';
 import {
+  balanceTermOfLabel,
   incomeCascadeKindOfLabel,
   type IncomeCascadeKind,
 } from '@/lib/export/statement-presentation';
@@ -413,20 +418,16 @@ export function validateNiifReportJson(
       }
     }
   }
-  // E6b. Sin componentes ORI mapeados por el preprocesador, el ORI no tiene
-  // ancla: se exige $0 en ambos periodos. Presentar un ORI requiere un mapeo
-  // explícito de cuentas ORI de la entidad (auditoría niif-contrato-12 /
-  // prompts-normativa-11: el grupo 31 es capital, no ORI).
-  if (options.presentationV3 && options.presentationV3.oriComponents.length === 0) {
-    const oriCmp = json.incomeStatement.oriComparative;
-    if (oriPnl !== ZERO || (oriCmp !== null && parseMoneyCop(oriCmp) !== ZERO)) {
-      errors.push(
-        `E6b. El P&G presenta Otro Resultado Integral (${fmtCop(oriPnl)}` +
-          `${oriCmp !== null ? ` / comparativo ${fmtCop(parseMoneyCop(oriCmp))}` : ''}) y el ` +
-          `balance de prueba no tiene cuentas ORI mapeadas: el ORI no tiene ancla y debe ser $0.`,
-      );
-    }
-  }
+  // E6b. El ORI del ERI contra su ancla determinista (enmienda 12, spec v2.1;
+  // integración I4). El ORI del periodo es la variación del grupo PUC 38
+  // entre el corte de apertura y el de cierre: la misma cifra que la columna
+  // ORI del ECP mueve (E24 fija esa columna al saldo del grupo 38 en cada
+  // corte y E6 su variación al ORI del ERI). Hasta esta enmienda E6b exigía
+  // ORI $0 sin componentes mapeados, y con un grupo 38 que se movió en el año
+  // ninguna cifra del ERI satisfacía E6 y E6b a la vez. Sin corte de apertura
+  // rige lo anterior (auditoría niif-contrato-12 / prompts-normativa-11): $0
+  // en el periodo actual; en el comparativo, N/D si el grupo 38 tiene saldo.
+  errors.push(...oriAnchorErrors(json, options, oriPnl));
 
   // -- E19. Saldo inicial del ECP == patrimonio comparativo del ESF ----------
   // Auditoría 2026-09 (niif-contrato-11a): el saldo inicial nunca se cruzaba
@@ -1333,6 +1334,30 @@ export function validateNiifReportJson(
     }
   }
 
+  // -- E27. Subtotales corriente / no corriente del ESF == controlTotals ------
+  // Integración I4: los subtotales de plazo que imprime un ESF escrito por el
+  // modelo son las cifras de liquidez de los KPIs, el gate y X03, en ambos
+  // periodos (ver `termSubtotalErrors`).
+  if (options.ledgers) {
+    const termPeriods: Array<[StatementPeriod, readonly LedgerLeaf[] | null, string]> = [
+      ['primary', options.ledgers.primary, `periodo ${json.company.fiscalPeriod}`],
+    ];
+    if (hasComparative) {
+      termPeriods.push([
+        'comparative',
+        options.ledgers.comparative,
+        `periodo comparativo ${json.company.comparativePeriod}`,
+      ]);
+    }
+    for (const [period, leaves, etiqueta] of termPeriods) {
+      if (!leaves) continue;
+      errors.push(
+        ...termSubtotalErrors('Activo', 'assets', bs.assets, leaves, period, etiqueta),
+        ...termSubtotalErrors('Pasivo', 'liabilities', bs.liabilities, leaves, period, etiqueta),
+      );
+    }
+  }
+
   // -- E21. Renglones con código PUC anclados al balance de prueba ------------
   // Auditoría 2026-09-24 (e2e-niif-02/-05/-06). E14/E9 anclaban los TOTALES y
   // E3b sólo el renglón 11: el modelo podía mover $1.000.000 de deudores (13)
@@ -1634,6 +1659,71 @@ function uncodedIncomeRowErrors(
   return out;
 }
 
+const TERM_CONTROL_TOTAL: Record<'assets' | 'liabilities', Record<'current' | 'nonCurrent', [string, string]>> = {
+  assets: {
+    current: ['activo corriente', 'activoCorriente'],
+    nonCurrent: ['activo no corriente', 'activoNoCorriente'],
+  },
+  liabilities: {
+    current: ['pasivo corriente', 'pasivoCorriente'],
+    nonCurrent: ['pasivo no corriente', 'pasivoNoCorriente'],
+  },
+};
+
+/**
+ * E27 — subtotales corriente / no corriente del ESF contra la partición del
+ * preprocesador (integración I4). `controlTotals.activoCorriente` /
+ * `activoNoCorriente` / `pasivoCorriente` / `pasivoNoCorriente` son las cifras
+ * de los KPIs de liquidez, el gate y X03; aquí se reconstruyen al centavo
+ * desde las hojas del periodo con su plazo (`LedgerLeaf.term`: excepción de
+ * vencimiento declarada, virtual de R1 por su origen, grupo PUC). E21 ancla
+ * cada grupo y E22 exige que el subtotal sume su bloque, así que un grupo en el
+ * bloque equivocado imprimía subtotales coherentes consigo mismos y distintos
+ * de los KPIs cuando el ESF lo escribía el modelo (sin completado determinista).
+ * Tolerancia $0. Una celda `null` no se contrasta (no es $0); un encabezado sin
+ * "total" sólo si imprime monto; una sección con hojas de plazo no
+ * determinable, tampoco.
+ */
+function termSubtotalErrors(
+  nombre: string,
+  section: 'assets' | 'liabilities',
+  lines: readonly BalanceLine[],
+  leaves: readonly LedgerLeaf[],
+  period: StatementPeriod,
+  etiqueta: string,
+): string[] {
+  const classCode = section === 'assets' ? 1 : 2;
+  const expected = { current: ZERO, nonCurrent: ZERO };
+  for (const leaf of leaves) {
+    if (leaf.classCode !== classCode) continue;
+    if (leaf.term === undefined || leaf.term === null) {
+      if (leaf.cents !== ZERO) return [];
+      continue;
+    }
+    expected[leaf.term] += leaf.cents;
+  }
+  const out: string[] = [];
+  for (const line of lines) {
+    if (line.account !== null && line.account.trim() !== '') continue;
+    const kind = balanceTermOfLabel(section, line.label);
+    if (!kind) continue;
+    const raw = periodCell(line, period);
+    if (raw === null) continue;
+    const v = parseMoneyCop(raw);
+    if (kind.header && v === ZERO) continue;
+    const e = expected[kind.term];
+    if (v === e) continue;
+    const [noun, key] = TERM_CONTROL_TOTAL[section][kind.term];
+    out.push(
+      `E27. Estado de Situación Financiera — ${nombre} (${etiqueta}): "${line.label}" imprime ${fmtCop(v)} ` +
+        `y el ${noun} del balance de prueba (controlTotals.${key}: la cifra de los KPIs de liquidez, ` +
+        `el gate y X03) es ${fmtCop(e)}. Brecha: ${fmtCop(v - e)}. La clasificación corriente / no corriente ` +
+        `del ESF es la del preprocesador, con los vencimientos declarados (NIIF para las PYMES 4.4).`,
+    );
+  }
+  return out;
+}
+
 /** E22 del ESF: subtotales y encabezados sin código, comparados con signo. */
 function uncodedBalanceRowErrors(
   nombre: string,
@@ -1861,6 +1951,79 @@ function equityColumnsFromLedger(leaves: readonly LedgerLeaf[]): EquityColumns {
     else c.unmapped += leaf.cents;
   }
   return c;
+}
+
+/**
+ * E6b — ORI del ERI contra el ancla determinista de cada periodo (enmienda 12,
+ * spec v2.1). Ancla = Δ grupo PUC 38 entre el corte de apertura y el de cierre
+ * (`buildOriAnchors`, `ComparativeStatementsBasis.oriCents`):
+ *   - periodo actual: apertura = corte comparativo (hojas `ledgers.comparative`);
+ *     sin él, $0 bajo el modo simple de PresentationV3 (lo anterior);
+ *   - periodo comparativo: apertura = corte anterior al comparativo (la base
+ *     comparativa); sin él y con saldo en el grupo 38, N/D (null); sin saldo,
+ *     $0 o N/D. Con P&G comparativo N/D (saldos de apertura) no se exige.
+ */
+function oriAnchorErrors(
+  json: NiifReportJson,
+  options: NiifJsonValidatorOptions,
+  oriPnl: bigint,
+): string[] {
+  const out: string[] = [];
+  const fp = json.company.fiscalPeriod;
+  const cp = json.company.comparativePeriod;
+  const ledgers = options.ledgers;
+  const basis = options.comparativeStatements;
+  const simpleMode = !!options.presentationV3 && options.presentationV3.oriComponents.length === 0;
+  const g38 = (leaves: readonly LedgerLeaf[]) => equityColumnsFromLedger(leaves).ori;
+  const regla =
+    'El ORI del periodo es el movimiento de la columna ORI del ECP (NIIF para las PYMES, Secciones 5 y 6 — ' +
+    '6.3(c)); lo calcula el código y el ERI lo copia.';
+
+  if (cp !== null && ledgers?.comparative) {
+    const anchor = g38(ledgers.primary) - g38(ledgers.comparative);
+    if (oriPnl !== anchor) {
+      out.push(
+        `E6b. ORI del ERI ${fp} (${fmtCop(oriPnl)}) ≠ variación del grupo PUC 38 (superávit por valorizaciones / ORI) ` +
+          `entre los cortes ${cp} y ${fp} (${fmtCop(anchor)}). Brecha: ${fmtCop(oriPnl - anchor)}. ${regla}`,
+      );
+    }
+  } else if (simpleMode && oriPnl !== ZERO) {
+    out.push(
+      `E6b. El ERI ${fp} presenta Otro Resultado Integral (${fmtCop(oriPnl)}) sin corte de apertura del periodo: ` +
+        `la variación del grupo PUC 38 no es medible y el ORI no tiene ancla; debe ser $0.`,
+    );
+  }
+
+  if (cp === null || options.comparativeIsOpening === true) return out;
+  const oriCmp = json.incomeStatement.oriComparative;
+  const cmp = oriCmp === null ? null : parseMoneyCop(oriCmp);
+  const measured = basis?.oriCents ?? null;
+  if (basis && measured !== null) {
+    if (cmp === null ? measured !== ZERO : cmp !== measured) {
+      out.push(
+        `E6b. ORI del ERI comparativo ${cp} (${cmp === null ? 'N/D' : fmtCop(cmp)}) ≠ variación del grupo PUC 38 ` +
+          `(superávit por valorizaciones / ORI) entre los cortes ${basis.openingPeriod} y ${cp} (${fmtCop(measured)})` +
+          `${cmp === null ? '' : `. Brecha: ${fmtCop(cmp - measured)}`}. ${regla}`,
+      );
+    }
+    return out;
+  }
+  if (cmp === null) return out;
+  const anchored = !!basis && !!ledgers?.comparative;
+  const saldo38 = anchored ? g38(ledgers!.comparative!) : ZERO;
+  if (saldo38 !== ZERO) {
+    out.push(
+      `E6b. ORI del ERI comparativo ${cp} (${fmtCop(cmp)}): sin un corte de apertura utilizable del periodo ` +
+        `comparativo la variación del grupo PUC 38 (saldo al cierre de ${cp}: ${fmtCop(saldo38)}) no es medible; ` +
+        `el ORI comparativo se presenta N/D (null), no ${fmtCop(cmp)}.`,
+    );
+  } else if ((simpleMode || anchored) && cmp !== ZERO) {
+    out.push(
+      `E6b. El ERI presenta Otro Resultado Integral comparativo ${cp} (${fmtCop(cmp)}) sin ancla: el balance ` +
+        `no permite medir la variación del grupo PUC 38 de ese periodo; debe ser $0 o N/D.`,
+    );
+  }
+  return out;
 }
 
 function equityColumnsOfRow(r: EquityChangeRowJson): Omit<EquityColumns, 'unmapped'> {
@@ -2321,15 +2484,12 @@ function comparativeStatementErrors(
         // 6.3). Un ORI comparativo no presentado (null) o un P&G comparativo
         // N/D (saldos de apertura) no se cruzan.
         //
-        // Tampoco bajo el régimen de E6b (sin componentes ORI mapeados): E6b
-        // ya fija el ORI comparativo del ERI en $0, y las filas del ECP
-        // comparativo son deterministas (Δ grupo 38 en la columna ORI). Con un
-        // grupo 38 que se movió en el periodo comparativo ninguna cifra del
-        // ERI satisfaría a la vez E6b y este cruce: bloquearía un informe
-        // honesto sin detectar nada que E6b no detecte ya (revisión I2).
+        // La revisión I2 lo había apagado bajo el régimen de E6b porque E6b
+        // fijaba el ORI del ERI en $0 y el ECP comparativo determinista lleva
+        // Δ38 en la columna ORI. Con la enmienda 12 (spec v2.1) E6b ancla el ORI
+        // a esa misma Δ38, así que los dos cruces coinciden y corre siempre.
         const oriCmp = json.incomeStatement.oriComparative;
-        const e6bRegime = !!options.presentationV3 && options.presentationV3.oriComponents.length === 0;
-        if (!pygComparativeIsNd && oriCmp !== null && !e6bRegime) {
+        if (!pygComparativeIsNd && oriCmp !== null) {
           const oriDelta = parseMoneyCop(closing.ori) - parseMoneyCop(opening.ori);
           const oriPnlCmp = parseMoneyCop(oriCmp);
           if (oriDelta !== oriPnlCmp) {
