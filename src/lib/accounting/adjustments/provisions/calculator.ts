@@ -1,11 +1,12 @@
 // ─── WS4 — Provisiones laborales y parafiscales (Colombia 2026) ───────────────
 //
 // Tasas estándar por provision_type (Ley 21/1982, CST, Decreto 1295/1994):
-//   prima              8.3333% (Art. 306 CST — 30 días de salario por año)
-//   cesantias          8.3333% (Art. 249 CST)
+//   prima              1/12    (Art. 306 CST — 30 días de salario por año)
+//   cesantias          1/12    (Art. 249 CST — un mes de salario por año)
 //   intereses_cesantias 1.00%  (Ley 52/1975: 12% anual sobre cesantías; sobre
 //                              la MISMA base de cesantías = 8,33% × 12% ≈ 1%)
-//   vacaciones         4.1667% (Art. 186 CST — 15 días por año)
+//   vacaciones         1/24    (Art. 186 CST — 15 días hábiles por año)
+//   (las fracciones se aplican exactas: ver EXACT_FRACTIONS)
 //   salud              8.50%   (Ley 100/1993 — empleador) *
 //   pension           12.00%   (Ley 100/1993 — empleador)
 //   arl                0.522%  (Decreto 1772/1994 — Clase de Riesgo I)
@@ -31,7 +32,8 @@
 // Algoritmo por provisión laboral:
 //   1. Base = saldo débito neto del período de las cuentas en
 //      `base_account_codes` (prefijos), por centro de costo.
-//   2. Provisión por centro de costo = base_cc × rate. Una línea de gasto por
+//   2. Provisión por centro de costo = base_cc × rate, redondeo half-up al
+//      centavo (misma regla que la renta). Una línea de gasto por
 //      centro de costo (las cuentas 5105xx del PUC sembrado lo exigen) y una
 //      línea de pasivo por el total.
 //
@@ -72,11 +74,10 @@ function fromCentavos(c: bigint): string {
   return `${c < ZERO ? '-' : ''}${abs / SCALE}.${(abs % SCALE).toString().padStart(2, '0')}`;
 }
 
-/** Multiplica centavos por una tasa decimal (string "0.0833") con 6 decimales de precisión.
- *  Usa escalado ×1_000_000 para evitar float. */
-function applyRate(centavos: bigint, rateStr: string): bigint {
-  // rateStr ej. "0.083300" → 6 decimales máx en la DB (numeric 8,6)
-  const RATE_SCALE = BigInt(1_000_000);
+const RATE_SCALE = BigInt(1_000_000);
+
+/** Tasa decimal (string "0.083333", NUMERIC(8,6) en la DB) escalada ×1_000_000. */
+function rateToMicros(rateStr: string): bigint {
   const dot = rateStr.indexOf('.');
   let intR = '0';
   let fracR = '';
@@ -87,8 +88,53 @@ function applyRate(centavos: bigint, rateStr: string): bigint {
     fracR = rateStr.slice(dot + 1);
   }
   fracR = fracR.padEnd(6, '0').slice(0, 6);
-  const rateBig = BigInt(intR) * RATE_SCALE + BigInt(fracR);
-  return (centavos * rateBig) / RATE_SCALE;
+  return BigInt(intR) * RATE_SCALE + BigInt(fracR);
+}
+
+/** centavos × num / den, redondeo half-up al centavo (una sola regla de redondeo). */
+function mulDivHalfUp(centavos: bigint, num: bigint, den: bigint): bigint {
+  const n = centavos * num;
+  const q = n / den;
+  const r = n % den;
+  return r * BigInt(2) >= den ? q + BigInt(1) : q;
+}
+
+/**
+ * Fracciones exactas de las prestaciones (contab-nomina-24). La tasa se guarda
+ * con 6 decimales y 1/12 no cabe: 0,083333 (o 0,0833) infraprovisiona prima y
+ * cesantías; 4.000.000 → 333.332 / 333.200 en vez de 333.333,33.
+ *   prima       Art. 306 CST: 30 días de salario por año → 1/12 mensual.
+ *   cesantías   Art. 249 CST: un mes de salario por año  → 1/12 mensual.
+ *   vacaciones  Art. 186 CST: 15 días hábiles por año    → 15/360 = 1/24.
+ * Sólo se usa la fracción si la tasa configurada es su redondeo (±0,00005);
+ * una tasa distinta, fijada por el usuario, se respeta tal cual.
+ */
+const EXACT_FRACTIONS: Record<string, [bigint, bigint]> = {
+  prima: [BigInt(1), BigInt(12)],
+  cesantias: [BigInt(1), BigInt(12)],
+  vacaciones: [BigInt(1), BigInt(24)],
+};
+const FRACTION_TOLERANCE_MICROS = BigInt(50);
+
+/**
+ * Aplica la tasa de la provisión a una base en centavos, con redondeo half-up
+ * — el mismo de `computeIncomeTaxProvision` (contab-nomina-25: antes este
+ * camino, que es el que POSTEA, truncaba y el de renta redondeaba).
+ */
+export function applyProvisionRate(
+  centavos: bigint,
+  rateStr: string,
+  provisionType?: string,
+): bigint {
+  const micros = rateToMicros(rateStr);
+  const frac = provisionType ? EXACT_FRACTIONS[provisionType] : undefined;
+  if (frac) {
+    const [num, den] = frac;
+    const exactMicros = mulDivHalfUp(RATE_SCALE, num, den);
+    const diff = micros > exactMicros ? micros - exactMicros : exactMicros - micros;
+    if (diff <= FRACTION_TOLERANCE_MICROS) return mulDivHalfUp(centavos, num, den);
+  }
+  return mulDivHalfUp(centavos, micros, RATE_SCALE);
 }
 
 // ---------------------------------------------------------------------------
@@ -158,6 +204,14 @@ export function calculateProvisions(
   for (const cfg of configs) {
     if (!cfg.active) {
       skipped.push({ provisionType: cfg.provisionType, reason: 'inactive' });
+      continue;
+    }
+    // Este cálculo es MENSUAL. Una configuración con cadencia anual se
+    // aceptaba y se provisionaba cada mes como si fuera mensual
+    // (contab-nomina-25): se omite con motivo explícito.
+    const cadence = (cfg as { cadence?: string | null }).cadence;
+    if (cadence && cadence !== 'monthly') {
+      skipped.push({ provisionType: cfg.provisionType, reason: 'cadence_not_monthly' });
       continue;
     }
 
@@ -288,7 +342,7 @@ export function calculateProvisions(
     // Provisión por centro de costo (la suma de las partes es el total).
     const perCostCenter: Array<{ costCenterId: string | null; amount: bigint }> = [];
     for (const [cc, base] of baseByCostCenter) {
-      const amount = applyRate(base, cfg.rate);
+      const amount = applyProvisionRate(base, cfg.rate, cfg.provisionType);
       if (amount > ZERO) perCostCenter.push({ costCenterId: cc || null, amount });
     }
     const provisionCentavos = perCostCenter.reduce((acc, p) => acc + p.amount, ZERO);

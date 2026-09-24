@@ -39,6 +39,15 @@ export interface AuditCompanyContext {
   tipoSocietario?: 'SAS' | 'SA' | 'LTDA' | 'EU' | 'OTRO';
   /** Tri-state intencionalmente: `undefined` = "no preguntado al usuario". */
   estatutosRequierenReservaLegal?: boolean;
+  /**
+   * Régimen del impuesto de renta (auditoria-calidad-31). La TTD del par. 6
+   * del Art. 240 E.T. aplica a "los contribuyentes del impuesto sobre la renta
+   * de que trata este artículo y el artículo 240-1"; el Régimen Simple de
+   * Tributación (Art. 903 E.T.) "sustituye el impuesto sobre la renta", así
+   * que con `'simple'` V10 no se exige. `undefined` = no informado: V10 se
+   * evalúa como régimen ordinario.
+   */
+  regimenTributario?: 'ordinario' | 'simple';
 }
 
 export type AuditBlockerCode =
@@ -381,9 +390,14 @@ export function auditReportEmittable(
   // TTD = ID / UD; si es < 15 % se liquida IA = UD × 15 % − ID. Sin ID/UD
   // verificados la TTD es N/D con motivo: la UAI contable no es base fiscal
   // (re-auditoría 2026-09, NM-13 — el mensaje anterior pedía «TMT 15 % sobre
-  // utilidad contable depurada — tomar el mayor»).
+  // utilidad contable depurada — tomar el mayor»). No aplica al Régimen Simple
+  // (Art. 903 E.T.) cuando el intake lo informa (auditoria-calidad-31).
   // -------------------------------------------------------------------------
-  if (!options.skipReportTextChecks && !reportIncluyeTMTCalculada(reportText)) {
+  if (
+    !options.skipReportTextChecks &&
+    company.regimenTributario !== 'simple' &&
+    !reportIncluyeTMTCalculada(reportText)
+  ) {
     blockers.push({
       code: 'V10',
       message:

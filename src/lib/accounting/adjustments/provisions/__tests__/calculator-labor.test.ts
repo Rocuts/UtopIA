@@ -45,9 +45,12 @@ describe('provisiones laborales — base y centros de costo', () => {
     const byCc = Object.fromEntries(
       e.lines.filter((l) => l.debit !== '0.00').map((l) => [l.costCenterId, l.debit]),
     );
-    // adm: (3.000.000 + 249.095) × 0,083333 ; vta: 1.000.000 × 0,083333
-    expect(byCc).toEqual({ 'cc-adm': '270756.83', 'cc-vta': '83333.00' });
-    expect(e.lines.at(-1)).toMatchObject({ accountId: 'liab-prima', credit: '354089.83' });
+    // adm: (3.000.000 + 249.095) / 12 ; vta: 1.000.000 / 12 — la tasa 0,083333
+    // es el redondeo de 1/12 y se aplica la fracción exacta con redondeo
+    // half-up (contab-nomina-24/25). Antes se esperaban 270.756,83 / 83.333,00:
+    // la tasa truncada infraprovisionaba.
+    expect(byCc).toEqual({ 'cc-adm': '270757.92', 'cc-vta': '83333.33' });
+    expect(e.lines.at(-1)).toMatchObject({ accountId: 'liab-prima', credit: '354091.25' });
     expect(r.lines[0].baseAmountCop).toBe('4249095.00');
   });
 

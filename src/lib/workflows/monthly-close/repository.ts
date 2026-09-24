@@ -14,6 +14,7 @@ import {
   workspaces,
 } from '@/lib/db/schema';
 import type { JournalEntryRow, JournalLineRow, MonthlyCloseRunRow } from '@/lib/db/schema';
+import { centsToNumeric, numericToCents } from '@/lib/accounting/double-entry/ledger';
 
 // ---------------------------------------------------------------------------
 // Período
@@ -208,8 +209,9 @@ export async function getAccountPeriodBalance(
     );
 
   const { totalDebit, totalCredit } = result[0] ?? { totalDebit: '0', totalCredit: '0' };
-  const balance = parseFloat(totalDebit) - parseFloat(totalCredit);
-  return balance.toFixed(2);
+  // MoneyCop (contab-nomina-25): la resta en float perdía centavos por encima
+  // de ~9×10^13 y el cierre (exacto en BigInt) podía rechazar el asiento.
+  return centsToNumeric(numericToCents(totalDebit) - numericToCents(totalCredit));
 }
 
 /**

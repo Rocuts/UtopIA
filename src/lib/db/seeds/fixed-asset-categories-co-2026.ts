@@ -1,32 +1,52 @@
-// ─── WS4 — Categorías de activos fijos con vidas útiles Art. 137 E.T. 2026 ──
+// ─── WS4 — Categorías de activos fijos: vida útil contable y tope fiscal ────
 //
-// Referencia: Art. 137 E.T. — "Limitación a la deducción por depreciación":
-//   - Inmuebles (edificios):          20 años = 240 meses  (5% anual)
-//   - Barcos, trenes, aviones:        10 años = 120 meses
-//   - Vehículos y equipo aeronáutico:  5 años =  60 meses
-//   - Equipos de cómputo:              5 años =  60 meses  (práctica mercado: 3 años)
-//   - Maquinaria, equipo e instalaciones: 10 años = 120 meses
-//   - Muebles y enseres:              10 años = 120 meses
+// contab-nomina-23 (auditoría 2026-09-24). La versión anterior atribuía al
+// Art. 137 E.T. vidas de 20 años para edificios y 5 para vehículos: ese
+// esquema es anterior a la Ley 1819 de 2016. Hoy el Art. 137 (mod. art. 82
+// Ley 1819/2016, src/data/tax_docs/estatuto_tributario_completo.md) dice que
+// la depreciación fiscal es la contable "siempre que no exceda las tasas
+// máximas" y, sin reglamento, fija en su parágrafo 1 tasas anuales máximas:
+//   - Construcciones y edificaciones            2,22 %
+//   - Flota y equipo de transporte terrestre   10,00 %
+//   - Maquinaria, equipos                      10,00 %
+//   - Muebles y enseres                        10,00 %
+//   - Equipo eléctrico                         10,00 %
+//   - Equipo de computación / de comunicación  20,00 %
 //
-// Nota: para NIIF (NIC 16), la vida útil la estima la entidad — puede diferir
-// del fiscal. El MVP usa las vidas fiscales del Art. 137 como punto de partida
-// razonable para PYMES. El usuario puede sobrescribir por activo.
+// Por eso cada categoría separa:
+//   - `usefulLifeMonths`: vida útil CONTABLE sugerida (NIC 16 / Sección 17 de
+//     NIIF para las PYMES: la estima la entidad; el usuario la sobrescribe por
+//     activo). No es una vida "permitida por el E.T.".
+//   - `fiscalMaxAnnualRatePct`: tasa máxima fiscal del Art. 137 par. 1. Si la
+//     depreciación contable la supera (p. ej. cómputo a 36 meses ≈ 33 % frente
+//     al 20 % fiscal), el exceso no es deducible en el año y genera una
+//     diferencia temporaria (Art. 137 par. 4).
 //
-// Para equipo de cómputo usamos 36 meses (3 años) que es el estándar de
-// mercado para PYMES tecnológicas, aunque el E.T. permite hasta 60 meses.
+// Cuentas PUC (Decreto 2650/1993, src/data/tax_docs/puc_pymes_2026.json): cada
+// categoría usa SU subcuenta de depreciación acumulada 1592xx y su espejo de
+// gasto 5160xx (mismos dos últimos dígitos, convención del PUC sembrado en
+// puc-pyme-colombia.ts). Antes todas usaban 159205/516010 (construcciones /
+// maquinaria) y cómputo usaba 152405 (muebles y enseres).
+//
+// Sin consumidores en producción: el módulo de depreciación lee la
+// configuración de cada activo, no esta tabla.
 
 export interface FixedAssetCategory {
   /** Clave interna — coincide con el campo `category` de la tabla fixed_assets. */
   key: string;
   /** Nombre legible en español. */
   name: string;
-  /** Vida útil en meses (Art. 137 E.T.). */
+  /** Vida útil CONTABLE sugerida en meses (estimación de la entidad, NIC 16 / Secc. 17). */
   usefulLifeMonths: number;
-  /** Código PUC típico del activo (cuenta de activo). Ejemplo: 152405. */
+  /** Tasa anual máxima de depreciación fiscal (Art. 137 E.T. par. 1), en %. */
+  fiscalMaxAnnualRatePct: number;
+  /** Concepto de la tabla del Art. 137 par. 1 del que sale la tasa. */
+  fiscalConcept: string;
+  /** Código PUC del activo. */
   assetAccountCode: string;
-  /** Código PUC típico de la depreciación acumulada. Ejemplo: 159205. */
+  /** Código PUC de la depreciación acumulada (1592xx de la categoría). */
   depreciationAccountCode: string;
-  /** Código PUC típico del gasto de depreciación. Ejemplo: 516010. */
+  /** Código PUC del gasto de depreciación (5160xx espejo de la 1592xx). */
   expenseAccountCode: string;
 }
 
@@ -34,50 +54,64 @@ export const FIXED_ASSET_CATEGORIES_CO_2026: FixedAssetCategory[] = [
   {
     key: 'equipo_computo',
     name: 'Equipo de cómputo y comunicaciones',
-    usefulLifeMonths: 36,          // 3 años — estándar mercado PYME
-    assetAccountCode: '152405',    // Equipo de cómputo
-    depreciationAccountCode: '159205', // Depreciación acumulada — equipo cómputo
-    expenseAccountCode: '516010',  // Gasto depreciación — equipo cómputo
+    usefulLifeMonths: 36,          // 3 años: estimación contable usual; ≈ 33 %/año > 20 % fiscal
+    fiscalMaxAnnualRatePct: 20,
+    fiscalConcept: 'EQUIPO DE COMPUTACIÓN',
+    assetAccountCode: '152805',    // Equipos de procesamiento de datos
+    depreciationAccountCode: '159220', // Dep. acumulada — equipo de computación y comunicación
+    expenseAccountCode: '516020',  // Depreciación — equipo de computación y comunicación
   },
   {
     key: 'vehiculos',
     name: 'Vehículos',
-    usefulLifeMonths: 60,          // 5 años Art. 137 E.T.
-    assetAccountCode: '152005',    // Vehículos
-    depreciationAccountCode: '159205', // Depreciación acumulada
-    expenseAccountCode: '516010',  // Gasto depreciación
+    usefulLifeMonths: 60,          // 5 años contable; fiscal máx. 10 %/año
+    fiscalMaxAnnualRatePct: 10,
+    fiscalConcept: 'FLOTA Y EQUIPO DE TRANSPORTE TERRESTRE',
+    assetAccountCode: '154005',    // Autos, camionetas y camperos
+    depreciationAccountCode: '159235', // Dep. acumulada — flota y equipo de transporte
+    expenseAccountCode: '516035',  // Depreciación — flota y equipo de transporte
   },
   {
     key: 'muebles_enseres',
     name: 'Muebles y enseres',
-    usefulLifeMonths: 120,         // 10 años Art. 137 E.T.
-    assetAccountCode: '152010',    // Muebles y enseres
-    depreciationAccountCode: '159205',
-    expenseAccountCode: '516010',
+    usefulLifeMonths: 120,         // 10 años
+    fiscalMaxAnnualRatePct: 10,
+    fiscalConcept: 'MUEBLES Y ENSERES',
+    assetAccountCode: '152405',    // Muebles y enseres
+    depreciationAccountCode: '159215', // Dep. acumulada — equipo de oficina
+    expenseAccountCode: '516015',  // Depreciación — equipo de oficina
   },
   {
     key: 'maquinaria_equipo',
     name: 'Maquinaria y equipo',
-    usefulLifeMonths: 120,         // 10 años Art. 137 E.T.
-    assetAccountCode: '152210',    // Maquinaria y equipo
-    depreciationAccountCode: '159205',
-    expenseAccountCode: '516010',
+    usefulLifeMonths: 120,         // 10 años
+    fiscalMaxAnnualRatePct: 10,
+    fiscalConcept: 'MAQUINARIA, EQUIPOS',
+    assetAccountCode: '152010',    // Maquinaria y equipo (en operación)
+    depreciationAccountCode: '159210', // Dep. acumulada — maquinaria y equipo
+    expenseAccountCode: '516010',  // Depreciación — maquinaria y equipo
   },
   {
     key: 'edificios',
     name: 'Edificios y construcciones',
-    usefulLifeMonths: 540,         // 45 años — NIIF (NIC 16); fiscal 240 meses
+    usefulLifeMonths: 540,         // 45 años; fiscal máx. 2,22 %/año (≈ 45 años)
+    fiscalMaxAnnualRatePct: 2.22,
+    fiscalConcept: 'CONSTRUCCIONES Y EDIFICACIONES',
     assetAccountCode: '151605',    // Edificios
-    depreciationAccountCode: '159205',
-    expenseAccountCode: '516010',
+    depreciationAccountCode: '159205', // Dep. acumulada — construcciones y edificaciones
+    expenseAccountCode: '516005',  // Depreciación — construcciones y edificaciones
   },
   {
     key: 'equipo_oficina',
     name: 'Equipo de oficina',
     usefulLifeMonths: 120,         // 10 años
-    assetAccountCode: '152410',    // Equipo de oficina
-    depreciationAccountCode: '159205',
-    expenseAccountCode: '516010',
+    fiscalMaxAnnualRatePct: 10,
+    // El Art. 137 no lista "equipo de oficina": se asimila a muebles y enseres
+    // (la misma tasa que equipo eléctrico).
+    fiscalConcept: 'MUEBLES Y ENSERES',
+    assetAccountCode: '152410',    // Equipos (de oficina)
+    depreciationAccountCode: '159215', // Dep. acumulada — equipo de oficina
+    expenseAccountCode: '516015',  // Depreciación — equipo de oficina
   },
 ];
 

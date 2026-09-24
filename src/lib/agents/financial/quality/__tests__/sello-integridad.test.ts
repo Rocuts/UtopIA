@@ -96,7 +96,7 @@ describe('Sello condicionado a la integridad y a la Exactitud (auditoria-calidad
   it('D2 Exactitud = 0 y el resto en 100 ya no produce "CERTIFICADA"', () => {
     const v = buildQualityV21View(makeJson({ score: 100, overrideD: { 2: 0 } }));
     expect(v.sello.type).toBe('requiere_correccion');
-    expect(v.selloBlockers.join(' ')).toMatch(/Exactitud 0\.0\/10/);
+    expect(v.selloBlockers.join(' ')).toMatch(/Exactitud 0,0\/10/);
   });
 
   it('integridad determinista con bloqueantes fuerza Exactitud = 0 y sello "requiere corrección"', () => {

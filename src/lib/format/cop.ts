@@ -12,15 +12,10 @@
  * for hot loops, callers can hold a single Intl instance themselves.
  */
 
+import { formatCopFromCents } from '@/lib/agents/financial/contracts/money';
+
 export const COP_LOCALE = 'es-CO';
 export const COP_CURRENCY = 'COP';
-
-const fmt = new Intl.NumberFormat(COP_LOCALE, {
-  style: 'currency',
-  currency: COP_CURRENCY,
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
 const fmtNoCurrency = new Intl.NumberFormat(COP_LOCALE, {
   minimumFractionDigits: 2,
@@ -32,14 +27,36 @@ const fmtInteger = new Intl.NumberFormat(COP_LOCALE, {
 });
 
 /**
- * "1234567.89" or 1234567.89 → "$ 1.234.567,89" (Colombian format).
+ * Monto JS (número o string NUMERIC "1234567.89") → centavos BigInt. Los
+ * strings de hasta 2 decimales se convierten sin pasar por `Number` (exacto
+ * por encima de 2^53); el resto redondea al centavo. `null` si no es finito.
+ */
+function toCentavos(value: string | number): bigint | null {
+  if (typeof value === 'string') {
+    const m = value.trim().match(/^(-)?(\d+)(?:\.(\d{1,2}))?$/);
+    if (m) {
+      const cents = BigInt(m[2]) * BigInt(100) + BigInt(((m[3] ?? '') + '00').slice(0, 2));
+      return m[1] ? -cents : cents;
+    }
+  }
+  const n = typeof value === 'string' ? Number(value) : value;
+  if (!Number.isFinite(n)) return null;
+  return BigInt(Math.round(n * 100));
+}
+
+/**
+ * "1234567.89" or 1234567.89 → "$1.234.567,89" (Colombian format, the same
+ * output as `formatCopFromCents`). Negatives in parentheses, the NIIF
+ * convention of the financial statements, the Excel export and the charts:
+ * "($1.234,56)" — before it printed Intl's "-$ 1.234,56", with a space and a
+ * minus sign (reportes-export-19).
  * Returns "—" for nullish or non-numeric input so callers don't need to guard.
  */
 export function formatCOP(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === '') return '—';
-  const n = typeof value === 'string' ? Number(value) : value;
-  if (!Number.isFinite(n)) return '—';
-  return fmt.format(n);
+  const cents = toCentavos(value);
+  if (cents === null) return '—';
+  return formatCopFromCents(cents);
 }
 
 /**

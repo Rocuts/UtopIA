@@ -21,18 +21,25 @@ export function runT3(
     metrics.margenBruto !== null && metrics.margenBruto > MARGIN_THRESHOLD;
   if (!inventoryTrigger && !marginTrigger) return { fired: false };
 
+  const language = ctx.language ?? 'es';
+  const sinDato = language === 'en' ? 'N/A' : 'N/D';
   const insight = fillInsightFromTemplate({
     pillar: 'valor',
     severity: 'advertencia',
     triggerCode: 'T3',
     dedupKey: `T3-valor-${ctx.workspaceId}-${ctx.periodId ?? 'global'}`,
     workspaceId: ctx.workspaceId,
-    language: ctx.language ?? 'es',
+    language,
     vars: {
       empresario_nombre: ctx.empresarioNombre ?? 'empresario',
       margen_bruto_pct:
         metrics.margenBruto !== null ? (metrics.margenBruto * 100).toFixed(0) : '—',
-      dias_inventario: metrics.diasInventario ?? 0,
+      // Sin dato es N/D, nunca "0 días" (ratios-kpis-26): el KPI del
+      // preprocesador (`controlTotals.diasInventario`) puede ser null con
+      // motivo (costos < 1 %, periodo sin meses) y T3 puede dispararse sólo
+      // por el margen.
+      dias_inventario:
+        metrics.diasInventario !== null ? Math.round(metrics.diasInventario) : sinDato,
     },
   });
   return { fired: true, insight };

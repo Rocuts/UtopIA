@@ -98,6 +98,24 @@ describe('T3 — Value / Anomaly', () => {
   it('dispara con días de inventario >365', () => {
     const out = runT3({ ...baseMetrics, diasInventario: 400 }, ctx);
     expect(out.fired).toBe(true);
+    expect(out.insight?.hallazgo).toContain('días de inventario son 400');
+  });
+  // ratios-kpis-26: sin KPI de días de inventario (null con motivo en el
+  // preprocesador) el correo decía "los días de inventario son 0".
+  it('días de inventario N/D se imprimen como N/D, no como 0', () => {
+    const out = runT3({ ...baseMetrics, margenBruto: 0.95, diasInventario: null }, ctx);
+    expect(out.fired).toBe(true);
+    expect(out.insight?.hallazgo).toContain('días de inventario son N/D');
+    expect(out.insight?.hallazgo).not.toMatch(/son 0\b/);
+    const en = runT3(
+      { ...baseMetrics, margenBruto: 0.95, diasInventario: null },
+      { ...ctx, language: 'en' },
+    );
+    expect(en.insight?.hallazgo).toContain('N/A inventory days');
+  });
+  it('los días se redondean a entero', () => {
+    const out = runT3({ ...baseMetrics, diasInventario: 400.6 }, ctx);
+    expect(out.insight?.hallazgo).toContain('son 401');
   });
 });
 

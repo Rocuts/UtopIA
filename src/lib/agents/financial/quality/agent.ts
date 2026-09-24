@@ -289,10 +289,11 @@ export function toLegacyQualityAssessment(
 //   3. Three block frames (A=ISO 25012, B=ISO/IEC 42001, C=IASB QC) each with
 //      4 dimensions in the v2.1 format
 //   4. Tabla resumen meta-auditoría (12 rows + global)
-//   5. Sello de calidad (one of three variants)
-//   6. Acciones correctivas priorizadas (only if any dim < 7/10)
-//   7. Conclusión (from json.conclusion)
-//   8. Appendix: legacy 14-dim block + raw ISO 25012 / 42001 / IFRS 18 details
+//   5. Acciones correctivas priorizadas (only if any dim < 7/10)
+//   6. Conclusión (from json.conclusion)
+//   7. Appendix: legacy 14-dim block + raw ISO 25012 / 42001 / IFRS 18 details
+//   8. Sello de calidad (one of the variants) — ALWAYS the last element
+//      (spec v2.1 "REGLAS DE INTEGRACIÓN", auditoria-calidad-30)
 //
 // The v2.1 visual frame is the PRIMARY contract. The legacy 14-dim appendix
 // remains so downstream consumers (PDF Élite, dashboards) that parse the raw
@@ -370,10 +371,6 @@ function renderMarkdown(
   );
   lines.push('');
 
-  // --- Sello de calidad -----------------------------------------------------
-  lines.push(...renderSelloBlock(view));
-  lines.push('');
-
   // --- Acciones correctivas priorizadas -------------------------------------
   if (view.correctiveActions.length > 0) {
     lines.push('## ACCIONES CORRECTIVAS PRIORIZADAS');
@@ -382,7 +379,7 @@ function renderMarkdown(
     lines.push('|------:|-----------|--------|------------------:|');
     for (const a of view.correctiveActions) {
       lines.push(
-        `| ${a.dimNum} | ${escapeCell(a.dimName)} | ${escapeCell(a.action)} | +${a.impactPoints.toFixed(1)} pts |`,
+        `| ${a.dimNum} | ${escapeCell(a.dimName)} | ${escapeCell(a.action)} | +${a.impactPoints.toFixed(1).replace('.', ',')} pts |`,
       );
     }
     lines.push('');
@@ -444,6 +441,15 @@ function renderMarkdown(
     lines.push('');
   }
 
+  // --- Sello de calidad: último elemento ------------------------------------
+  // Spec v2.1, "REGLAS DE INTEGRACIÓN": el sello es el último elemento del
+  // informe, después de toda la meta-auditoría (auditoria-calidad-30).
+  lines.push('---');
+  lines.push('');
+  lines.push('## SELLO DE CALIDAD DEL INFORME');
+  lines.push('');
+  lines.push(...renderSelloBlock(view));
+
   return lines.join('\n');
 }
 
@@ -476,7 +482,8 @@ function renderDimensionBlock(dim: QualityV21Dimension): string[] {
 }
 
 function fmtDimScore(score10: number | null): string {
-  return score10 === null ? 'N/D' : `${score10.toFixed(1)}/10`;
+  // Coma decimal es-CO, como QualityMetaAuditPage (reportes-export-19).
+  return score10 === null ? 'N/D' : `${score10.toFixed(1).replace('.', ',')}/10`;
 }
 
 /**
