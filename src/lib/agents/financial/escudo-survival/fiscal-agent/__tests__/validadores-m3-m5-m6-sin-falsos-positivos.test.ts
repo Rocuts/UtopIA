@@ -38,7 +38,7 @@ import { analyzeRefund } from '../tools/refund-analyzer';
 import { classificationFromKind } from '../tools/dian-letter-builder';
 import { validateDevolucionesL2 } from '../validators/devoluciones.validator';
 import { validateDefensaDian } from '../validators/defensa-dian.validator';
-import { scoresCitadosEnProsa, validateRiskScoreL3 } from '../validators/risk-score.validator';
+import { scoresCitadosEnProsa, validateRiskScore, validateRiskScoreL3 } from '../validators/risk-score.validator';
 import type { Modulo3RiskScore, Modulo5DefensaDian, Modulo6Devoluciones } from '../validators/types';
 
 // UAI = 1.240M − 760M − 158M = 322M → F02 = 112,7M; F03 = 150M → F04 = −37,3M.
@@ -291,5 +291,30 @@ describe('NT-06 — M5.L2.4: reducir la adición o el mayor impuesto no es reduc
 
   it('con la norma disponible (Art. 709 E.T.) pasa', () => {
     expect(erroresDe(validateDefensaDian(m5e('Aceptamos los hechos y solicitamos la reducción de la sanción a la cuarta parte (Art. 709 E.T.).')))).toEqual([]);
+  });
+});
+
+describe('NT-07 — M3.L2.3: umbral, rango y aporte de un factor no son el score', () => {
+  const base: Modulo3RiskScore = {
+    score: 72, nivel: 'muy_alto',
+    factores: [{ factor: 'tet_baja', puntos: 30 }, { factor: 'sin_provision_renta', puntos: 30 }, { factor: 'crecimiento_inusual', puntos: 12 }],
+    publicable: true, noPublicableMotivo: null, f01Cents: '10000000000',
+    narrativa: '', recomendaciones: ['Activar Modo Supervivencia Élite (Módulo 8)'], modoSupervivenciaActivo: null,
+  };
+
+  it.each([
+    'El score de 72/100 supera el umbral de 60/100 que activa el Modo Supervivencia.',
+    'Score 72/100: nivel muy alto (rango 61-80/100).',
+    'El factor tet_baja aporta 30 de 100 puntos posibles; el score total es 72/100.',
+    'Score 72/100; el umbral del Modo Supervivencia es 60/100.',
+  ])('sin error: %s', (narrativa) => {
+    expect(erroresDe(validateRiskScore({ ...base, narrativa }))).toEqual([]);
+  });
+
+  it('un score distinto del determinista sigue fallando', () => {
+    expect(erroresDe(validateRiskScore({ ...base, narrativa: 'El score es 45/100, riesgo medio.' }))).toContain(
+      'M3.L2.3_narrativa_cita_score_determinista',
+    );
+    expect(scoresCitadosEnProsa('Score 72/100 (umbral 60/100); el puntaje real es 45/100.')).toEqual([72, 45]);
   });
 });
