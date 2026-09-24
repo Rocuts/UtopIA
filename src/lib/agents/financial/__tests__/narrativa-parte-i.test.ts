@@ -152,6 +152,22 @@ describe('checkNiifNarrative — sin falsos positivos en notas honestas', () => 
     expect(check(fake, pp).motivos.join('\n')).toMatch(/Total Patrimonio: la nota imprime \$74\.000\.000,00/);
   });
 
+  it('"total de pasivos y patrimonio" es pasivo + patrimonio, no el patrimonio', () => {
+    const pp = preprocesarTresCortes();
+    const json = informeTresCortes(pp);
+    const activo = cop(BigInt(json.balanceSheet.totalAssetsPrimary));
+    const notes = [
+      `El total de pasivos y patrimonio asciende a ${activo}, igual al total de activos.`,
+      `El total del pasivo y patrimonio asciende a ${activo}.`,
+      `La suma del pasivo y el patrimonio asciende a ${activo}.`,
+      `Pasivo más patrimonio suma ${activo}.`,
+    ];
+    expect(check(withNotes(json, notes), pp).motivos).toEqual([]);
+    // El patrimonio mismo sigue juzgándose.
+    const fake = withNotes(json, [`El total de pasivos y patrimonio asciende a ${activo}; el patrimonio asciende a $99.000.000,00.`]);
+    expect(check(fake, pp).motivos.join('\n')).toMatch(/Total Patrimonio: la nota imprime \$99\.000\.000,00/);
+  });
+
   it('fixture coherente sin preprocesado: sólo las anclas del propio JSON', () => {
     const json = makeCoherentNiifReport();
     const withProse = withNotes(json, [

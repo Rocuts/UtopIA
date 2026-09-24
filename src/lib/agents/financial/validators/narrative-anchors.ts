@@ -268,9 +268,12 @@ export function buildNarrativeConcepts(sources: NarrativeAnchorSources): Narrati
       // "Total patrimonio", "el patrimonio al cierre", "el patrimonio al 31 de
       // diciembre de 2025" (e2e-niif-10) y "el patrimonio asciende a" (notas
       // de Gobierno). "El patrimonio está compuesto por capital de $X" NO es
-      // el total: sin verbo de saldo no se juzga.
+      // el total: sin verbo de saldo no se juzga. "El total de pasivos y
+      // patrimonio asciende a $X" tampoco: X es pasivo + patrimonio (= el
+      // activo), no el patrimonio (revisión I5-3; frase habitual de las notas
+      // de la Parte I).
       re: new RegExp(
-        String.raw`\b(?:total\s+(?:del?\s+)?patrimonio|patrimonio\s+(?:total|al\s+cierre|al\s+31\s+de\s+diciembre(?:\s+(?:de|del)\s+\d{4})?)|patrimonio(?:\s+(?:neto|total))?(?:\s+de\s+la\s+(?:sociedad|compa[nñ][ií]a|empresa|entidad))?\s+${AMOUNT_VERBS})\b`,
+        String.raw`(?<!\bpasivos?\s*(?:y|\+|m[aá]s)\s*(?:el\s+)?)\b(?:total\s+(?:del?\s+)?patrimonio|patrimonio\s+(?:total|al\s+cierre|al\s+31\s+de\s+diciembre(?:\s+(?:de|del)\s+\d{4})?)|patrimonio(?:\s+(?:neto|total))?(?:\s+de\s+la\s+(?:sociedad|compa[nñ][ií]a|empresa|entidad))?\s+${AMOUNT_VERBS})\b`,
         'gi',
       ),
       values: vals(
