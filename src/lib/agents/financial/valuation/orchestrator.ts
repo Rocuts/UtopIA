@@ -6,8 +6,15 @@
 //                   ├──→ [Valuation Synthesizer]
 //   [Comparables] ──┘
 //
-// DCF and Comparables run in PARALLEL (Promise.allSettled).
-// Synthesizer runs AFTER both complete, receiving their outputs.
+// DCF and Comparables run in PARALLEL (Promise.allSettled). Cada metodología
+// pasa por su validador determinista; su estado queda en 'ok' | 'blocked' |
+// 'failed'.
+//
+// valoracion-14:
+//   - Ninguna metodología válida → el Sintetizador NO se ejecuta y el informe
+//     declara "sin opinión de valor (N/D)" con los motivos.
+//   - Una sola válida → el Sintetizador recibe la otra como null estructurado
+//     (peso 0) y el informe se rotula como de metodología única.
 // ---------------------------------------------------------------------------
 
 import { runDcfModeler } from './agents/dcf-modeler';
@@ -19,25 +26,59 @@ import type {
   DcfModelResult,
   MarketComparablesResult,
   ValuationProgressEvent,
+  ValuationSynthesisResult,
 } from './types';
 
 export interface ValuationOrchestrateOptions {
   onProgress?: (event: ValuationProgressEvent) => void;
 }
 
+function failedDcf(errorMsg: string): DcfModelResult {
+  const reason = `El Modelador DCF no pudo completar el análisis: ${errorMsg}`;
+  return {
+    cashFlowProjections: '',
+    waccCalculation: '',
+    terminalValue: '',
+    valuationSummary: '',
+    sensitivityAnalysis: '',
+    validationReport: '',
+    fullContent: `[ERROR: ${reason}]`,
+    status: 'failed',
+    blockingReasons: [reason],
+    computed: null,
+    discrepancies: [],
+  };
+}
+
+function failedComparables(errorMsg: string): MarketComparablesResult {
+  const reason = `El Experto en Múltiplos no pudo completar el análisis: ${errorMsg}`;
+  return {
+    comparableSelection: '',
+    multiplesAnalysis: '',
+    impliedValuation: '',
+    colombianAdjustments: '',
+    validationReport: '',
+    fullContent: `[ERROR: ${reason}]`,
+    status: 'failed',
+    blockingReasons: [reason],
+    computed: null,
+    discrepancies: [],
+  };
+}
+
 /**
  * Execute the full business valuation pipeline.
  *
  * Hybrid flow:
- * 1. DCF Modeler + Market Comparables run in PARALLEL
- * 2. Valuation Synthesizer merges both outputs into a consolidated opinion
+ * 1. DCF Modeler + Market Comparables run in PARALLEL (validated in code)
+ * 2. Valuation Synthesizer merges the VALID outputs into a consolidated opinion
  * 3. Orchestrator builds the final consolidated report
  */
 export async function orchestrateValuation(
   request: ValuationRequest,
   options: ValuationOrchestrateOptions = {},
 ): Promise<ValuationReport> {
-  const { financialData, company, language, instructions, purpose } = request;
+  const { financialData, company, language, instructions, purpose, macro } = request;
   const { onProgress } = options;
 
   const agentNames = [
@@ -63,8 +104,8 @@ export async function orchestrateValuation(
   });
 
   const [dcfSettled, comparablesSettled] = await Promise.allSettled([
-    runDcfModeler(financialData, company, language, purpose, instructions, onProgress),
-    runMarketComparables(financialData, company, language, purpose, instructions, onProgress),
+    runDcfModeler(financialData, company, language, purpose, instructions, onProgress, undefined, macro),
+    runMarketComparables(financialData, company, language, purpose, instructions, onProgress, undefined, macro),
   ]);
 
   // ---------------------------------------------------------------------------
@@ -73,31 +114,18 @@ export async function orchestrateValuation(
   let dcfResult: DcfModelResult;
   if (dcfSettled.status === 'fulfilled') {
     dcfResult = dcfSettled.value;
-    onProgress?.({
-      type: 'agent_complete',
-      agent: 'dcf',
-      name: 'Modelador DCF (Flujo de Caja Descontado)',
-    });
+    if (dcfResult.status === 'ok') {
+      onProgress?.({ type: 'agent_complete', agent: 'dcf', name: 'Modelador DCF (Flujo de Caja Descontado)' });
+    } else {
+      onProgress?.({ type: 'agent_failed', agent: 'dcf', name: 'Modelador DCF', error: dcfResult.blockingReasons.join(' ') });
+    }
   } else {
     const errorMsg = dcfSettled.reason instanceof Error
       ? dcfSettled.reason.message
       : 'Error desconocido';
     console.error('[valuation] DCF Modeler failed:', errorMsg);
-    onProgress?.({
-      type: 'agent_failed',
-      agent: 'dcf',
-      name: 'Modelador DCF',
-      error: errorMsg,
-    });
-    // Provide empty fallback so synthesizer can still work with comparables
-    dcfResult = {
-      cashFlowProjections: '',
-      waccCalculation: '',
-      terminalValue: '',
-      valuationSummary: '',
-      sensitivityAnalysis: '',
-      fullContent: `[ERROR: El Modelador DCF no pudo completar el analisis. Error: ${errorMsg}]`,
-    };
+    onProgress?.({ type: 'agent_failed', agent: 'dcf', name: 'Modelador DCF', error: errorMsg });
+    dcfResult = failedDcf(errorMsg);
   }
 
   // ---------------------------------------------------------------------------
@@ -106,56 +134,72 @@ export async function orchestrateValuation(
   let comparablesResult: MarketComparablesResult;
   if (comparablesSettled.status === 'fulfilled') {
     comparablesResult = comparablesSettled.value;
-    onProgress?.({
-      type: 'agent_complete',
-      agent: 'comparables',
-      name: 'Experto en Multiplos de Mercado',
-    });
+    if (comparablesResult.status === 'ok') {
+      onProgress?.({ type: 'agent_complete', agent: 'comparables', name: 'Experto en Multiplos de Mercado' });
+    } else {
+      onProgress?.({
+        type: 'agent_failed',
+        agent: 'comparables',
+        name: 'Experto en Multiplos de Mercado',
+        error: comparablesResult.blockingReasons.join(' '),
+      });
+    }
   } else {
     const errorMsg = comparablesSettled.reason instanceof Error
       ? comparablesSettled.reason.message
       : 'Error desconocido';
     console.error('[valuation] Market Comparables failed:', errorMsg);
-    onProgress?.({
-      type: 'agent_failed',
-      agent: 'comparables',
-      name: 'Experto en Multiplos de Mercado',
-      error: errorMsg,
-    });
-    // Provide empty fallback
-    comparablesResult = {
-      comparableSelection: '',
-      multiplesAnalysis: '',
-      impliedValuation: '',
-      colombianAdjustments: '',
-      fullContent: `[ERROR: El Experto en Multiplos no pudo completar el analisis. Error: ${errorMsg}]`,
-    };
+    onProgress?.({ type: 'agent_failed', agent: 'comparables', name: 'Experto en Multiplos de Mercado', error: errorMsg });
+    comparablesResult = failedComparables(errorMsg);
   }
 
-  // ---------------------------------------------------------------------------
-  // Stage 2: Valuation Synthesizer (sequential — needs both outputs)
-  // ---------------------------------------------------------------------------
-  onProgress?.({
-    type: 'agent_start',
-    agent: 'synthesizer',
-    name: 'Sintetizador de Valoracion',
-  });
-  onProgress?.({ type: 'synthesizing' });
+  const methodologies: Array<'dcf' | 'market_comparables'> = [];
+  if (dcfResult.status === 'ok') methodologies.push('dcf');
+  if (comparablesResult.status === 'ok') methodologies.push('market_comparables');
+  const reasons = [
+    ...(dcfResult.status === 'ok' ? [] : dcfResult.blockingReasons.map((r) => `DCF: ${r}`)),
+    ...(comparablesResult.status === 'ok' ? [] : comparablesResult.blockingReasons.map((r) => `Múltiplos: ${r}`)),
+  ];
 
-  const synthesisResult = await runValuationSynthesizer(
-    dcfResult.fullContent,
-    comparablesResult.fullContent,
-    company,
-    language,
-    purpose,
-    onProgress,
-  );
+  // ---------------------------------------------------------------------------
+  // Stage 2: Valuation Synthesizer — sólo con al menos una metodología válida
+  // ---------------------------------------------------------------------------
+  let synthesisResult: ValuationSynthesisResult | null = null;
+  if (methodologies.length === 0) {
+    onProgress?.({ type: 'value_opinion_not_issued', reasons });
+  } else {
+    onProgress?.({ type: 'agent_start', agent: 'synthesizer', name: 'Sintetizador de Valoracion' });
+    onProgress?.({ type: 'synthesizing' });
 
-  onProgress?.({
-    type: 'agent_complete',
-    agent: 'synthesizer',
-    name: 'Sintetizador de Valoracion',
-  });
+    synthesisResult = await runValuationSynthesizer(
+      dcfResult,
+      comparablesResult,
+      company,
+      language,
+      purpose,
+      onProgress,
+    );
+
+    if (synthesisResult.status === 'ok') {
+      onProgress?.({ type: 'agent_complete', agent: 'synthesizer', name: 'Sintetizador de Valoracion' });
+    } else {
+      reasons.push(...synthesisResult.blockingReasons.map((r) => `Síntesis: ${r}`));
+      onProgress?.({
+        type: 'agent_failed',
+        agent: 'synthesizer',
+        name: 'Sintetizador de Valoracion',
+        error: synthesisResult.blockingReasons.join(' '),
+      });
+      onProgress?.({ type: 'value_opinion_not_issued', reasons });
+    }
+  }
+
+  const issued = synthesisResult !== null && synthesisResult.status === 'ok';
+  const valueOpinion: ValuationReport['valueOpinion'] = {
+    status: issued ? 'issued' : 'not_issued',
+    methodologies: issued ? methodologies : [],
+    reasons,
+  };
 
   // ---------------------------------------------------------------------------
   // Stage 3: Build consolidated report
@@ -164,7 +208,8 @@ export async function orchestrateValuation(
     company,
     dcfResult.fullContent,
     comparablesResult.fullContent,
-    synthesisResult.fullContent,
+    synthesisResult,
+    valueOpinion,
     purpose || 'General',
     language,
   );
@@ -174,6 +219,7 @@ export async function orchestrateValuation(
     dcfModel: dcfResult,
     marketComparables: comparablesResult,
     synthesis: synthesisResult,
+    valueOpinion,
     consolidatedReport,
     purpose: purpose || 'General',
     generatedAt: new Date().toISOString(),
@@ -188,28 +234,44 @@ export async function orchestrateValuation(
 // Build the final consolidated Markdown report
 // ---------------------------------------------------------------------------
 
+function buildSubtitle(valueOpinion: ValuationReport['valueOpinion'], language: 'es' | 'en'): string {
+  const en = language === 'en';
+  if (valueOpinion.status === 'not_issued') {
+    return en ? 'No value opinion issued (N/D)' : 'Sin opinión de valor (N/D)';
+  }
+  if (valueOpinion.methodologies.length === 1) {
+    const m = valueOpinion.methodologies[0] === 'dcf' ? 'DCF' : (en ? 'Market Multiples' : 'Multiplos de Mercado');
+    return en ? `Single-Methodology Valuation: ${m}` : `Valoracion por Metodologia Unica: ${m}`;
+  }
+  return en ? 'Multi-Methodology Corporate Valuation' : 'Valoracion Corporativa Multi-Metodologia';
+}
+
 function buildConsolidatedValuationReport(
   company: ValuationRequest['company'],
   dcfContent: string,
   comparablesContent: string,
-  synthesisContent: string,
+  synthesis: ValuationSynthesisResult | null,
+  valueOpinion: ValuationReport['valueOpinion'],
   purpose: string,
   language: 'es' | 'en',
 ): string {
-  const title =
-    language === 'en'
-      ? 'BUSINESS VALUATION REPORT'
-      : 'INFORME DE VALORACION EMPRESARIAL';
-
-  const subtitle =
-    language === 'en'
-      ? 'Multi-Methodology Corporate Valuation'
-      : 'Valoracion Corporativa Multi-Metodologia';
+  const en = language === 'en';
+  const title = en ? 'BUSINESS VALUATION REPORT' : 'INFORME DE VALORACION EMPRESARIAL';
+  const subtitle = buildSubtitle(valueOpinion, language);
 
   const date = new Date().toLocaleDateString(
     language === 'es' ? 'es-CO' : 'en-US',
     { year: 'numeric', month: 'long', day: 'numeric' },
   );
+
+  const synthesisContent = valueOpinion.status === 'issued' && synthesis
+    ? synthesis.fullContent
+    : [
+        en
+          ? '**NO VALUE OPINION IS ISSUED (N/D).** No methodology produced a valid value after the deterministic validation:'
+          : '**NO SE EMITE OPINIÓN DE VALOR (N/D).** Ninguna metodología produjo un valor válido tras la validación determinista:',
+        ...valueOpinion.reasons.map((r) => `- ${r}`),
+      ].join('\n');
 
   return `# ${title}
 ## ${subtitle}
@@ -225,7 +287,7 @@ function buildConsolidatedValuationReport(
 | **Periodo Base** | ${company.fiscalPeriod} |
 | **Proposito** | ${purpose} |
 | **Fecha de Valoracion** | ${date} |
-| **Sistema** | 1+1 — Valuation Pipeline (3 Agentes: DCF + Multiplos en Paralelo → Sintetizador) |
+| **Sistema** | 1+1 — Valuation Pipeline (3 Agentes: DCF + Multiplos en Paralelo → Sintetizador, con validación determinista) |
 
 ---
 
@@ -250,6 +312,6 @@ ${synthesisContent}
 
 ---
 
-> **Nota Legal:** Este informe de valoracion fue generado por 1+1, un sistema de inteligencia artificial. Las estimaciones de valor, supuestos y proyecciones deben ser validados por un valuador profesional certificado antes de su uso en transacciones, procesos legales o presentaciones ante la DIAN o SuperSociedades. 1+1 no reemplaza la opinion profesional de un perito valuador. La valoracion se realiza bajo el marco de NIIF 13 (Valor Razonable), Art. 90 del Estatuto Tributario, y los lineamientos de la Superintendencia de Sociedades vigentes a 2026.
+> **Nota Legal:** Este informe de valoracion fue generado por 1+1, un sistema de inteligencia artificial. Las estimaciones de valor, supuestos y proyecciones deben ser validados por un valuador profesional certificado antes de su uso en transacciones, procesos legales o presentaciones ante la DIAN o SuperSociedades. 1+1 no reemplaza la opinion profesional de un perito valuador. La valoracion se realiza bajo el marco de NIIF 13 (Valor Razonable) y el Art. 90 del Estatuto Tributario.
 `;
 }
