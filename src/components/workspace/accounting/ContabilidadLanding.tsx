@@ -258,7 +258,7 @@ export function ContabilidadLanding() {
                       #{e.entryNumber}
                     </span>
                     <span className="text-2xs text-n-500 tabular-nums">
-                      {new Date(e.entryDate).toLocaleDateString('es-CO')}
+                      {new Date(e.entryDate).toLocaleDateString('es-CO', { timeZone: 'UTC' })}
                     </span>
                   </div>
                   <div className="flex-1 min-w-0">
