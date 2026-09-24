@@ -173,6 +173,7 @@ const LOSS_TWO = [
   'codigo,nombre,nivel,transaccional,saldo 2024,saldo 2025',
   '110505,Caja general,Auxiliar,1,30000000,5000000',
   '130505,Clientes nacionales,Auxiliar,1,20000000,15000000',
+  '152410,Maquinaria,Auxiliar,1,50000000,50000000',
   '152405,Equipo de oficina,Auxiliar,1,50000000,50000000',
   '159205,Depreciacion acumulada equipo,Auxiliar,1,-10000000,-20000000',
   '210505,Bancos nacionales,Auxiliar,1,40000000,45000000',
