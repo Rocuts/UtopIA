@@ -10,6 +10,7 @@
 // ---------------------------------------------------------------------------
 
 import type { NormativeArticleEntry } from '../types';
+import { MIN_SANCTION } from '@/lib/tools/sanction-calculator';
 
 export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
   // ─── RENTA — CONCEPTOS GENERALES ──────────────────────────────────────────
@@ -1012,7 +1013,7 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     cita: 'Art. 639 E.T.',
     titulo: 'Sanción mínima',
     resumen:
-      'Ninguna sanción puede ser inferior a 10 UVT. En 2026: 10 × $52.374 = $523.740, que se aproxima a $524.000 COP (Art. 868 E.T.).',
+      `Ninguna sanción puede ser inferior a 10 UVT. En 2026: 10 × $52.374 aproximado al múltiplo de mil = $${MIN_SANCTION.toLocaleString('es-CO')} COP (Art. 868 E.T.).`,
     textoLiteral: null,
     estado: 'VIGENTE_2026',
     modificaciones: [],
