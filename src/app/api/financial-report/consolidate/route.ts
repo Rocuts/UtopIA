@@ -16,7 +16,7 @@ import type { FinancialReport } from '@/lib/agents/financial/types';
 import { ancoraOrNull } from '@/lib/agents/financial/ancora/build-ancora';
 import { requireAuthSession } from '@/lib/auth/require-session';
 import { toJsonSafe } from '@/lib/preprocessing/json-safe';
-import { withServerPartVerdicts } from '@/lib/reports/part-verdicts';
+import { withServerRenderedParts } from '@/lib/reports/part-markdown';
 import { applyRequestConfirmations } from '@/lib/reports/ingest-confirmations';
 import { parseReportParts } from '@/lib/reports/report-parts';
 import { buildFinancialReportVersion } from '@/lib/reports/financial-report-version';
@@ -159,13 +159,34 @@ export async function POST(req: Request) {
       { rawData, company, language },
       { adjustmentLedger: ledger.data as AdjustmentLedger | undefined },
     );
+    // I3 — procedencia del Markdown: con las tres partes (JSON incluido), el
+    // texto de cada Parte se RE-RENDERIZA aquí desde su JSON con los
+    // veredictos del servidor (`withServerRenderedParts`); el Markdown que
+    // reenvía el navegador se descarta. El consolidado, sus gates de texto
+    // (V8/V9/V10/V15) y la versión persistida salen de ese texto. Sin
+    // `reportParts` (sólo textos sueltos) no hay JSON contra el cual producirlo:
+    // la respuesta no se persiste y /export sin referencia lo re-renderiza.
+    const verified: FinancialReport | null = fromParts
+      ? withServerRenderedParts(
+          {
+            company: ctx.effectiveCompany,
+            niifAnalysis: fromParts.niifAnalysis,
+            strategicAnalysis: fromParts.strategicAnalysis,
+            governance: fromParts.governance,
+            consolidatedReport: '',
+            generatedAt: '',
+          },
+          ctx.ppForAgents,
+          language,
+        )
+      : null;
     const result = consolidateSplitReport({
       company: ctx.effectiveCompany,
       preprocessed: ctx.ppForAgents,
       rawData: ctx.effectiveRawData,
-      niifContent: contents.niifContent as string,
-      strategyContent: contents.strategyContent as string,
-      governanceContent: contents.governanceContent as string,
+      niifContent: verified ? verified.niifAnalysis.fullContent : (contents.niifContent as string),
+      strategyContent: verified ? verified.strategicAnalysis.fullContent : (contents.strategyContent as string),
+      governanceContent: verified ? verified.governance.fullContent : (contents.governanceContent as string),
       language,
       // pipeline-flujo-21: el override marca BORRADOR el consolidado (y con él
       // la versión persistida, el PDF y el sello de procedencia); no levanta
@@ -184,36 +205,30 @@ export async function POST(req: Request) {
           language,
         );
     }
-    if (!fromParts) return NextResponse.json(result);
+    if (!verified) return NextResponse.json(result);
 
     // ─── Versión persistida (procedencia servidor) ─────────────────────────
-    // El informe final lo ensambla el servidor. Los veredictos de las Partes II
-    // y III se RECALCULAN contra el balance re-derivado con las mismas
-    // funciones que las fases (`withServerPartVerdicts`): aritmética del acta,
-    // cifras en la prosa de notas y acta (P3) y anclas + prosa de la Parte II.
-    // Un veredicto omitido o reescrito por el cliente no llega a la versión:
-    // el del servidor sólo endurece el recibido. Las salvedades se pliegan
-    // sobre la reconciliación NIIF con la misma regla que la UI; el snapshot
-    // fiscal y el Âncora son los que `prepareFinancialContext` acaba de
-    // calcular desde el balance re-derivado (no los que el navegador recibió
-    // de /niif).
+    // El informe final lo ensambla el servidor. Los veredictos de las tres
+    // Partes se RECALCULARON arriba contra el balance re-derivado con las
+    // mismas funciones que las fases (`withServerRenderedParts` →
+    // `applyServerPartVerdicts`): invariantes del JSON NIIF, aritmética del
+    // acta, cifras en la prosa de notas y acta (P3), anclas + prosa de la
+    // Parte II, y sello de la Parte sin JSON válido (I3). Un veredicto omitido o
+    // reescrito por el cliente no llega a la versión: el del servidor sólo
+    // endurece el recibido, y las salvedades ya están plegadas sobre la
+    // reconciliación NIIF. El snapshot fiscal y el Âncora son los que
+    // `prepareFinancialContext` acaba de calcular desde el balance re-derivado
+    // (no los que el navegador recibió de /niif).
     const ancora = ancoraOrNull(ctx.ancora);
-    const report: FinancialReport = withServerPartVerdicts(
-      {
-        company: ctx.effectiveCompany,
-        niifAnalysis: fromParts.niifAnalysis,
-        strategicAnalysis: fromParts.strategicAnalysis,
-        governance: fromParts.governance,
-        consolidatedReport: result.consolidatedReport,
-        validation: result.validation,
-        ...(result.emittability ? { emittability: result.emittability } : {}),
-        generatedAt: new Date().toISOString(),
-        ...(ctx.fiscalSnapshot ? { fiscalSnapshot: ctx.fiscalSnapshot } : {}),
-        ...(ancora ? { ancora } : {}),
-      },
-      ctx.ppForAgents,
-      language,
-    );
+    const report: FinancialReport = {
+      ...verified,
+      consolidatedReport: result.consolidatedReport,
+      validation: result.validation,
+      ...(result.emittability ? { emittability: result.emittability } : {}),
+      generatedAt: new Date().toISOString(),
+      ...(ctx.fiscalSnapshot ? { fiscalSnapshot: ctx.fiscalSnapshot } : {}),
+      ...(ancora ? { ancora } : {}),
+    };
     const version = buildFinancialReportVersion({
       report,
       preprocessed: ctx.ppForAgents,

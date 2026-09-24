@@ -40,6 +40,7 @@ import type { GovernanceReportJson } from '@/lib/agents/financial/contracts/gove
 import type { StrategyReportJson } from '@/lib/agents/financial/contracts/strategy-report';
 import type { CompanyInfo, FinancialReport, GovernanceResult, StrategicAnalysisResult } from '@/lib/agents/financial/types';
 import { PROVENANCE_COMPANY, PROVENANCE_CSV } from './provenance-fixture';
+import { COMPLIANCE_CHECKLIST, withCoherentParts } from './coherent-parts';
 
 const cop = (cents: bigint | string) => formatCopFromCents(BigInt(cents), false);
 const centsOf = (pesos: number) => String(Math.round(pesos * 100));
@@ -96,7 +97,7 @@ function governanceJson(
       },
       closingStatement: 'Se levanta la sesión.',
     },
-    complianceChecklist: [],
+    complianceChecklist: COMPLIANCE_CHECKLIST,
     disclaimers: [],
     preparerNotes: [],
   } as unknown as GovernanceReportJson;
@@ -302,9 +303,13 @@ describe('informe coherente — sin falsos positivos y reglas de endurecimiento'
       ],
     });
 
+  /** Informe coherente con Parte II estructurada y la Parte III dada (sin JSON si `gov` es undefined). */
   function report(gov: GovernanceReportJson | undefined, extra: Partial<GovernanceResult> = {}): FinancialReport {
-    const r = makeExportableReport();
-    return { ...r, company, governance: { ...r.governance, ...(gov ? { json: gov } : {}), ...extra } };
+    const r = withCoherentParts({ ...makeExportableReport(), company }, pp);
+    const governance = { ...r.governance, ...extra };
+    if (gov) governance.json = gov;
+    else delete governance.json;
+    return { ...r, governance };
   }
 
   it('la prosa honesta deja la reconciliación limpia y el gate sin bloqueos', () => {
@@ -314,11 +319,26 @@ describe('informe coherente — sin falsos positivos y reglas de endurecimiento'
     expect(financialExportBlockers(checked, pp)).toEqual([]);
   });
 
-  it('sin JSON estructurado no hay veredicto del servidor: el informe queda igual', () => {
-    const r = report(undefined);
-    const checked = withServerPartVerdicts(r, pp);
-    expect(checked.governance).toBe(r.governance);
-    expect(checked.strategicAnalysis).toBe(r.strategicAnalysis);
+  it('I3: una Parte III o II sin JSON estructurado válido se sella (antes conservaba el veredicto limpio del cliente)', () => {
+    // El texto de esas Partes no tiene cifras estructuradas contra las cuales
+    // verificarse ni puede re-renderizarse en el servidor: queda sellado y el
+    // gate de exportación lo bloquea.
+    const noGov = withServerPartVerdicts(report(undefined, { actaQualifications: { clean: true, motivos: [] } }), pp);
+    expect(noGov.governance.actaQualifications?.clean).toBe(false);
+    expect(noGov.governance.actaQualifications?.motivos.join(' ')).toMatch(/Parte III no trae cifras estructuradas/);
+    expect(noGov.niifAnalysis.reconciliation?.clean).toBe(false);
+    expect(financialExportBlockers(noGov, pp)).toContain('El informe contiene salvedades o validaciones bloqueantes.');
+
+    const partial = withServerPartVerdicts(report({ shareholderMinutes: null } as unknown as GovernanceReportJson), pp);
+    expect(partial.governance.actaQualifications?.clean).toBe(false);
+
+    const r = report(honest());
+    const noStrategy = withServerPartVerdicts(
+      { ...r, strategicAnalysis: { ...r.strategicAnalysis, json: undefined, strategyQualifications: { clean: true, motivos: [], noVerificables: [] } } },
+      pp,
+    );
+    expect(noStrategy.strategicAnalysis.strategyQualifications?.clean).toBe(false);
+    expect(noStrategy.strategicAnalysis.strategyQualifications?.motivos.join(' ')).toMatch(/Parte II no trae cifras estructuradas/);
   });
 
   it('un `clean: true` del cliente no levanta el sello; un `clean: false` se conserva', () => {

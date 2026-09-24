@@ -28,7 +28,8 @@ import { POST } from '../export/route';
 import { generateFinancialExcel } from '@/lib/export/excel-export';
 import { composeEditorialReport, renderEditorialReportToStream } from '@/lib/export/pdf-elite-react';
 import { orchestrateFinancialReport, BalanceValidationError } from '@/lib/agents/financial/orchestrator';
-import { makeExportableReport } from '@/lib/agents/financial/__fixtures__/coherent-niif-report';
+import { makeExportableReport as makeNiifOnlyReport } from '@/lib/agents/financial/__fixtures__/coherent-niif-report';
+import { withCoherentParts } from '@/lib/reports/__tests__/coherent-parts';
 import { parseTrialBalanceCSV, preprocessTrialBalance } from '@/lib/preprocessing/trial-balance';
 import { toJsonSafe } from '@/lib/preprocessing/json-safe';
 import { applyAdjustments } from '@/lib/agents/repair/adjustments';
@@ -48,6 +49,18 @@ const CSV_COHERENTE = [
   '530505,Intereses,Auxiliar,1,1000',
   '613505,CMV,Auxiliar,1,2000',
 ].join('\n');
+
+/**
+ * Informe coherente con `CSV_COHERENTE`, con Partes II y III estructuradas
+ * (I3: el servidor re-renderiza su Markdown desde el JSON y sella la Parte sin
+ * JSON válido) y la declaración §3.14/§10.21 en la Parte I: el balance es de
+ * un solo corte y /export sin referencia corre el gate de texto (V15) sobre
+ * el texto que exporta, como /consolidate (revisión I3).
+ */
+const makeExportableReport = () =>
+  withCoherentParts(makeNiifOnlyReport(), preprocessTrialBalance(parseTrialBalanceCSV(CSV_COHERENTE)), {
+    impracticable: true,
+  });
 
 /** El mismo balance ANTES del ajuste del Doctor de Datos (sueldos +$500). */
 const CSV_SIN_AJUSTE = CSV_COHERENTE.replace('510505,Sueldos,Auxiliar,1,2000', '510505,Sueldos,Auxiliar,1,2500');

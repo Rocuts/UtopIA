@@ -29,6 +29,7 @@ import {
 } from '../prompts/strategy-director.prompt';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import type { ReportMode } from '../contracts/base';
+import type { NiifReportJson } from '../contracts/niif-report';
 import type {
   CompanyInfo,
   NiifAnalysisResult,
@@ -103,25 +104,10 @@ export async function runStrategyDirector(
     onDegraded: (info) => onProgress?.({ type: 'stage_progress', stage: 2, detail: info.message }),
   });
 
-  const verified = reconcileStrategyReport(result.json, strategyAnchorsFrom(preprocessed));
-  applyDeterministicTrends(verified, preprocessed);
-  // KPIs sin ancla → N/D con motivo; recomputables → valor del preprocesador
-  // (pendiente #2 de la auditoría integral 2026-09-24). El JSON que viaja al
-  // visor, al Excel y al Editor Jefe HTML ya no lleva la cifra del modelo.
-  const kpiAnchors = applyKpiAnchors(
-    verified.json,
-    strategyAnchorSources(preprocessed, niifOutput.json ?? null),
-    { language },
-  );
-  verified.json = kpiAnchors.json;
-  verified.checks.kpisNeutralized = kpiAnchors.neutralized;
-  verified.checks.kpisRecomputed = kpiAnchors.recomputed;
+  const verified = postProcessStrategyJson(result.json, preprocessed, niifOutput.json ?? null, language);
   const strategic = toStrategicAnalysisResult(verified.json, verified.checks);
   if (result.meta?.degraded === true) {
-    const notice = buildDegradationNotice(
-      [language === 'es' ? 'Análisis estratégico (Parte II)' : 'Strategic analysis (Part II)'],
-      language,
-    );
+    const notice = strategyDegradationNotice(language);
     strategic.degraded = true;
     strategic.kpiDashboard = `${notice}\n${strategic.kpiDashboard}`;
     strategic.fullContent = `${notice}\n${strategic.fullContent}`;
@@ -196,6 +182,9 @@ function fmtSigned(cents: bigint): string {
   return formatCopFromCents(cents, false);
 }
 
+const SALDO_FINAL_RX = /saldo\s+final/i;
+const FLUJO_NETO_RX = /flujo\s+(de\s+caja\s+)?neto/i;
+
 export function reconcileStrategyReport(
   input: StrategyReportJson,
   anchors: StrategyAnchors | null,
@@ -230,20 +219,17 @@ export function reconcileStrategyReport(
   // -- Punto de equilibrio: PE = CF / (1 − CV/I) = CF · I / (I − CV) ---------
   const be = json.breakEven;
   const cf = parseMoneyCop(be.fixedCostsCop);
-  const cv = parseMoneyCop(be.variableCostsCop);
   const ing = parseMoneyCop(be.revenueCop);
-  const contribution = ing - cv;
-  if (ing <= ZERO || contribution <= ZERO || cf < ZERO) {
-    checks.breakEvenUndefinedReason =
-      ing <= ZERO
-        ? 'sin ingresos del periodo no hay punto de equilibrio'
-        : contribution <= ZERO
-          ? 'los costos variables igualan o superan los ingresos (margen de contribución ≤ 0): ningún nivel de ventas cubre los costos fijos'
-          : 'costos fijos negativos: la clasificación de costos no es válida';
+  const contribution = ing - parseMoneyCop(be.variableCostsCop);
+  const undefinedReason = breakEvenUndefinedReason(be);
+  if (undefinedReason) {
+    checks.breakEvenUndefinedReason = undefinedReason;
     // El PE no existe: no se conserva la cifra que emitió el LLM (valoracion-12).
     be.breakEvenPointCop = null;
     be.marginOfSafetyPct = 'ND';
-    be.classificationNote = `Punto de equilibrio N/D: ${checks.breakEvenUndefinedReason}. ${be.classificationNote}`;
+    // Idempotente: el servidor vuelve a pasar el JSON publicado por aquí (I3).
+    const ndPrefix = `Punto de equilibrio N/D: ${checks.breakEvenUndefinedReason}. `;
+    if (!be.classificationNote.startsWith(ndPrefix)) be.classificationNote = `${ndPrefix}${be.classificationNote}`;
   } else {
     const pe = divRound(cf * ing, contribution);
     be.breakEvenPointCop = pe.toString(10);
@@ -255,46 +241,81 @@ export function reconcileStrategyReport(
   // -- Escenarios: resumen = tabla; saldo final = anterior + flujo neto -------
   for (const sc of pcf.scenarios) {
     const issues: string[] = [];
-    const saldo = sc.lines.find((l) => /saldo\s+final/i.test(l.concept));
-    const flujo = sc.lines.find((l) => /flujo\s+(de\s+caja\s+)?neto/i.test(l.concept));
-    if (saldo) {
-      const tableY3 = saldo.yearPlus3;
-      if (tableY3 !== sc.finalCashBalanceYear3) {
-        issues.push(
-          `El saldo final del año +3 del resumen (${fmtSigned(parseMoneyCop(sc.finalCashBalanceYear3))}) ` +
-            `difería de la tabla; se presenta el de la tabla.`,
-        );
-        sc.finalCashBalanceYear3 = tableY3;
-      }
-      if (flujo) {
-        const s = [saldo.currentYear, saldo.yearPlus1, saldo.yearPlus2, saldo.yearPlus3].map(parseMoneyCop);
-        const f = [flujo.currentYear, flujo.yearPlus1, flujo.yearPlus2, flujo.yearPlus3].map(parseMoneyCop);
-        for (let y = 1; y <= 3; y++) {
-          const expected = s[y - 1] + f[y];
-          if (s[y] !== expected) {
-            issues.push(
-              `La tabla no concilia en el Año +${y}: saldo final ${fmtSigned(s[y])} ≠ saldo anterior ` +
-                `${fmtSigned(s[y - 1])} + flujo neto ${fmtSigned(f[y])} (brecha ${fmtSigned(s[y] - expected)}).`,
-            );
-          }
-        }
-      } else {
-        issues.push('Sin renglón de flujo neto: no se pudo verificar la conciliación de saldos.');
-      }
-      const initial = parseMoneyCop(pcf.initialCashBalanceCop);
-      if (parseMoneyCop(saldo.currentYear) !== initial) {
-        issues.push(
-          `El saldo de caja actual de la tabla (${fmtSigned(parseMoneyCop(saldo.currentYear))}) no coincide ` +
-            `con el efectivo PUC 11 (${fmtSigned(initial)}).`,
-        );
-      }
-    } else {
-      issues.push('Sin renglón de saldo final de caja: el escenario no se pudo conciliar.');
+    const saldo = sc.lines.find((l) => SALDO_FINAL_RX.test(l.concept));
+    if (saldo && saldo.yearPlus3 !== sc.finalCashBalanceYear3) {
+      issues.push(
+        `El saldo final del año +3 del resumen (${fmtSigned(parseMoneyCop(sc.finalCashBalanceYear3))}) ` +
+          `difería de la tabla; se presenta el de la tabla.`,
+      );
+      sc.finalCashBalanceYear3 = saldo.yearPlus3;
     }
+    issues.push(...scenarioTableIssues(sc, pcf.initialCashBalanceCop));
     if (issues.length > 0) checks.scenarioIssues[sc.scenario] = issues;
   }
 
   return { json, checks };
+}
+
+
+/**
+ * Motivo por el que el punto de equilibrio no existe (`null` si se puede
+ * calcular). Función pura de los costos e ingresos del JSON, que el
+ * post-procesador no altera: el servidor la recalcula al re-renderizar la
+ * Parte II desde el JSON persistido (src/lib/reports/part-markdown.ts).
+ */
+export function breakEvenUndefinedReason(be: StrategyReportJson['breakEven']): string | null {
+  const cf = parseMoneyCop(be.fixedCostsCop);
+  const cv = parseMoneyCop(be.variableCostsCop);
+  const ing = parseMoneyCop(be.revenueCop);
+  const contribution = ing - cv;
+  if (ing > ZERO && contribution > ZERO && cf >= ZERO) return null;
+  return ing <= ZERO
+    ? 'sin ingresos del periodo no hay punto de equilibrio'
+    : contribution <= ZERO
+      ? 'los costos variables igualan o superan los ingresos (margen de contribución ≤ 0): ningún nivel de ventas cubre los costos fijos'
+      : 'costos fijos negativos: la clasificación de costos no es válida';
+}
+
+/**
+ * Observaciones de conciliación de la tabla de un escenario: saldo final =
+ * saldo anterior + flujo neto, y saldo actual = efectivo PUC 11. Pura sobre el
+ * JSON ya conciliado (el aviso de "resumen distinto de la tabla" lo emite sólo
+ * `reconcileStrategyReport`, que es quien sustituye el resumen).
+ */
+export function scenarioTableIssues(
+  sc: StrategyReportJson['projectedCashFlow']['scenarios'][number],
+  initialCashBalanceCop: string,
+): string[] {
+  const issues: string[] = [];
+  const saldo = sc.lines.find((l) => SALDO_FINAL_RX.test(l.concept));
+  const flujo = sc.lines.find((l) => FLUJO_NETO_RX.test(l.concept));
+  if (saldo) {
+    if (flujo) {
+      const s = [saldo.currentYear, saldo.yearPlus1, saldo.yearPlus2, saldo.yearPlus3].map(parseMoneyCop);
+      const f = [flujo.currentYear, flujo.yearPlus1, flujo.yearPlus2, flujo.yearPlus3].map(parseMoneyCop);
+      for (let y = 1; y <= 3; y++) {
+        const expected = s[y - 1] + f[y];
+        if (s[y] !== expected) {
+          issues.push(
+            `La tabla no concilia en el Año +${y}: saldo final ${fmtSigned(s[y])} ≠ saldo anterior ` +
+              `${fmtSigned(s[y - 1])} + flujo neto ${fmtSigned(f[y])} (brecha ${fmtSigned(s[y] - expected)}).`,
+          );
+        }
+      }
+    } else {
+      issues.push('Sin renglón de flujo neto: no se pudo verificar la conciliación de saldos.');
+    }
+    const initial = parseMoneyCop(initialCashBalanceCop);
+    if (parseMoneyCop(saldo.currentYear) !== initial) {
+      issues.push(
+        `El saldo de caja actual de la tabla (${fmtSigned(parseMoneyCop(saldo.currentYear))}) no coincide ` +
+          `con el efectivo PUC 11 (${fmtSigned(initial)}).`,
+      );
+    }
+  } else {
+    issues.push('Sin renglón de saldo final de caja: el escenario no se pudo conciliar.');
+  }
+  return issues;
 }
 
 // ---------------------------------------------------------------------------
@@ -319,10 +340,7 @@ function applyDeterministicTrends(
   const sources = strategyAnchorSources(preprocessed, null);
   if (!sources.comparative) {
     json.trends = null;
-    checks.noTrendsReason =
-      preprocessed.comparative && preprocessed.comparativos_impracticables === true
-        ? 'Comparativo impracticable (NIIF para las PYMES 3.14 / 10.21): no se presentan variaciones interanuales.'
-        : 'Sin periodo comparativo disponible.';
+    checks.noTrendsReason = trendChecksFor(preprocessed).noTrendsReason;
     return;
   }
   const t = deterministicTrends(sources);
@@ -340,6 +358,95 @@ function applyDeterministicTrends(
   };
   checks.trendsSource = 'deterministic';
   checks.trendsNdMotivo = t.motivo;
+}
+
+/**
+ * Procedencia de las tendencias que imprime el render (sin tocar el JSON):
+ * la misma decisión que `applyDeterministicTrends`, recalculable desde el
+ * preprocesado.
+ */
+function trendChecksFor(
+  preprocessed: PreprocessedBalance | undefined,
+): Pick<StrategyChecks, 'trendsSource' | 'trendsNdMotivo' | 'noTrendsReason'> {
+  if (!preprocessed?.primary) return {};
+  const sources = strategyAnchorSources(preprocessed, null);
+  if (!sources.comparative) {
+    return {
+      noTrendsReason:
+        preprocessed.comparative && preprocessed.comparativos_impracticables === true
+          ? 'Comparativo impracticable (NIIF para las PYMES 3.14 / 10.21): no se presentan variaciones interanuales.'
+          : 'Sin periodo comparativo disponible.',
+    };
+  }
+  return { trendsSource: 'deterministic', trendsNdMotivo: deterministicTrends(sources).motivo };
+}
+
+// ---------------------------------------------------------------------------
+// Render de la Parte II desde el JSON persistido (I3: procedencia del Markdown)
+// ---------------------------------------------------------------------------
+// El Markdown de la Parte II es una función determinista del JSON validado y
+// de los `StrategyChecks` del post-procesador. El navegador reenvía ese
+// Markdown a /consolidate y /export; para que un texto alterado no llegue al
+// PDF ni al Excel, el servidor lo vuelve a producir desde el JSON con estas
+// funciones (src/lib/reports/part-markdown.ts), pasando antes el JSON por el
+// MISMO post-procesador de la fase (`postProcessStrategyJson`) con el
+// preprocesado del servidor; la única observación que no se reproduce es la de
+// un resumen de escenario distinto de su tabla, porque `reconcileStrategyReport`
+// ya sustituyó el resumen (la cifra impresa es la de la tabla en ambos casos).
+// ---------------------------------------------------------------------------
+
+/** Aviso de sección degradada de la Parte II (mismo texto en la fase y en el servidor). */
+export function strategyDegradationNotice(language: 'es' | 'en'): string {
+  return buildDegradationNotice(
+    [language === 'es' ? 'Análisis estratégico (Parte II)' : 'Strategic analysis (Part II)'],
+    language,
+  );
+}
+
+/**
+ * Post-proceso determinista de la Parte II sobre el JSON del modelo: puerta de
+ * liquidez y saldo inicial desde las anclas, punto de equilibrio y margen de
+ * seguridad recalculados, conciliación de escenarios, tendencias desde ambos
+ * cortes y KPIs sin ancla → N/D o recalculados. Es el MISMO paso para la fase
+ * (`runStrategyDirector`) y para el servidor cuando re-renderiza la Parte II
+ * desde un JSON recibido o persistido (src/lib/reports/part-markdown.ts): es
+ * idempotente sobre el JSON que publicó la fase, y sobre un JSON alterado
+ * vuelve a fijar las cifras que el código deriva (el render nunca imprime un
+ * punto de equilibrio, un saldo inicial, un mensaje de liquidez ni un KPI sin
+ * ancla que no haya calculado el sistema).
+ *
+ * `keepWhenNoSource` (sólo exportadores): sin preprocesado se conservan los
+ * KPIs con ancla y los recomputables como los publicó la fase (mismo criterio
+ * que el Excel); la fase sin preprocesado los publica N/D.
+ */
+export function postProcessStrategyJson(
+  json: StrategyReportJson,
+  preprocessed: PreprocessedBalance | undefined,
+  niifJson: NiifReportJson | null | undefined,
+  language: 'es' | 'en' = 'es',
+  options: { keepWhenNoSource?: boolean } = {},
+): { json: StrategyReportJson; checks: StrategyChecks } {
+  const verified = reconcileStrategyReport(json, strategyAnchorsFrom(preprocessed));
+  applyDeterministicTrends(verified, preprocessed);
+  // KPIs sin ancla → N/D con motivo; recomputables → valor del preprocesador
+  // (pendiente #2 de la auditoría integral 2026-09-24). El JSON que viaja al
+  // visor, al Excel y al Editor Jefe HTML ya no lleva la cifra del modelo.
+  const kpiAnchors = applyKpiAnchors(verified.json, strategyAnchorSources(preprocessed, niifJson ?? null), {
+    language,
+    ...(options.keepWhenNoSource ? { keepWhenNoSource: true } : {}),
+  });
+  verified.json = kpiAnchors.json;
+  verified.checks.kpisNeutralized = kpiAnchors.neutralized;
+  verified.checks.kpisRecomputed = kpiAnchors.recomputed;
+  return verified;
+}
+
+/** Markdown de la Parte II desde su JSON (el adaptador de la fase, sin sellos). */
+export function renderStrategicAnalysisResult(
+  json: StrategyReportJson,
+  checks?: StrategyChecks,
+): StrategicAnalysisResult {
+  return toStrategicAnalysisResult(json, checks);
 }
 
 // ---------------------------------------------------------------------------

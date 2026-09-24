@@ -25,51 +25,35 @@ vi.mock('@/lib/export/excel-export', () => ({ generateFinancialExcel: vi.fn(asyn
 import { POST as consolidate } from '../consolidate/route';
 import { POST as exportReport } from '../export/route';
 import { generateFinancialExcel } from '@/lib/export/excel-export';
-import { buildActaExpectedArithmetic } from '@/lib/agents/financial/prompts/governance-specialist.prompt';
 import type { FinancialReport } from '@/lib/agents/financial/types';
-import { preprocessUploadedTrialBalanceText } from '@/lib/preprocessing/raw-data';
 import {
-  PROVENANCE_COMPANY,
   consolidateBody,
   makeProvenanceParts,
   makeReportsTableFake,
 } from '@/lib/reports/__tests__/provenance-fixture';
 
 const W1 = '11111111-1111-4111-8111-111111111111';
-const COMPANY = PROVENANCE_COMPANY;
-const read = preprocessUploadedTrialBalanceText(consolidateBody().rawData);
-if (read.kind !== 'ok') throw new Error('fixture sin balance');
-const pp = read.preprocessed;
 /** Utilidad neta del P&G del fixture (Activo $10.000): $2.000 en centavos. */
 const NET_INCOME = '200000';
 let fake: ReturnType<typeof makeReportsTableFake>;
 const previousDbUrl = process.env.DATABASE_URL;
 
-/** Acta estructurada con la utilidad neta dada. */
-function acta(netIncomeCop: string) {
-  const exp = buildActaExpectedArithmetic({ ...COMPANY, niifGroup: 2 }, pp)!;
-  return {
-    shareholderMinutes: {
-      resultDistribution: {
-        netIncomeCop,
-        applies: exp.distributionApplies,
-        lines: [],
-        neutralProposalText: 'La asamblea decide sobre la destinación de la utilidad.',
-      },
-      capitalizationProposal: {
-        applies: exp.capitalizationApplies,
-        retainedEarningsBaseCop: exp.capitalizationBaseCop,
-        capitalizationAmountCop: exp.capitalizationAmountCop,
-        legalReference: 'Ley 1258/2008',
-        body: 'No se propone capitalización.',
-      },
-    },
-  };
-}
-
+/**
+ * Parte III del fixture (JSON del contrato, coherente con el balance) con la
+ * utilidad neta del acta dada. Desde I3 el JSON debe cumplir el contrato: el
+ * servidor re-renderiza el acta desde él y sella la Parte cuyo JSON no es
+ * válido.
+ */
 function parts(netIncomeCop: string, actaQualifications?: unknown) {
   const r = makeProvenanceParts();
-  (r.governance as { json?: unknown }).json = acta(netIncomeCop);
+  const json = r.governance.json!;
+  r.governance.json = {
+    ...json,
+    shareholderMinutes: {
+      ...json.shareholderMinutes,
+      resultDistribution: { ...json.shareholderMinutes.resultDistribution, netIncomeCop },
+    },
+  };
   if (actaQualifications !== undefined) {
     (r.governance as { actaQualifications?: unknown }).actaQualifications = actaQualifications;
   }

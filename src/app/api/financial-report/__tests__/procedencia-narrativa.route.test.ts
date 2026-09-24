@@ -46,10 +46,10 @@ import { POST as html } from '../html/route';
 import { generateFinancialExcel } from '@/lib/export/excel-export';
 import { composeEditorialReport } from '@/lib/export/pdf-elite-react';
 import { runHtmlEditor } from '@/lib/agents/financial/agents/html-editor';
-import { buildActaExpectedArithmetic } from '@/lib/agents/financial/prompts/governance-specialist.prompt';
 import { preprocessUploadedTrialBalanceText } from '@/lib/preprocessing/raw-data';
 import { toJsonSafe } from '@/lib/preprocessing/json-safe';
 import type { StrategyReportJson } from '@/lib/agents/financial/contracts/strategy-report';
+import type { GovernanceReportJson } from '@/lib/agents/financial/contracts/governance-report';
 import type { FinancialReport } from '@/lib/agents/financial/types';
 import {
   PROVENANCE_COMPANY,
@@ -81,29 +81,22 @@ const HONEST_DEVELOPMENT =
   'Se aprobaron los estados financieros: el total de activos asciende a $10.000,00 y la utilidad neta del ejercicio fue de $2.000,00.';
 const HONEST_NOTE = 'El total patrimonio es $6.000,00 y el efectivo al cierre fue de $1.700,00.';
 
-/** Parte III estructurada: aritmética del acta honesta; prosa configurable. */
-function governanceJson(prose: { development?: string; note?: string } = {}) {
-  const exp = buildActaExpectedArithmetic({ ...COMPANY, niifGroup: 2 }, pp)!;
+/**
+ * Parte III estructurada (JSON del contrato: desde I3 el servidor re-renderiza
+ * el Markdown desde él y sella la Parte cuyo JSON no es válido): aritmética del
+ * acta honesta; prosa configurable.
+ */
+function governanceJson(prose: { development?: string; note?: string } = {}): GovernanceReportJson {
+  const base = makeProvenanceParts().governance.json!;
   return {
+    ...base,
     financialNotes: [
-      { number: 1, title: 'Situación financiera', body: prose.note ?? HONEST_NOTE, materiality: 'material' },
+      { number: 1, title: 'Situación financiera', body: prose.note ?? HONEST_NOTE, normReference: null, materiality: 'material', confidence: null },
+      ...base.financialNotes.filter((n) => n.number !== 1),
     ],
     shareholderMinutes: {
-      agenda: [{ number: 1, topic: 'Aprobación de estados financieros' }],
+      ...base.shareholderMinutes,
       developments: [{ itemNumber: 1, body: prose.development ?? HONEST_DEVELOPMENT }],
-      resultDistribution: {
-        netIncomeCop: exp.netIncomeCop,
-        applies: exp.distributionApplies,
-        lines: exp.lines.map((l) => ({ label: l.label, amountCop: l.amountCop, normReference: l.normReference })),
-        neutralProposalText: 'La asamblea decide sobre la destinación de la utilidad.',
-      },
-      capitalizationProposal: {
-        applies: exp.capitalizationApplies,
-        retainedEarningsBaseCop: exp.capitalizationBaseCop,
-        capitalizationAmountCop: exp.capitalizationAmountCop,
-        legalReference: 'Ley 1258/2008',
-        body: 'No se propone capitalización.',
-      },
     },
   };
 }

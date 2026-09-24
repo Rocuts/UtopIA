@@ -16,6 +16,8 @@ import { randomUUID } from 'node:crypto';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import type { SQL } from 'drizzle-orm';
 import { makeExportableReport } from '@/lib/agents/financial/__fixtures__/coherent-niif-report';
+import { preprocessUploadedTrialBalanceText } from '@/lib/preprocessing/raw-data';
+import { withCoherentParts } from './coherent-parts';
 
 export const PROVENANCE_CSV = [
   'Razón social: EMPRESA PRUEBA SAS',
@@ -42,9 +44,24 @@ export const PROVENANCE_COMPANY = {
   niifGroup: 2,
 };
 
-/** Partes I–III coherentes con `PROVENANCE_CSV` (texto que pasa los gates post-render). */
-export function makeProvenanceParts() {
-  const r = makeExportableReport();
+/**
+ * Partes I–III coherentes con `PROVENANCE_CSV`. Desde I3 el servidor
+ * re-renderiza el Markdown desde el JSON de cada Parte (y sella la Parte sin
+ * JSON válido): las Partes II y III llevan JSON del contrato coherente con el
+ * balance, y la Parte I la declaración de impracticabilidad de comparativos
+ * (V15) en sus notas técnicas; la TTD (V10) está en la nota de impuestos. Los
+ * textos sueltos de abajo son lo que "envía el navegador": el servidor los
+ * descarta. `csv` fija el balance contra el que se arman las Partes II y III
+ * (el JSON NIIF es siempre el de Activo $10.000).
+ */
+export function makeProvenanceParts(csv: string = PROVENANCE_CSV) {
+  const read = preprocessUploadedTrialBalanceText(csv);
+  if (read.kind !== 'ok') throw new Error('balance del fixture ilegible');
+  const r = withCoherentParts(
+    { ...makeExportableReport(), company: { ...PROVENANCE_COMPANY, niifGroup: 2 } },
+    read.preprocessed,
+    { impracticable: true },
+  );
   r.niifAnalysis.fullContent = [
     '## Estado de Situación Financiera',
     '| Concepto | 2025 |',

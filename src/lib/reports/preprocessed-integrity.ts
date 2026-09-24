@@ -26,7 +26,15 @@ import { adjustmentPeriodSchema, unknownAdjustmentPeriodReasons } from './adjust
 // ---------------------------------------------------------------------------
 
 export type RederivedPreprocessed =
-  | { ok: true; preprocessed: PreprocessedBalance }
+  | {
+      ok: true;
+      preprocessed: PreprocessedBalance;
+      /**
+       * Detalle de los ajustes confirmados aplicados (saldo previo y nuevo por
+       * cuenta): la traza de ajustes del consolidado sale de aquí (I3).
+       */
+      affected: ReturnType<typeof applyAdjustments>['affected'];
+    }
   | { ok: false; details: string[] };
 
 export const REDERIVE_MISMATCH_HEADLINE =
@@ -39,6 +47,7 @@ export function rederivePreprocessedFromRows(
   adjustments: readonly Adjustment[] = [],
 ): RederivedPreprocessed {
   let derived: PreprocessedBalance;
+  let affected: ReturnType<typeof applyAdjustments>['affected'] = [];
   try {
     const openingPeriods = claimed.periods
       .filter((p) => p.saldosDeApertura === true)
@@ -52,7 +61,11 @@ export function rederivePreprocessedFromRows(
     // silencio (mismo criterio que Stage 0.4 de /niif).
     const periodErrors = unknownAdjustmentPeriodReasons(derived, applied);
     if (periodErrors.length > 0) return { ok: false, details: periodErrors };
-    if (applied.length > 0) derived = applyAdjustments(derived, applied).balance;
+    if (applied.length > 0) {
+      const application = applyAdjustments(derived, applied);
+      derived = application.balance;
+      affected = application.affected;
+    }
   } catch (err) {
     console.warn(
       '[reports/preprocessed-integrity] no se pudo re-derivar el preprocesado:',
@@ -68,7 +81,7 @@ export function rederivePreprocessedFromRows(
   }
   const mismatches = preprocessedAnchorMismatches(claimed, derived);
   if (mismatches.length > 0) return { ok: false, details: [REDERIVE_MISMATCH_HEADLINE, ...mismatches] };
-  return { ok: true, preprocessed: derived };
+  return { ok: true, preprocessed: derived, affected };
 }
 
 /**
