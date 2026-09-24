@@ -53,8 +53,8 @@ import {
 } from '../contracts/deterministic-breakdown';
 import type { PeriodSnapshot } from '@/lib/preprocessing/trial-balance';
 import type { NiifReportJson } from '../contracts/niif-report';
-import { esfTermSubtotalMismatches } from '../validators/niif-json-validator';
-import { balanceTermOfLabel } from '@/lib/export/statement-presentation';
+// Plazo de cada renglón del modelo: la misma lectura de E27 y E21 (validador).
+import { balanceRowTerms, esfTermSubtotalMismatches } from '../validators/niif-json-validator';
 
 /**
  * Lo mínimo que necesita el reconciliador. Se define estructuralmente para que
@@ -564,39 +564,6 @@ function namesBalanceTerm(label: string): boolean {
 }
 
 /**
- * Plazo con que el MODELO presentó cada renglón con código de su sección: el
- * del subtotal que cierra su bloque o, sin él, el del encabezado que lo abre
- * (la misma lectura que E27 y la desambiguación de grupos partidos, en
- * español o inglés). `null` para renglones sin código o fuera de un bloque.
- */
-function termsOfModelRows(
-  section: 'assets' | 'liabilities',
-  lines: ReadonlyArray<{ account: string | null; label: string }>,
-): Array<BalanceTerm | null> {
-  const terms: Array<BalanceTerm | null> = lines.map(() => null);
-  let header: BalanceTerm | null = null;
-  let pending: number[] = [];
-  lines.forEach((l, i) => {
-    if (l.account !== null && l.account.trim() !== '') {
-      terms[i] = header;
-      pending.push(i);
-      return;
-    }
-    const kind = balanceTermOfLabel(section, l.label);
-    if (!kind) return;
-    if (kind.header) {
-      header = kind.term;
-      pending = [];
-      return;
-    }
-    for (const j of pending) terms[j] = kind.term;
-    pending = [];
-    header = null;
-  });
-  return terms;
-}
-
-/**
  * Ordena renglones de grupo PUC de dos dígitos en bloques corriente / no
  * corriente con su subtotal (level 3, sin código), según el plazo de cada
  * renglón. Auditoría 2026-09 (niif-contrato-07): NIIF PYMES 4.4 exige
@@ -730,7 +697,7 @@ export function projectSectionsFromSnapshot<T extends ReconcilableReport>(
     // escribió para un bloque se usa en ese bloque; en el otro sólo si no
     // nombra un plazo (si lo nombra, rige el del catálogo). Sin plazo
     // reconocible en la sección del modelo, el de su código, como antes.
-    const modelTerms = byTerm && section !== 'equity' ? termsOfModelRows(section, previous) : null;
+    const modelTerms = byTerm && section !== 'equity' ? balanceRowTerms(section, previous) : null;
     const labelByKey = new Map<string, string>();
     const termedAccounts = new Set<string>();
     if (modelTerms) {

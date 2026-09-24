@@ -35,6 +35,10 @@
 //       ajustes son partidas no monetarias y cambios en WC, no transferencias
 //       contables internas). Defensa Art. 647 E.T.: la salida ficticia
 //       distorsiona el flujo informado a la DIAN sin sustento documental.
+//  E21. Cada renglón con código PUC del ESF y del ERI == Σ de las hojas del
+//       balance de prueba que su código agrupa, renglón a renglón (un código
+//       por renglón; un código repetido sólo en las porciones corriente / no
+//       corriente de un grupo partido por plazo; re-auditoría 2 e2e-niif2-01)
 //  E27. Subtotales corriente / no corriente del ESF == controlTotals
 //       (activo/pasivo corriente y no corriente, ambos periodos; integración I4)
 //
@@ -61,6 +65,7 @@ import {
   formatCashFlowLineViolations,
   type CashFlowStatementLike,
   type ComparativeStatementsBasis,
+  type BalanceTerm,
   type DeterministicCashFlow,
   type LedgerLeaf,
 } from '../contracts/deterministic-breakdown';
@@ -1354,7 +1359,9 @@ export function validateNiifReportJson(
   // columnas, con todos los totales intactos. Cada renglón con código se ancla
   // ahora a la suma de las hojas del balance de prueba que su código agrupa
   // (la hoja se asigna al código MÁS específico listado, así "15" bruto +
-  // "1592" depreciación también cuadra), tolerancia $0.
+  // "1592" depreciación también cuadra), tolerancia $0. Re-auditoría 2
+  // (e2e-niif2-01): renglón a renglón, sin unir renglones por códigos
+  // compartidos; ver `balanceLineAnchorErrors`.
   if (options.ledgers) {
     const ledgerPeriods: Array<[StatementPeriod, readonly LedgerLeaf[]]> = [
       ['primary', options.ledgers.primary],
@@ -1362,6 +1369,9 @@ export function validateNiifReportJson(
     if (hasComparative && options.ledgers.comparative) {
       ledgerPeriods.push(['comparative', options.ledgers.comparative]);
     }
+    // Hojas de los periodos presentados: un código está partido por plazo si
+    // lo está en alguno de ellos (e2e-niif2-01).
+    const presentedLeaves = ledgerPeriods.flatMap(([, leaves]) => leaves);
     for (const [period, leaves] of ledgerPeriods) {
       const etiqueta =
         period === 'primary'
@@ -1372,7 +1382,9 @@ export function validateNiifReportJson(
         ['Pasivo', bs.liabilities, 2],
         ['Patrimonio', bs.equity, 3],
       ] as const) {
-        errors.push(...balanceLineAnchorErrors(nombre, lineas, classCode, leaves, period, etiqueta));
+        errors.push(
+          ...balanceLineAnchorErrors(nombre, lineas, classCode, leaves, period, etiqueta, presentedLeaves),
+        );
       }
       if (period === 'primary' || !pygComparativeIsNd) {
         errors.push(...incomeLineAnchorErrors(json.incomeStatement.lines, leaves, period, etiqueta));
@@ -1803,42 +1815,113 @@ function uncodedBalanceRowErrors(
   return out;
 }
 
-/**
- * Agrupa los renglones con código por códigos compartidos (unión de conjuntos)
- * y asigna cada hoja al código listado MÁS específico que la contiene.
- * Devuelve, por grupo, los índices de los renglones y la suma asignada.
- */
-function anchorGroups(
-  keysByLine: Array<{ index: number; keys: string[] }>,
-  leaves: readonly LedgerLeaf[],
-  acceptLeaf: (leaf: LedgerLeaf) => boolean,
-  leafValue: (leaf: LedgerLeaf, key: string) => void,
-): Array<{ indices: number[]; keys: Set<string> }> {
-  const allKeys = Array.from(new Set(keysByLine.flatMap((x) => x.keys)));
-  for (const leaf of leaves) {
-    if (!acceptLeaf(leaf)) continue;
-    let best: string | null = null;
-    for (const k of allKeys) {
-      if (leaf.code.startsWith(k) && (best === null || k.length > best.length)) best = k;
-    }
-    if (best !== null) leafValue(leaf, best);
+// ---------------------------------------------------------------------------
+// E21 — un renglón, un código (re-auditoría 2, e2e-niif2-01)
+// ---------------------------------------------------------------------------
+// E21 anclaba GRUPOS de renglones unidos por un código compartido (unión de
+// conjuntos) y sólo comparaba la suma del grupo: un renglón puente en $0 con
+// dos códigos ("13 15", "41 61", "21 22") o dos renglones con el mismo código
+// permitían trasladar importes entre grupos o inventar sub-renglones con la
+// suma intacta. Ahora cada renglón con código se ancla SOLO a la suma de las
+// hojas que su código agrupa (cada hoja va al código listado MÁS específico:
+// "15" bruto + "1592" depreciación cuadran por separado; un sub-renglón de
+// detalle, p. ej. 510506, es su hoja). Un renglón con varios códigos es error;
+// un código repetido sólo se admite en las dos porciones corriente / no
+// corriente de un grupo que el balance de prueba parte por plazo (vencimiento
+// declarado, virtual de R1 por su origen), con los importes de la proyección
+// determinista (`buildDeterministicBreakdownByTerm`). Los errores de forma
+// (varios códigos, código repetido) se publican una vez, con el periodo
+// actual; los de importe, en cada columna.
+// ---------------------------------------------------------------------------
+
+/** Código listado MÁS específico que contiene la hoja, o `null`. */
+function mostSpecificKey(code: string, keys: readonly string[]): string | null {
+  let best: string | null = null;
+  for (const k of keys) {
+    if (code.startsWith(k) && (best === null || k.length > best.length)) best = k;
   }
-  // Unión de renglones que comparten algún código.
-  const groups: Array<{ indices: number[]; keys: Set<string> }> = [];
-  for (const { index, keys } of keysByLine) {
-    const touching = groups.filter((g) => keys.some((k) => g.keys.has(k)));
-    const merged = { indices: [index], keys: new Set(keys) };
-    for (const g of touching) {
-      merged.indices.push(...g.indices);
-      for (const k of g.keys) merged.keys.add(k);
-      groups.splice(groups.indexOf(g), 1);
-    }
-    groups.push(merged);
-  }
-  return groups;
+  return best;
 }
 
-/** E21 del ESF: cada renglón con código contra las hojas de su clase. */
+/** Renglones con UN código de la clase, agrupados por código; los de varios códigos, aparte. */
+function codedRows<L extends { account: string | null }>(
+  lines: readonly L[],
+  acceptCode: (code: string) => boolean,
+): { byKey: Map<string, number[]>; multi: Array<{ index: number; codes: string[] }>; uncoded: number[] } {
+  const byKey = new Map<string, number[]>();
+  const multi: Array<{ index: number; codes: string[] }> = [];
+  const uncoded: number[] = [];
+  lines.forEach((line, index) => {
+    if (line.account === null || line.account.trim() === '') return;
+    const codes = (line.account.match(/\d+/g) ?? []).filter(acceptCode);
+    if (codes.length === 0) uncoded.push(index);
+    else if (codes.length > 1) multi.push({ index, codes });
+    else byKey.set(codes[0], [...(byKey.get(codes[0]) ?? []), index]);
+  });
+  return { byKey, multi, uncoded };
+}
+
+function multiCodeMessage(estado: string, etiqueta: string, rotulo: string, codes: readonly string[]): string {
+  return (
+    `E21. ${estado} (${etiqueta}): el renglón "${rotulo}" declara varios códigos PUC (${codes.join(', ')}). ` +
+    `Cada renglón con código se ancla a UNA cuenta o grupo del balance de prueba: un renglón que une ` +
+    `grupos permite trasladar importes entre ellos con la suma intacta. Presenta cada grupo en su renglón.`
+  );
+}
+
+function repeatedCodeMessage(estado: string, etiqueta: string, key: string, rotulos: readonly string[]): string {
+  return (
+    `E21. ${estado} (${etiqueta}): el código ${key} aparece en ${rotulos.length} renglones ` +
+    `(${rotulos.map((r) => `"${r}"`).join(', ')}). Un código PUC se presenta en un solo renglón, anclado ` +
+    `a la suma de sus cuentas; sólo un grupo que el balance de prueba parte por plazo (vencimiento ` +
+    `declarado, virtual de R1) va en dos renglones, uno por bloque. Un sub-renglón lleva el código de su ` +
+    `cuenta (p. ej. 510506), que se ancla a su hoja.`
+  );
+}
+
+/**
+ * Plazo con el que el modelo presenta cada renglón con código de una sección
+ * del ESF: el del subtotal que cierra su bloque o, sin él, el del encabezado
+ * que lo abre (en español o inglés). `null` para renglones sin código o fuera
+ * de un bloque reconocible. Es la lectura de E27, la de E21 para los grupos
+ * partidos y la del reconciliador cuando sustituye una sección por la
+ * proyección por plazo (el rótulo del modelo sigue a su bloque).
+ */
+export function balanceRowTerms(
+  section: 'assets' | 'liabilities',
+  lines: ReadonlyArray<{ account: string | null; label: string }>,
+): Array<BalanceTerm | null> {
+  const terms: Array<BalanceTerm | null> = lines.map(() => null);
+  let header: BalanceTerm | null = null;
+  let pending: number[] = [];
+  lines.forEach((l, i) => {
+    if (l.account !== null && l.account.trim() !== '') {
+      terms[i] = header;
+      pending.push(i);
+      return;
+    }
+    const kind = balanceTermOfLabel(section, l.label);
+    if (!kind) return;
+    if (kind.header) {
+      header = kind.term;
+      pending = [];
+      return;
+    }
+    for (const j of pending) terms[j] = kind.term;
+    pending = [];
+    header = null;
+  });
+  return terms;
+}
+
+const TERM_NAME: Record<BalanceTerm, string> = { current: 'corriente', nonCurrent: 'no corriente' };
+
+/**
+ * E21 del ESF: cada renglón con código contra las hojas de su clase.
+ * `allLeaves` son las hojas de los periodos que presenta el informe: un código
+ * está partido por plazo si sus hojas tienen los dos plazos en alguno de ellos
+ * (una porción puede existir sólo en el comparativo e imprimirse en $0).
+ */
 function balanceLineAnchorErrors(
   nombre: string,
   lines: readonly BalanceLine[],
@@ -1846,47 +1929,103 @@ function balanceLineAnchorErrors(
   leaves: readonly LedgerLeaf[],
   period: StatementPeriod,
   etiqueta: string,
+  allLeaves: readonly LedgerLeaf[],
 ): string[] {
   const out: string[] = [];
-  const keysByLine: Array<{ index: number; keys: string[] }> = [];
-  lines.forEach((line, index) => {
-    if (line.account === null || line.account.trim() === '') return;
-    const keys = (line.account.match(/\d+/g) ?? []).filter((k) => k.startsWith(String(classCode)));
-    if (keys.length === 0) {
-      if (periodCell(line, period) === null || parseMoneyCop(periodCell(line, period)!) === ZERO) return;
-      out.push(
-        `E21. Estado de Situación Financiera — ${nombre} (${etiqueta}): el renglón "${line.account} — ` +
-          `${line.label}" no lleva un código PUC de la clase ${classCode}; su cifra no se puede anclar al ` +
-          `balance de prueba.`,
-      );
-      return;
-    }
-    keysByLine.push({ index, keys });
-  });
-  const assigned = new Map<string, bigint>();
-  const groups = anchorGroups(
-    keysByLine,
-    leaves,
-    (leaf) => leaf.classCode === classCode,
-    (leaf, key) => assigned.set(key, (assigned.get(key) ?? ZERO) + leaf.cents),
-  );
-  for (const g of groups) {
-    let emitted = ZERO;
-    let missingCell = false;
-    for (const i of g.indices) {
-      const v = signedLineAmount(lines[i] as StatementLineWithColumns, period);
-      if (v === null) missingCell = true;
-      else emitted += v;
-    }
-    if (missingCell) continue; // E15c: una celda ausente no se trata como cero.
-    const expected = [...g.keys].reduce((acc, k) => acc + (assigned.get(k) ?? ZERO), ZERO);
-    if (emitted === expected) continue;
-    const rotulo = g.indices.map((i) => `${lines[i].account} — ${lines[i].label}`).join(' + ');
+  const estado = `Estado de Situación Financiera — ${nombre}`;
+  const structural = period === 'primary';
+  const rotulo = (i: number) => `${lines[i].account} — ${lines[i].label}`;
+  const { byKey, multi, uncoded } = codedRows(lines, (k) => k.startsWith(String(classCode)));
+
+  for (const i of uncoded) {
+    const raw = periodCell(lines[i], period);
+    if (raw === null || parseMoneyCop(raw) === ZERO) continue;
     out.push(
-      `E21. Estado de Situación Financiera — ${nombre} (${etiqueta}): "${rotulo}" imprime ` +
-        `${fmtCop(emitted)} y las cuentas del balance de prueba de ese código suman ${fmtCop(expected)} ` +
-        `(brecha ${fmtCop(emitted - expected)}). El importe de un renglón con código PUC es la suma de sus ` +
-        `cuentas: no lo redacta el analista.`,
+      `E21. ${estado} (${etiqueta}): el renglón "${rotulo(i)}" no lleva un código PUC de la clase ` +
+        `${classCode}; su cifra no se puede anclar al balance de prueba.`,
+    );
+  }
+  if (structural) {
+    for (const { index, codes } of multi) out.push(multiCodeMessage(estado, etiqueta, rotulo(index), codes));
+  }
+
+  const keys = [...byKey.keys()];
+  const assigned = new Map<string, { total: bigint; current: bigint; nonCurrent: bigint; undetermined: bigint }>();
+  for (const leaf of leaves) {
+    if (leaf.classCode !== classCode) continue;
+    const k = mostSpecificKey(leaf.code, keys);
+    if (k === null) continue;
+    const acc = assigned.get(k) ?? { total: ZERO, current: ZERO, nonCurrent: ZERO, undetermined: ZERO };
+    acc.total += leaf.cents;
+    if (leaf.term === 'current') acc.current += leaf.cents;
+    else if (leaf.term === 'nonCurrent') acc.nonCurrent += leaf.cents;
+    else acc.undetermined += leaf.cents;
+    assigned.set(k, acc);
+  }
+  const termsOf = new Map<string, Set<BalanceTerm>>();
+  for (const leaf of allLeaves) {
+    if (leaf.classCode !== classCode || (leaf.term !== 'current' && leaf.term !== 'nonCurrent')) continue;
+    const k = mostSpecificKey(leaf.code, keys);
+    if (k === null) continue;
+    termsOf.set(k, (termsOf.get(k) ?? new Set<BalanceTerm>()).add(leaf.term));
+  }
+  const section = classCode === 1 ? 'assets' : classCode === 2 ? 'liabilities' : null;
+  const rowTerms = section ? balanceRowTerms(section, lines) : null;
+
+  for (const [key, idx] of byKey) {
+    const expected = assigned.get(key) ?? { total: ZERO, current: ZERO, nonCurrent: ZERO, undetermined: ZERO };
+    if (idx.length === 1) {
+      const emitted = signedLineAmount(lines[idx[0]] as StatementLineWithColumns, period);
+      if (emitted === null) continue; // E15c: una celda ausente no se trata como cero.
+      if (emitted === expected.total) continue;
+      out.push(
+        `E21. ${estado} (${etiqueta}): "${rotulo(idx[0])}" imprime ${fmtCop(emitted)} y las cuentas del ` +
+          `balance de prueba de ese código suman ${fmtCop(expected.total)} (brecha ` +
+          `${fmtCop(emitted - expected.total)}). El importe de un renglón con código PUC es la suma de sus ` +
+          `cuentas: no lo redacta el analista.`,
+      );
+      continue;
+    }
+    const split = rowTerms !== null && idx.length === 2 && (termsOf.get(key)?.size ?? 0) === 2;
+    if (!split) {
+      if (structural) out.push(repeatedCodeMessage(estado, etiqueta, key, idx.map(rotulo)));
+      continue;
+    }
+    const t = idx.map((i) => rowTerms[i]);
+    if (t[0] !== null && t[0] === t[1]) {
+      if (structural) {
+        out.push(
+          `E21. ${estado} (${etiqueta}): el código ${key} aparece en 2 renglones del mismo bloque ` +
+            `(${TERM_NAME[t[0]]}): ${idx.map((i) => `"${rotulo(i)}"`).join(', ')}. Las dos porciones de un ` +
+            `grupo partido por plazo van una en cada bloque (NIIF para las PYMES 4.4).`,
+        );
+      }
+      continue;
+    }
+    const amounts = idx.map((i) => signedLineAmount(lines[i] as StatementLineWithColumns, period));
+    if (amounts[0] === null || amounts[1] === null) continue; // E15c
+    const [a0, a1] = amounts as [bigint, bigint];
+    const { current: c, nonCurrent: n } = expected;
+    const known = t[0] !== null && t[1] !== null;
+    const ok =
+      expected.undetermined === ZERO &&
+      (known
+        ? a0 === (t[0] === 'current' ? c : n) && a1 === (t[1] === 'current' ? c : n)
+        : (a0 === c && a1 === n) || (a0 === n && a1 === c));
+    if (ok) continue;
+    const printed = known
+      ? [0, 1]
+          .sort((x, y) => (t[x] === 'current' ? 0 : 1) - (t[y] === 'current' ? 0 : 1))
+          .map((x) => `${fmtCop(x === 0 ? a0 : a1)} (${TERM_NAME[t[x]!]})`)
+          .join(' y ')
+      : `${fmtCop(a0)} y ${fmtCop(a1)}`;
+    out.push(
+      `E21. ${estado} (${etiqueta}): el ${key.length === 2 ? 'grupo' : 'código'} ${key} se presenta partido por ` +
+        `plazo y sus renglones imprimen ${printed}; las cuentas del balance de prueba de ese código suman ` +
+        `${fmtCop(c)} (corriente) y ${fmtCop(n)} (no corriente)` +
+        (expected.undetermined !== ZERO ? ` y ${fmtCop(expected.undetermined)} sin plazo determinable` : '') +
+        `. Cada porción es la suma de sus cuentas con ese plazo (vencimiento declarado, virtual de R1 por su ` +
+        `origen, grupo PUC): no la redacta el analista.`,
     );
   }
   return out;
@@ -1900,54 +2039,45 @@ function incomeLineAnchorErrors(
   etiqueta: string,
 ): string[] {
   const out: string[] = [];
-  const keysByLine: Array<{ index: number; keys: string[] }> = [];
-  lines.forEach((line, index) => {
-    const keys = (line.account?.match(/\d+/g) ?? []).filter((k) => /^[4-7]/.test(k));
-    if (keys.length > 0) keysByLine.push({ index, keys });
-  });
-  if (keysByLine.length === 0) return out;
+  const estado = 'Estado de Resultados';
+  const structural = period === 'primary';
+  const rotulo = (i: number) => `${lines[i].account} — ${lines[i].label}`;
+  const { byKey, multi } = codedRows(lines, (k) => /^[4-7]/.test(k));
+  if (structural) {
+    for (const { index, codes } of multi) out.push(multiCodeMessage(estado, etiqueta, rotulo(index), codes));
+  }
+  if (byKey.size === 0) return out;
   // Orientación de la clase 4 (firmada o en magnitudes): la del total de las
   // ordinarias, igual que las anclas (`anchors.ts`).
   const ordinarias = leaves
     .filter((l) => l.classCode === 4 && !l.code.startsWith('4175'))
     .reduce((acc, l) => acc + l.cents, ZERO);
   const signo = ordinarias < ZERO ? BigInt(-1) : BigInt(1);
+  const keys = [...byKey.keys()];
   const ord = new Map<string, bigint>();
   const dev = new Map<string, bigint>();
   const exp = new Map<string, bigint>();
   const bump = (m: Map<string, bigint>, k: string, v: bigint) => m.set(k, (m.get(k) ?? ZERO) + v);
-  const groups = anchorGroups(
-    keysByLine,
-    leaves,
-    (leaf) => leaf.classCode >= 4 && leaf.classCode <= 7,
-    (leaf, key) => {
-      if (leaf.classCode === 4) bump(leaf.code.startsWith('4175') ? dev : ord, key, leaf.cents);
-      else bump(exp, key, leaf.cents);
-    },
-  );
-  for (const g of groups) {
-    let expected = ZERO;
-    for (const k of g.keys) {
-      expected += signo * (ord.get(k) ?? ZERO) - abs(dev.get(k) ?? ZERO) - (exp.get(k) ?? ZERO);
+  for (const leaf of leaves) {
+    if (leaf.classCode < 4 || leaf.classCode > 7) continue;
+    const k = mostSpecificKey(leaf.code, keys);
+    if (k === null) continue;
+    if (leaf.classCode === 4) bump(leaf.code.startsWith('4175') ? dev : ord, k, leaf.cents);
+    else bump(exp, k, leaf.cents);
+  }
+  for (const [key, idx] of byKey) {
+    if (idx.length > 1) {
+      if (structural) out.push(repeatedCodeMessage(estado, etiqueta, key, idx.map(rotulo)));
+      continue;
     }
-    let emittedA = ZERO;
-    let emittedB = ZERO;
-    let skip = false;
-    for (const i of g.indices) {
-      const a = incomeLineContribution(lines[i], period, true);
-      const b = incomeLineContribution(lines[i], period, false);
-      if (periodCell(lines[i], period) === null) {
-        skip = true;
-        break;
-      }
-      emittedA += a?.value ?? ZERO;
-      emittedB += b?.value ?? ZERO;
-    }
-    if (skip) continue; // E16c: una celda ausente no se trata como cero.
+    const i = idx[0];
+    if (periodCell(lines[i], period) === null) continue; // E16c: una celda ausente no se trata como cero.
+    const expected = signo * (ord.get(key) ?? ZERO) - abs(dev.get(key) ?? ZERO) - (exp.get(key) ?? ZERO);
+    const emittedA = incomeLineContribution(lines[i], period, true)?.value ?? ZERO;
+    const emittedB = incomeLineContribution(lines[i], period, false)?.value ?? ZERO;
     if (emittedA === expected || emittedB === expected) continue;
-    const rotulo = g.indices.map((i) => `${lines[i].account} — ${lines[i].label}`).join(' + ');
     out.push(
-      `E21. Estado de Resultados (${etiqueta}): "${rotulo}" aporta ${fmtCop(emittedA)} al resultado y las ` +
+      `E21. ${estado} (${etiqueta}): "${rotulo(i)}" aporta ${fmtCop(emittedA)} al resultado y las ` +
         `cuentas del balance de prueba de ese código aportan ${fmtCop(expected)} (brecha ` +
         `${fmtCop(emittedA - expected)}). Ingresos 41 − devoluciones 4175, costos 6/7 y gastos 51/52/53/54 ` +
         `salen de las hojas del balance: el analista no los redacta.`,
