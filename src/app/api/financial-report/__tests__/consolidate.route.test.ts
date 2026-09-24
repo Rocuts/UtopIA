@@ -140,6 +140,84 @@ describe('/api/financial-report/consolidate', () => {
     expect(r.validation.warnings.join(' ')).toMatch(/Total Activo.*esperado \$?1\.000\.000/);
   });
 
+  // e2e-niif-03: "### 4.2 Saldo Inicial Depurado (PUC 11)" (encabezado que el
+  // adaptador de la Parte II imprime siempre que AC ≥ PC) se leía como $4,20
+  // y "Caja inflada" tumbaba el informe honesto.
+  it('informe honesto con AC ≥ PC y el saldo inicial = PUC 11: validation.ok=true', async () => {
+    const { json } = await consolidate({
+      rawData: CSV,
+      company: COMPANY,
+      language: 'es',
+      niifContent: NIIF_OK,
+      strategyContent: [
+        STRATEGY_OK,
+        '## 4. PROYECCIONES',
+        '### 4.1 Gate de Liquidez',
+        'AC ≥ PC: proyección habilitada.',
+        '',
+        '### 4.2 Saldo Inicial Depurado (PUC 11)',
+        '- Saldo Inicial Caja: $400.000,00',
+        '- DSO usado: 30 días',
+      ].join('\n'),
+      governanceContent: GOVERNANCE_OK,
+    });
+    const r = json as unknown as Result;
+    expect(r.validation.errors).toEqual([]);
+    expect(r.validation.ok).toBe(true);
+  });
+
+  // e2e-niif-04: patrimonio negativo "($X)" con comparativo en la misma fila.
+  it('informe honesto con patrimonio negativo: validation.ok=true y avisos sin cifras falsas', async () => {
+    const csv = [
+      'codigo,nombre,nivel,transaccional,saldo 2024,saldo 2025',
+      '110505,Caja general,Auxiliar,1,30000000,5000000',
+      '130505,Clientes nacionales,Auxiliar,1,20000000,15000000',
+      '152405,Equipo de oficina,Auxiliar,1,50000000,50000000',
+      '159205,Depreciacion acumulada equipo,Auxiliar,1,-10000000,-20000000',
+      '210505,Bancos nacionales,Auxiliar,1,40000000,45000000',
+      '220505,Proveedores nacionales,Auxiliar,1,30000000,25000000',
+      '311505,Capital suscrito y pagado,Auxiliar,1,50000000,50000000',
+      '360505,Perdida del ejercicio,Auxiliar,1,-30000000,-40000000',
+      '370505,Perdidas acumuladas,Auxiliar,1,0,-30000000',
+      '410505,Ventas,Auxiliar,1,100000000,80000000',
+      '510506,Sueldos,Auxiliar,1,40000000,30000000',
+      '516015,Depreciacion equipo,Auxiliar,1,0,10000000',
+      '530505,Intereses bancarios,Auxiliar,1,10000000,10000000',
+      '613505,Costo de ventas,Auxiliar,1,80000000,70000000',
+    ].join('\n');
+    const niif = [
+      '## Estado de Situación Financiera',
+      '| Rubro | 2025 | 2024 |',
+      '| :--- | ---: | ---: |',
+      '| **TOTAL ACTIVOS** | **$50.000.000,00** | **$90.000.000,00** |',
+      '| **TOTAL PASIVOS** | **$70.000.000,00** | **$70.000.000,00** |',
+      '| **Total patrimonio** | **($20.000.000,00)** | **$20.000.000,00** |',
+      '| **✅ TOTAL PASIVO + PATRIMONIO** | **$50.000.000,00** | **$90.000.000,00** |',
+      '| **PÉRDIDA NETA DEL PERÍODO** | **($40.000.000,00)** | **($30.000.000,00)** |',
+    ].join('\n');
+    const strategy = [
+      STRATEGY_OK,
+      '| Total Activo | $50 M | $90 M | $-40 M | — | Cierre. |',
+      '| Utilidad Neta | $-40 M | $-30 M | $-10 M | — | Pérdida. |',
+      '| profitability | ROE | Utilidad neta / patrimonio promedio | ND | -150,0% | > 15% | — | x |',
+    ].join('\n');
+    const { status, json } = await consolidate({
+      rawData: csv,
+      company: COMPANY,
+      language: 'es',
+      niifContent: niif,
+      strategyContent: strategy,
+      governanceContent: GOVERNANCE_OK,
+    });
+    expect(status).toBe(200);
+    const r = json as unknown as Result;
+    expect(r.validation.errors).toEqual([]);
+    expect(r.validation.ok).toBe(true);
+    expect(
+      r.validation.warnings.filter((w) => /^(Total Activo|Total Pasivo|Total Patrimonio|Utilidad Neta)/.test(w)),
+    ).toEqual([]);
+  });
+
   it('sin balance preprocesado (texto no tabular): no emitible con motivo explícito', async () => {
     const { json } = await consolidate({
       rawData: 'Estado de situación financiera escaneado. Activo total 1.000.000.',

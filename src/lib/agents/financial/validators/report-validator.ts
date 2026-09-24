@@ -6,6 +6,7 @@
 // ---------------------------------------------------------------------------
 
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
+import { parseCOPStrict } from '@/lib/format/cop';
 import type { ReportValidationResult } from '../types';
 
 // Agente A3 ira extendiendo PreprocessedBalance con controlTotals/equityBreakdown.
@@ -98,21 +99,128 @@ export function parseCopAmount(input: string): number | null {
   return negative ? -n : n;
 }
 
-/**
- * Montos dentro de una línea del Markdown. La primera alternativa captura el
- * negativo NIIF que imprime el renderer, con el signo pesos DENTRO del
- * paréntesis ("($1.234.567,89)", `formatCopFromCents(cents, false)`): sin ella
- * el patrón empezaba en "$" y leía la cifra como positiva (reportes-export-01).
- * Las otras dos conservan el patrón histórico ("$1.234", "(1.234)", "-1.234").
- */
-const AMOUNT_SOURCE =
-  String.raw`\(\s*\$\s*-?\s*(?:\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*\)` +
-  String.raw`|\$?\s*\(?-?\s*\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?\)?` +
-  String.raw`|\$?\s*\(?-?\s*\d+(?:[.,]\d{1,2})?\)?`;
+// ---------------------------------------------------------------------------
+// Montos COP en texto (auditoría 2026-09, e2e-niif-03 / e2e-niif-04)
+// ---------------------------------------------------------------------------
+// El patrón histórico tomaba cualquier número de la línea: "4.2" del
+// encabezado "### 4.2 Saldo Inicial Depurado" como $4,20 (caja inflada en todo
+// informe con AC ≥ PC), "15" de la banda "> 15%" como $15,00, "$-40 M" del
+// dashboard como -$40,00 y la columna comparativa como cifra del periodo.
+// Este extractor sólo reconoce MONTOS: con signo pesos o con separadores de
+// miles es-CO, sin empezar a mitad de otro número, con el negativo contable
+// entre paréntesis (con el "$" dentro o fuera), y marca porcentajes y montos
+// abreviados ("$150 M", "$1,2 B") para que el llamador decida.
+// ---------------------------------------------------------------------------
 
-function amountRegex(): RegExp {
-  return new RegExp(AMOUNT_SOURCE, 'g');
+interface CopToken {
+  /** Valor en pesos (con signo). Para abreviados, ya multiplicado por la escala. */
+  value: number;
+  /** El token va seguido de '%': no es un monto. */
+  percent: boolean;
+  /** Abreviado ($X M / $X B): la precisión es la media unidad del último dígito. */
+  abbreviated: boolean;
+  /** Tolerancia de redondeo del abreviado, en pesos (0 si es cifra completa). */
+  roundingTolerance: number;
+  index: number;
 }
+
+const COP_TOKEN_SOURCE =
+  String.raw`(?<![\w.,$])` + // no empezar a mitad de un número ni de una palabra
+  String.raw`(\(\s*)?` + // 1: paréntesis contable que abre
+  String.raw`([-−]\s*)?` + // 2: signo antes del "$"
+  String.raw`(\$\s*)?` + // 3: signo pesos
+  String.raw`(\(\s*)?` + // 4: "$(1.234)"
+  String.raw`([-−]\s*)?` + // 5: "$-1.234"
+  String.raw`(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:,\d{1,2})?)` + // 6: número es-CO
+  String.raw`(?!\d|[.,]\d)` +
+  String.raw`(\s*\))?` + // 7: paréntesis que cierra
+  String.raw`(\s*%|\s*(?:MM|M|B|mil\s+millones|millones|billones|mil(?:es)?)(?![\p{L}\d]))?`; // 8: sufijo
+
+// "B" es la escala que imprime el dashboard de la Parte II (miles de
+// millones, `formatCopAsMillions`); "billones" es la escala colombiana (10^12).
+const ABBREVIATION_SCALE: Array<[RegExp, number]> = [
+  [/^mil\s+millones$/, 1e9],
+  [/^(?:MM|M|millones)$/, 1e6],
+  [/^B$/, 1e9],
+  [/^billones$/, 1e12],
+  [/^mil(?:es)?$/, 1e3],
+];
+
+/** Tokeniza los montos COP de un texto (ver el comentario del bloque). */
+export function extractCopTokens(text: string): CopToken[] {
+  const out: CopToken[] = [];
+  const re = new RegExp(COP_TOKEN_SOURCE, 'gu');
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const [, openParen, signBefore, dollar, openParenAfter, signAfter, digits, closeParen, suffixRaw] = m;
+    const grouped = /\./.test(digits);
+    // Un número pelado sin "$" ni miles ("11" de PUC 11, "2025") no es monto.
+    if (!dollar && !grouped) continue;
+    const parsed = parseCOPStrict(digits);
+    if (parsed === null) continue;
+    const magnitude = Number(parsed);
+    if (!Number.isFinite(magnitude)) continue;
+    const negative =
+      Boolean(signBefore) ||
+      Boolean(signAfter) ||
+      (Boolean(openParen || openParenAfter) && Boolean(closeParen));
+    const suffix = (suffixRaw ?? '').trim();
+    const percent = suffix === '%';
+    let scale = 1;
+    if (suffix && !percent) {
+      scale = ABBREVIATION_SCALE.find(([re]) => re.test(suffix))?.[1] ?? 1;
+    }
+    const decimals = /,(\d{1,2})$/.exec(digits)?.[1].length ?? 0;
+    const abbreviated = scale !== 1;
+    out.push({
+      value: (negative ? -magnitude : magnitude) * scale,
+      percent,
+      abbreviated,
+      roundingTolerance: abbreviated ? (scale / 10 ** decimals) / 2 : 0,
+      index: m.index,
+    });
+  }
+  return out;
+}
+
+/** Primer monto (no porcentaje) del texto; `allowAbbreviated` admite "$X M". */
+function firstCopAmount(text: string, allowAbbreviated: boolean): CopToken | null {
+  for (const t of extractCopTokens(text)) {
+    if (t.percent) continue;
+    if (t.abbreviated && !allowAbbreviated) continue;
+    return t;
+  }
+  return null;
+}
+
+/**
+ * Texto que sigue al rótulo en una línea de tabla o de prosa: en tablas, las
+ * celdas posteriores a la del rótulo (la primera es la columna del periodo
+ * actual); en prosa, el resto de la línea tras el rótulo.
+ */
+function textAfterLabel(line: string, pattern: RegExp): string | null {
+  const clean = line.replace(/\*+/g, '');
+  const m = pattern.exec(clean);
+  if (!m || m.index === undefined) return null;
+  if (clean.includes('|')) {
+    const cells = clean.split('|');
+    let offset = 0;
+    for (let i = 0; i < cells.length; i++) {
+      const end = offset + cells[i].length;
+      if (m.index >= offset && m.index < end) {
+        // Resto de la celda del rótulo (p. ej. "Total Activo: $X") + celdas siguientes.
+        const restOfCell = clean.slice(m.index + m[0].length, end);
+        return [restOfCell, ...cells.slice(i + 1)].join(' | ');
+      }
+      offset = end + 1;
+    }
+  }
+  return clean.slice(m.index + m[0].length);
+}
+
+/** Subtotales y rótulos compuestos que NO son el total buscado. */
+const NOT_THE_TOTAL_RE =
+  /^\s*[:|]?\s*(?:no\s+corriente|corriente|\+|y\s+(?:el\s+)?patrimonio|\/|sobre\b|promedio\b)/i;
 
 /**
  * Formatea un monto a COP legible (para mensajes de error/warning).
@@ -132,21 +240,28 @@ function extractTotalsMentions(
   markdown: string,
   label: RegExp,
   isLossLine?: (line: string) => boolean,
-): number[] {
-  const found: number[] = [];
+): Array<{ value: number; tolerance: number }> {
+  const found: Array<{ value: number; tolerance: number }> = [];
   const lines = markdown.split(/\r?\n/);
   for (const line of lines) {
+    // Encabezados ("### 4.2 …") no citan cifras (e2e-niif-03).
+    if (/^\s*#/.test(line)) continue;
     if (!label.test(line)) continue;
-    // Buscar montos: patron amplio que acepta $ opcional, parentheses y decimales
-    const numMatches = line.match(amountRegex());
-    if (!numMatches) continue;
+    // Sólo la PRIMERA cifra tras el rótulo: en una tabla es la columna del
+    // periodo actual; las siguientes son el comparativo y la variación
+    // (e2e-niif-04). "Total Activo Corriente", "Total Pasivo + Patrimonio" o
+    // "Utilidad neta / patrimonio" no son el total buscado.
+    const tail = textAfterLabel(line, label);
+    if (tail === null || NOT_THE_TOTAL_RE.test(tail)) continue;
+    const token = firstCopAmount(tail, true);
+    if (!token) continue;
     // "PÉRDIDA NETA" rotula un resultado negativo: su cifra puede venir en
     // magnitud ("$5.000") o firmada ("($5.000)"); ambas se leen negativas.
     const loss = isLossLine?.(line) === true;
-    for (const raw of numMatches) {
-      const n = parseCopAmount(raw);
-      if (n !== null) found.push(loss ? -Math.abs(n) : n);
-    }
+    found.push({
+      value: loss ? -Math.abs(token.value) : token.value,
+      tolerance: token.roundingTolerance,
+    });
   }
   return found;
 }
@@ -162,10 +277,12 @@ function extractHeadlineTotal(markdown: string, pattern: RegExp): number | null 
   // Auditoría 2026-09 (niif-contrato-16): antes se tomaba la ÚLTIMA cifra de
   // la fila, que en un estado comparativo es la columna del año anterior. La
   // cifra del periodo actual es la PRIMERA celda numérica después del rótulo.
-  const NUM_RE = amountRegex();
+  // e2e-niif-04: sólo montos COP (con "$" o miles es-CO; "($X)" negativo), sin
+  // abreviados del dashboard ("$50 M") ni porcentajes.
   const lines = markdown.split(/\r?\n/);
   for (const rawLine of lines) {
     const line = rawLine.replace(/\*+/g, '').trim();
+    if (line.startsWith('#')) continue;
     if (!pattern.test(line)) continue;
     let tail: string;
     if (line.includes('|')) {
@@ -176,12 +293,8 @@ function extractHeadlineTotal(markdown: string, pattern: RegExp): number | null 
       const m = line.match(pattern);
       tail = m && m.index !== undefined ? line.slice(m.index + m[0].length) : line;
     }
-    const nums = tail.match(NUM_RE);
-    if (!nums) continue;
-    for (const raw of nums) {
-      const n = parseCopAmount(raw);
-      if (n !== null && n !== 0) return n;
-    }
+    const token = firstCopAmount(tail, false);
+    if (token) return token.value;
   }
   return null;
 }
@@ -317,9 +430,11 @@ export function validateConsolidatedReport(
       const expected = check.expected;
       const absExpected = Math.abs(expected);
       let worst: { reported: number; diff: number } | null = null;
-      for (const reported of mentions) {
+      for (const { value: reported, tolerance } of mentions) {
         const diff = Math.abs(reported - expected);
         const pct = absExpected > 0 ? diff / absExpected : diff > 1 ? Infinity : 0;
+        // Un abreviado ("$150 M") cuadra si el ancla redondea a esa cifra.
+        if (diff <= tolerance) continue;
         if (pct > TOLERANCE && diff > 100) {
           if (!worst || diff > worst.diff) {
             worst = { reported, diff };
@@ -557,6 +672,10 @@ export function detectInflatedCash(
   let firstReported: number | null = null;
   for (const rawLine of lines) {
     const line = rawLine.replace(/\*+/g, '').trim();
+    // e2e-niif-03: el encabezado "### 4.2 Saldo Inicial Depurado (PUC 11)" no
+    // cita el saldo; su numeración de sección se leía como $4,20 y tumbaba
+    // todo informe con AC ≥ PC.
+    if (line.startsWith('#')) continue;
     if (!labelPattern.test(line)) continue;
     // Si la linea menciona PUC 13/14/12/Activo Corriente, NO es el saldo inicial
     // depurado — ignorar.
@@ -568,17 +687,10 @@ export function detectInflatedCash(
     ) {
       continue;
     }
-    const nums = line.match(
-      /\$?\s*\(?-?\s*\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?\)?|\$?\s*\(?-?\s*\d+(?:[.,]\d{1,2})?\)?/g,
-    );
-    if (!nums) continue;
-    for (const raw of nums) {
-      const n = parseCopAmount(raw);
-      if (n !== null && Math.abs(n) > 1) {
-        firstReported = n;
-        break;
-      }
-    }
+    // Sólo el primer MONTO tras el rótulo ("PUC 11" no es un monto).
+    const tail = textAfterLabel(line, labelPattern);
+    const token = tail === null ? null : firstCopAmount(tail, false);
+    if (token && Math.abs(token.value) > 1) firstReported = token.value;
     if (firstReported !== null) break;
   }
 
