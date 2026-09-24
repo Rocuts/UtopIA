@@ -29,13 +29,16 @@ import {
 import { useLanguage } from '@/context/LanguageContext';
 import { cn } from '@/lib/utils';
 import { formatPesos } from '@/lib/format/cop';
+import { displayEntryStatus, type EntryStatus } from './entry-status';
 
 interface RecentEntry {
   id: string;
   entryNumber: number;
   entryDate: string;
   description: string;
-  status: 'draft' | 'posted' | 'reversed' | 'voided';
+  status: EntryStatus;
+  /** Asiento de reverso que anula este original (contab-nomina-01). */
+  reversedByEntryId?: string | null;
   totalDebit: string;
   totalCredit: string;
   currency?: string;
@@ -49,7 +52,7 @@ interface ActivePeriod {
   label?: string;
 }
 
-const STATUS_BADGE: Record<RecentEntry['status'], string> = {
+const STATUS_BADGE: Record<EntryStatus, string> = {
   draft: 'bg-n-100 text-n-700 border-n-300',
   posted: 'bg-success/10 text-success border-success/30',
   reversed: 'bg-warning/10 text-warning border-warning/30',
@@ -266,10 +269,10 @@ export function ContabilidadLanding() {
                       className={cn(
                         'inline-block text-[10px] font-mono uppercase tracking-eyebrow',
                         'rounded border px-1.5 py-0.5 mt-1',
-                        STATUS_BADGE[e.status],
+                        STATUS_BADGE[displayEntryStatus(e)],
                       )}
                     >
-                      {ac.status[e.status]}
+                      {ac.status[displayEntryStatus(e)]}
                     </span>
                   </div>
                   <div className="text-right shrink-0">

@@ -180,7 +180,7 @@ function ivaCuatrimestral(digit: number, cuat: number, dueDate: string): Nationa
  * es decir en SEPTIEMBRE de 2026 y con la regla del 7º–16º día hábil. Las dos
  * cosas eran falsas: la exógena tiene tabla propia y los plazos terminan el
  * 12-jun-2026. Anunciar septiembre expone a la sanción del Art. 651 E.T.
- * (hasta 15.000 UVT) más el desconocimiento de costos y deducciones.
+ * (1 % / 0,7 % / 0,5 %, tope 7.500 UVT) más el desconocimiento de costos y deducciones.
  * El comentario "FIX: antes estaba en mayo; lo oficial es septiembre" revertía
  * un valor que estaba bien.
  *

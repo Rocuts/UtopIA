@@ -12,6 +12,13 @@
  * - Sección "Usted como dueño" (independiente, base 40%) cuando existe
  * - Alta de personas con formulario inline; retiro lógico (DELETE)
  *
+ * Art. 114-1 E.T. (auditoría 2026-09, contab-nomina-19): la exoneración de
+ * salud/SENA/ICBF depende de la condición del EMPLEADOR, que se declara aquí
+ * (GET/PUT /api/pyme/empleador). Sin declararla se liquida sin exoneración y
+ * se muestra el ahorro potencial; la etiqueta «exonerado 114-1» sólo aparece
+ * con estado 'aplicada'. El salario integral (≥ 13 SMMLV) se marca al crear o
+ * en el detalle de la persona.
+ *
  * Honestidad: los valores son ESTIMACIONES (sin auxilio de transporte,
  * horas extra ni retención) y la UI lo declara. Sin personas registradas
  * se muestra el estado vacío con el formulario, nunca gente inventada.
@@ -27,7 +34,15 @@ import {
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/context/LanguageContext';
 import { formatPesosInteger } from '@/lib/format/cop';
+import {
+  SALARIO_INTEGRAL_MIN_COP,
+  employerSelectValue,
+  estado114Text,
+  parseEmployerSelect,
+  salarioIntegralInvalido,
+} from '@/components/workspace/pyme/empleados-display';
 import { PymeSubpageShell } from '@/components/workspace/pyme/PymeSubpageShell';
 import { PymeGreenHero } from '@/components/workspace/pyme/PymeGreenHero';
 import type {
@@ -45,6 +60,7 @@ interface EmpleadoWire {
     cargo: string | null;
     tipoContrato: string | null;
     salarioCop: number;
+    salarioIntegral?: boolean | null;
     eps: string | null;
     afp: string | null;
     arl: string | null;
@@ -104,22 +120,72 @@ function Chip({ label, value, total }: { label: string; value: string; total?: b
   );
 }
 
-function EmpleadoDetail({ item }: { item: EmpleadoWire }) {
+function EmpleadoDetail({ item, onChanged }: { item: EmpleadoWire; onChanged: () => void }) {
+  const { t } = useLanguage();
+  const et = t.pyme.empleados;
   const e = item.empleado;
+  const [integralSaving, setIntegralSaving] = useState(false);
+  const [integralError, setIntegralError] = useState<string | null>(null);
+
   if (item.costo.kind === 'dueno') {
     const d = item.costo.data;
     return (
-      <div className="grid grid-cols-1 gap-2.5 min-[460px]:grid-cols-2">
-        <Chip label="Ingreso mensual estimado" value={cop(d.ingresoMensualCop)} />
-        <Chip label="Base de cotización (40%, piso 1 SMMLV)" value={cop(d.baseCotizacionCop)} />
-        <Chip label="Salud (12,5%)" value={cop(d.saludCop)} />
-        <Chip label="Pensión (16%)" value={cop(d.pensionCop)} />
-        <Chip label="Su aporte mensual total" value={cop(d.totalMensualCop)} total />
+      <div className="flex flex-col gap-2.5">
+        <div className="grid grid-cols-1 gap-2.5 min-[460px]:grid-cols-2">
+          <Chip label="Ingreso mensual estimado" value={cop(d.ingresoMensualCop)} />
+          <Chip label="Base de cotización (40%, piso 1 SMMLV)" value={cop(d.baseCotizacionCop)} />
+          <Chip label="Salud (12,5%)" value={cop(d.saludCop)} />
+          <Chip label="Pensión (16%)" value={cop(d.pensionCop)} />
+          <Chip
+            label={et.fspLabel}
+            value={d.fondoSolidaridadCop == null ? et.notAvailable : cop(d.fondoSolidaridadCop)}
+          />
+          <Chip label="Su aporte mensual total" value={cop(d.totalMensualCop)} total />
+        </div>
+        {d.totalIncompleto && (
+          <p className="text-xs font-semibold text-n-800">{et.totalIncompleto}</p>
+        )}
+        {d.notas.length > 0 && (
+          <div className="rounded-md border border-n-200 bg-n-50 px-3.5 py-2.5">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-n-600">
+              {et.notasTitle}
+            </div>
+            <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs text-n-700">
+              {d.notas.map((n) => (
+                <li key={n}>{n}</li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     );
   }
   const d = item.costo.data;
+
+  const toggleIntegral = async (checked: boolean) => {
+    if (salarioIntegralInvalido('empleado', e.salarioCop, checked)) {
+      setIntegralError(et.salarioIntegralMin.replace('{min}', cop(SALARIO_INTEGRAL_MIN_COP)));
+      return;
+    }
+    setIntegralSaving(true);
+    setIntegralError(null);
+    try {
+      const res = await fetch(`/api/pyme/empleados/${e.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ salarioIntegral: checked }),
+      });
+      if (!res.ok) throw new Error('patch_failed');
+      onChanged();
+    } catch {
+      setIntegralError(et.salarioIntegralSaveError);
+    } finally {
+      setIntegralSaving(false);
+    }
+  };
+
   return (
+    <div className="flex flex-col gap-2.5">
     <div className="grid grid-cols-1 gap-2.5 min-[460px]:grid-cols-2">
       <Chip label="Salario" value={cop(d.salarioCop)} />
       <Chip label="EPS" value={e.eps ?? '—'} />
@@ -131,10 +197,30 @@ function EmpleadoDetail({ item }: { item: EmpleadoWire }) {
       <Chip label="Aporte PILA mensual (SS + parafiscales)" value={cop(d.pensionCop + d.saludCop + d.arlCop + d.cajaCop + d.senaCop + d.icbfCop)} />
       <Chip label="Prestaciones provisionadas / mes" value={cop(d.primaCop + d.cesantiasCop + d.interesesCesantiasCop + d.vacacionesCop)} />
       <Chip
-        label={`Lo que le cuesta al mes (estimado${d.exoneracion114_1 ? ' · exonerado 114-1' : ''})`}
+        label={`Lo que le cuesta al mes (estimado${
+          d.exoneracion114_1Estado === 'aplicada' ? ` · ${et.exoneradoTag}` : ''
+        })`}
         value={cop(d.totalMensualCop)}
         total
       />
+    </div>
+      <p className="text-xs leading-snug text-n-700">
+        {estado114Text(d.exoneracion114_1Estado, d.ahorroPotencial114_1Cop, et, cop)}
+      </p>
+      <label className="flex items-start gap-2 text-xs text-n-800">
+        <input
+          type="checkbox"
+          checked={e.salarioIntegral === true}
+          disabled={integralSaving}
+          onChange={(ev) => void toggleIntegral(ev.target.checked)}
+          className="mt-0.5 h-4 w-4 accent-area-pyme"
+        />
+        <span>
+          <span className="font-semibold">{et.salarioIntegral}</span>
+          <span className="block text-n-600">{et.salarioIntegralHelp}</span>
+        </span>
+      </label>
+      {integralError && <p className="text-xs text-danger">{integralError}</p>}
     </div>
   );
 }
@@ -147,6 +233,7 @@ interface FormState {
   cargo: string;
   tipoContrato: 'fijo' | 'indefinido' | 'obra_labor';
   salarioCop: string;
+  salarioIntegral: boolean;
   eps: string;
   afp: string;
   arl: string;
@@ -159,6 +246,7 @@ const EMPTY_FORM: FormState = {
   cargo: '',
   tipoContrato: 'fijo',
   salarioCop: '',
+  salarioIntegral: false,
   eps: '',
   afp: '',
   arl: '',
@@ -177,6 +265,8 @@ function AddForm({
   onCreated: () => void;
   onCancel: () => void;
 }) {
+  const { t } = useLanguage();
+  const et = t.pyme.empleados;
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -191,6 +281,10 @@ function AddForm({
       setError('Escriba el salario o ingreso mensual en pesos.');
       return;
     }
+    if (salarioIntegralInvalido(form.tipo, salario, form.tipo === 'empleado' && form.salarioIntegral)) {
+      setError(et.salarioIntegralMin.replace('{min}', cop(SALARIO_INTEGRAL_MIN_COP)));
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -203,6 +297,7 @@ function AddForm({
           cargo: form.cargo.trim() || undefined,
           tipoContrato: form.tipo === 'empleado' ? form.tipoContrato : undefined,
           salarioCop: salario,
+          salarioIntegral: form.tipo === 'empleado' ? form.salarioIntegral : false,
           eps: form.eps.trim() || undefined,
           afp: form.afp.trim() || undefined,
           arl: form.tipo === 'empleado' ? form.arl.trim() || undefined : undefined,
@@ -324,6 +419,21 @@ function AddForm({
               <label className={LABEL_CLS} htmlFor="emp-afp">AFP (opcional)</label>
               <input id="emp-afp" value={form.afp} onChange={(e) => set('afp', e.target.value)} placeholder="Porvenir" className={INPUT_CLS} />
             </div>
+            <div className="min-[521px]:col-span-2">
+              <label className="flex items-start gap-2 text-sm text-n-800" htmlFor="emp-integral">
+                <input
+                  id="emp-integral"
+                  type="checkbox"
+                  checked={form.salarioIntegral}
+                  onChange={(e) => set('salarioIntegral', e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-area-pyme"
+                />
+                <span>
+                  <span className="font-semibold">{et.salarioIntegral}</span>
+                  <span className="block text-xs text-n-600">{et.salarioIntegralHelp}</span>
+                </span>
+              </label>
+            </div>
             <div>
               <label className={LABEL_CLS} htmlFor="emp-arl">ARL (opcional)</label>
               <input id="emp-arl" value={form.arl} onChange={(e) => set('arl', e.target.value)} placeholder="Positiva" className={INPUT_CLS} />
@@ -420,7 +530,7 @@ function PersonaCard({
       </div>
       {open && (
         <div className="animate-elite-fade mt-4 border-t border-n-100 pt-4">
-          <EmpleadoDetail item={item} />
+          <EmpleadoDetail item={item} onChanged={onRemoved} />
           <button
             type="button"
             onClick={remove}
@@ -439,21 +549,51 @@ function PersonaCard({
 // ─── View ────────────────────────────────────────────────────────────────────
 
 export function MisEmpleadosView() {
+  const { t } = useLanguage();
+  const et = t.pyme.empleados;
   const [items, setItems] = useState<EmpleadoWire[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [empleador114_1, setEmpleador114_1] = useState<boolean | null>(null);
+  const [empleadorSaving, setEmpleadorSaving] = useState(false);
+  const [empleadorError, setEmpleadorError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
       const res = await fetch('/api/pyme/empleados');
-      const json = (await res.json()) as { ok: boolean; empleados?: EmpleadoWire[] };
+      const json = (await res.json()) as {
+        ok: boolean;
+        empleados?: EmpleadoWire[];
+        empleador114_1?: boolean | null;
+      };
       setItems(json.ok && json.empleados ? json.empleados : []);
+      if (json.ok) setEmpleador114_1(json.empleador114_1 ?? null);
     } catch {
       setItems([]);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const saveEmpleador = async (value: boolean | null) => {
+    setEmpleadorSaving(true);
+    setEmpleadorError(null);
+    try {
+      const res = await fetch('/api/pyme/empleador', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ beneficiario114_1: value }),
+      });
+      const json = (await res.json()) as { ok: boolean; beneficiario114_1?: boolean | null };
+      if (!res.ok || !json.ok) throw new Error('empleador_failed');
+      setEmpleador114_1(json.beneficiario114_1 ?? null);
+      await load();
+    } catch {
+      setEmpleadorError(et.employerError);
+    } finally {
+      setEmpleadorSaving(false);
+    }
+  };
 
   useEffect(() => {
     void load();
@@ -524,6 +664,28 @@ export function MisEmpleadosView() {
           </div>
         </div>
       )}
+
+      {/* Condición del empleador — Art. 114-1 E.T. */}
+      <section className="mb-6 rounded-xl border border-n-200 bg-n-0 px-5 py-4">
+        <h2 className="text-[15px] font-bold text-n-1000">{et.employerTitle}</h2>
+        <p className="mt-1 text-sm leading-relaxed text-n-700">{et.employerHelp}</p>
+        <label className="mt-3 flex flex-col gap-1.5 text-xs font-semibold text-n-700" htmlFor="emp-114-1">
+          {et.employerLabel}
+          <select
+            id="emp-114-1"
+            value={employerSelectValue(empleador114_1)}
+            disabled={empleadorSaving || loading}
+            onChange={(e) => void saveEmpleador(parseEmployerSelect(e.target.value))}
+            className={INPUT_CLS}
+          >
+            <option value="unset">{et.employerUnset}</option>
+            <option value="yes">{et.employerYes}</option>
+            <option value="no">{et.employerNo}</option>
+          </select>
+        </label>
+        {empleadorSaving && <p className="mt-1.5 text-xs text-n-600">{et.employerSaving}</p>}
+        {empleadorError && <p className="mt-1.5 text-xs text-danger">{empleadorError}</p>}
+      </section>
 
       {/* Su equipo */}
       <div className="mb-3.5 flex items-center justify-between">

@@ -34,6 +34,7 @@ import { cn } from '@/lib/utils';
 import { OpenPeriodModal } from './OpenPeriodModal';
 import { ClosePeriodConfirmDialog } from './ClosePeriodConfirmDialog';
 import { QuickStartPeriodButton } from './QuickStartPeriodButton';
+import { isAnnualClosePeriod, periodMonthLabel } from './period-close';
 
 export interface AccountingPeriod {
   id: string;
@@ -47,20 +48,8 @@ export interface AccountingPeriod {
   lockedAt: string | null;
 }
 
-const MONTH_NAMES_ES = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-  'Cierre Anual', // 13
-];
-const MONTH_NAMES_EN = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-  'Year Close', // 13
-];
-
 function getMonthLabel(month: number, lang: 'es' | 'en'): string {
-  const idx = Math.max(1, Math.min(13, month)) - 1;
-  return (lang === 'es' ? MONTH_NAMES_ES : MONTH_NAMES_EN)[idx];
+  return periodMonthLabel(month, lang);
 }
 
 function statusBadgeStatus(s: AccountingPeriod['status']): 'success' | 'info' | 'warning' {
@@ -70,9 +59,10 @@ function statusBadgeStatus(s: AccountingPeriod['status']): 'success' | 'info' | 
 }
 
 export function PeriodsManagementView() {
-  const { language } = useLanguage();
+  const { t, language } = useLanguage();
   const { toast } = useToast();
   const isEs = language === 'es';
+  const pt = t.accounting.periods;
   const locale = isEs ? 'es-CO' : 'en-US';
   const now = useMemo(() => new Date(), []);
   const currentYear = now.getFullYear();
@@ -199,6 +189,7 @@ export function PeriodsManagementView() {
             ? 'Gestiona los ciclos contables de tu empresa: apertura, cierre durable con hash de integridad, y bloqueo terminal post-DIAN.'
             : 'Manage your accounting cycles: opening, durable close with integrity hash, and terminal lock post-DIAN.'}
         </p>
+        <p className="mt-2 text-sm text-n-700 max-w-2xl">{pt.annualCloseHint}</p>
       </header>
 
       {/* Toolbar */}
@@ -315,16 +306,24 @@ export function PeriodsManagementView() {
                                 disabled={inFlight}
                                 tone="warning"
                                 icon={XCircle}
-                                label={isEs ? 'Cerrar' : 'Close'}
+                                label={
+                                  isAnnualClosePeriod(p)
+                                    ? pt.annualCloseAction
+                                    : isEs ? 'Cerrar' : 'Close'
+                                }
                               />
-                              <ActionBtn
-                                onClick={() => performAction(p, 'lock')}
-                                disabled={inFlight}
-                                tone="danger"
-                                icon={Lock}
-                                label={isEs ? 'Bloquear' : 'Lock'}
-                                title={isEs ? 'Requiere cierre previo' : 'Must close first'}
-                              />
+                              {/* El período 13 lo bloquea el workflow tras el asiento
+                                  de cierre; bloquearlo antes impediría contabilizarlo. */}
+                              {!isAnnualClosePeriod(p) && (
+                                <ActionBtn
+                                  onClick={() => performAction(p, 'lock')}
+                                  disabled={inFlight}
+                                  tone="danger"
+                                  icon={Lock}
+                                  label={isEs ? 'Bloquear' : 'Lock'}
+                                  title={isEs ? 'Requiere cierre previo' : 'Must close first'}
+                                />
+                              )}
                             </>
                           )}
                           {p.status === 'closed' && (

@@ -431,6 +431,11 @@ export interface FiscalAgentOrchestratorInput {
   instructions?: string;
   dianRequirementText?: string;
   dianRequirementKind?: DianRequirementKind;
+  /**
+   * Saldo a favor liquidado en el Formulario 110 (MoneyCop). Se reenvía a
+   * `FiscalAgentInput` para el módulo de devoluciones (tributario-modulos-02).
+   */
+  saldoAFavorDeclaradoCents?: string | null;
 }
 
 export interface FiscalAgentOrchestratorCallbacks {

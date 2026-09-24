@@ -32,6 +32,10 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 import { cn } from '@/lib/utils';
+import {
+  normalizeOpeningBalanceResponse,
+  type OpeningBalanceUiResult,
+} from './opening-balance-response';
 
 interface PeriodOption {
   id: string;
@@ -41,12 +45,7 @@ interface PeriodOption {
   label?: string;
 }
 
-interface ImportResult {
-  ok: boolean;
-  inserted?: number;
-  warnings?: string[];
-  error?: string;
-}
+type ImportResult = OpeningBalanceUiResult;
 
 const ACCEPT =
   '.csv,.txt,.xlsx,.xls,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv';
@@ -167,8 +166,8 @@ export function OpeningBalanceUploader() {
         method: 'POST',
         body: fd,
       });
-      const json = (await res.json()) as ImportResult;
-      if (!res.ok || json.ok === false) {
+      const json = normalizeOpeningBalanceResponse(res.ok, await res.json().catch(() => null));
+      if (!json.ok) {
         setError(json.error ?? ac.errorGeneric);
       } else {
         setResult(json);
@@ -382,9 +381,13 @@ export function OpeningBalanceUploader() {
             )}
             <p className="text-sm font-semibold text-n-1000">
               {result.ok
-                ? language === 'es'
-                  ? `Importadas ${result.inserted ?? 0} líneas`
-                  : `Imported ${result.inserted ?? 0} lines`
+                ? result.inserted === null
+                  ? language === 'es'
+                    ? 'Saldos iniciales importados'
+                    : 'Opening balances imported'
+                  : language === 'es'
+                    ? `Importadas ${result.inserted} líneas`
+                    : `Imported ${result.inserted} lines`
                 : language === 'es'
                   ? 'La importación falló'
                   : 'Import failed'}
