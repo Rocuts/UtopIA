@@ -192,14 +192,21 @@ export function informeHonesto(pp: PreprocessedBalance): NiifReportJson {
         section: sec.section,
         lines: sec.rows.map((r) => linea(null, r.label, r.cents.toString(), null)),
         netFlow: sec.netFlowCents.toString(),
+        netFlowComparative: null,
       })),
       netChange: efe.netChangeCents.toString(),
       cashOpening: efe.cashOpeningCents.toString(),
       cashClosing: efe.cashClosingCents.toString(),
       methodNote: 'indirect',
       degeneracyFlag: null,
+      netChangeComparative: null,
+      cashOpeningComparative: null,
+      cashClosingComparative: null,
+      comparativeNote: null,
     },
     equityChanges: {
+      comparativeRows: null,
+      comparativeNote: null,
       rows: [
         filaEcp('opening_balance', 'Saldo al 1 de enero de 2025', open),
         filaEcp('prior_period_result_cancellation', 'Traslado del resultado 2024 a resultados acumulados', {

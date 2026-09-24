@@ -40,10 +40,14 @@ import {
 } from './validators/niif-json-validator';
 import { moneyCopEquals, parseMoneyCop, formatCopFromCents } from './contracts/money';
 import {
+  buildComparativeStatementsBasis,
   buildDeterministicCashFlow,
   buildLedgerLeaves,
   checkCashFlowInvariants,
+  deterministicCuratorFlags,
   formatCashFlowViolations,
+  type ComparativeStatementsBasis,
+  type ComparativeStatementsSource,
 } from './contracts/deterministic-breakdown';
 import {
   normalizeNiifStatementLabels,
@@ -442,6 +446,15 @@ export function buildNiifValidatorOptions(preprocessed: unknown): NiifJsonValida
       primarySnap && comparativeSnap
         ? buildDeterministicCashFlow(primarySnap, comparativeSnap)
         : null,
+    // Comparativos del EFE y del ECP (auditoría 2026-09-24, pendiente #3):
+    // la columna comparativa del EFE y las filas del ECP del periodo
+    // comparativo se cruzan contra el cálculo desde el corte anterior al
+    // comparativo; sin ese corte, presentarlas es error (NIIF PYMES 3.14/10.21).
+    comparativeStatements: primarySnap
+      ? buildComparativeStatementsBasis(preprocessed as ComparativeStatementsSource)
+      : undefined,
+    // E26 (niif-contrato-23): curatorFlags son hechos del Curator.
+    curatorFlags: primarySnap ? deterministicCuratorFlags(primarySnap) : undefined,
   };
 }
 
@@ -1450,6 +1463,52 @@ function renderDeterministicCashFlowLines(
 }
 
 /**
+ * Sección "EFE Y ECP DEL PERIODO COMPARATIVO" del bloque vinculante
+ * (auditoría 2026-09-24, pendiente #3 — NIIF para las PYMES 3.14). Estrategia
+ * y Gobierno citan tendencias de flujo de efectivo o de patrimonio sólo desde
+ * aquí: cifras calculadas desde el corte anterior al comparativo, o la nota
+ * de impracticabilidad cuando el balance no lo trae.
+ */
+function renderComparativeStatementsLines(basis: ComparativeStatementsBasis | null): string[] {
+  if (!basis) return [];
+  const lines: string[] = [''];
+  const money = (cents: bigint) => `${formatCopFromCents(cents)} COP ${moneyCopToken(cents)}`;
+  lines.push(`## EFE Y ECP DEL PERIODO COMPARATIVO ${basis.comparativePeriod} (deterministas)`);
+  const efe = basis.cashFlow;
+  if (efe) {
+    const sectionLabel: Record<string, string> = {
+      operating: 'Actividades de Operación',
+      investing: 'Actividades de Inversión',
+      financing: 'Actividades de Financiación',
+    };
+    lines.push(
+      `- EFE ${efe.comparativePeriod} → ${efe.primaryPeriod}, calculado desde el corte ${basis.openingPeriod}:`,
+    );
+    for (const section of efe.sections) {
+      lines.push(`  - Flujo neto ${sectionLabel[section.section]}: ${money(section.netFlowCents)}`);
+    }
+    lines.push(`  - Variación neta de efectivo: ${money(efe.netChangeCents)}`);
+    lines.push(`  - Efectivo al inicio: ${money(efe.cashOpeningCents)}; al final: ${money(efe.cashClosingCents)}`);
+  } else {
+    lines.push(`- EFE: ${basis.cashFlowNote}`);
+  }
+  const rows = basis.equityRows;
+  if (rows && rows.length > 0) {
+    const opening = rows[0];
+    const closing = rows[rows.length - 1];
+    lines.push(
+      `- ECP: patrimonio al inicio ${money(BigInt(opening.total))}; al cierre ${money(BigInt(closing.total))}.`,
+    );
+  } else {
+    lines.push(`- ECP: ${basis.equityNote}`);
+  }
+  lines.push(
+    '- Sin estas cifras no hay tendencia del flujo de efectivo ni del patrimonio entre periodos que citar.',
+  );
+  return lines;
+}
+
+/**
  * Construye el bloque Markdown "TOTALES VINCULANTES" que se inyecta a los 3
  * agentes. Este bloque es la fuente de verdad: los agentes deben citar estas
  * cifras textualmente y no re-calcularlas.
@@ -1548,6 +1607,11 @@ function buildBindingTotalsBlock(preprocessed: unknown): string {
   }
 
   lines.push(...renderDeterministicCashFlowLines(primary, comparative));
+  lines.push(
+    ...renderComparativeStatementsLines(
+      buildComparativeStatementsBasis(preprocessed as ComparativeStatementsSource),
+    ),
+  );
 
   lines.push('');
   lines.push(

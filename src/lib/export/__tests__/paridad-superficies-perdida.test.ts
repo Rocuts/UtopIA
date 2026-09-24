@@ -110,15 +110,18 @@ function lossNegativeEquityScenario(): NiifReportJson {
             L(null, 'Variación de proveedores', '290000', null, { isAbsolute: false }),
           ],
           netFlow: '140000',
+          netFlowComparative: null,
         },
-        { section: 'investing', lines: [L(null, 'Compra de equipo', '-40000', null, { isAbsolute: false })], netFlow: '-40000' },
-        { section: 'financing', lines: [L(null, 'Pago de obligaciones', '-30000', null, { isAbsolute: false })], netFlow: '-30000' },
+        { section: 'investing', lines: [L(null, 'Compra de equipo', '-40000', null, { isAbsolute: false })], netFlow: '-40000', netFlowComparative: null },
+        { section: 'financing', lines: [L(null, 'Pago de obligaciones', '-30000', null, { isAbsolute: false })], netFlow: '-30000', netFlowComparative: null },
       ],
       netChange: '70000',
       cashOpening: '80000',
       cashClosing: '150000',
     },
     equityChanges: {
+      comparativeRows: null,
+      comparativeNote: null,
       rows: [
         { kind: 'opening_balance', label: 'Saldo al 1 ene 2025', capitalSocial: '300000', primaColocacion: '0', reservaLegal: '0', otrasReservas: '0', resultadosAcumulados: '-300000', resultadoEjercicio: '70000', ori: '0', total: '70000' },
         { kind: 'prior_period_result_cancellation', label: 'Traslado del resultado 2024', capitalSocial: '0', primaColocacion: '0', reservaLegal: '0', otrasReservas: '0', resultadosAcumulados: '70000', resultadoEjercicio: '-70000', ori: '0', total: '0' },
@@ -172,7 +175,10 @@ async function excelSheets(report: FinancialReport) {
   return wb;
 }
 
-/** Hojas de estados (con comparativo): col1 código, col2 rótulo, col3 comparativo, col4 actual. */
+/**
+ * Hojas de estados (con comparativo): col1 código, col2 rótulo, col3 actual,
+ * col4 comparativo — el orden del PDF (reportes-export-20).
+ */
 function excelStatementRows(ws: ExcelJS.Worksheet): Row[] {
   const out: Row[] = [];
   ws.eachRow((row) => {
@@ -181,7 +187,7 @@ function excelStatementRows(ws: ExcelJS.Worksheet): Row[] {
     const account = row.getCell(1).value;
     if (account === 'Codigo') return; // fila de encabezados de columna
     const full = typeof account === 'string' && account.trim() ? `${account} — ${label}` : label;
-    out.push([full.trim(), excelCell(row.getCell(4).value), excelCell(row.getCell(3).value)]);
+    out.push([full.trim(), excelCell(row.getCell(3).value), excelCell(row.getCell(4).value)]);
   });
   return out;
 }

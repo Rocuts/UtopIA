@@ -42,8 +42,11 @@ import {
 } from './reconcile-anchors';
 import { buildReportAnchors } from '../contracts/anchors';
 import {
+  attachComparativeStatements,
+  buildComparativeStatementsBasis,
   buildDeterministicCashFlow,
   crossCheckCashFlowAgainstDeterministic,
+  deterministicCuratorFlags,
   formatCashFlowCrossCheckViolations,
 } from '../contracts/deterministic-breakdown';
 import {
@@ -351,6 +354,12 @@ export async function runNiifAnalyst(
   }
 
   pass1 = reconciled.json;
+  // curatorFlags son hechos del Curator, no juicio del modelo (auditoría
+  // 2026-09, niif-contrato-23): se fijan desde el snapshot ANTES de que
+  // Pass-2/3 los reciban como ancla.
+  if (preprocessed?.primary) {
+    pass1 = { ...pass1, curatorFlags: deterministicCuratorFlags(preprocessed.primary) };
+  }
   const pass1Anchors = extractPass1Anchors(pass1);
 
   // -- Pass 2: Derivados (EFE + ECP) --------------------------------------
@@ -430,17 +439,28 @@ export async function runNiifAnalyst(
     );
   }
 
+  const deterministicCashFlow = preprocessed?.primary && preprocessed.comparative
+    ? buildDeterministicCashFlow(preprocessed.primary, preprocessed.comparative)
+    : null;
+
+  // Comparativos del EFE y del ECP (auditoría integral 2026-09-24, pendiente
+  // #3; NIIF para las PYMES 3.14). No los redacta el modelo: se calculan desde
+  // el corte anterior al comparativo (tres cortes) o se declaran impracticables
+  // con una nota determinista (NIIF para las PYMES 10.21).
+  const withComparatives = attachComparativeStatements(
+    parsed.data,
+    buildComparativeStatementsBasis(preprocessed),
+    deterministicCashFlow,
+  );
+
   // Segunda pasada del reconciliador, ahora sobre el reporte completo: Pass-2
   // aporta `cashFlow.cashClosing`, que no existía cuando corrió la primera.
-  const finalReconciled = reconcileAnchors(parsed.data, anchors);
+  const finalReconciled = reconcileAnchors(withComparatives, anchors);
 
   // EFE emitido contra el EFE determinista (auditoría niif-contrato-02). El
   // determinista se inyectaba sólo como texto del prompt; nada comprobaba que
   // el modelo lo copiara. Cualquier diferencia por actividad o en los totales
   // de caja es una salvedad que sella el informe y bloquea la descarga.
-  const deterministicCashFlow = preprocessed?.primary && preprocessed.comparative
-    ? buildDeterministicCashFlow(preprocessed.primary, preprocessed.comparative)
-    : null;
   const cashFlowDiscrepancies = deterministicCashFlow
     ? formatCashFlowCrossCheckViolations(
         crossCheckCashFlowAgainstDeterministic(parsed.data.cashFlow, deterministicCashFlow),

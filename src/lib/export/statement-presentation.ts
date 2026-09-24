@@ -536,6 +536,86 @@ export function normalizeNiifStatementLabels<T extends LabelledNiifJson>(
   };
 }
 
+/** Nota estructurada mínima (ref libre + cuerpo). */
+interface NumberableNote {
+  ref: string | null;
+  body: string;
+}
+interface NotedNiifJson {
+  balanceSheet: { notes: NumberableNote[] };
+  incomeStatement: { notes: NumberableNote[] };
+  equityChanges: { notes: NumberableNote[] };
+  technicalNotes: NumberableNote[];
+}
+
+/** "Nota 3" o "Nota 3 — Inventarios": número y, si lo hay, el título. */
+const NUMBERED_REF = /^\s*nota\s*(\d+)\b\s*(.*)$/i;
+
+/**
+ * Numeración determinista de las notas del informe NIIF (spec v2.1
+ * Corrección 6; auditoría 2026-09, niif-contrato-19). `ref` es texto libre del
+ * modelo y ninguna regla controlaba saltos ni duplicados; el respaldo del
+ * renderer reiniciaba "Nota 1" en cada estado. Aquí las notas numerables (ref
+ * nulo, "Nota N" o "Nota N — título") reciben un número global secuencial 1..N en el orden
+ * ESF → ERI → ECP → notas técnicas; las marcas no numéricas ("*") se
+ * conservan. Las referencias "Nota X" en los cuerpos se actualizan sólo cuando
+ * el número anterior era único (sin ambigüedad). Pura e idempotente.
+ */
+export function numberStatementNotes<T extends NotedNiifJson>(json: T): { json: T; changed: number } {
+  const lists: NumberableNote[][] = [
+    json.balanceSheet.notes,
+    json.incomeStatement.notes,
+    json.equityChanges.notes,
+    json.technicalNotes,
+  ];
+  const oldNumbers = new Map<string, number>();
+  for (const list of lists) {
+    for (const n of list) {
+      const m = NUMBERED_REF.exec(n.ref ?? '');
+      if (m) oldNumbers.set(m[1], (oldNumbers.get(m[1]) ?? 0) + 1);
+    }
+  }
+  const remap = new Map<string, number>();
+  let next = 0;
+  const numbered = lists.map((list) =>
+    list.map((n) => {
+      const ref = n.ref?.trim() ?? '';
+      const m = NUMBERED_REF.exec(ref);
+      if (ref !== '' && !m) return { note: n, ref: n.ref };
+      next++;
+      if (m && oldNumbers.get(m[1]) === 1) remap.set(String(Number(m[1])), next);
+      const title = m?.[2]?.trim() ?? '';
+      const sep = /^[:.,;)]/.test(title) ? '' : ' ';
+      return { note: n, ref: title ? `Nota ${next}${sep}${title}` : `Nota ${next}` };
+    }),
+  );
+  let changed = 0;
+  const rewrite = (body: string) =>
+    body.replace(/\b(Nota)\s+(\d+)\b/g, (whole, word: string, num: string) => {
+      const target = remap.get(String(Number(num)));
+      return target === undefined ? whole : `${word} ${target}`;
+    });
+  const out = numbered.map((list) =>
+    list.map(({ note, ref }) => {
+      const body = rewrite(note.body);
+      if (ref === note.ref && body === note.body) return note;
+      changed++;
+      return { ...note, ref, body };
+    }),
+  );
+  if (changed === 0) return { json, changed: 0 };
+  return {
+    json: {
+      ...json,
+      balanceSheet: { ...json.balanceSheet, notes: out[0] },
+      incomeStatement: { ...json.incomeStatement, notes: out[1] },
+      equityChanges: { ...json.equityChanges, notes: out[2] },
+      technicalNotes: out[3],
+    },
+    changed,
+  };
+}
+
 export type PeriodoTipo = 'cerrado' | 'parcial' | 'indeterminado';
 
 export interface StatementDateContext {
@@ -620,9 +700,11 @@ export function statementDateLabel(kind: 'position' | 'period', ctx: StatementDa
 
 /**
  * Leyenda cuando el informe declara comparativo pero el estado sólo trae el
- * periodo actual (el contrato NIIF no tiene columnas comparativas para EFE ni
- * filas del ECP del año anterior). NIIF para las PYMES 3.14 exige comparativos
- * para todos los importes; no se presenta en silencio (reportes-export-13).
+ * periodo actual. NIIF para las PYMES 3.14 exige comparativos para todos los
+ * importes; no se presenta en silencio (reportes-export-13). Desde el
+ * contrato con comparativos del EFE y del ECP (auditoría 2026-09-24,
+ * pendiente #3) el motivo lo redacta el código (`comparativeNote`); esta
+ * leyenda genérica queda para los informes serializados antes de él.
  */
 export function comparativeNotPresentedLegend(comparativePeriod: string | null): string | null {
   if (!comparativePeriod) return null;
@@ -631,6 +713,76 @@ export function comparativeNotPresentedLegend(comparativePeriod: string | null):
     `no contiene las cifras del periodo anterior para este estado (NIIF para las PYMES 3.14). ` +
     `No debe leerse como un conjunto comparativo completo.`
   );
+}
+
+/** Forma mínima del EFE con su columna comparativa. */
+interface CashFlowComparativeLike {
+  sections: ReadonlyArray<{ netFlowComparative?: string | null }>;
+  netChangeComparative?: string | null;
+  cashOpeningComparative?: string | null;
+  cashClosingComparative?: string | null;
+  comparativeNote?: string | null;
+}
+
+/**
+ * El EFE trae su columna comparativa completa (subtotales, variación y
+ * efectivo al inicio y al final): sólo entonces se imprime la segunda columna.
+ */
+export function cashFlowHasComparativeColumn(cf: CashFlowComparativeLike): boolean {
+  const cells = [
+    cf.netChangeComparative,
+    cf.cashOpeningComparative,
+    cf.cashClosingComparative,
+    ...cf.sections.map((s) => s.netFlowComparative),
+  ];
+  return cells.every((v) => v !== null && v !== undefined);
+}
+
+/**
+ * Leyenda del EFE o del ECP cuando el informe declara comparativo y ese estado
+ * no lo presenta: la nota determinista del informe (impracticabilidad, NIIF
+ * para las PYMES 3.14 / 10.21) o, en informes anteriores a ella, la genérica.
+ * `null` cuando no hay comparativo o el estado sí lo presenta.
+ */
+export function comparativeStatementLegend(
+  statement: 'cashFlow' | 'equity',
+  json: {
+    company: { comparativePeriod: string | null };
+    cashFlow: CashFlowComparativeLike;
+    equityChanges: { comparativeRows?: readonly unknown[] | null; comparativeNote?: string | null };
+  },
+): string | null {
+  const cp = json.company.comparativePeriod;
+  if (!cp) return null;
+  if (statement === 'cashFlow') {
+    if (cashFlowHasComparativeColumn(json.cashFlow)) return null;
+    return json.cashFlow.comparativeNote?.trim() || comparativeNotPresentedLegend(cp);
+  }
+  const rows = json.equityChanges.comparativeRows;
+  if (rows && rows.length > 0) return null;
+  return json.equityChanges.comparativeNote?.trim() || comparativeNotPresentedLegend(cp);
+}
+
+/**
+ * Rótulo legible del método del EFE (reportes-export-21): el contrato guarda el
+ * literal `'indirect'` y el Excel lo imprimía crudo al pie de la hoja. Con el
+ * método indirecto degenerado (spec v8.1 §5 Slide 08) se añade la limitación.
+ */
+export function cashFlowMethodLabel(
+  methodNote: string,
+  degeneracyFlag: string | null | undefined,
+  language: 'es' | 'en' = 'es',
+): string {
+  const base =
+    methodNote === 'indirect'
+      ? language === 'en'
+        ? 'Indirect method (IAS 7 ¶18(b) / IFRS for SMEs Section 7)'
+        : 'Método indirecto (NIC 7 ¶18(b) / NIIF para las PYMES Secc. 7)'
+      : methodNote;
+  if (degeneracyFlag !== 'indirect_method_unreliable') return base;
+  return language === 'en'
+    ? `${base} — limited informative value: most working-capital lines are zero (no auxiliary detail).`
+    : `${base} — valor informativo limitado: la mayoría de los renglones de capital de trabajo están en cero (sin auxiliares).`;
 }
 
 export type StatementKind = 'balance' | 'income' | 'cashFlow' | 'equity';

@@ -50,10 +50,14 @@ export function makeCoherentNiifReport(overrides: Partial<NiifReportJson> = {}):
       modeBanner: null,
     },
     cashFlow: {
+      netChangeComparative: null,
+      cashOpeningComparative: null,
+      cashClosingComparative: null,
+      comparativeNote: null,
       sections: [
-        { section: 'operating', lines: [line(null, '200000'), line(null, '-50000')], netFlow: '150000' },
-        { section: 'investing', lines: [line(null, '-50000')], netFlow: '-50000' },
-        { section: 'financing', lines: [line(null, '-30000')], netFlow: '-30000' },
+        { section: 'operating', lines: [line(null, '200000'), line(null, '-50000')], netFlow: '150000', netFlowComparative: null },
+        { section: 'investing', lines: [line(null, '-50000')], netFlow: '-50000', netFlowComparative: null },
+        { section: 'financing', lines: [line(null, '-30000')], netFlow: '-30000', netFlowComparative: null },
       ],
       netChange: '70000',
       cashOpening: '100000',
@@ -62,6 +66,8 @@ export function makeCoherentNiifReport(overrides: Partial<NiifReportJson> = {}):
       degeneracyFlag: null,
     },
     equityChanges: {
+      comparativeRows: null,
+      comparativeNote: null,
       rows: [
         {
           kind: 'opening_balance',

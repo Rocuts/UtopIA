@@ -10,7 +10,10 @@
 // fueron eliminadas; todo vive ahora en cada PeriodSnapshot.
 //
 // Layout multiperiodo (cuando preprocessed.periods.length >= 2):
-//   Balance / P&L: Cuenta | Saldo {comparative} | Saldo {primary} | Variacion $ | Variacion %
+//   Balance / P&L: Cuenta | Saldo {primary} | Saldo {comparative} | Variacion $ | Variacion %
+//   (periodo actual primero, el mismo orden del PDF y del Markdown —
+//   reportes-export-20; la variación va en color neutro: su signo no dice si
+//   es buena o mala sin la naturaleza de la cuenta).
 //   KPIs: bloque por periodo con columnas paralelas
 //   Validacion: una seccion por periodo
 //   Resumen: bloque comparativo si aplica
@@ -27,7 +30,9 @@ import type { StatementLineJson, StatementNoteJson } from '@/lib/agents/financia
 import {
   CURRENCY_NOTE,
   NARRATIVE_DISCLAIMER,
-  comparativeNotPresentedLegend,
+  cashFlowHasComparativeColumn,
+  cashFlowMethodLabel,
+  comparativeStatementLegend,
   narrativeDisclaimer,
   incomeStatementPresentationRows,
   normalizeNiifStatementLabels,
@@ -117,7 +122,12 @@ function centsToPesos(value: string): number {
  */
 function fmtCopPesos(pesos: number): string {
   if (!Number.isFinite(pesos)) return 'N/D';
-  return formatCopFromCents(Math.round(pesos * 100), false);
+  // Pesos → centavos exactos por el texto decimal (redondeo simétrico al
+  // centavo y sin pasar por un `number` de centavos, que deja de ser exacto
+  // por encima de 2^53 — niif-contrato-22).
+  const fixed = pesos.toFixed(2);
+  if (!/^-?\d+\.\d{2}$/.test(fixed)) return 'N/D';
+  return formatCopFromCents(BigInt(fixed.replace('.', '')), false);
 }
 
 // ---------------------------------------------------------------------------
@@ -378,48 +388,79 @@ function addCashFlowAndEquitySheets(
   language: 'es' | 'en' = 'es',
 ): void {
   const json = presentableJson(report, layout)!;
-  const periodLine = `${statementDate('period', report, layout)} · ${CURRENCY_NOTE}`;
-  // El contrato no trae el comparativo del EFE ni filas del ECP del año
-  // anterior: se declara en el propio estado (reportes-export-13).
-  const legend = comparativeNotPresentedLegend(json.company.comparativePeriod);
+  const fp = json.company.fiscalPeriod;
+  const cp = json.company.comparativePeriod;
+  // Columna comparativa del EFE y ECP del periodo comparativo (auditoría
+  // 2026-09-24, pendiente #3): los calcula el código desde el corte anterior
+  // al comparativo. Sin ellos, la nota determinista de impracticabilidad
+  // (NIIF para las PYMES 3.14 / 10.21) se declara en el propio estado
+  // (reportes-export-13). Orden de columnas: periodo actual | comparativo,
+  // igual que el PDF.
+  const cf = json.cashFlow;
+  const cfComparative = cp !== null && cashFlowHasComparativeColumn(cf);
+  const comparativeRows = cp !== null ? (json.equityChanges.comparativeRows ?? []) : [];
+  const ecComparative = comparativeRows.length > 0;
+  const periodLine = (shown: boolean) =>
+    `${statementDate('period', report, layout, shown)} · ${CURRENCY_NOTE}`;
+  const legendFont = { name: FONT_MAIN, size: 9, italic: true, color: { argb: COLORS.orange } };
+
   const cash = wb.addWorksheet('Flujos de Efectivo');
-  cash.columns = [{ width: 58 }, { width: 24 }];
-  cash.addRow(['ESTADO DE FLUJOS DE EFECTIVO', json.company.fiscalPeriod]);
-  cash.addRow([json.company.name, 'COP']);
-  cash.addRow([periodLine]).font = { name: FONT_MAIN, size: 9, italic: true };
-  if (legend) cash.addRow([legend]).font = { name: FONT_MAIN, size: 9, italic: true, color: { argb: COLORS.orange } };
-  const addCash = (label: string, cents: string, bold = false) => {
-    const row = cash.addRow([label, centsToPesos(cents)]);
+  cash.columns = [{ width: 58 }, { width: 24 }, ...(cfComparative ? [{ width: 24 }] : [])];
+  cash.addRow(['ESTADO DE FLUJOS DE EFECTIVO', fp, ...(cfComparative ? [cp] : [])]);
+  cash.addRow([json.company.name, 'COP', ...(cfComparative ? ['COP'] : [])]);
+  cash.addRow([periodLine(cfComparative)]).font = { name: FONT_MAIN, size: 9, italic: true };
+  const cashLegend = comparativeStatementLegend('cashFlow', json);
+  if (cashLegend) cash.addRow([cashLegend]).font = legendFont;
+  const lastCashCol = cfComparative ? 3 : 2;
+  const addCash = (label: string, cents: string, comparative: string | null | undefined, bold = false) => {
+    const values: Array<string | number> = [label, centsToPesos(cents)];
+    if (cfComparative) values.push(comparative !== null && comparative !== undefined ? centsToPesos(comparative) : 'n/c');
+    const row = cash.addRow(values);
     row.font = { name: FONT_MAIN, bold };
-    row.getCell(2).numFmt = NUM_FMT_COP;
+    for (let col = 2; col <= lastCashCol; col++) {
+      if (typeof row.getCell(col).value === 'number') row.getCell(col).numFmt = NUM_FMT_COP;
+    }
   };
-  addCash('Efectivo al inicio', json.cashFlow.cashOpening, true);
+  addCash('Efectivo al inicio', cf.cashOpening, cf.cashOpeningComparative, true);
   const sectionNames = { operating: 'Operación', investing: 'Inversión', financing: 'Financiación' };
-  for (const section of json.cashFlow.sections) {
+  for (const section of cf.sections) {
     cash.addRow([sectionNames[section.section]]).font = { name: FONT_MAIN, bold: true };
-    for (const line of section.lines) addCash(line.label, line.amountPrimary);
-    addCash(`Flujo neto de ${sectionNames[section.section]}`, section.netFlow, true);
+    for (const line of section.lines) addCash(line.label, line.amountPrimary, line.amountComparative);
+    addCash(`Flujo neto de ${sectionNames[section.section]}`, section.netFlow, section.netFlowComparative, true);
   }
-  addCash('Variación neta del efectivo', json.cashFlow.netChange, true);
-  addCash('Efectivo al cierre', json.cashFlow.cashClosing, true);
-  cash.addRow([json.cashFlow.methodNote]);
+  addCash('Variación neta del efectivo', cf.netChange, cf.netChangeComparative, true);
+  addCash('Efectivo al cierre', cf.cashClosing, cf.cashClosingComparative, true);
+  cash.addRow([cashFlowMethodLabel(cf.methodNote, cf.degeneracyFlag, language)]).font = {
+    name: FONT_MAIN, size: 9, italic: true,
+  };
 
   const equity = wb.addWorksheet('Cambios en Patrimonio');
   equity.columns = [{ width: 46 }, ...Array.from({ length: 8 }, () => ({ width: 23 }))];
-  equity.addRow(['ESTADO DE CAMBIOS EN EL PATRIMONIO', json.company.fiscalPeriod]);
+  equity.addRow(['ESTADO DE CAMBIOS EN EL PATRIMONIO', fp, ...(ecComparative ? [cp] : [])]);
   equity.addRow([json.company.name, 'COP']);
-  equity.addRow([periodLine]).font = { name: FONT_MAIN, size: 9, italic: true };
-  if (legend) equity.addRow([legend]).font = { name: FONT_MAIN, size: 9, italic: true, color: { argb: COLORS.orange } };
+  equity.addRow([periodLine(ecComparative)]).font = { name: FONT_MAIN, size: 9, italic: true };
+  const equityLegend = comparativeStatementLegend('equity', json);
+  if (equityLegend) equity.addRow([equityLegend]).font = legendFont;
   equity.addRow(['Movimiento', 'Capital social', 'Prima colocación', 'Reserva legal',
     'Otras reservas', 'Resultados acumulados', 'Resultado ejercicio', 'ORI', 'Total'])
     .font = { name: FONT_MAIN, bold: true };
   const keys = ['capitalSocial', 'primaColocacion', 'reservaLegal', 'otrasReservas',
     'resultadosAcumulados', 'resultadoEjercicio', 'ori', 'total'] as const;
-  for (const movement of json.equityChanges.rows) {
-    const row = equity.addRow([movement.label, ...keys.map(key => centsToPesos(movement[key]))]);
-    row.font = { name: FONT_MAIN, bold: ['opening_balance', 'closing_balance'].includes(movement.kind) };
-    for (let col = 2; col <= 9; col++) row.getCell(col).numFmt = NUM_FMT_COP;
+  const addMovements = (rows: NiifReportJson['equityChanges']['rows']) => {
+    for (const movement of rows) {
+      const row = equity.addRow([movement.label, ...keys.map(key => centsToPesos(movement[key]))]);
+      row.font = { name: FONT_MAIN, bold: ['opening_balance', 'closing_balance'].includes(movement.kind) };
+      for (let col = 2; col <= 9; col++) row.getCell(col).numFmt = NUM_FMT_COP;
+    }
+  };
+  if (ecComparative) {
+    // Los dos periodos apilados en orden cronológico (NIIF para las PYMES 6.3):
+    // el cierre del comparativo es la apertura del periodo actual.
+    equity.addRow([`Periodo ${cp}`]).font = { name: FONT_MAIN, bold: true, color: { argb: COLORS.darkNavy } };
+    addMovements(comparativeRows);
+    equity.addRow([`Periodo ${fp}`]).font = { name: FONT_MAIN, bold: true, color: { argb: COLORS.darkNavy } };
   }
+  addMovements(json.equityChanges.rows);
   // e2e-niif-10: las notas en prosa del ECP las redacta el LLM y sus cifras no
   // se anclan; se rotulan como narrativa no auditada (mismo aviso del PDF).
   const equityNotes = json.equityChanges.notes.map(formatStatementNote).filter(Boolean);
@@ -576,11 +617,11 @@ function addBalanceSheet(
       r.getCell(2).font = { name: FONT_MAIN, size: 9, italic: true };
       // Convergence row preserves sign (can be negative) — NO Math.abs
       if (isMultiPeriod) {
-        r.getCell(3).value = 0;
+        r.getCell(3).value = convAdjAmount;
         r.getCell(3).numFmt = NUM_FMT_COP;
-        r.getCell(4).value = convAdjAmount;
+        r.getCell(3).font = { name: FONT_MAIN, size: 9, italic: true };
+        r.getCell(4).value = 0;
         r.getCell(4).numFmt = NUM_FMT_COP;
-        r.getCell(4).font = { name: FONT_MAIN, size: 9, italic: true };
       } else {
         r.getCell(3).value = convAdjAmount;
         r.getCell(3).numFmt = NUM_FMT_COP;
@@ -733,27 +774,14 @@ function addJsonStatementRow(
     comparativeText === undefined && amountComparative !== null ? centsToPesos(amountComparative) : null;
 
   if (hasComparative) {
-    r.getCell(3).value = comparative ?? comparativeText ?? 'n/c';
-    if (comparative !== null) r.getCell(3).numFmt = NUM_FMT_COP;
-    r.getCell(3).font = { name: FONT_MAIN, size, bold, color: { argb: COLORS.textMuted } };
-    r.getCell(4).value = primary;
-    r.getCell(4).numFmt = NUM_FMT_COP;
-    r.getCell(4).font = { name: FONT_MAIN, size, bold };
-    if (comparative !== null) {
-      const delta = primary - comparative;
-      r.getCell(5).value = delta;
-      r.getCell(5).numFmt = NUM_FMT_COP;
-      r.getCell(5).font = {
-        name: FONT_MAIN, size, bold,
-        color: { argb: delta >= 0 ? COLORS.green : COLORS.red },
-      };
-      r.getCell(6).value = comparative !== 0 ? delta / Math.abs(comparative) : 0;
-      r.getCell(6).numFmt = NUM_FMT_PCT;
-      r.getCell(6).font = {
-        name: FONT_MAIN, size, bold,
-        color: { argb: delta >= 0 ? COLORS.green : COLORS.red },
-      };
-    }
+    // Periodo actual | comparativo (reportes-export-20: mismo orden del PDF).
+    r.getCell(3).value = primary;
+    r.getCell(3).numFmt = NUM_FMT_COP;
+    r.getCell(3).font = { name: FONT_MAIN, size, bold };
+    r.getCell(4).value = comparative ?? comparativeText ?? 'n/c';
+    if (comparative !== null) r.getCell(4).numFmt = NUM_FMT_COP;
+    r.getCell(4).font = { name: FONT_MAIN, size, bold, color: { argb: COLORS.textMuted } };
+    if (comparative !== null) writeVariationCells(r, primary, comparative, { size, bold });
   } else {
     r.getCell(3).value = primary;
     r.getCell(3).numFmt = NUM_FMT_COP;
@@ -767,6 +795,29 @@ function addJsonStatementRow(
     }
   }
   return row + 1;
+}
+
+/**
+ * Variación $ y % (cols 5 y 6) del periodo actual contra el comparativo.
+ * Color NEUTRO (reportes-export-20): pintar en verde toda variación ≥ 0 dejaba
+ * en verde un aumento de gastos o de pasivos; el signo sin la naturaleza de la
+ * cuenta no dice si la variación es favorable. Los negativos van entre
+ * paréntesis por el formato numérico.
+ */
+function writeVariationCells(
+  r: ExcelJS.Row,
+  current: number,
+  previous: number,
+  style: { size: number; bold: boolean },
+): void {
+  const delta = current - previous;
+  const font = { name: FONT_MAIN, size: style.size, bold: style.bold, color: { argb: COLORS.textDark } };
+  r.getCell(5).value = delta;
+  r.getCell(5).numFmt = NUM_FMT_COP;
+  r.getCell(5).font = font;
+  r.getCell(6).value = previous !== 0 ? delta / Math.abs(previous) : 0;
+  r.getCell(6).numFmt = NUM_FMT_PCT;
+  r.getCell(6).font = font;
 }
 
 /** `level` del contrato: 0=sección 1=subgrupo 2=detalle 3=subtotal 4=total. */
@@ -1201,7 +1252,7 @@ function kpiNumFmt(k: KPIRow): string {
 
 /**
  * Tabla comparativa de KPIs deterministicos derivados del preprocessed.
- * Layout: KPI | <comparative.period> | <primary.period> | Variacion $ | Variacion %
+ * Layout: KPI | <primary.period> | <comparative.period> | Variacion $ | Variacion % (reportes-export-20)
  */
 function addKPIComparativeBlock(
   ws: ExcelJS.Worksheet,
@@ -1214,8 +1265,8 @@ function addKPIComparativeBlock(
   ws.getRow(row).getCell(1).font = { name: FONT_MAIN, bold: true, size: 12, color: { argb: COLORS.darkNavy } };
   row += 2;
 
-  // Headers
-  const headers = ['KPI', comparative.period, primary.period, 'Variacion', 'Variacion %'];
+  // Headers — periodo actual | comparativo (reportes-export-20).
+  const headers = ['KPI', primary.period, comparative.period, 'Variacion', 'Variacion %'];
   const hRow = ws.getRow(row);
   headers.forEach((h, i) => {
     const cell = hRow.getCell(i + 1);
@@ -1232,8 +1283,8 @@ function addKPIComparativeBlock(
     r.getCell(1).value = k.label;
     r.getCell(1).font = { name: FONT_MAIN, size: 10 };
     const fmt = kpiNumFmt(k);
-    writeKpiCell(r.getCell(2), k.prev, fmt);
-    writeKpiCell(r.getCell(3), k.curr, fmt);
+    writeKpiCell(r.getCell(2), k.curr, fmt);
+    writeKpiCell(r.getCell(3), k.prev, fmt);
     writeKpiCell(r.getCell(4), k.delta, fmt);
     writeKpiCell(r.getCell(5), k.deltaPct, NUM_FMT_PCT);
     if (k.note) {
@@ -1546,6 +1597,17 @@ function addValidationSheet(wb: ExcelJS.Workbook, layout: PeriodLayout): void {
       ws.getRow(row).getCell(1).value = `DISCREPANCIAS DETECTADAS — ${p.period}`;
       ws.getRow(row).getCell(1).font = { name: FONT_MAIN, bold: true, size: 11, color: { argb: COLORS.red } };
       row++;
+      // reportes-export-21: estas discrepancias se miden sobre el balance de
+      // prueba recibido, ANTES del Curator; listarlas junto a totales "OK" sin
+      // decirlo confundía al cliente. Se declara la base y el estado posterior.
+      ws.getRow(row).getCell(1).value =
+        'Medidas sobre el balance de prueba recibido, antes de los ajustes del Curator (cierre virtual del ' +
+        'resultado, reclasificaciones). Estado posterior al Curator, base de los estados financieros: ' +
+        (p.summary.equationBalanced
+          ? 'ecuación patrimonial A = P + C cuadra.'
+          : `ecuación patrimonial descuadrada por ${fmtCopPesos(p.summary.equationBalance)}.`);
+      ws.getRow(row).getCell(1).font = { name: FONT_MAIN, size: 9, italic: true };
+      row++;
 
       for (const d of p.discrepancies) {
         ws.getRow(row).getCell(1).value = d.location;
@@ -1650,7 +1712,8 @@ function addComparativeSummaryBlock(
   ];
 
   // Header
-  const headers = ['Concepto', comparative.period, primary.period, 'Variacion', '% Var'];
+  // Periodo actual | comparativo (reportes-export-20).
+  const headers = ['Concepto', primary.period, comparative.period, 'Variacion', '% Var'];
   const hRow = ws.getRow(row);
   headers.forEach((h, i) => {
     const cell = hRow.getCell(i + 1);
@@ -1665,8 +1728,8 @@ function addComparativeSummaryBlock(
     const r = ws.getRow(row);
     r.getCell(1).value = label;
     const delta = prev !== null && curr !== null ? curr - prev : null;
-    writeKpiCell(r.getCell(2), prev, NUM_FMT_COP_INT);
-    writeKpiCell(r.getCell(3), curr, NUM_FMT_COP_INT);
+    writeKpiCell(r.getCell(2), curr, NUM_FMT_COP_INT);
+    writeKpiCell(r.getCell(3), prev, NUM_FMT_COP_INT);
     writeKpiCell(r.getCell(4), delta, NUM_FMT_COP_INT);
     writeKpiCell(
       r.getCell(5),
@@ -1729,11 +1792,14 @@ function statementDate(
   kind: 'position' | 'period',
   report: FinancialReport,
   layout: PeriodLayout | null,
+  /** El estado imprime el comparativo; si no, el rótulo no lo nombra. */
+  comparativeShown = true,
 ): string {
   const json = report.niifAnalysis?.json;
   const fiscalPeriod = json?.company.fiscalPeriod ?? report.company.fiscalPeriod;
-  const comparativePeriod =
-    json?.company.comparativePeriod ?? layout?.comparative?.period ?? report.company.comparativePeriod ?? null;
+  const comparativePeriod = comparativeShown
+    ? json?.company.comparativePeriod ?? layout?.comparative?.period ?? report.company.comparativePeriod ?? null
+    : null;
   const tipos = resolvePeriodoTipos(
     fiscalPeriod,
     comparativePeriod,
@@ -1803,7 +1869,7 @@ function addNarrativeDisclaimer(ws: ExcelJS.Worksheet, row: number): number {
 
 /**
  * Encabezado de columnas de un estado financiero. En multiperiodo:
- *   col 1: Codigo | col 2: Cuenta | col 3: <comparative> | col 4: <primary> | col 5: Var $ | col 6: Var %
+ *   col 1: Codigo | col 2: Cuenta | col 3: <primary> | col 4: <comparative> | col 5: Var $ | col 6: Var %
  * En periodo unico:
  *   col 1: Codigo | col 2: Cuenta | col 3: Saldo
  */
@@ -1818,8 +1884,8 @@ function addStatementColumnHeader(
   r.getCell(1).value = 'Codigo';
   r.getCell(2).value = 'Cuenta';
   if (comparativePeriod) {
-    r.getCell(3).value = `Saldo ${comparativePeriod}`;
-    r.getCell(4).value = `Saldo ${primaryPeriod}`;
+    r.getCell(3).value = `Saldo ${primaryPeriod}`;
+    r.getCell(4).value = `Saldo ${comparativePeriod}`;
     r.getCell(5).value = 'Variacion $';
     r.getCell(6).value = 'Variacion %';
   } else {
@@ -1953,7 +2019,7 @@ function addAccountRowSingle(
 
 /**
  * Fila de cuenta con layout multiperiodo:
- *   Codigo | Cuenta | Saldo {prev} | Saldo {curr} | Variacion $ | Variacion % | Nota Reclasificación?
+ *   Codigo | Cuenta | Saldo {curr} | Saldo {prev} | Variacion $ | Variacion % | Nota Reclasificación?
  */
 function addAccountRowMulti(
   ws: ExcelJS.Worksheet,
@@ -1970,36 +2036,22 @@ function addAccountRowMulti(
   r.getCell(1).font = { name: FONT_MAIN, size: 9, color: { argb: COLORS.textMuted } };
   r.getCell(2).value = name;
   r.getCell(2).font = { name: FONT_MAIN, size: 9 };
-  r.getCell(4).value = currBalance;
-  r.getCell(4).numFmt = NUM_FMT_COP;
-  r.getCell(4).font = { name: FONT_MAIN, size: 9 };
+  r.getCell(3).value = currBalance;
+  r.getCell(3).numFmt = NUM_FMT_COP;
+  r.getCell(3).font = { name: FONT_MAIN, size: 9 };
   if (prevBalance === null) {
-    writeKpiCell(r.getCell(3), null, NUM_FMT_COP);
-    r.getCell(3).font = { name: FONT_MAIN, size: 9, color: { argb: COLORS.textMuted } };
+    writeKpiCell(r.getCell(4), null, NUM_FMT_COP);
+    r.getCell(4).font = { name: FONT_MAIN, size: 9, color: { argb: COLORS.textMuted } };
     if (footnote) {
       r.getCell(7).value = footnote;
       r.getCell(7).font = { name: FONT_MAIN, size: 8, italic: true, color: { argb: COLORS.orange } };
     }
     return row + 1;
   }
-  r.getCell(3).value = prevBalance;
-  r.getCell(3).numFmt = NUM_FMT_COP;
-  r.getCell(3).font = { name: FONT_MAIN, size: 9, color: { argb: COLORS.textMuted } };
-  const delta = currBalance - prevBalance;
-  r.getCell(5).value = delta;
-  r.getCell(5).numFmt = NUM_FMT_COP;
-  r.getCell(5).font = {
-    name: FONT_MAIN,
-    size: 9,
-    color: { argb: delta >= 0 ? COLORS.green : COLORS.red },
-  };
-  r.getCell(6).value = prevBalance !== 0 ? delta / Math.abs(prevBalance) : 0;
-  r.getCell(6).numFmt = NUM_FMT_PCT;
-  r.getCell(6).font = {
-    name: FONT_MAIN,
-    size: 9,
-    color: { argb: delta >= 0 ? COLORS.green : COLORS.red },
-  };
+  r.getCell(4).value = prevBalance;
+  r.getCell(4).numFmt = NUM_FMT_COP;
+  r.getCell(4).font = { name: FONT_MAIN, size: 9, color: { argb: COLORS.textMuted } };
+  writeVariationCells(r, currBalance, prevBalance, { size: 9, bold: false });
   if (footnote) {
     r.getCell(7).value = footnote;
     r.getCell(7).font = { name: FONT_MAIN, size: 8, italic: true, color: { argb: COLORS.orange } };
@@ -2035,8 +2087,8 @@ function addStatementTotalRow(
       writeKpiCell(r.getCell(col), Number.isFinite(v) ? v : null, NUM_FMT_COP);
     };
     if (isMultiPeriod && comparativeAmount !== undefined) {
-      put(3, comparativeAmount);
-      put(4, primaryAmount);
+      put(3, primaryAmount);
+      put(4, comparativeAmount);
     } else {
       put(3, primaryAmount);
     }
@@ -2044,25 +2096,13 @@ function addStatementTotalRow(
   }
 
   if (isMultiPeriod && comparativeAmount !== undefined) {
-    r.getCell(3).value = comparativeAmount;
+    r.getCell(3).value = primaryAmount;
     r.getCell(3).numFmt = NUM_FMT_COP;
-    r.getCell(3).font = { name: FONT_MAIN, bold: true, size: 10, color: { argb: COLORS.textMuted } };
-    r.getCell(4).value = primaryAmount;
+    r.getCell(3).font = { name: FONT_MAIN, bold: true, size: 10 };
+    r.getCell(4).value = comparativeAmount;
     r.getCell(4).numFmt = NUM_FMT_COP;
-    r.getCell(4).font = { name: FONT_MAIN, bold: true, size: 10 };
-    const delta = primaryAmount - comparativeAmount;
-    r.getCell(5).value = delta;
-    r.getCell(5).numFmt = NUM_FMT_COP;
-    r.getCell(5).font = {
-      name: FONT_MAIN, bold: true, size: 10,
-      color: { argb: delta >= 0 ? COLORS.green : COLORS.red },
-    };
-    r.getCell(6).value = comparativeAmount !== 0 ? delta / Math.abs(comparativeAmount) : 0;
-    r.getCell(6).numFmt = NUM_FMT_PCT;
-    r.getCell(6).font = {
-      name: FONT_MAIN, bold: true, size: 10,
-      color: { argb: delta >= 0 ? COLORS.green : COLORS.red },
-    };
+    r.getCell(4).font = { name: FONT_MAIN, bold: true, size: 10, color: { argb: COLORS.textMuted } };
+    writeVariationCells(r, primaryAmount, comparativeAmount, { size: 10, bold: true });
 
     for (let i = 2; i <= 6; i++) {
       r.getCell(i).border = { top: { style: 'thin', color: { argb: COLORS.darkNavy } } };

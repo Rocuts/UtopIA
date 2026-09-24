@@ -98,6 +98,29 @@ Sin embargo, verificar que el EFE cuadre:
 Si el EFE no cuadra, revisar los ajustes de capital de trabajo hasta que cuadre.
 NUNCA incluir el asiento 3605 para "hacer cuadrar" el EFE.
 
+> **Nota de enmienda (auditoría integral 2026-09-24, niif-contrato-18).** La regla
+> de esta corrección (el traslado a 3605 no es flujo de efectivo) sigue vigente;
+> el ejemplo y la nota sobre proveedores no deben seguirse literalmente:
+>
+> 1. El ejemplo "CORRECTO" no es aritméticamente consistente: sus cinco renglones
+>    suman $1.996.192.335,63 (no ≈ $995.769.354,31) y, con inversión y
+>    financiación en $0, el flujo de operación tendría que ser igual a la
+>    variación del efectivo, $850.192.334,63. El EFE determinista del mismo
+>    balance (`buildDeterministicCashFlow`, contracts/deterministic-breakdown.ts)
+>    da operación $853.109.000,63, inversión −$2.916.666,00 y financiación $0,00,
+>    que sí suman $850.192.334,63.
+> 2. La nota sobre proveedores manda medir la variación con el Pasivo TOTAL, que
+>    incluye obligaciones financieras (grupo 21): sus flujos son de financiación
+>    (NIC 7 ¶17(c)-(d) / NIIF para las PYMES 7.6). El capital de trabajo se
+>    mide sólo con los pasivos operativos (grupos 22 a 28) y el grupo 21 va a
+>    financiación, que es la clasificación por grupo PUC que aplica el código.
+> 3. El EFE no "se revisa hasta que cuadre": lo calcula el código desde el
+>    balance de prueba y el modelo lo copia; E18/E23 contrastan lo emitido al
+>    centavo. Desde la misma auditoría (pendiente #3) el EFE y el ECP también
+>    llevan la columna del periodo comparativo cuando el balance trae el corte
+>    anterior (NIIF para las PYMES 3.14), o la nota de impracticabilidad
+>    (3.14 / 10.21) cuando no.
+
 ---
 
 ## CORRECCIÓN 3 — ROE: FÓRMULA CONSISTENTE (Error moderado)

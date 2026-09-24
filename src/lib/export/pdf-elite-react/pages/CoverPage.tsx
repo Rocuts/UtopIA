@@ -57,6 +57,16 @@ function companyInitials(name: string): string {
   return (words[0][0] + words[1][0]).toUpperCase();
 }
 
+/**
+ * Rótulo superior de la portada con el año del periodo que el informe cubre
+ * (reportes-export-21): antes decía "Colombia 2026" fijo, también en un
+ * informe del ejercicio 2025. Sin año identificable no se afirma ninguno.
+ */
+export function coverEyebrow(fiscalPeriod: string | null | undefined): string {
+  const year = /(?:19|20)\d{2}/.exec(fiscalPeriod ?? '')?.[0];
+  return year ? `Informe Financiero NIIF · Colombia · Ejercicio ${year}` : 'Informe Financiero NIIF · Colombia';
+}
+
 export function CoverPage({ doc }: Props) {
   const isBlocked = doc.meta.watermark === 'BLOQUEADO';
   const isDraft = doc.meta.watermark === 'BORRADOR';
@@ -149,7 +159,7 @@ export function CoverPage({ doc }: Props) {
               textTransform: 'uppercase',
             }}
           >
-            Informe Financiero NIIF · Colombia 2026
+            {coverEyebrow(doc.meta.fiscalPeriod)}
           </Text>
         </View>
 

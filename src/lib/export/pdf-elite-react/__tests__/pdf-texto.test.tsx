@@ -11,6 +11,14 @@ import { DialGaugePage } from '../pages/DialGaugePage';
 import { KPIGridPage } from '../pages/KPIGridPage';
 import { StatementsPages } from '../pages/StatementsPages';
 import type { EditorialReport, KpiCell } from '../types';
+import {
+  niifJsonToCashFlowTable,
+  niifJsonToEquityTable,
+} from '../compose-statements-from-json';
+import {
+  informeTresCortes,
+  preprocesarTresCortes,
+} from '@/lib/agents/financial/__fixtures__/tres-cortes-comparativo';
 
 async function pdfText(el: React.ReactElement): Promise<string> {
   const buf = await renderToBuffer(<Document>{el}</Document>);
@@ -103,5 +111,19 @@ describe('PDF renderizado — diales, KPIs y estados', () => {
     expect(text).toContain('comparativa 2024 no presentada');
     expect(text).toContain('NIIF PYMES Secc. 7');
     expect(text).not.toMatch(/NIIF 7\b(?!\.)/);
+  }, 30_000);
+
+  it('pendiente #3: el EFE imprime la columna comparativa y el ECP los dos periodos (tres cortes)', async () => {
+    const json = informeTresCortes(preprocesarTresCortes());
+    const cashFlow = niifJsonToCashFlowTable(json);
+    const equity = niifJsonToEquityTable(json);
+    const pages = StatementsPages({ doc: doc({ statements: { balance: table, income: table, cashFlow, equity } }) });
+    const text = await pdfText(<>{pages}</>);
+    const flat = text.replace(/\s+/g, ' ');
+    expect(flat).toMatch(/2025 2024/); // encabezado del EFE: actual | comparativo
+    expect(flat).toContain('$15.000.000,00'); // variación neta 2024
+    expect(flat).toContain('PERIODO 2024');
+    expect(flat).toContain('PERIODO 2025');
+    expect(flat).not.toContain('no presentada');
   }, 30_000);
 });

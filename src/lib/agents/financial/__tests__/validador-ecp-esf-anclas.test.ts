@@ -83,6 +83,10 @@ function rich(): { json: NiifReportJson; opts: NiifJsonValidatorOptions } {
       oriPrimary: '0', oriComparative: '0', notes: [], modeBanner: null,
     },
     cashFlow: {
+      netChangeComparative: null,
+      cashOpeningComparative: null,
+      cashClosingComparative: null,
+      comparativeNote: null,
       sections: [
         {
           section: 'operating',
@@ -93,14 +97,17 @@ function rich(): { json: NiifReportJson; opts: NiifJsonValidatorOptions } {
             L(null, 'Aumento de proveedores', '500000000', null, 2, false),
           ],
           netFlow: '1700000000',
+          netFlowComparative: null,
         },
-        { section: 'investing', lines: [L(null, 'Adquisición de PPE', '-500000000', null, 2, false)], netFlow: '-500000000' },
-        { section: 'financing', lines: [L(null, 'Dividendos pagados', '-500000000', null, 2, false)], netFlow: '-500000000' },
+        { section: 'investing', lines: [L(null, 'Adquisición de PPE', '-500000000', null, 2, false)], netFlow: '-500000000', netFlowComparative: null },
+        { section: 'financing', lines: [L(null, 'Dividendos pagados', '-500000000', null, 2, false)], netFlow: '-500000000', netFlowComparative: null },
       ],
       netChange: '700000000', cashOpening: '1000000000', cashClosing: '1700000000',
       methodNote: 'indirect', degeneracyFlag: 'none',
     },
     equityChanges: {
+      comparativeRows: null,
+      comparativeNote: null,
       rows: [
         {
           kind: 'opening_balance', label: 'Saldo al 1 de enero de 2025',

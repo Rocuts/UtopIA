@@ -19,7 +19,8 @@ import type {
 import type { StatementLineJson, StatementNoteJson } from '@/lib/agents/financial/contracts/base';
 import {
   CURRENCY_NOTE,
-  comparativeNotPresentedLegend,
+  cashFlowHasComparativeColumn,
+  comparativeStatementLegend,
   incomeStatementPresentationRows,
   normalizeNiifStatementLabels,
   presentedLineCents,
@@ -65,12 +66,14 @@ function presentationMeta(
   kind: 'position' | 'period',
   ctx: StatementTableContext | undefined,
   notes: StatementNoteJson[] | undefined,
+  /** El estado imprime la columna/filas del comparativo (el subtítulo lo nombra sólo entonces). */
+  comparativeShown = true,
 ): Pick<ParsedTable, 'subtitle' | 'currencyNote' | 'footnotes'> {
   const footnotes = (notes ?? []).map(formatStatementNote).filter((n) => n.length > 0);
   return {
     subtitle: statementDateLabel(kind, {
       fiscalPeriod: json.company.fiscalPeriod,
-      comparativePeriod: json.company.comparativePeriod,
+      comparativePeriod: comparativeShown ? json.company.comparativePeriod : null,
       primaryPeriodoTipo: ctx?.primaryPeriodoTipo ?? null,
       comparativePeriodoTipo: ctx?.comparativePeriodoTipo ?? null,
     }),
@@ -383,39 +386,45 @@ export function niifJsonToCashFlowTable(
     investing: 'ACTIVIDADES DE INVERSIÓN',
     financing: 'ACTIVIDADES DE FINANCIAMIENTO',
   } as const;
-  // El contrato NIIF no trae netFlow / cashOpening / cashClosing del periodo
-  // comparativo, así que el EFE se presenta con una sola columna. Cuando el
-  // informe declara comparativo eso se dice en una leyenda visible en lugar de
-  // descartar el comparativo en silencio (reportes-export-13).
+  // Columna comparativa del EFE (auditoría 2026-09-24, pendiente #3): la
+  // calcula el código desde el corte anterior al comparativo y sólo se imprime
+  // completa. Sin ella, la nota determinista de impracticabilidad (NIIF para
+  // las PYMES 3.14 / 10.21) va como leyenda visible (reportes-export-13).
+  const hasComparative = json.company.comparativePeriod !== null && cashFlowHasComparativeColumn(cf);
   const rows: ParsedTableRow[] = [];
   for (const s of cf.sections) {
     rows.push({ account: sectionLabel[s.section], cells: [], emphasis: 'subtotal' });
-    rows.push(...s.lines.map((l) => lineToRow(l, false, false)));
+    rows.push(...s.lines.map((l) => lineToRow(l, hasComparative, false)));
     rows.push({
       account: `FLUJO NETO ${sectionLabel[s.section]}`,
-      cells: [fmtCop(s.netFlow, false)],
+      cells: totalCells(s.netFlow, s.netFlowComparative, hasComparative),
       emphasis: 'subtotal',
     });
   }
   rows.push({
     account: 'AUMENTO (DISMINUCIÓN) NETO EN EFECTIVO',
-    cells: [fmtCop(cf.netChange, false)],
+    cells: totalCells(cf.netChange, cf.netChangeComparative, hasComparative),
     emphasis: 'total',
   });
   // Saldos de efectivo con signo: un sobregiro presentado en caja no debe
   // imprimirse positivo.
-  rows.push({ account: 'Efectivo al inicio del período', cells: [fmtCop(cf.cashOpening, false)] });
+  rows.push({
+    account: 'Efectivo al inicio del período',
+    cells: totalCells(cf.cashOpening, cf.cashOpeningComparative, hasComparative),
+  });
   rows.push({
     account: 'EFECTIVO AL FINAL DEL PERÍODO',
-    cells: [fmtCop(cf.cashClosing, false)],
+    cells: totalCells(cf.cashClosing, cf.cashClosingComparative, hasComparative),
     emphasis: 'total',
   });
-  const legend = comparativeNotPresentedLegend(json.company.comparativePeriod);
+  const legend = comparativeStatementLegend('cashFlow', json);
   return {
     caption: 'Estado de Flujos de Efectivo (Método Indirecto)',
-    headers: ['Concepto', json.company.fiscalPeriod],
+    headers: hasComparative
+      ? ['Concepto', json.company.fiscalPeriod, json.company.comparativePeriod ?? '']
+      : ['Concepto', json.company.fiscalPeriod],
     rows,
-    ...presentationMeta(json, 'period', ctx, undefined),
+    ...presentationMeta(json, 'period', ctx, undefined, hasComparative),
     ...(legend ? { legends: [legend] } : {}),
   };
 }
@@ -454,12 +463,25 @@ export function niifJsonToEquityTable(
     ];
     return bold ? { account: r.label, cells, emphasis: 'total' } : { account: r.label, cells };
   };
-  const legend = comparativeNotPresentedLegend(json.company.comparativePeriod);
+  // ECP del periodo comparativo (pendiente #3, NIIF para las PYMES 3.14 /
+  // 6.3): los dos periodos apilados en orden cronológico, cada uno bajo su
+  // encabezado; el cierre del comparativo es la apertura del periodo actual.
+  const comparativeRows = json.company.comparativePeriod !== null ? (ec.comparativeRows ?? []) : [];
+  const hasComparative = comparativeRows.length > 0;
+  const rows: ParsedTableRow[] = hasComparative
+    ? [
+        { account: `PERIODO ${json.company.comparativePeriod}`, cells: [] },
+        ...comparativeRows.map(rowToRow),
+        { account: `PERIODO ${json.company.fiscalPeriod}`, cells: [] },
+        ...ec.rows.map(rowToRow),
+      ]
+    : ec.rows.map(rowToRow);
+  const legend = comparativeStatementLegend('equity', json);
   return {
     caption: 'Estado de Cambios en el Patrimonio',
     headers,
-    rows: ec.rows.map(rowToRow),
-    ...presentationMeta(json, 'period', ctx, ec.notes),
+    rows,
+    ...presentationMeta(json, 'period', ctx, ec.notes, hasComparative),
     ...(legend ? { legends: [legend] } : {}),
   };
 }

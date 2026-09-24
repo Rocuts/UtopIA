@@ -40,11 +40,12 @@ async function hojas(report: FinancialReport, preprocessed = pp) {
   return wb;
 }
 
+/** [rótulo, periodo actual, comparativo]: col3 actual, col4 comparativo (reportes-export-20). */
 function filas(ws: ExcelJS.Worksheet): Array<[string, unknown, unknown]> {
   const out: Array<[string, unknown, unknown]> = [];
   ws.eachRow((row) => {
     const label = row.getCell(2).value;
-    if (typeof label === 'string') out.push([label, row.getCell(4).value, row.getCell(3).value]);
+    if (typeof label === 'string') out.push([label, row.getCell(3).value, row.getCell(4).value]);
   });
   return out;
 }
