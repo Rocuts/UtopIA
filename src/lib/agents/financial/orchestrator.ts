@@ -2152,11 +2152,84 @@ export async function runGovernancePhase(
     } else {
       governance.actaQualifications = { clean: true, motivos: [] };
     }
+  } else if (!actaEsperada && acta) {
+    // -----------------------------------------------------------------------
+    // Sin aritmética esperada (no llegó el preprocesado: reanudación tras
+    // recarga, flujo de carga sin preprocesado) el prompt pide applies=false,
+    // pero nada lo verificaba: si el modelo repartía reserva legal, saldo
+    // distribuible o capitalización, el acta salía sin salvedad y exportable
+    // (pipeline-flujo-03). Una cifra de destinación sin ancla no se firma.
+    // -----------------------------------------------------------------------
+    const motivos = describeUnanchoredActaFigures(acta, language);
+    if (motivos.length > 0) {
+      onProgress?.({
+        type: 'warning',
+        warnings: motivos.map((m) => `[Acta — sin ancla] ${m}`),
+      });
+      governance.actaQualifications = { clean: false, motivos };
+      const seal = [
+        language === 'es'
+          ? '> ## ACTA CON SALVEDADES — CIFRAS SIN VERIFICAR'
+          : '> ## MINUTES WITH QUALIFICATIONS — UNVERIFIED FIGURES',
+        '>',
+        language === 'es'
+          ? '> El acta propone cifras de destinación que no pudieron contrastarse con una ' +
+            'aritmética determinista sobre la utilidad del ejercicio. Este documento NO es firmable ' +
+            'ni inscribible tal como está:'
+          : '> The minutes propose allocation figures that could not be checked against ' +
+            'deterministic arithmetic over the period result. This document is NOT signable as issued:',
+        '>',
+        ...motivos.map((m) => `> - ${m}`),
+        '',
+      ].join('\n');
+      governance.shareholderMinutes = `${seal}\n${governance.shareholderMinutes}`;
+      governance.fullContent = `${seal}\n${governance.fullContent}`;
+    }
   }
 
   onProgress?.({ type: 'stage_complete', stage: 3, label: completeLabel });
 
   return governance;
+}
+
+/**
+ * Cifras de destinación del acta que no tienen aritmética determinista contra
+ * la cual reconciliarse (pipeline-flujo-03). Vacío cuando el acta no propone
+ * reparto, reservas ni capitalización con monto.
+ */
+function describeUnanchoredActaFigures(
+  acta: NonNullable<GovernanceResult['json']>['shareholderMinutes'],
+  language: 'es' | 'en',
+): string[] {
+  const isMoney = (v: unknown): v is string => typeof v === 'string' && /^-?\d+$/.test(v);
+  const nonZero = (v: unknown) => isMoney(v) && parseMoneyCop(v) !== BigInt(0);
+  const out: string[] = [];
+
+  const distribution = acta.resultDistribution;
+  const linesWithAmount = (distribution?.lines ?? []).filter((l) => nonZero(l?.amountCop));
+  if (distribution?.applies === true || linesWithAmount.length > 0) {
+    out.push(
+      language === 'es'
+        ? `El acta propone una destinación de utilidades (${linesWithAmount.length} renglón(es) con monto) ` +
+            'sin aritmética determinista verificable: el balance preprocesado no llegó a esta fase. ' +
+            'Regenere el informe con el balance antes de firmar.'
+        : `The minutes propose a profit allocation (${linesWithAmount.length} line(s) with amounts) ` +
+            'without verifiable deterministic arithmetic: the preprocessed trial balance did not reach ' +
+            'this phase. Regenerate the report with the trial balance before signing.',
+    );
+  }
+
+  const capitalization = acta.capitalizationProposal;
+  if (capitalization?.applies === true || nonZero(capitalization?.capitalizationAmountCop)) {
+    out.push(
+      language === 'es'
+        ? 'El acta propone una capitalización sin aritmética determinista verificable sobre la ' +
+            'utilidad del ejercicio.'
+        : 'The minutes propose a capitalization without verifiable deterministic arithmetic over ' +
+            'the period result.',
+    );
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
