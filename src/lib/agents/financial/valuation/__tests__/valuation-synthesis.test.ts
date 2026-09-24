@@ -181,6 +181,8 @@ describe('valoracion-15 — síntesis recalculada en código', () => {
     expect(rep.valueOpinion.methodologies).toEqual(['dcf']);
     expect(rep.synthesis!.computed!.baseCop).toBe('613636363637');
     expect(rep.synthesis!.executiveSummary).toContain('con punto medio $6.136.363.636,37');
+    // Las rutas API serializan el informe con NextResponse.json: sin BigInt.
+    expect(() => JSON.stringify(rep)).not.toThrow();
   });
 });
 

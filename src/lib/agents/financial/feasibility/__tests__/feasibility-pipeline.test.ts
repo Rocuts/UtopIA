@@ -89,6 +89,8 @@ describe('valoracion-09 — datos del usuario y métricas en código', () => {
     expect(fm.breakEven.status).toBe('ok');
     expect(fm.breakEvenAnalysis).toContain('calculado en código');
     expect(FinancialModelReportSchema.shape.cashFlows).toBeDefined();
+    // La ruta API serializa el informe con NextResponse.json: sin BigInt.
+    expect(() => JSON.stringify(rep)).not.toThrow();
   });
 
   it('una tasa "del usuario" que no aparece en sus datos se reemplaza por el WACC recalculado', async () => {
