@@ -106,6 +106,57 @@ export function readStrategyQualifications(strategic: unknown): StrategyQualific
 }
 
 // ---------------------------------------------------------------------------
+// Sello y nota de verificación de la Parte II (texto del entregable)
+// ---------------------------------------------------------------------------
+// Mismo texto que `qualifyStrategyResult` (orchestrator.ts) escribe en el
+// cuerpo de la Parte II: el servidor lo reconstruye desde su propio cruce al
+// re-renderizar el Markdown desde el JSON (src/lib/reports/part-markdown.ts).
+// Una prueba de paridad fija que la fase y el re-render coinciden
+// (src/lib/reports/__tests__/part-markdown.test.ts).
+// ---------------------------------------------------------------------------
+
+/** Sello "CON SALVEDADES" que encabeza la Parte II cuando su veredicto no es limpio. */
+export function buildStrategyQualificationSeal(motivos: readonly string[], language: 'es' | 'en' = 'es'): string {
+  const es = language === 'es';
+  return [
+    es
+      ? '> ## ANÁLISIS ESTRATÉGICO CON SALVEDADES — CIFRAS SIN RESPALDO'
+      : '> ## STRATEGIC ANALYSIS WITH QUALIFICATIONS — UNSUPPORTED FIGURES',
+    '>',
+    es
+      ? '> Cifras de la Parte II no coinciden con el balance preprocesado. Esta sección NO es emitible tal como está:'
+      : '> Part II figures do not match the preprocessed trial balance. This section is NOT issuable as is:',
+    '>',
+    ...motivos.map((m) => `> - ${m}`),
+    '',
+  ].join('\n');
+}
+
+/** Nota final "Verificación determinista de la Parte II" (cifras cruzadas y no verificables). */
+export function buildStrategyVerificationNote(
+  verifiedCount: number,
+  noVerificables: readonly string[],
+  language: 'es' | 'en' = 'es',
+): string {
+  const es = language === 'es';
+  const MAX = 12;
+  const shown = noVerificables.slice(0, MAX);
+  const rest = noVerificables.length - shown.length;
+  return [
+    '',
+    es ? '### Verificación determinista de la Parte II' : '### Deterministic verification of Part II',
+    es
+      ? `- Cifras cruzadas contra el balance preprocesado: ${verifiedCount}.`
+      : `- Figures cross-checked against the preprocessed trial balance: ${verifiedCount}.`,
+    (es
+      ? '- No verificables contra anclas deterministas (estimaciones del modelo, no cifras del balance): '
+      : '- Not verifiable against deterministic anchors (model estimates, not trial-balance figures): ') +
+      shown.join('; ') +
+      (rest > 0 ? (es ? `; y ${rest} más.` : `; and ${rest} more.`) : '.'),
+  ].join('\n');
+}
+
+// ---------------------------------------------------------------------------
 // Anclas monetarias por periodo
 // ---------------------------------------------------------------------------
 

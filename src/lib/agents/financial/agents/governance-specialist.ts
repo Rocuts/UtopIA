@@ -125,10 +125,7 @@ export async function runGovernanceSpecialist(
     capitalizationApplies: actaEsperada ? actaEsperada.capitalizationApplies : null,
   });
   if (agentResult.meta?.degraded === true) {
-    const notice = buildDegradationNotice(
-      [language === 'es' ? 'Gobierno corporativo (Parte III)' : 'Corporate governance (Part III)'],
-      language,
-    );
+    const notice = governanceDegradationNotice(language);
     result.degraded = true;
     result.financialNotes = `${notice}\n${result.financialNotes}`;
     result.shareholderMinutes = `${notice}\n${result.shareholderMinutes}`;
@@ -153,6 +150,37 @@ export async function runGovernanceSpecialist(
   }
 
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// Render de la Parte III desde el JSON persistido (I3: procedencia del Markdown)
+// ---------------------------------------------------------------------------
+// Las notas, el acta, el checklist y los avisos son una función determinista
+// del JSON validado, del tipo societario y grupo NIIF de la empresa y de la
+// aritmética del acta (`capitalizationApplies`). El servidor vuelve a producir
+// ese Markdown en /consolidate y /export (src/lib/reports/part-markdown.ts)
+// en lugar de aceptar el que reenvía el navegador.
+// ---------------------------------------------------------------------------
+
+/** Aviso de sección degradada de la Parte III (mismo texto en la fase y en el servidor). */
+export function governanceDegradationNotice(language: 'es' | 'en'): string {
+  return buildDegradationNotice(
+    [language === 'es' ? 'Gobierno corporativo (Parte III)' : 'Corporate governance (Part III)'],
+    language,
+  );
+}
+
+/**
+ * Markdown de la Parte III desde su JSON (el adaptador de la fase, sin sellos).
+ * `capitalizationApplies` es el de `buildActaExpectedArithmetic` (`null` sin
+ * balance preprocesado).
+ */
+export function renderGovernanceResult(
+  json: GovernanceReportJson,
+  company: Pick<CompanyInfo, 'entityType' | 'niifGroup'> | undefined,
+  capitalizationApplies: boolean | null,
+): GovernanceResult {
+  return toGovernanceResult(json, company, { capitalizationApplies });
 }
 
 // ---------------------------------------------------------------------------
