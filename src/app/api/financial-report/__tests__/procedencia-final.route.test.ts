@@ -7,9 +7,12 @@
 // composer REAL del PDF (sólo se sustituye el render a bytes):
 //   - e2e-niif2-02: una desviación que /niif ya corrigió en el JSON
 //     (`overwritten: true`, informe limpio) no sella la versión persistida.
+//   - procedencia-R2-03 + e2e-niif2-06: /html sin referencia aplica el mismo
+//     gate que /export sin referencia (V1–V15, identidad II/III, prosa de la
+//     Parte I, post-proceso de la Parte II) antes de pagar el Editor Jefe.
 // ---------------------------------------------------------------------------
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Readable } from 'node:stream';
 
 const state = vi.hoisted(() => ({ db: null as unknown, workspace: null as string | null }));
@@ -46,7 +49,14 @@ import { POST as html } from '../html/route';
 import { generateFinancialExcel } from '@/lib/export/excel-export';
 import { runHtmlEditor } from '@/lib/agents/financial/agents/html-editor';
 import type { FinancialReport } from '@/lib/agents/financial/types';
+import type { GovernanceReportJson } from '@/lib/agents/financial/contracts/governance-report';
+import type { NiifReportJson } from '@/lib/agents/financial/contracts/niif-report';
+import type { StrategyReportJson } from '@/lib/agents/financial/contracts/strategy-report';
+import { preprocessUploadedTrialBalanceText } from '@/lib/preprocessing/raw-data';
+import { toJsonSafe } from '@/lib/preprocessing/json-safe';
 import {
+  PROVENANCE_COMPANY,
+  PROVENANCE_CSV,
   consolidateBody,
   makeProvenanceParts,
   makeReportsTableFake,
@@ -153,5 +163,145 @@ describe('e2e-niif2-02 — total del ESF corregido por /niif (overwritten) en un
     expect(out.report.niifAnalysis.reconciliation?.clean).toBe(false);
     const xlsx = await exportReport(req('/api/financial-report/export', { reportRef: out.reportRef, format: 'excel' }));
     expect(xlsx.status).toBe(422);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// procedencia-R2-03 + e2e-niif2-06 (modo sin base de datos)
+// ---------------------------------------------------------------------------
+
+describe('R2-03 / e2e-niif2-06 — /html sin referencia con el gate de /export sin referencia', () => {
+  const read = preprocessUploadedTrialBalanceText(PROVENANCE_CSV);
+  if (read.kind !== 'ok') throw new Error('fixture');
+  const PP = toJsonSafe(read.preprocessed);
+
+  beforeEach(() => {
+    delete process.env.DATABASE_URL;
+    state.workspace = null;
+  });
+  afterEach(() => {
+    process.env.DATABASE_URL = 'postgres://fake-for-tests';
+  });
+
+  /** Informe honesto tal como /consolidate lo devuelve sin DB (lo que la UI guarda). */
+  async function honestReport(): Promise<FinancialReport> {
+    const res = await consolidate(req('/api/financial-report/consolidate', consolidateBody()));
+    expect(res.status).toBe(200);
+    const out = (await res.json()) as { report: FinancialReport; provenance: { status: string } };
+    expect(out.provenance.status).toBe('not_persisted');
+    return out.report;
+  }
+
+  /** Cuerpo de /html sin referencia como lo arma la UI (`handleGenerateHtml`). */
+  const htmlBody = (report: FinancialReport) => ({
+    niifReport: report.niifAnalysis.json,
+    strategyReport: report.strategicAnalysis.json,
+    governanceReport: report.governance.json,
+    company: PROVENANCE_COMPANY,
+    metadata: { reportMode: 'LINEA_BASE' },
+    preprocessed: PP,
+    language: 'es',
+    actaQualifications: report.governance.actaQualifications ?? null,
+    strategyQualifications: report.strategicAnalysis.strategyQualifications ?? null,
+  });
+
+  it('control: el informe honesto sale 200 "no verificada" en /export y en /html', async () => {
+    const report = await honestReport();
+    const ex = await exportReport(
+      req('/api/financial-report/export', { report, rawData: PROVENANCE_CSV, format: 'excel', language: 'es' }),
+    );
+    expect(ex.status).toBe(200);
+    const h = await html(req('/api/financial-report/html', htmlBody(report)));
+    expect(h.status).toBe(200);
+    expect(h.headers.get('X-Report-Provenance')).toBe('unverified');
+    expect(runHtmlEditor).toHaveBeenCalledTimes(1);
+  });
+
+  type Mutation = (r: FinancialReport) => void;
+  const REJECTED: Array<[string, Mutation]> = [
+    [
+      'Parte III de OTRA empresa (identidad I5-2)',
+      (r) => {
+        const g = r.governance.json as GovernanceReportJson;
+        g.company = { ...g.company, name: 'Compañía Ajena Ltda', nit: '800999888-1' };
+      },
+    ],
+    [
+      'nota técnica con utilidad neta falsa (prosa Parte I, I5-3)',
+      (r) => {
+        const n = r.niifAnalysis.json as NiifReportJson;
+        n.technicalNotes = [
+          ...n.technicalNotes,
+          { ref: null, norma: null, body: 'La utilidad neta del ejercicio fue de $9.000.000,00.' },
+        ] as NiifReportJson['technicalNotes'];
+      },
+    ],
+    [
+      'nota del ERI con la utilidad neta falsa (e2e-niif2-06)',
+      (r) => {
+        const n = r.niifAnalysis.json as NiifReportJson;
+        n.incomeStatement.notes = [
+          { ref: 'Nota 3', norma: null, body: 'La utilidad neta del ejercicio 2025 fue de $44.444.444,00.' },
+        ] as NiifReportJson['incomeStatement']['notes'];
+      },
+    ],
+    [
+      'Parte I sin declaración de impracticabilidad (V15)',
+      (r) => {
+        (r.niifAnalysis.json as NiifReportJson).technicalNotes = [];
+      },
+    ],
+  ];
+
+  it.each(REJECTED)('%s → 422 en /export y en /html, sin llamar al Editor Jefe', async (_label, mutate) => {
+    const report = structuredClone(await honestReport());
+    mutate(report);
+    // El cliente declara todo limpio.
+    report.emittability = { kind: 'emittable', blockers: [], suggestedAdjustments: [] } as never;
+    report.validation = { ok: true } as never;
+    const ex = await exportReport(
+      req('/api/financial-report/export', { report, rawData: PROVENANCE_CSV, format: 'excel', language: 'es' }),
+    );
+    expect(ex.status).toBe(422);
+    const h = await html(req('/api/financial-report/html', htmlBody(report)));
+    expect(h.status).toBe(422);
+    expect(runHtmlEditor).not.toHaveBeenCalled();
+  });
+
+  it('la reconciliación del analista que reenvía la UI sólo endurece: `clean: false` bloquea /html', async () => {
+    const report = await honestReport();
+    const h = await html(
+      req('/api/financial-report/html', {
+        ...htmlBody(report),
+        niifReconciliation: { clean: false, deviations: [], lineGaps: [], repairAttempted: true },
+      }),
+    );
+    expect(h.status).toBe(422);
+    expect(runHtmlEditor).not.toHaveBeenCalled();
+  });
+
+  it('punto de equilibrio alterado en el JSON de la Parte II: el Editor Jefe recibe el derivado por el código', async () => {
+    const report = structuredClone(await honestReport());
+    const s = report.strategicAnalysis.json as StrategyReportJson;
+    s.breakEven = {
+      ...s.breakEven!,
+      fixedCostsCop: '100000000',
+      variableCostsCop: '50000000',
+      revenueCop: '200000000',
+      breakEvenPointCop: '777777700',
+      marginOfSafetyPct: '61,1',
+    };
+    const ex = await exportReport(
+      req('/api/financial-report/export', { report, rawData: PROVENANCE_CSV, format: 'excel', language: 'es' }),
+    );
+    expect(ex.status).toBe(200);
+    const exported = vi.mocked(generateFinancialExcel).mock.calls[0][0].report.strategicAnalysis
+      .json as StrategyReportJson;
+    expect(exported.breakEven?.breakEvenPointCop).not.toBe('777777700');
+
+    const h = await html(req('/api/financial-report/html', htmlBody(report)));
+    expect(h.status).toBe(200);
+    const input = vi.mocked(runHtmlEditor).mock.calls[0][0] as unknown as { strategyReport: StrategyReportJson };
+    expect(input.strategyReport.breakEven?.breakEvenPointCop).toBe(exported.breakEven?.breakEvenPointCop);
   });
 });

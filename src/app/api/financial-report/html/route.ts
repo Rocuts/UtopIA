@@ -50,18 +50,21 @@ import {
   resolveOwnedReportId,
   type TelemetryContext,
 } from '@/lib/db/telemetry';
-import {
-  financialExportBlockers,
-  niifArithmeticBlockers,
-} from '@/lib/export/financial-export-validation';
+import { financialExportBlockers } from '@/lib/export/financial-export-validation';
 import { revivePreprocessedBalance, toJsonSafe } from '@/lib/preprocessing/json-safe';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import type { GovernanceReportJson } from '@/lib/agents/financial/contracts/governance-report';
 import type { CompanyInfo } from '@/lib/agents/financial/types';
+import type { FinancialReport } from '@/lib/agents/financial/types';
+import type { Adjustment } from '@/lib/agents/repair/types';
+import type { applyAdjustments } from '@/lib/agents/repair/adjustments';
 import { serverActaVerdict } from '@/lib/reports/part-verdicts';
-import { withServerRenderedPersisted } from '@/lib/reports/part-markdown';
+import {
+  withServerRenderedClientReport,
+  withServerRenderedPersisted,
+} from '@/lib/reports/part-markdown';
 import { resolvePersistedReport } from '@/lib/reports/persisted-report-request';
-import { htmlInputFromPersisted } from '@/lib/reports/html-input';
+import { htmlClientReport, htmlInputFromPersisted } from '@/lib/reports/html-input';
 import {
   readAppliedAdjustments,
   rederivePreprocessedFromRows,
@@ -210,22 +213,24 @@ export async function POST(req: Request) {
     // filas con los ajustes confirmados que reenvía (`adjustmentLedger`) y se
     // usa el re-derivado; si sus totales de control difieren → 422.
     let preprocessed: PreprocessedBalance | undefined;
+    let adjustments: { applied: Adjustment[]; affected: ReturnType<typeof applyAdjustments>['affected'] } | null =
+      null;
     if (persisted.kind === 'ok') {
       preprocessed = persisted.preprocessed;
     } else {
       const bodyPreprocessed = (body as { preprocessed?: unknown }).preprocessed;
       if (bodyPreprocessed !== undefined && bodyPreprocessed !== null) {
         const revived = revivePreprocessedBalance(bodyPreprocessed);
-        const adjustments = readAppliedAdjustments(
+        const applied = readAppliedAdjustments(
           (body as { adjustmentLedger?: unknown }).adjustmentLedger,
         );
-        if (!revived || !adjustments) {
+        if (!revived || !applied) {
           return NextResponse.json(
             { error: revived ? 'Invalid adjustmentLedger format.' : 'Invalid preprocessed format.' },
             { status: 400 },
           );
         }
-        const rederived = rederivePreprocessedFromRows(revived, adjustments);
+        const rederived = rederivePreprocessedFromRows(revived, applied);
         if (!rederived.ok) {
           return NextResponse.json(
             { error: 'Report is not exportable.', details: rederived.details },
@@ -233,33 +238,38 @@ export async function POST(req: Request) {
           );
         }
         preprocessed = rederived.preprocessed;
+        if (applied.length > 0) adjustments = { applied, affected: rederived.affected };
       }
     }
 
-    // Gate aritmético ANTES de pagar el Editor Jefe (32-48K tokens): la MISMA
-    // función que Excel/PDF (`niifArithmeticBlockers`, pipeline-flujo-10):
-    // validador JSON NIIF con E15/E6 promovidos, invariantes del EFE, columna
-    // comparativa, subtotales, códigos del ERI y Parte II contra sus anclas.
-    // Con el preprocesado que usó /niif, además los cruces contra sus anclas.
-    // Antes /html sólo validaba la forma: un JSON NIIF con Activo ≠ Pasivo +
-    // Patrimonio producía un HTML "emitible".
-    //
-    // Con versión persistida el servidor tiene el informe completo: se aplica
-    // el MISMO gate que /export sobre ESA versión (`financialExportBlockers`:
-    // validación post-render, emitibilidad, salvedades, completitud, identidad
-    // y el gate aritmético). Sin esto una versión que /export rechaza salía en
-    // HTML sellado "procedencia verificada".
-    const blockers =
-      persisted.kind === 'ok'
-        ? financialExportBlockers(persisted.report, preprocessed)
-        : niifArithmeticBlockers(parsed.data.niifReport, {
-            strategyJson: parsed.data.strategyReport,
-            preprocessed,
-          });
-    // Veredictos de las Partes II y III (auditoría 2026-09-24, e2e-niif-16):
-    // /export ya bloqueaba con `actaQualifications`/`strategyQualifications`
-    // en `clean: false`, pero /html no los miraba y el HTML salía "emitible"
-    // con un acta cuya utilidad neta contradecía el P&G.
+    // Gate ANTES de pagar el Editor Jefe (32-48K tokens): el MISMO que
+    // Excel/PDF (`financialExportBlockers`: validación post-render,
+    // emitibilidad, salvedades, completitud, identidad y el gate aritmético
+    // `niifArithmeticBlockers` —validador JSON NIIF con E15/E6 promovidos,
+    // invariantes del EFE, columna comparativa, subtotales, códigos del ERI y
+    // Parte II contra sus anclas—), sobre un informe cuyas Partes ya pasaron
+    // por el recálculo del servidor:
+    //   - con versión persistida, ESA versión (`withServerRenderedPersisted`,
+    //     arriba);
+    //   - sin ella (procedencia-R2-03, e2e-niif2-06), el MISMO camino que
+    //     /export sin referencia (`withServerRenderedClientReport`):
+    //     veredictos de las tres Partes recalculados contra el balance
+    //     re-derivado (invariantes y prosa de la Parte I, anclas y prosa de la
+    //     Parte II, aritmética y prosa del acta, identidad de las Partes II/III),
+    //     post-proceso de la Parte II y gate de emisión V1–V15 sobre el texto
+    //     que produce el servidor. Antes sólo corrían el gate aritmético y el
+    //     acta: un informe que /export rechaza salía en HTML y el Editor Jefe
+    //     recibía el JSON de la Parte II sin post-procesar.
+    let serverReport: FinancialReport;
+    if (persisted.kind === 'ok') {
+      serverReport = persisted.report;
+    } else {
+      const received = htmlClientReport(body as Record<string, unknown>, parsed.data);
+      serverReport =
+        withServerRenderedClientReport(received, { preprocessed, adjustments, rawData: null }, parsed.data.language) ??
+        received;
+    }
+    const blockers = financialExportBlockers(serverReport, preprocessed);
     blockers.push(...partQualificationBlockers(body, parsed.data, preprocessed));
     if (blockers.length > 0) {
       return NextResponse.json(
@@ -269,7 +279,20 @@ export async function POST(req: Request) {
     }
     // El Editor Jefe (reconciliación §1.1 y contexto) usa el MISMO preprocesado
     // con que se acaba de validar: el re-derivado o el de la versión persistida.
-    const editorInput = { ...parsed.data, preprocessed: preprocessed ? toJsonSafe(preprocessed) : null };
+    // Sin referencia, los JSON que ve el Editor Jefe son los que el servidor
+    // acaba de verificar (la Parte II con sus cifras derivadas fijadas por el
+    // código), no los recibidos.
+    const editorInput = {
+      ...parsed.data,
+      ...(persisted.kind === 'ok'
+        ? {}
+        : {
+            niifReport: serverReport.niifAnalysis.json ?? parsed.data.niifReport,
+            strategyReport: serverReport.strategicAnalysis.json ?? parsed.data.strategyReport,
+            governanceReport: serverReport.governance.json ?? parsed.data.governanceReport,
+          }),
+      preprocessed: preprocessed ? toJsonSafe(preprocessed) : null,
+    };
 
     // Hechos del negocio (Ola 2) — resueltos SERVER-SIDE, nunca desde el body
     // del cliente (tenancy). El bloque <hechos_empresa> viaja al <context> del

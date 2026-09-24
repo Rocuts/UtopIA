@@ -14,7 +14,7 @@ import {
   informeHonesto,
   preprocesarPerdidaComparativo,
 } from '@/lib/agents/financial/__fixtures__/perdida-comparativo-w4a';
-import { buildActaExpectedArithmetic } from '@/lib/agents/financial/prompts/governance-specialist.prompt';
+import { coherentGovernanceJson, coherentStrategyJson } from '@/lib/reports/__tests__/coherent-parts';
 import { toJsonSafe } from '@/lib/preprocessing/json-safe';
 
 const mockRunHtmlEditor = vi.fn();
@@ -44,31 +44,24 @@ const COMPANY = {
   fiscalPeriod: '2025', comparativePeriod: '2024', city: null, signatories: null,
 };
 
+const NIIF = informeHonesto(pp);
+
+/**
+ * Parte III del contrato con la aritmética esperada del acta y la utilidad
+ * neta dada. Desde la re-auditoría final (procedencia-R2-03) /html sin
+ * referencia aplica el mismo gate que /export sin referencia: las Partes II y
+ * III llevan JSON completo (un JSON parcial sella la Parte).
+ */
 function acta(netIncomeCop: string) {
-  const exp = buildActaExpectedArithmetic({ name: COMPANY.name, nit: COMPANY.nit, fiscalPeriod: '2025', entityType: 'SAS' }, pp)!;
-  return {
-    shareholderMinutes: {
-      resultDistribution: {
-        netIncomeCop,
-        applies: exp.distributionApplies,
-        lines: [],
-        neutralProposalText: 'La asamblea decide sobre el cubrimiento de la pérdida.',
-      },
-      capitalizationProposal: {
-        applies: exp.capitalizationApplies,
-        retainedEarningsBaseCop: exp.capitalizationBaseCop,
-        capitalizationAmountCop: exp.capitalizationAmountCop,
-        legalReference: 'Ley 1258/2008',
-        body: 'No se propone capitalización.',
-      },
-    },
-  };
+  const gov = coherentGovernanceJson(NIIF, COMPANY as never, pp);
+  gov.shareholderMinutes!.resultDistribution!.netIncomeCop = netIncomeCop;
+  return gov;
 }
 
 function body(governanceReport: unknown, extra: Record<string, unknown> = {}) {
   return {
-    niifReport: informeHonesto(pp),
-    strategyReport: {},
+    niifReport: NIIF,
+    strategyReport: coherentStrategyJson(NIIF, pp),
     governanceReport,
     company: COMPANY,
     metadata: { entityNit: '900123456', periodEnd: '2025-12-31' },
@@ -118,8 +111,8 @@ describe('/html — gate de las Partes II y III (e2e-niif-16)', () => {
 
   it('sin preprocesado, un acta que reparte o capitaliza con monto no se emite', async () => {
     const gov = acta('-4000000000');
-    gov.shareholderMinutes.capitalizationProposal.applies = true;
-    gov.shareholderMinutes.capitalizationProposal.capitalizationAmountCop = '100000000';
+    gov.shareholderMinutes!.capitalizationProposal!.applies = true;
+    gov.shareholderMinutes!.capitalizationProposal!.capitalizationAmountCop = '100000000';
     const res = await post(body(gov, { preprocessed: undefined }));
     expect(res.status).toBe(422);
   });

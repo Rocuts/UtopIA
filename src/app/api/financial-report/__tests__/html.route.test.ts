@@ -17,6 +17,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ChecklistFailure } from '@/lib/agents/financial/agents/html-editor-validator';
 import { makeCoherentNiifReport } from '@/lib/agents/financial/__fixtures__/coherent-niif-report';
+import { coherentGovernanceJson, coherentStrategyJson } from '@/lib/reports/__tests__/coherent-parts';
 
 // ---------------------------------------------------------------------------
 // Mocks — declarados ANTES del dynamic import del route
@@ -121,14 +122,27 @@ const { POST } = await import('../html/route.js');
 // Fixtures
 // ---------------------------------------------------------------------------
 
-/** Body mínimo que pasa la validación mockeada del schema */
+/**
+ * Body que pasa la validación mockeada del schema. Desde la re-auditoría final
+ * (procedencia-R2-03) /html sin referencia aplica el MISMO gate que /export
+ * sin referencia: las tres Partes deben traer JSON del contrato (el real lo
+ * exige; un `{}` dejaba la Parte II/III sellada) y la empresa del encabezado
+ * debe ser la de los estados (identidad).
+ */
+const COHERENT_NIIF = makeCoherentNiifReport();
+const COHERENT_COMPANY = {
+  name: COHERENT_NIIF.company.name,
+  nit: COHERENT_NIIF.company.nit,
+  fiscalPeriod: COHERENT_NIIF.company.fiscalPeriod,
+  entityType: 'SAS',
+};
 const VALID_BODY = {
   // JSON NIIF estructuralmente válido y coherente: el route aplica el gate
   // aritmético servidor (misma regla que Excel/PDF) antes del Editor Jefe.
-  niifReport: makeCoherentNiifReport(),
-  strategyReport: {},
-  governanceReport: {},
-  company: { name: 'Empresa Test SAS', nit: '900123456-1', fiscalPeriod: '2025' },
+  niifReport: COHERENT_NIIF,
+  strategyReport: coherentStrategyJson(COHERENT_NIIF),
+  governanceReport: coherentGovernanceJson(COHERENT_NIIF, COHERENT_COMPANY),
+  company: COHERENT_COMPANY,
   metadata: MOCK_METADATA,
   language: 'es',
 };

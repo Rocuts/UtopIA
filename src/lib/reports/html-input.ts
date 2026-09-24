@@ -1,4 +1,4 @@
-import type { FinancialReport } from '@/lib/agents/financial/types';
+import type { CompanyInfo, FinancialReport, NiifAnalysisResult } from '@/lib/agents/financial/types';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { toJsonSafe } from '@/lib/preprocessing/json-safe';
 import { aggregateConfidence, summarizeCoverage } from '@/lib/preprocessing/v8-helpers';
@@ -103,5 +103,80 @@ export function htmlInputFromPersisted(
     preprocessed: preprocessed ? toJsonSafe(preprocessed) : null,
     actaQualifications: report.governance?.actaQualifications ?? null,
     strategyQualifications: report.strategicAnalysis?.strategyQualifications ?? null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// /html SIN referencia: el informe que el servidor verifica (procedencia-R2-03)
+// ---------------------------------------------------------------------------
+// Sin versión persistida /html recibe los tres JSON, la empresa y el balance
+// del navegador. /export sin referencia los pasa por
+// `withServerRenderedClientReport` (veredictos del servidor, identidad de las
+// Partes II/III, prosa de la Parte I, post-proceso de la Parte II y gate
+// V1–V15 recalculado); /html sólo corría el gate aritmético y el acta, así que
+// un informe que /export rechaza salía en HTML y el Editor Jefe recibía el
+// JSON de la Parte II sin post-procesar. Aquí se arma el MISMO `FinancialReport`
+// que /export recibiría: las Partes con su JSON y sin texto (el servidor lo
+// produce desde el JSON) y los veredictos que reenvía el cliente (sólo pueden
+// endurecer).
+// ---------------------------------------------------------------------------
+
+function objectOrNull(v: unknown): Record<string, unknown> | null {
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+}
+
+export function htmlClientReport(
+  body: Record<string, unknown>,
+  input: {
+    niifReport: unknown;
+    strategyReport: unknown;
+    governanceReport: unknown;
+    company: { name: string; nit: string; fiscalPeriod: string; entityType: string | null; comparativePeriod?: string | null };
+  },
+): FinancialReport {
+  // Mismo insumo que usó /governance para el régimen de la reserva legal: la
+  // empresa del intake que reenvía el cliente, con la identidad ya validada.
+  const rawCompany = objectOrNull(body.company) ?? {};
+  const company = {
+    ...rawCompany,
+    name: input.company.name,
+    nit: input.company.nit,
+    fiscalPeriod: input.company.fiscalPeriod,
+    entityType: input.company.entityType ?? undefined,
+    comparativePeriod: input.company.comparativePeriod ?? undefined,
+  } as CompanyInfo;
+  const acta = objectOrNull(body.actaQualifications);
+  const strategy = objectOrNull(body.strategyQualifications);
+  const reconciliation = objectOrNull(body.niifReconciliation);
+  return {
+    company,
+    niifAnalysis: {
+      balanceSheet: '',
+      incomeStatement: '',
+      cashFlowStatement: '',
+      equityChangesStatement: '',
+      technicalNotes: '',
+      fullContent: '',
+      json: input.niifReport as NiifAnalysisResult['json'],
+      ...(reconciliation ? { reconciliation: reconciliation as unknown as NiifAnalysisResult['reconciliation'] } : {}),
+    },
+    strategicAnalysis: {
+      kpiDashboard: '',
+      breakEvenAnalysis: '',
+      projectedCashFlow: '',
+      strategicRecommendations: '',
+      fullContent: '',
+      json: input.strategyReport as FinancialReport['strategicAnalysis']['json'],
+      ...(strategy ? { strategyQualifications: strategy as unknown as FinancialReport['strategicAnalysis']['strategyQualifications'] } : {}),
+    },
+    governance: {
+      financialNotes: '',
+      shareholderMinutes: '',
+      fullContent: '',
+      json: input.governanceReport as FinancialReport['governance']['json'],
+      ...(acta ? { actaQualifications: acta as unknown as FinancialReport['governance']['actaQualifications'] } : {}),
+    },
+    consolidatedReport: '',
+    generatedAt: '',
   };
 }

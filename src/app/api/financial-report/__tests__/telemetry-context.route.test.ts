@@ -25,6 +25,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { makeCoherentNiifReport } from '@/lib/agents/financial/__fixtures__/coherent-niif-report';
+import { coherentGovernanceJson, coherentStrategyJson } from '@/lib/reports/__tests__/coherent-parts';
 
 const WORKSPACE = '11111111-1111-4111-8111-111111111111';
 const REPORT = '33333333-3333-4333-8333-333333333333';
@@ -227,17 +228,22 @@ const RUTAS = [
     nombre: 'html',
     agente: 'html-editor',
     post: postHtml,
-    body: (extra: Record<string, unknown> = {}) => ({
-      // JSON NIIF estructuralmente válido: /html aplica el gate aritmético
-      // servidor antes de invocar al Editor Jefe (pipeline-flujo-10).
-      niifReport: makeCoherentNiifReport(),
-      strategyReport: { fullContent: '## Estrategia' },
-      governanceReport: { fullContent: '## Gobierno' },
-      metadata: { entityNit: '900123456-1' },
-      company: COMPANY,
-      language: 'es',
-      ...extra,
-    }),
+    body: (extra: Record<string, unknown> = {}) => {
+      // Informe coherente: /html sin referencia aplica el gate de /export sin
+      // referencia (procedencia-R2-03) antes de invocar al Editor Jefe — los
+      // tres JSON del contrato y la empresa de los estados.
+      const niifReport = makeCoherentNiifReport();
+      const company = { name: niifReport.company.name, nit: niifReport.company.nit, fiscalPeriod: '2025', entityType: 'SAS' };
+      return {
+        niifReport,
+        strategyReport: coherentStrategyJson(niifReport),
+        governanceReport: coherentGovernanceJson(niifReport, company),
+        metadata: { entityNit: '900123456-1' },
+        company,
+        language: 'es',
+        ...extra,
+      };
+    },
   },
 ] as const;
 

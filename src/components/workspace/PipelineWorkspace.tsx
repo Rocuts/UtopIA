@@ -3698,6 +3698,10 @@ export function PipelineWorkspace() {
         // (clean === false), igual que Excel/PDF.
         actaQualifications: backendReport.governance?.actaQualifications ?? null,
         strategyQualifications: backendReport.strategicAnalysis?.strategyQualifications ?? null,
+        // procedencia-R2-03: sin referencia, /html pasa el informe por el gate
+        // de /export sin referencia; la reconciliación del analista viaja como
+        // en /export (un `clean: false` sólo puede endurecer).
+        niifReconciliation: backendReport.niifAnalysis?.reconciliation ?? null,
         // pipeline-flujo-21: un consolidado BORRADOR (override del Doctor de
         // Datos) hace que el sello de procedencia del HTML lo aclare.
         ...(isProvisionalDraft(backendReport) ? { provisional: { active: true } } : {}),

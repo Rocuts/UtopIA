@@ -178,11 +178,14 @@ describe('ajuste del Doctor de Datos anclado al comparativo', () => {
     expect(loose.status, await loose.clone().text()).toBe(200);
 
     const r = consolidated.report;
+    // Lo que envía la UI (`handleGenerateHtml`): los tres JSON del informe.
+    // /html sin referencia aplica el gate de /export sin referencia
+    // (procedencia-R2-03), que sella una Parte II/III sin JSON del contrato.
     const page = await html(
       req('/api/financial-report/html', {
         niifReport: r.niifAnalysis.json,
-        strategyReport: {},
-        governanceReport: {},
+        strategyReport: r.strategicAnalysis.json,
+        governanceReport: r.governance.json,
         company: { ...r.company, sector: null, city: null, signatories: null },
         metadata: { entityNit: r.company.nit, periodEnd: '2025-12-31' },
         language: 'es',
