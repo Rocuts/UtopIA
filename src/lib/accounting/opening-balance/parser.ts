@@ -18,6 +18,7 @@
 // ---------------------------------------------------------------------------
 
 import {
+  isDebitNaturePuc,
   parseTrialBalanceCSV,
   preprocessTrialBalance,
   type RawAccountRow,
@@ -218,19 +219,11 @@ async function parseXLSXContent(buffer: Buffer): Promise<ParseFileResult> {
 // ---------------------------------------------------------------------------
 
 /**
- * Naturaleza PUC (Decreto 2650/1993) por clase y grupo (auditoría ingesta-29):
- *   - Clases 1, 5, 6, 7: deudoras.  Clases 2, 3, 4: acreedoras.
- *   - Clase 8 (orden deudoras): 81-83 deudoras; 84-86 "por contra" acreedoras.
- *   - Clase 9 (orden acreedoras): 91-93 acreedoras; 94-96 "por contra" deudoras.
- * Antes `classCode >= 5` trataba toda la clase 9 como deudora.
+ * Naturaleza PUC por clase y grupo (ingesta-29). La regla vive en el
+ * preprocesador para que el parser de balances y este importador usen la
+ * misma; se reexporta por compatibilidad con los consumidores existentes.
  */
-export function isDebitNaturePuc(code: string): boolean {
-  const cls = parseInt(code[0] ?? '', 10);
-  const grp = parseInt(code.slice(0, 2), 10);
-  if (cls === 8) return !(grp >= 84 && grp <= 86);
-  if (cls === 9) return grp >= 94 && grp <= 96;
-  return cls === 1 || cls === 5 || cls === 6 || cls === 7;
-}
+export { isDebitNaturePuc };
 
 /**
  * Filtra hojas (transactional o level === 'Auxiliar') y enruta el saldo

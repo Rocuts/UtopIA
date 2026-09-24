@@ -1042,15 +1042,28 @@ function isUsableHeader(layout: HeaderLayout): boolean {
 
 const CANONICAL_LEVELS = new Set(['Clase', 'Grupo', 'Cuenta', 'Subcuenta', 'Auxiliar']);
 
-/** Clases PUC de naturaleza débito (el resto se deriva crédito − débito). */
-const DEBIT_NATURE_CLASSES = [1, 5, 6, 7];
+/**
+ * Naturaleza PUC (Decreto 2650/1993) por clase y grupo (auditoría ingesta-29):
+ *   - Clases 1, 5, 6, 7: deudoras.  Clases 2, 3, 4: acreedoras.
+ *   - Clase 8 (orden deudoras): 81-83 deudoras; 84-86 "por contra" acreedoras.
+ *   - Clase 9 (orden acreedoras): 91-93 acreedoras; 94-96 "por contra" deudoras.
+ * Fuente única: la usan el parser de balances (saldo = débito − crédito en las
+ * deudoras) y el importador de saldos de apertura (lado del asiento).
+ */
+export function isDebitNaturePuc(code: string): boolean {
+  const cls = parseInt(code[0] ?? '', 10);
+  const grp = parseInt(code.slice(0, 2), 10);
+  if (cls === 8) return !(grp >= 84 && grp <= 86);
+  if (cls === 9) return grp >= 94 && grp <= 96;
+  return cls === 1 || cls === 5 || cls === 6 || cls === 7;
+}
 
-function natureBalance(classCode: number, debit: number, credit: number): number {
-  const value = DEBIT_NATURE_CLASSES.includes(classCode) ? debit - credit : credit - debit;
+function natureBalance(code: string, debit: number, credit: number): number {
+  const value = isDebitNaturePuc(code) ? debit - credit : credit - debit;
   return value === 0 ? 0 : value;
 }
 
-function readBalanceCell(cols: string[], col: BalanceColumn, classCode: number): AmountCell {
+function readBalanceCell(cols: string[], col: BalanceColumn, code: string): AmountCell {
   const first = parseAmountCell(cols[col.index]);
   if (col.creditIndex === undefined) return first;
   const credit = parseAmountCell(cols[col.creditIndex]);
@@ -1059,7 +1072,7 @@ function readBalanceCell(cols: string[], col: BalanceColumn, classCode: number):
   if (first.kind === 'empty' && credit.kind === 'empty') return first;
   const d = first.kind === 'number' ? first.value : 0;
   const c = credit.kind === 'number' ? credit.value : 0;
-  return { kind: 'number', value: natureBalance(classCode, d, c) };
+  return { kind: 'number', value: natureBalance(code, d, c) };
 }
 
 function unreadableMessage(code: string, header: string, cell: UnreadableCell): string {
@@ -1133,7 +1146,6 @@ export function parseTrialBalanceCSVWithMeta(
       transactional = level === 'Auxiliar';
     }
 
-    const classCode = parseInt(code[0], 10);
     const balancesByPeriod: Record<string, number> = {};
     const rowIssues: RawRowParseIssue[] = [];
     const name = (cols[nameIdx] || '').trim().replace(/['"]/g, '');
@@ -1157,7 +1169,7 @@ export function parseTrialBalanceCSVWithMeta(
       // Caso normal: hay columnas de saldo identificadas. Cada columna
       // alimenta su periodo correspondiente.
       for (const col of balanceColumns) {
-        const cell = readBalanceCell(cols, col, classCode);
+        const cell = readBalanceCell(cols, col, code);
         if (cell.kind === 'number') {
           balancesByPeriod[col.period] = cell.value;
           numericPeriods.add(col.period);
@@ -1178,7 +1190,7 @@ export function parseTrialBalanceCSVWithMeta(
       }
       if (debit.kind !== 'unreadable' && credit.kind !== 'unreadable') {
         balancesByPeriod[dcPeriod] = natureBalance(
-          classCode,
+          code,
           debit.kind === 'number' ? debit.value : 0,
           credit.kind === 'number' ? credit.value : 0,
         );
