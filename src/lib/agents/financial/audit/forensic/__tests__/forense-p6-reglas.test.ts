@@ -93,6 +93,43 @@ describe('auditoria-calidad-24 — Benford con MAD de Nigrini', () => {
     expect(a.affectedAmountCop).toBe(`${expected}.00`);
   });
 
+  it('partida doble: el mismo monto al débito y al crédito del asiento es una sola cifra de la muestra', () => {
+    const entries = debitLines(new Array(9).fill(7), (d) => `${d}345678.00`);
+    const doubled = entries.flatMap((l) => [l, { ...l, debit: '0.00', credit: l.debit }]);
+    expect(evaluateBenford(doubled).n).toBe(63);
+    // Asiento dividido: $1.190.000 contra $1.000.000 + $190.000 → tres cifras.
+    const split: JournalLineAmount[] = [
+      { entryId: 'v', debit: '1190000.00', credit: '0.00', thirdPartyId: null },
+      { entryId: 'v', debit: '0.00', credit: '1000000.00', thirdPartyId: null },
+      { entryId: 'v', debit: '0.00', credit: '190000.00', thirdPartyId: null },
+    ];
+    expect(evaluateBenford([...doubled, ...split]).n).toBe(66);
+  });
+
+  it('libros honestos de asientos de dos líneas no se marcan por duplicar la muestra', () => {
+    // Montos log-uniformes en 6 décadas = distribución de Benford exacta. Con
+    // cada monto contado al débito y al crédito, el chi² se duplicaba y ~47 %
+    // de los períodos de 100 asientos salían con anomalía.
+    let seed = 20260924;
+    const rnd = () => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return seed / 4294967296;
+    };
+    const trials = 200;
+    let anomalies = 0;
+    for (let t = 0; t < trials; t++) {
+      const ledger: JournalLineAmount[] = [];
+      for (let i = 0; i < 100; i++) {
+        const amount = Math.pow(10, 2 + 6 * rnd()).toFixed(2);
+        ledger.push({ entryId: `t${t}-${i}`, debit: amount, credit: '0.00', thirdPartyId: null });
+        ledger.push({ entryId: `t${t}-${i}`, debit: '0.00', credit: amount, thirdPartyId: null });
+      }
+      if (evaluateBenford(ledger).kind === 'anomaly') anomalies++;
+    }
+    // α nominal del chi² = 5 %; holgura para el ruido de 200 corridas.
+    expect(anomalies / trials).toBeLessThan(0.1);
+  });
+
   it('montos menores a $10 no entran a la prueba', () => {
     const small = debitLines(new Array(9).fill(10), (d) => `${d}.50`);
     const ev = evaluateBenford(small);

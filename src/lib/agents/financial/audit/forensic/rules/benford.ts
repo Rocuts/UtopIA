@@ -3,6 +3,8 @@
 // Algoritmo:
 //   1. Extrae los montos ≥ $10 (débito y crédito) de las journal_lines. Los
 //      montos menores distorsionan la prueba del primer dígito (Nigrini).
+//      Un mismo monto al débito y al crédito del mismo asiento cuenta UNA vez
+//      (partida doble): contarlo dos veces duplica N y el chi².
 //   2. Para cada monto, obtiene el primer dígito significativo (1-9).
 //   3. Construye la distribución observada de los 9 dígitos.
 //   4. Dos estadísticos complementarios (auditoria-calidad-24):
@@ -140,9 +142,19 @@ interface BenfordAmount {
   digit: number;
 }
 
-/** Montos ≥ $10 de las líneas, un registro por lado con saldo. */
+/**
+ * Montos ≥ $10 de las líneas, una cifra por monto de la transacción.
+ *
+ * Partida doble: el mismo monto al débito y al crédito del mismo asiento
+ * (compra de $5.000.000: gasto / proveedor) es UNA cifra, no dos. Contarla
+ * dos veces duplica N sin información nueva y duplica el chi²: con libros
+ * honestos de asientos de dos líneas la prueba marcaba ~47 % de los períodos
+ * de 25 a 200 asientos. Por asiento, cada crédito que tiene un débito igual
+ * se empareja y no se vuelve a contar; los montos sin pareja (asientos
+ * divididos: $1.190.000 contra $1.000.000 + $190.000) entran todos.
+ */
 function collectAmounts(lines: JournalLineAmount[]): BenfordAmount[] {
-  const out: BenfordAmount[] = [];
+  const byEntry = new Map<string, { debit: BenfordAmount[]; credit: BenfordAmount[] }>();
   for (const line of lines) {
     for (const side of ['debit', 'credit'] as const) {
       const raw = line[side];
@@ -150,7 +162,27 @@ function collectAmounts(lines: JournalLineAmount[]): BenfordAmount[] {
       if (cents === null || cents < MIN_AMOUNT_CENTS) continue;
       const digit = firstSignificantDigit(raw);
       if (digit === null) continue;
-      out.push({ entryId: line.entryId, side, raw, cents, digit });
+      const bucket = byEntry.get(line.entryId) ?? { debit: [], credit: [] };
+      bucket[side].push({ entryId: line.entryId, side, raw, cents, digit });
+      byEntry.set(line.entryId, bucket);
+    }
+  }
+
+  const out: BenfordAmount[] = [];
+  for (const { debit, credit } of byEntry.values()) {
+    // Débitos pendientes de emparejar, por monto en centavos.
+    const unpairedDebits = new Map<bigint, number>();
+    for (const d of debit) {
+      out.push(d);
+      unpairedDebits.set(d.cents, (unpairedDebits.get(d.cents) ?? 0) + 1);
+    }
+    for (const c of credit) {
+      const pending = unpairedDebits.get(c.cents) ?? 0;
+      if (pending > 0) {
+        unpairedDebits.set(c.cents, pending - 1); // gemelo de un débito: ya contado
+        continue;
+      }
+      out.push(c);
     }
   }
   return out;
