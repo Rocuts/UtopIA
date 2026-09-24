@@ -417,8 +417,22 @@ function deriveValidation(preprocessed: unknown): {
   reasons: string[];
   suggestedAccounts: string[];
   adjustments: string[];
+  /**
+   * Subconjunto de `reasons` que ni el Bridge de Cuadratura ni la
+   * re-validación del Doctor de Datos pueden levantar: integridad de los
+   * datos leídos (`validation.integrityReasons`) y bloqueos escritos por el
+   * curator después de R8 (`validation.curatorBlockingReasons`: CUR-R8,
+   * CUR-R5, CUR-R12). Con prefijo de periodo, igual que `reasons`.
+   */
+  persistentReasons: string[];
 } {
-  const empty = { blocking: false, reasons: [], suggestedAccounts: [], adjustments: [] };
+  const empty = {
+    blocking: false,
+    reasons: [],
+    suggestedAccounts: [],
+    adjustments: [],
+    persistentReasons: [],
+  };
   if (!preprocessed || typeof preprocessed !== 'object') return empty;
   const pp = preprocessed as { periods?: PeriodSnapshot[] };
   const snapshots = Array.isArray(pp.periods) ? pp.periods : [];
@@ -431,11 +445,33 @@ function deriveValidation(preprocessed: unknown): {
   const reasons: string[] = [];
   const suggestedAccounts: string[] = [];
   const adjustments: string[] = [];
+  const persistentReasons: string[] = [];
 
   for (const snap of snapshots) {
     const v = snap.validation;
     if (!v) continue;
     const tag = `[${snap.period}] `;
+
+    // Motivos que ningún cierre virtual resuelve (auditoría 2026-09):
+    //   - `integrityReasons` (WP02, niif-preproceso-05): importes ilegibles,
+    //     columnas de saldo ambiguas, filas desplazadas, códigos no PUC.
+    //   - `curatorBlockingReasons` (WP03): residual que el traslado del
+    //     resultado no explica (CUR-R8), desglose del patrimonio ≠ clase 3
+    //     (CUR-R5), P&G posiblemente acumulado (CUR-R12).
+    // El Bridge sólo puede degradar las razones pre-R8 que el traslado del
+    // resultado sí explica; éstas siempre bloquean y se conservan en `reasons`.
+    const persistent = Array.from(
+      new Set([
+        ...asStringArray(v.integrityReasons),
+        ...asStringArray(v.curatorBlockingReasons),
+      ]),
+    );
+    const persistentSet = new Set(persistent);
+    const snapReasons = asStringArray(v.reasons);
+    // Defensivo: un motivo persistente que no figure en `reasons` también
+    // debe verse en el 422.
+    const allReasons = [...snapReasons, ...persistent.filter((r) => !snapReasons.includes(r))];
+    for (const r of persistent) persistentReasons.push(`${tag}${r}`);
 
     // ── BRIDGE DE CUADRATURA ────────────────────────────────────────────
     // El flag `validation.blocking` se setea en `buildSnapshotForPeriod`
@@ -457,6 +493,9 @@ function deriveValidation(preprocessed: unknown): {
     //   - Si R8 absorbió un residual MATERIAL (>1% activo) en 3710VC, el
     //     bridge NO se activa: el descuadre puede ser un error de captura
     //     enmascarado y debe revisarse manualmente (FIX audit B3).
+    //   - Aun con el bridge activo, los motivos persistentes (integridad y
+    //     bloqueos post-R8 del curator, ver arriba) mantienen blocking=true y
+    //     se publican en `reasons`, nunca en `adjustments`.
     const equationBalancedPostCurator =
       snap.summary?.equationBalanced === true;
     const r8Applied = snap.virtualCloseAdjustment !== undefined;
@@ -469,28 +508,33 @@ function deriveValidation(preprocessed: unknown): {
     const bridgeActive =
       equationBalancedPostCurator && r8Applied && adjustmentIsImmaterial;
 
-    if (v.blocking && !bridgeActive) {
+    if ((v.blocking && !bridgeActive) || persistent.length > 0) {
       blocking = true;
     }
 
     if (bridgeActive && v.blocking) {
-      // Bridge de Cuadratura activo: las razones pre-R8 son informativas,
-      // no bloqueantes. El operador ve el ajuste documentado.
-      const monto = snap.virtualCloseAdjustment?.dynamicNetIncome ?? 0;
-      adjustments.push(
-        `${tag}Bridge de Cuadratura aplicado: utilidad transitoria de ` +
-          `$${monto.toLocaleString('es-CO', { maximumFractionDigits: 0 })} ` +
-          `trasladada a Patrimonio (cuenta virtual 3605VC). Ecuación post-R8 cuadra al centavo.`,
-      );
-      for (const r of asStringArray(v.reasons)) {
-        adjustments.push(`${tag}[informativo, no-bloqueante] ${r}`);
+      // Bridge de Cuadratura activo: las razones pre-R8 que el traslado del
+      // resultado explica son informativas, no bloqueantes. Las persistentes
+      // (integridad / curator post-R8) siguen bloqueando.
+      const soft = allReasons.filter((r) => !persistentSet.has(r));
+      if (soft.length > 0) {
+        const monto = snap.virtualCloseAdjustment?.dynamicNetIncome ?? 0;
+        adjustments.push(
+          `${tag}Bridge de Cuadratura aplicado: utilidad transitoria de ` +
+            `$${monto.toLocaleString('es-CO', { maximumFractionDigits: 0 })} ` +
+            `trasladada a Patrimonio (cuenta virtual 3605VC). Ecuación post-R8 cuadra al centavo.`,
+        );
+      }
+      for (const r of allReasons) {
+        if (persistentSet.has(r)) reasons.push(`${tag}${r}`);
+        else adjustments.push(`${tag}[informativo, no-bloqueante] ${r}`);
       }
     } else {
-      for (const r of asStringArray(v.reasons)) reasons.push(`${tag}${r}`);
+      for (const r of allReasons) reasons.push(`${tag}${r}`);
     }
 
     // suggestedAccounts solo se reportan si el bloqueo es real.
-    if (!bridgeActive || v.blocking === false) {
+    if (!bridgeActive || v.blocking === false || persistent.length > 0) {
       for (const a of asStringArray(v.suggestedAccounts)) suggestedAccounts.push(a);
     }
     for (const adj of asStringArray(v.adjustments)) adjustments.push(`${tag}${adj}`);
@@ -501,6 +545,7 @@ function deriveValidation(preprocessed: unknown): {
     reasons,
     suggestedAccounts: Array.from(new Set(suggestedAccounts)),
     adjustments,
+    persistentReasons,
   };
 }
 
@@ -1498,11 +1543,18 @@ export async function prepareFinancialContext(
         revalidate(adjustedBalance, snap),
       );
       const freshErrors = freshResults.flatMap((r) => r.errors);
-      if (freshErrors.length > 0) {
+      // `revalidate` sólo mira la ecuación con tolerancia del 1 % del activo.
+      // Los motivos persistentes del balance AJUSTADO no los levanta: la
+      // integridad de la lectura no cambia con un ajuste, y `applyAdjustments`
+      // re-ejecuta R8 (CUR-R8 refleja el residual post-ajuste al centavo);
+      // CUR-R5 / CUR-R12 se conservan porque ningún ajuste de saldos los
+      // re-evalúa (auditoría 2026-09, WP03 recalculo-03 / recalculo-08).
+      const unresolved = [...freshErrors, ...balanceValidation.persistentReasons];
+      if (unresolved.length > 0) {
         // Los ajustes no alcanzaron a corregir el balance: 422 con las
         // cifras post-ajuste (mas precisas que las razones estancadas).
         throw new BalanceValidationError(
-          freshErrors,
+          unresolved,
           balanceValidation.suggestedAccounts,
         );
       }
