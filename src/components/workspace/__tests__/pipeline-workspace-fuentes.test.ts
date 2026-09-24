@@ -18,6 +18,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   buildFiscalContextBlock,
   exportSourceFields,
+  htmlLedgerField,
   derivePeriodBounds,
   foldReportQualifications,
   runAuditInBackground,
@@ -128,8 +129,21 @@ describe('exportSourceFields (pipeline-flujo-07)', () => {
     ],
   };
 
-  it('prefiere el preprocesado de /niif (ya ajustado)', () => {
-    expect(exportSourceFields(preprocessed, ledger)).toEqual({ preprocessed });
+  // niif-preproceso-33: el servidor ya no usa el preprocesado tal cual; lo
+  // re-deriva de `rawData` (o de sus filas) con el MISMO ledger y exige que
+  // coincida. Sin el ledger, un preprocesado ajustado se rechazaría (422).
+  it('envía el preprocesado de /niif (ya ajustado) junto con el ledger que lo ajustó', () => {
+    expect(exportSourceFields(preprocessed, ledger)).toEqual({ preprocessed, adjustmentLedger: ledger });
+    expect(exportSourceFields(preprocessed, null)).toEqual({ preprocessed });
+  });
+
+  it('/html recibe sólo los ajustes confirmados del ledger (niif-preproceso-33)', () => {
+    const proposed = { ...ledger.adjustments[0], id: 'a2', status: 'proposed' as const };
+    expect(htmlLedgerField({ adjustments: [...ledger.adjustments, proposed] })).toEqual({
+      adjustmentLedger: { adjustments: ledger.adjustments },
+    });
+    expect(htmlLedgerField({ adjustments: [proposed] })).toEqual({});
+    expect(htmlLedgerField(null)).toEqual({});
   });
 
   it('sin preprocesado envía el ledger con ajustes aplicados', () => {
