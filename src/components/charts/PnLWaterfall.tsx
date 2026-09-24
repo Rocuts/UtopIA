@@ -2,7 +2,13 @@
 
 /**
  * PnLWaterfall — cascada de utilidad (P&L Bridge):
- *   Ingresos → Costos → Gastos Op → Gastos Fin → Impuestos → Utilidad Neta.
+ *   Ingresos (operacionales) → Costos → Gastos Op → Otros ingresos (42) →
+ *   No operacionales (53) → Impuestos → Utilidad Neta.
+ *
+ * "Otros ingresos (42)" sólo aparece cuando el puente trae `otrosIngresos`
+ * (ingresos operacionales separados de los no operacionales, IW4). La barra
+ * "No operacionales (53)" agrupa el grupo 53 (financieros, extraordinarios,
+ * diversos) y cualquier otro grupo de la clase 5 distinto de 51, 52 y 54.
  *
  * Implementación: ECharts BarChart con una serie "placeholder" transparente
  * (offset acumulado) + una serie "value" coloreada. Es la técnica canónica
@@ -19,9 +25,13 @@ import { formatBigCop, formatCop } from '@/lib/charts/format';
 import { ChartContainer } from './ChartContainer';
 
 export interface PnLWaterfallData {
+  /** Ingresos operacionales netos (41 − 4175) cuando viene `otrosIngresos`. */
   ingresos: number;
+  /** Ingresos no operacionales (grupo 42 y demás de la clase 4 ≠ 41). */
+  otrosIngresos?: number;
   costos: number;
   gastosOperacionales: number;
+  /** No operacionales: grupo 53 y otros grupos de la clase 5 ≠ 51/52/54. */
   gastosFinancieros: number;
   impuestos: number;
   /** Si `null`, se calcula como ingresos - sumas. */
@@ -36,7 +46,7 @@ export interface PnLWaterfallProps {
   subtitle?: string;
 }
 
-interface BarStep {
+export interface BarStep {
   label: string;
   /** Valor del segmento visible. Positivo o negativo (negativo se grafica hacia abajo). */
   value: number;
@@ -45,20 +55,30 @@ interface BarStep {
   kind: 'anchor' | 'positive' | 'negative';
 }
 
-function buildSteps(data: PnLWaterfallData): BarStep[] {
+export function buildPnlWaterfallSteps(data: PnLWaterfallData): BarStep[] {
   const ut =
     data.utilidadNeta ??
-    data.ingresos - data.costos - data.gastosOperacionales - data.gastosFinancieros - data.impuestos;
+    data.ingresos +
+      (data.otrosIngresos ?? 0) -
+      data.costos -
+      data.gastosOperacionales -
+      data.gastosFinancieros -
+      data.impuestos;
   const steps: BarStep[] = [];
 
   // Paso inicial: Ingresos como anchor (full bar from 0 → ingresos).
   steps.push({ label: 'Ingresos', value: data.ingresos, offset: 0, kind: 'anchor' });
 
   let running = data.ingresos;
+  // Montos POSITIVOS son reducciones; los otros ingresos se restan con signo
+  // invertido para que sumen al acumulado.
   const reductions: Array<[string, number]> = [
     ['Costos', data.costos],
     ['Gastos Op', data.gastosOperacionales],
-    ['Gastos Fin', data.gastosFinancieros],
+    ...(data.otrosIngresos !== undefined
+      ? ([['Otros ingresos (42)', -data.otrosIngresos]] as Array<[string, number]>)
+      : []),
+    ['No operacionales (53)', data.gastosFinancieros],
     ['Impuestos', data.impuestos],
   ];
   for (const [label, val] of reductions) {
@@ -87,10 +107,12 @@ export function PnLWaterfall({
 }: PnLWaterfallProps) {
   const theme = useChartTheme();
   const tokens = getTokens(theme);
-  const empty = !Number.isFinite(data.ingresos) || data.ingresos === 0;
+  const empty =
+    !Number.isFinite(data.ingresos) ||
+    (data.ingresos === 0 && !(data.otrosIngresos !== undefined && data.otrosIngresos !== 0));
 
   const option = useMemo(() => {
-    const steps = buildSteps(data);
+    const steps = buildPnlWaterfallSteps(data);
     const labels = steps.map((s) => s.label);
     const offsetSeries = steps.map((s) => (s.kind === 'anchor' ? 0 : s.offset));
     const valueSeries = steps.map((s) => s.value);

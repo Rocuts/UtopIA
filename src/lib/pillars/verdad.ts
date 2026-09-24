@@ -5,7 +5,8 @@
 //   1. Score de Integridad  = forensicScore (0-100); sin análisis forense, se
 //      deriva de los hallazgos críticos del Curator ROTULADO como tal; sin
 //      ninguna fuente ⇒ N/D (ratios-kpis-25: antes se presentaba como
-//      "Benford, gaps, montos repetidos" sin serlo)
+//      "Benford, gaps, montos repetidos" sin serlo). Un escaneo forense con
+//      cobertura PARCIAL no es score de integridad (auditoria-calidad-19).
 //   2. Brecha de Cuadratura = |equationDiff| / totalActivo (decimal)
 //   3. Índice de Conciliación = facturasCruzadas / totalFacturas
 //
@@ -23,6 +24,7 @@ import {
   scoreToStatus,
   weightedScore,
 } from './health-score';
+import { forensicIntegrityScore } from './shared-metrics';
 import type {
   PillarAlert,
   PillarKpi,
@@ -42,8 +44,10 @@ export function computeVerdadPillar(input: PillarsAggregateInput): PillarMetrics
   const curatorRes = input.curator ?? snapshot.curator ?? null;
   let integridad: number | null = null;
   let integridadOrigen: 'forense' | 'curator' | null = null;
-  if (forensic && Number.isFinite(forensic.score)) {
-    integridad = forensic.score;
+  const forensicScore = forensicIntegrityScore(forensic);
+  const forensicParcial = forensic?.coverage === 'parcial';
+  if (forensicScore !== null) {
+    integridad = forensicScore;
     integridadOrigen = 'forense';
   } else if (curatorRes) {
     const criticos = curatorRes.findings.filter((f) => f.severity === 'critico').length;
@@ -69,14 +73,22 @@ export function computeVerdadPillar(input: PillarsAggregateInput): PillarMetrics
       integridadOrigen === 'forense'
         ? 'Limpieza forense de los asientos contables (Benford, gaps, montos repetidos, etc.).'
         : integridadOrigen === 'curator'
-          ? 'Derivado de los hallazgos críticos del Curator (100 − 20 por hallazgo crítico). No hay análisis forense de asientos.'
-          : 'N/D — requiere un análisis forense de los asientos o el resultado del Curator.',
+          ? forensicParcial
+            ? 'Derivado de los hallazgos críticos del Curator (100 − 20 por hallazgo crítico). El escaneo forense tuvo cobertura parcial y no se usa como score.'
+            : 'Derivado de los hallazgos críticos del Curator (100 − 20 por hallazgo crítico). No hay análisis forense de asientos.'
+          : forensicParcial
+            ? 'N/D — el escaneo forense tuvo cobertura parcial (reglas sin evaluar) y no hay resultado del Curator.'
+            : 'N/D — requiere un análisis forense de los asientos o el resultado del Curator.',
     descriptionEn:
       integridadOrigen === 'forense'
         ? 'Forensic cleanliness of journal entries (Benford, gaps, repeated amounts, etc.).'
         : integridadOrigen === 'curator'
-          ? 'Derived from Curator critical findings (100 − 20 per critical finding). No forensic scan of entries.'
-          : 'N/A — requires a forensic scan of entries or the Curator result.',
+          ? forensicParcial
+            ? 'Derived from Curator critical findings (100 − 20 per critical finding). The forensic scan had partial coverage and is not used as a score.'
+            : 'Derived from Curator critical findings (100 − 20 per critical finding). No forensic scan of entries.'
+          : forensicParcial
+            ? 'N/A — the forensic scan had partial coverage (rules not evaluated) and there is no Curator result.'
+            : 'N/A — requires a forensic scan of entries or the Curator result.',
   };
 
   // ─── KPI 2 — Brecha de Cuadratura ──────────────────────────────────────

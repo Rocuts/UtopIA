@@ -9,7 +9,7 @@
 // Tarjetas (con código de color del contrato visual):
 //   1. EBITDA          — azul    — definición única de ./ebitda.ts (EBIT operacional + D&A)
 //   2. WAOO / Margen   — naranja — EBITDA / Ingresos operacionales netos (×100)
-//   3. Ratio           — morada  — (Gastos C5 + Costos C6) / Ingresos C4
+//   3. Ratio           — morada  — (Gastos C5 + Costos C6) / Ingresos netos (C4 − 4175)
 //   4. Free Cash Flow  — verde   — Operating Cash Flow − CapEx (varPPE) del EFE indirecto NIC 7
 //
 // Fuente única de la verdad:
@@ -24,6 +24,7 @@
 
 import { computeEbitda, computeEbitdaMargin } from './ebitda';
 import { scoreToStatus } from './health-score';
+import { ingresosNetosPeriodo } from './shared-metrics';
 import type {
   ExecutiveCard,
   PillarStatus,
@@ -95,7 +96,9 @@ export function computeValorExecutiveCards(
   const claseGastos = classes.find((c) => c.code === 5);
   const claseCostos = classes.find((c) => c.code === 6);
 
-  const totalIngresos = ct.ingresos;
+  // Ingresos netos de devoluciones (ratios-kpis-04): la Σ de la clase 4 suma
+  // las devoluciones 4175 cuando el ERP las exporta con el signo de las ventas.
+  const totalIngresos = ingresosNetosPeriodo(ct);
   const totalGastos = claseGastos?.auxiliaryTotal ?? 0;
   const totalCostos = claseCostos?.auxiliaryTotal ?? 0;
 
@@ -193,8 +196,8 @@ export function computeValorExecutiveCards(
       deltaVsComparative: safeDelta(ratio, prevRatio),
       descriptionEs: '¿Cuánto cuesta operar la empresa por cada peso de ingreso? Menor es mejor.',
       descriptionEn: 'How much it costs to operate per peso of revenue. Lower is better.',
-      formulaEs: '(Gastos Clase 5 + Costos Clase 6) / Ingresos Clase 4',
-      formulaEn: '(Class 5 Expenses + Class 6 Costs) / Class 4 Revenue',
+      formulaEs: '(Gastos Clase 5 + Costos Clase 6) / Ingresos netos (clase 4 − devoluciones 4175)',
+      formulaEn: '(Class 5 Expenses + Class 6 Costs) / Net revenue (class 4 − returns 4175)',
     },
     fcf: {
       key: 'fcf',
@@ -246,7 +249,7 @@ function buildAudit(
     amortizaciones: ebitdaRes.amortizaciones,
     totalGastos: claseGastos?.auxiliaryTotal ?? 0,
     totalCostos: claseCostos?.auxiliaryTotal ?? 0,
-    totalIngresos: ct.ingresos,
+    totalIngresos: ingresosNetosPeriodo(ct),
     capex: efe?.investing.varPPE ?? null,
     operatingCashFlow: efe?.operating.total ?? null,
   };

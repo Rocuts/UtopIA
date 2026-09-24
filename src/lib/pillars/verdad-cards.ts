@@ -24,6 +24,7 @@ import {
   isContraAsset,
 } from '@/lib/preprocessing/curator-rules/contra-asset-registry';
 
+import { forensicIntegrityScore, margenBruto as computeMargenBruto } from './shared-metrics';
 import type {
   ExecutiveCard,
   PillarStatus,
@@ -229,19 +230,17 @@ function buildVerdadAudit(
   // ── Anomalías de variación ────────────────────────────────────────────────
   const anomaliasVariacion = countAnomalies(snapshot, comparative);
 
-  // ── Margen bruto (Ingresos − Costos C6) / Ingresos ───────────────────────
-  const clase6 = snapshot.classes.find((c) => c.code === 6);
-  const totalIngresos = ct.ingresos;
-  const totalCostos = clase6?.auxiliaryTotal ?? 0;
-  let margenBruto: number | null = null;
-  if (totalIngresos > 0) {
-    margenBruto = (totalIngresos - totalCostos) / totalIngresos;
-  }
+  // ── Margen bruto sobre ingresos operacionales netos (41 − 4175) ─────────
+  // Misma utilidad bruta que el preprocesador (41 − 4175 − clases 6 y 7); la Σ
+  // de la clase 4 inflaba el margen con devoluciones y el grupo 42
+  // (ratios-kpis-04). Sin grupo 41 ⇒ N/D (no se marca omisión de costos).
+  const margenBruto = computeMargenBruto(snapshot);
   const posibleOmisionCostos = margenBruto !== null && margenBruto > 0.95;
 
   // ── Forensic ─────────────────────────────────────────────────────────────
-  const forensicScore: number | null =
-    forensic && Number.isFinite(forensic.score) ? forensic.score : null;
+  // Sólo un escaneo con cobertura completa es score de integridad
+  // (auditoria-calidad-19).
+  const forensicScore = forensicIntegrityScore(forensic);
 
   // integridadTerceros: ForensicSummary no expone este campo. Sin dato ⇒ null y
   // el índice de consistencia EXCLUYE el componente (no lo cuenta como 100 %).

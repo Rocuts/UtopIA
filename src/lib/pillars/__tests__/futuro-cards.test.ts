@@ -121,9 +121,10 @@ describe('computeFuturoExecutiveCards', () => {
 
     expect(cards.cagr.value).toBeNull();
     expect(cards.audit.cagrIngresos).toBeNull();
-    // utilidadProyectadaAnual = 300M × (1 + 0.05) = 315M
-    // provision = 315M × 0.35 = 110.25M
-    expect(cards.audit.utilidadProyectadaAnual).toBeCloseTo(315_000_000, -3);
+    // IW4 (ratios-kpis-10): sin diagnóstico UN × (1 + CAGR) × 35 %; el audit
+    // expone la utilidad neta leída.
+    expect(cards.audit.utilidadProyectadaAnual).toBeUndefined();
+    expect(cards.audit.utilidadNeta).toBe(300_000_000);
     expect(cards.provision_tributaria.value).toBeNull();
     expect(cards.audit.provisionTributariaFutura).toBeNull();
   });
@@ -246,7 +247,7 @@ describe('computeFuturoExecutiveCards', () => {
     expect(cards.audit.capacidadInversion).toBeNull();
   });
 
-  it('utilidadNeta negativa → provisión N/D (no 0) y diagnóstico interno 0', () => {
+  it('utilidadNeta negativa → provisión N/D (no 0) y la utilidad leída conserva el signo', () => {
     const snap = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({
@@ -260,6 +261,6 @@ describe('computeFuturoExecutiveCards', () => {
     const cards = computeFuturoExecutiveCards({ snapshot: snap });
 
     expect(cards.provision_tributaria.value).toBeNull();
-    expect(cards.audit.utilidadProyectadaAnual).toBe(0);
+    expect(cards.audit.utilidadNeta).toBe(-200_000_000);
   });
 });

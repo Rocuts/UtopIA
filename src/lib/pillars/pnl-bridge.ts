@@ -7,20 +7,30 @@
 // no lo delataba.
 //
 // Ahora cada barra es un bloque disjunto del P&L del snapshot:
-//   ingresos netos (Σ clase 4 − 4175, incluye 42)            = ct.ingresosNetos
+//   ingresos operacionales netos (41 − 4175)
+//   + otros ingresos no operacionales (grupo 42 y demás de la clase 4)
+//     = ingresos netos − ingresos operacionales (IW4 / ratios-kpis-04: el 42
+//       va debajo de la utilidad operacional, decisión del coordinador)
 //   − costos (clases 6 + 7)
 //   − gastos operacionales (grupos 51 + 52)
 //   − no operacionales (grupo 53 y cualquier otro grupo de la clase 5 ≠ 54)
 //   − impuesto de renta causado (grupo 54)
 //   = utilidad neta   ← se VERIFICA al centavo; si no cierra ⇒ null (no se pinta)
+// Sin grupo 41 identificable la barra inicial son los ingresos netos y no hay
+// barra de otros ingresos (no se inventa la separación).
 // ---------------------------------------------------------------------------
 
 import type { PeriodSnapshot, PUCClass } from '@/lib/preprocessing/trial-balance';
 
 import { isVirtualCuratorAccount } from './ebitda';
+import { ingresosOperacionalesNetosPeriodo } from './shared-metrics';
 
 export interface PnlBridge {
+  /** Ingresos operacionales netos (41 − 4175); ingresos netos si no hay
+   *  desglose del grupo 41 (entonces `otrosIngresos` no viene). */
   ingresos: number;
+  /** Ingresos no operacionales (grupo 42 y demás de la clase 4 ≠ 41). */
+  otrosIngresos?: number;
   costos: number;
   gastosOperacionales: number;
   /** Grupo 53 (financieros, extraordinarios, diversos) y otros grupos de la
@@ -55,8 +65,11 @@ export function buildPnlBridge(snapshot: PeriodSnapshot): PnlBridge | null {
   const c6 = snapshot.classes.find((c) => c.code === 6);
   const c7 = snapshot.classes.find((c) => c.code === 7);
 
-  const ingresosC =
+  const ingresosNetosC =
     ct.cents?.ingresosNetos ?? toCents(ct.ingresosNetos ?? ct.ingresos);
+  const ingresosOp = ingresosOperacionalesNetosPeriodo(snapshot);
+  const ingresosC = ingresosOp === null ? ingresosNetosC : toCents(ingresosOp);
+  const otrosIngresosC = ingresosOp === null ? null : ingresosNetosC - ingresosC;
   const costosC = sumClass(c6, () => true) + sumClass(c7, () => true);
   const opC = sumClass(c5, (code) => code.startsWith('51') || code.startsWith('52'));
   const impC = sumClass(c5, (code) => code.startsWith('54'));
@@ -66,12 +79,13 @@ export function buildPnlBridge(snapshot: PeriodSnapshot): PnlBridge | null {
   );
   const utilidadC = ct.cents?.utilidadNeta ?? toCents(ct.utilidadNeta);
 
-  const cierre = ingresosC - costosC - opC - otrosC - impC;
+  const cierre = ingresosC + (otrosIngresosC ?? BigInt(0)) - costosC - opC - otrosC - impC;
   if (cierre !== utilidadC) return null;
 
   const n = (c: bigint) => Number(c) / 100;
   return {
     ingresos: n(ingresosC),
+    ...(otrosIngresosC === null ? {} : { otrosIngresos: n(otrosIngresosC) }),
     costos: n(costosC),
     gastosOperacionales: n(opC),
     gastosFinancieros: n(otrosC),

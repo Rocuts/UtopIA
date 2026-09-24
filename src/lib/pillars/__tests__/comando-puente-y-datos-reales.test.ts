@@ -12,13 +12,16 @@ describe('ratios-kpis-13 — puente P&L', () => {
   it('bloques disjuntos que cierran al centavo contra la utilidad neta', () => {
     const b = buildPnlBridge(makePnlSnapshot())!;
     expect(b).not.toBeNull();
-    expect(b.ingresos).toBe(2_120_000_000); // netos de 4175, incluye 42
+    // IW4: la barra inicial son los ingresos operacionales (41 − 4175); el 42
+    // va aparte, debajo de la operación.
+    expect(b.ingresos).toBe(1_920_000_000);
+    expect(b.otrosIngresos).toBe(200_000_000);
     expect(b.costos).toBe(1_200_000_000); // 6 + 7
     expect(b.gastosOperacionales).toBe(450_000_000); // 51 + 52
     expect(b.gastosFinancieros).toBe(30_000_000); // 53 una sola vez
     expect(b.impuestos).toBe(95_000_000); // grupo 54, no el saldo del pasivo 24 (135M)
     expect(
-      b.ingresos - b.costos - b.gastosOperacionales - b.gastosFinancieros - b.impuestos,
+      b.ingresos + (b.otrosIngresos ?? 0) - b.costos - b.gastosOperacionales - b.gastosFinancieros - b.impuestos,
     ).toBe(b.utilidadNeta);
     expect(b.utilidadNeta).toBe(345_000_000);
   });
