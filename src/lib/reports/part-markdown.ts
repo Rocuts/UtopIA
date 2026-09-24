@@ -329,6 +329,11 @@ export function renderGovernancePart(
     financialNotes: r.financialNotes,
     shareholderMinutes: r.shareholderMinutes,
     fullContent: r.fullContent,
+    // El JSON que acompaña al texto es el del render: sin la opinión que el
+    // modelo anticipe para el Revisor Fiscal y con los firmantes del intake
+    // (procedencia-R2-04). El Editor Jefe HTML y el Excel lo leen de la
+    // versión persistida.
+    ...(r.json ? { json: r.json } : {}),
   };
   // Orden de la fase: aviso de degradación (runGovernanceSpecialist), sello
   // aritmético y sello de prosa (runGovernancePhase).

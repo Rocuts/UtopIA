@@ -9,6 +9,8 @@
 //     (`overwritten: true`, informe limpio) no sella la versión persistida.
 //   - procedencia-R2-02: el PDF y el HTML divulgan los ajustes confirmados del
 //     Doctor de Datos (anexo) y el sello nombra la huella de cada balance.
+//   - procedencia-R2-04: firmantes y Revisor Fiscal del acta salen del intake
+//     (o "a completar al firmar"), nunca del JSON de la Parte III.
 //   - procedencia-R2-06: todo artefacto marcado BORRADOR (HTML no emitible,
 //     PDF con marca de agua) lleva la variante BORRADOR del sello y
 //     X-Report-Draft.
@@ -542,5 +544,74 @@ describe('R2-02 — el PDF y el HTML divulgan los ajustes confirmados y el sello
     expect(page).toMatch(/PROCEDENCIA NO VERIFICADA/);
     expect(page).toMatch(/Ajustes confirmados por el usuario/);
     expect(page).toContain('adj-caja-arqueo-0001');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// procedencia-R2-04 — firmantes del acta cruzados con el intake
+// ---------------------------------------------------------------------------
+
+describe('R2-04 — firmantes y Revisor Fiscal del acta salen del intake, no del JSON', () => {
+  function partsWithForeignSignatories() {
+    const parts = makeProvenanceParts();
+    const g = parts.governance.json as GovernanceReportJson;
+    g.shareholderMinutes!.signatures = [
+      { role: 'presidente_asamblea', name: 'Pedro Presidente', identification: 'C.C. 1.000.001' },
+      { role: 'secretario_asamblea', name: 'Sara Secretaria', identification: 'C.C. 1.000.002' },
+      { role: 'representante_legal', name: 'Rodrigo Impostor', identification: 'C.C. 9.999.999' },
+    ] as never;
+    g.shareholderMinutes!.fiscalReviewerOpinion = {
+      ...g.shareholderMinutes!.fiscalReviewerOpinion,
+      applies: true,
+      reviewerName: 'Rogelio Revisor Ajeno',
+      reviewerTp: '99999-T',
+      exemptionReason: null,
+    } as never;
+    return parts;
+  }
+
+  it('con firmantes en el intake: el acta del PDF verificado imprime los del intake (nombre, C.C., T.P.)', async () => {
+    const company = {
+      ...PROVENANCE_COMPANY,
+      legalRepresentative: 'Luisa Legal Intake',
+      legalRepresentativeId: '52.111.222',
+      fiscalAuditor: 'Ana Revisora Intake',
+      fiscalAuditorTp: '12345-T',
+    };
+    const out = await consolidateWith(partsWithForeignSignatories(), { company });
+    const pdf = await exportReport(
+      req('/api/financial-report/export', { reportRef: out.reportRef, format: 'pdf-elite', language: 'es' }),
+    );
+    expect(pdf.status).toBe(200);
+    const doc = vi.mocked(composeEditorialReport).mock.results[0].value as {
+      shareholderMinutes?: { bodyMarkdown: string };
+      signatureBlock: { rendered: string };
+    };
+    const acta = doc.shareholderMinutes!.bodyMarkdown;
+    expect(acta).toContain('Luisa Legal Intake');
+    expect(acta).toContain('C.C. 52.111.222');
+    expect(acta).toContain('Ana Revisora Intake — T.P. 12345-T');
+    for (const foreign of ['Rodrigo Impostor', '9.999.999', 'Rogelio Revisor Ajeno', '99999-T', 'Pedro Presidente', 'Sara Secretaria']) {
+      expect(acta).not.toContain(foreign);
+    }
+    expect(doc.signatureBlock.rendered).toContain('Ana Revisora Intake');
+    // El JSON persistido (el que ven el Editor Jefe y el Excel) tampoco los lleva.
+    const persistedJson = JSON.stringify(out.report.governance.json);
+    expect(persistedJson).not.toContain('Rodrigo Impostor');
+    expect(persistedJson).not.toContain('Rogelio Revisor Ajeno');
+    expect(persistedJson).toContain('Luisa Legal Intake');
+  });
+
+  it('sin firmantes en el intake: nombres e identificaciones "a completar al firmar", nunca los del JSON', async () => {
+    const out = await consolidateWith(partsWithForeignSignatories());
+    expect(out.report.governance.actaQualifications?.clean).toBe(true);
+    const acta = out.report.governance.shareholderMinutes;
+    expect(acta).toMatch(/Representante Legal \| — \(a completar al firmar\) \|/);
+    expect(acta).toMatch(/— \(a completar al firmar\), Revisor Fiscal de/);
+    for (const foreign of ['Rodrigo Impostor', '9.999.999', 'Rogelio Revisor Ajeno', '99999-T', 'Pedro Presidente']) {
+      expect(acta).not.toContain(foreign);
+    }
+    const xlsx = await exportReport(req('/api/financial-report/export', { reportRef: out.reportRef, format: 'excel' }));
+    expect(xlsx.status).toBe(200);
   });
 });
