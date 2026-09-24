@@ -27,6 +27,7 @@
 // Types
 // ---------------------------------------------------------------------------
 
+import { esCreditoRenta } from '@/lib/accounting/renta-credit';
 import { computeEbitda } from '@/lib/pillars/ebitda';
 import { runCurator } from './balance-curator';
 import { normalizeSignConvention, type SignConventionDetection } from './sign-convention';
@@ -3409,27 +3410,19 @@ function collectParseIssueReasons(rows: RawAccountRow[], period: string): string
 // ---------------------------------------------------------------------------
 // Créditos del impuesto de renta (niif-preproceso-19, decisión fase 3)
 // ---------------------------------------------------------------------------
-const TAX_CREDIT_NAME =
-  /\b(impuestos?|anticipos?|retencion(?:es)?|autorretencion(?:es)?|saldos? a favor|sobrantes?)\b/;
-const RENTA_NAME = /\b(renta|retencion en la fuente|autorretencion(?:es)?)\b/;
-const NON_RENTA_TAX_NAME =
-  /\b(ica|reteica|industria y comercio|iva|reteiva|impuestos? (?:a|sobre) las ventas|descontables?|contribucion(?:es)?|timbre|predial|gmf)\b/;
 
 /**
  * ¿La cuenta es un crédito del impuesto de renta (anticipo, retención en la
- * fuente, autorretención) según la decisión de catálogo de la fase 3?
+ * fuente, autorretención)? Delega en la regla ÚNICA de
+ * `@/lib/accounting/renta-credit`, la misma del Âncora Fiscal (F03) y del
+ * Âncora NIIF (auditoría 2026-09, integración W3-B): 135505/135515 salvo
+ * nombre de IVA/ICA/predial/timbre/GMF/contribuciones; 135595 y 1805 sólo con
+ * nombre de renta; el resto de 1355 no.
  * Exportada para que otros detectores (p. ej. `repair/adjustments.ts`) usen
  * la misma regla en lugar de duplicarla.
  */
 export function isRentaCreditAccount(code: string, name: string): boolean {
-  const n = normalizeHeaderText(name);
-  if (NON_RENTA_TAX_NAME.test(n)) return false;
-  if (code.startsWith('1805')) return TAX_CREDIT_NAME.test(n);
-  if (!code.startsWith('1355')) return false;
-  const subcuenta = code.slice(0, 6);
-  if (subcuenta === '135505' || subcuenta === '135515') return true;
-  if (subcuenta === '135595' || code.length < 6) return RENTA_NAME.test(n);
-  return false;
+  return esCreditoRenta(code, [name]);
 }
 
 function findMissingAccountsForClass(
