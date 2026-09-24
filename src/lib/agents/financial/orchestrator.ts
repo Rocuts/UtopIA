@@ -44,6 +44,7 @@ import {
   buildDeterministicCashFlow,
   buildLedgerLeaves,
   checkCashFlowInvariants,
+  deterministicCuratorFlags,
   formatCashFlowViolations,
   type ComparativeStatementsBasis,
   type ComparativeStatementsSource,
@@ -447,6 +448,8 @@ export function buildNiifValidatorOptions(preprocessed: unknown): NiifJsonValida
     comparativeStatements: primarySnap
       ? buildComparativeStatementsBasis(preprocessed as ComparativeStatementsSource)
       : undefined,
+    // E26 (niif-contrato-23): curatorFlags son hechos del Curator.
+    curatorFlags: primarySnap ? deterministicCuratorFlags(primarySnap) : undefined,
   };
 }
 

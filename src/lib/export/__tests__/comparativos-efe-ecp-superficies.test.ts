@@ -159,7 +159,7 @@ describe('Prompt NIIF y TOTALES VINCULANTES', () => {
         grossProfitPrimary: '1', operatingProfitPrimary: '1', netIncomePrimary: '1',
         totalAssetsComparative: '1', totalLiabilitiesComparative: '1', totalEquityComparative: '1',
         grossProfitComparative: '1', operatingProfitComparative: '1', netIncomeComparative: '1',
-        oriComparative: '0',
+        oriPrimary: '0', oriComparative: '0',
         curatorFlags: {
           equityConvergenceApplied: false, cashFlowClosureForced: false, negativeAssetReclassified: false,
           presumedCostWarning: false, reclassifiedAmountCop: '0',

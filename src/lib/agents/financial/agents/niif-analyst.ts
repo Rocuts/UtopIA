@@ -46,6 +46,7 @@ import {
   buildComparativeStatementsBasis,
   buildDeterministicCashFlow,
   crossCheckCashFlowAgainstDeterministic,
+  deterministicCuratorFlags,
   formatCashFlowCrossCheckViolations,
 } from '../contracts/deterministic-breakdown';
 import {
@@ -353,6 +354,12 @@ export async function runNiifAnalyst(
   }
 
   pass1 = reconciled.json;
+  // curatorFlags son hechos del Curator, no juicio del modelo (auditoría
+  // 2026-09, niif-contrato-23): se fijan desde el snapshot ANTES de que
+  // Pass-2/3 los reciban como ancla.
+  if (preprocessed?.primary) {
+    pass1 = { ...pass1, curatorFlags: deterministicCuratorFlags(preprocessed.primary) };
+  }
   const pass1Anchors = extractPass1Anchors(pass1);
 
   // -- Pass 2: Derivados (EFE + ECP) --------------------------------------

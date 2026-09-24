@@ -187,6 +187,12 @@ export interface NiifJsonValidatorOptions {
    *     3.14 / 10.21: sin corte de apertura no hay comparativo que calcular).
    */
   comparativeStatements?: ComparativeStatementsBasis | null;
+  /**
+   * E26 (auditoría 2026-09, niif-contrato-23): banderas del Curator desde el
+   * snapshot (`deterministicCuratorFlags`). `curatorFlags` del informe debe
+   * coincidir: el modelo las copiaba sin contraste y Pass-2/3 las citaban.
+   */
+  curatorFlags?: NiifReportJson['curatorFlags'];
 }
 
 /**
@@ -1405,6 +1411,30 @@ export function validateNiifReportJson(
 
   // -- E25. Rótulos fechados en otro periodo (e2e-niif-09) --------------------
   errors.push(...labelYearErrors(json));
+
+  // -- E26. curatorFlags == banderas del Curator (niif-contrato-23) ----------
+  if (options.curatorFlags) {
+    const expected = options.curatorFlags;
+    const emitted = json.curatorFlags;
+    for (const key of [
+      'equityConvergenceApplied',
+      'cashFlowClosureForced',
+      'negativeAssetReclassified',
+      'presumedCostWarning',
+    ] as const) {
+      if (emitted[key] !== expected[key]) {
+        errors.push(
+          `E26. curatorFlags.${key} = ${emitted[key]} y el Curator del balance de prueba registra ${expected[key]}.`,
+        );
+      }
+    }
+    if (parseMoneyCop(emitted.reclassifiedAmountCop) !== parseMoneyCop(expected.reclassifiedAmountCop)) {
+      errors.push(
+        `E26. curatorFlags.reclassifiedAmountCop ${fmtCop(parseMoneyCop(emitted.reclassifiedAmountCop))} ≠ ` +
+          `monto reclasificado por R1 en el balance de prueba ${fmtCop(parseMoneyCop(expected.reclassifiedAmountCop))}.`,
+      );
+    }
+  }
 
   return {
     ok: errors.length === 0,

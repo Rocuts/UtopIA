@@ -282,12 +282,16 @@ function informeCorrecto(): NiifReportJson {
       notes: [],
     },
     technicalNotes: [],
+    // Auditoría 2026-09 (niif-contrato-23, regla E26): curatorFlags son hechos
+    // del Curator sobre este balance (R1 reclasificó $4.270.732,23 de activos
+    // con saldo acreedor y R7 emitió la advertencia de costo presunto). El
+    // fixture copiaba `false`/'0', que ahora E26 rechaza como eco sin base.
     curatorFlags: {
       equityConvergenceApplied: false,
       cashFlowClosureForced: false,
-      negativeAssetReclassified: false,
-      presumedCostWarning: false,
-      reclassifiedAmountCop: '0',
+      negativeAssetReclassified: true,
+      presumedCostWarning: true,
+      reclassifiedAmountCop: '427073223',
     },
     reportMode: 'COMPARATIVO_COMPLETO',
   };

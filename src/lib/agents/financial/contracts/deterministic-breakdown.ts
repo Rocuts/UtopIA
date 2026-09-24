@@ -1292,6 +1292,48 @@ export function formatCashFlowCrossCheckViolations(
 }
 
 // ===========================================================================
+// curatorFlags desde el snapshot (auditoría 2026-09, niif-contrato-23)
+// ===========================================================================
+
+/**
+ * Banderas del Curator tal como quedaron en el snapshot del periodo actual.
+ * Son hechos del preprocesador, no juicio del modelo: el Pass-1 las copiaba
+ * de TOTALES VINCULANTES y ninguna regla las contrastaba, y Pass-2/3 las
+ * recibían como ancla (un `reclassifiedAmountCop` erróneo podía citarse en
+ * las notas). El analista las sobrescribe con este valor y el validador lo
+ * exige (E26).
+ *   - equityConvergenceApplied: R5 registró `equityAnchorAdjustment` ≠ 0.
+ *   - cashFlowClosureForced: R6 registró `cashFlowClosureAdjustment` ≠ 0.
+ *   - negativeAssetReclassified: R1 aplicó al menos una reclasificación.
+ *   - presumedCostWarning: R7 emitió la advertencia de costo presunto.
+ *   - reclassifiedAmountCop: Σ |monto efectivamente trasladado| por R1.
+ */
+export function deterministicCuratorFlags(snapshot: PeriodSnapshot): {
+  equityConvergenceApplied: boolean;
+  cashFlowClosureForced: boolean;
+  negativeAssetReclassified: boolean;
+  presumedCostWarning: boolean;
+  reclassifiedAmountCop: string;
+} {
+  const nonZero = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v !== 0;
+  const applied = (snapshot.reclassifications ?? []).filter((r) => r.applied === true);
+  let reclassified = ZERO;
+  for (const r of applied) {
+    const cents = pesosToCents(
+      typeof r.effectiveTransferCop === 'number' ? r.effectiveTransferCop : r.amountCop,
+    );
+    reclassified += cents < ZERO ? -cents : cents;
+  }
+  return {
+    equityConvergenceApplied: nonZero(snapshot.equityAnchorAdjustment),
+    cashFlowClosureForced: nonZero(snapshot.cashFlowClosureAdjustment),
+    negativeAssetReclassified: applied.length > 0,
+    presumedCostWarning: !!snapshot.presumedCostWarning,
+    reclassifiedAmountCop: reclassified.toString(),
+  };
+}
+
+// ===========================================================================
 // Comparativos del EFE y del ECP (auditoría integral 2026-09-24, pendiente #3)
 // ===========================================================================
 //

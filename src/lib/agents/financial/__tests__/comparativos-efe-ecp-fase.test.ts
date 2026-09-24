@@ -35,7 +35,7 @@ const COMPANY: CompanyInfo = {
 };
 
 /** El LLM devuelve el informe honesto; en el Pass-2 inventa un comparativo del EFE. */
-function mockPasses(json: NiifReportJson) {
+function mockPasses(json: NiifReportJson, curatorFlags: NiifReportJson['curatorFlags'] = json.curatorFlags) {
   callFinancialAgentMock.mockImplementation(async (opts: { agentName: string }) => {
     if (opts.agentName.startsWith('niif-analyst-pass1')) {
       return {
@@ -43,7 +43,7 @@ function mockPasses(json: NiifReportJson) {
           company: json.company,
           balanceSheet: json.balanceSheet,
           incomeStatement: json.incomeStatement,
-          curatorFlags: json.curatorFlags,
+          curatorFlags,
           reportMode: json.reportMode,
         },
         meta: {},
@@ -92,6 +92,28 @@ describe('runNiifPhase — comparativos del EFE y del ECP', () => {
     expect(json.equityChanges.comparativeRows?.length).toBeGreaterThan(2);
     expect(phase.niif.reconciliation?.clean).toBe(true);
     expect(phase.niif.fullContent).not.toMatch(/\[NIIF JSON validator\]|E18\.|E24\./);
+  });
+
+  it('niif-contrato-23: las curatorFlags que eco el modelo se sobrescriben con las del Curator', async () => {
+    const pp = preprocesarTresCortes();
+    const json = informeTresCortes(pp);
+    mockPasses(json, { ...json.curatorFlags, negativeAssetReclassified: true, reclassifiedAmountCop: '999999' });
+    const phase = await runNiifPhase(
+      { rawData: csvTresCortes(), company: COMPANY, language: 'es' },
+      { preprocessed: pp },
+    );
+    expect(phase.niif.json!.curatorFlags).toEqual({
+      equityConvergenceApplied: false,
+      cashFlowClosureForced: false,
+      negativeAssetReclassified: false,
+      presumedCostWarning: false,
+      reclassifiedAmountCop: '0',
+    });
+    // Pass-2 y Pass-3 reciben las banderas del Curator, no el eco del modelo.
+    const pass2 = callFinancialAgentMock.mock.calls.find(([o]) => o.agentName === 'niif-analyst-pass2')![0];
+    expect(pass2.system).toContain('reclassifiedAmountCop');
+    expect(pass2.system).not.toContain('999999');
+    expect(phase.niif.reconciliation?.clean).toBe(true);
   });
 
   it('dos cortes: sin cifras comparativas del EFE/ECP, con la nota determinista, y sin sello', async () => {
