@@ -27,6 +27,12 @@ export interface SurvivalAnchorTotals {
   activo: number;
   pasivo: number;
   patrimonio: number;
+  /**
+   * Ingresos NETOS de devoluciones 4175 (`controlTotals.cents.ingresosNetos`),
+   * base de la utilidad neta del preprocesador. Nunca la Σ firmada de la
+   * clase 4 (`cents.ingresos`), que cambia con la convención de signos del
+   * ERP (re-auditoría 2026-09, recalculo-final-01).
+   */
   ingresos: number;
   gastos: number;
   utilidadNeta: number;
@@ -121,7 +127,13 @@ export function extractSurvivalAnchors(
   const classes = snap.classes || [];
 
   const ct = snap.controlTotals;
-  const ingresos = ct?.ingresos ?? snap.summary?.totalRevenue ?? 0;
+  // Ingresos netos de devoluciones 4175 desde los centavos exactos del
+  // preprocesador (recalculo-final-01): `ct.ingresos` es la Σ firmada de la
+  // clase 4 y publicaba 104 M o 96 M para el mismo balance según el ERP.
+  const ingresos =
+    ct?.cents?.ingresosNetos !== undefined
+      ? Number(ct.cents.ingresosNetos) / 100
+      : (ct?.ingresosNetos ?? snap.summary?.totalRevenue ?? 0);
   const gastos = ct?.gastos ?? snap.summary?.totalExpenses ?? 0;
   const utilidadNeta = ct?.utilidadNeta ?? snap.summary?.netIncome ?? ingresos - gastos;
   const impuestoCausado = ct?.cents ? Number(ct.cents.impuestoCausado) / 100 : 0;
@@ -196,7 +208,7 @@ export function buildAnchorBlock(anchors: SurvivalAnchorTotals): string {
 - Activo total: ${fmtCOP(anchors.activo)}
 - Pasivo total: ${fmtCOP(anchors.pasivo)}
 - Patrimonio: ${fmtCOP(anchors.patrimonio)}
-- Ingresos: ${fmtCOP(anchors.ingresos)}
+- Ingresos netos (neto de devoluciones 4175): ${fmtCOP(anchors.ingresos)}
 - Gastos y costos (clases 5, 6 y 7): ${fmtCOP(anchors.gastos)}
 - Costos y deducciones totales (clases 5+6+7 sin impuesto de renta 54): ${fmtCOP(anchors.costosTotales)}
 - Utilidad neta: ${fmtCOP(anchors.utilidadNeta)}
