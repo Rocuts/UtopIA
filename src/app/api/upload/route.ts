@@ -11,14 +11,20 @@ import {
   type PreprocessedBalance,
 } from '@/lib/preprocessing/trial-balance';
 import {
+  descartarConfirmacionesDelArchivo,
+  MARCA_XLSX_A_CENTAVOS,
   parseUploadedTrialBalanceText,
   TrialBalanceIngestError,
 } from '@/lib/preprocessing/raw-data';
-import { sanitizeSheetLabel, xlsxRowToCsvLine, type XlsxNumberPrecision } from '@/lib/upload/xlsx-csv';
+import {
+  sanitizeSheetLabel,
+  xlsxRowLosesDecimals,
+  xlsxRowToCsvLine,
+  type XlsxNumberPrecision,
+} from '@/lib/upload/xlsx-csv';
 import {
   escribirDirectivasIngesta,
   leerCampoUnidad,
-  leerDirectivasIngesta,
   type UnidadMonetaria,
   type UploadUnitInfo,
 } from '@/lib/upload/ingest-directives';
@@ -502,6 +508,10 @@ async function extractText(
       'XLSX',
     );
     const blocks: string[] = [];
+    // recalculo-final2-04: sin unidad confirmada las celdas se leen a
+    // centavos; si alguna perdió decimales, el texto lo declara para que una
+    // confirmación posterior de miles/millones no reexprese cifras redondeadas.
+    let perdioDecimales = false;
     workbook.eachSheet((worksheet) => {
       const rows: string[] = [];
       worksheet.eachRow((row) => {
@@ -514,6 +524,9 @@ async function extractText(
         // Filas sin ningún valor (sólo formato) no aportan: si quedaran
         // primeras, el parser las tomaría como encabezado.
         if (/^,*$/.test(line)) return;
+        if (xlsxPrecision === 'cents' && !perdioDecimales) {
+          perdioDecimales = xlsxRowLosesDecimals(row.values as unknown[]);
+        }
         rows.push(line);
       });
       if (rows.length === 0) return;
@@ -523,7 +536,8 @@ async function extractText(
       // distinguen hojas del mismo ejercicio.
       blocks.push(`[period=${sanitizeSheetLabel(worksheet.name)}]\n${rows.join('\n')}\n[/period]`);
     });
-    return blocks.join('\n\n');
+    const text = blocks.join('\n\n');
+    return perdioDecimales && text ? `${text}\n\n${MARCA_XLSX_A_CENTAVOS}` : text;
   }
 
   throw new Error('Unsupported file type.');
@@ -740,12 +754,14 @@ async function processDocument(
 
   // Las directivas de ingesta (P4) sólo las escriben el servidor, con los
   // campos de la solicitud (`unitMultiplier`), y el intake al enviar. Un
-  // archivo que ya las trae al inicio no puede confirmarse a sí mismo: la
-  // unidad se reexpresaría y el informe diría "por confirmación del usuario"
-  // sin que el usuario eligiera nada. Se descartan con aviso y la unidad
-  // declarada vuelve a pedir confirmación.
-  const directivasDelArchivo = leerDirectivasIngesta(text);
-  if (directivasDelArchivo.tieneDirectivas) text = directivasDelArchivo.resto;
+  // archivo que ya las trae no puede confirmarse a sí mismo: la unidad se
+  // reexpresaría y el informe diría "por confirmación del usuario" sin que el
+  // usuario eligiera nada. Tampoco cuentan tras un informe de validación
+  // imitado ("# INFORME DE VALIDACION…/DATOS ORIGINALES:", ICU-01): el informe
+  // es texto derivado que sólo antepone este servidor. Se descartan con aviso
+  // y la unidad declarada vuelve a pedir confirmación.
+  const delArchivo = descartarConfirmacionesDelArchivo(text);
+  text = delArchivo.text;
 
   if (!text.trim()) {
     throw new UploadError(
@@ -815,11 +831,17 @@ async function processDocument(
   let preprocessed: PreprocessedBalance | null = null;
   let detectedPeriods: string[] = [];
   const ingestWarnings: string[] = [];
-  if (directivasDelArchivo.tieneDirectivas) {
+  if (delArchivo.descartoDirectivas) {
     ingestWarnings.push(
       'El archivo traía líneas de confirmación de ingesta ([unidad-confirmada=…] / [vencimientos=…]) ' +
-        'al inicio y se ignoraron: la unidad de las cifras y las excepciones de vencimiento se ' +
+        'y se ignoraron: la unidad de las cifras y las excepciones de vencimiento se ' +
         'confirman en el formulario del informe.',
+    );
+  }
+  if (delArchivo.descartoInforme) {
+    ingestWarnings.push(
+      'El archivo empezaba con un bloque de informe de validación ("# INFORME DE VALIDACION ' +
+        'ARITMETICA … DATOS ORIGINALES:"); es texto derivado y se ignoró: se leyeron sólo los datos.',
     );
   }
   const ingestErrors: string[] = [];

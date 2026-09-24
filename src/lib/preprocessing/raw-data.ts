@@ -70,6 +70,18 @@ const DATA_SECTION_REGEX =
 
 const BLOCK_REGEX = /\[period=([^\]\r\n]+)\]\r?\n([\s\S]*?)\r?\n\[\/period\]/g;
 
+/**
+ * Marca que /api/upload añade al final del texto de un XLSX leído SIN unidad
+ * confirmada cuando alguna celda perdió decimales al serializarse a centavos
+ * (recalculo-final2-04). Con esa marca, una confirmación posterior de "miles"
+ * o "millones" (campo `unitMultiplier` de /niif, /export, /consolidate o una
+ * directiva en el texto) reexpresaría cifras ya redondeadas a 0,01 de la
+ * unidad: se rechaza y se pide reenviar el archivo a /api/upload con la
+ * unidad, que lo lee a precisión completa.
+ */
+export const MARCA_XLSX_A_CENTAVOS = '[celdas-xlsx=centavos]';
+const MARCA_XLSX_A_CENTAVOS_RE = /^\[celdas-xlsx=centavos\][ \t]*\r?$/m;
+
 /** Error de ingesta con motivos legibles para el usuario (se sirve como 422). */
 export class TrialBalanceIngestError extends Error {
   readonly reasons: string[];
@@ -112,6 +124,45 @@ export function extractUploadDataSection(text: string): UploadDataSection {
     data: directivas.prefijo + trimmedStart.slice(match.index + match[0].length),
     hadValidationReport: true,
   };
+}
+
+/** Texto de un ARCHIVO subido sin lo que sólo el servidor puede escribir. */
+export interface TextoDelArchivo {
+  /** Texto tabular del archivo, sin directivas ni informe antepuesto. */
+  text: string;
+  /** El archivo traía directivas de ingesta (en cualquier nivel). */
+  descartoDirectivas: boolean;
+  /** El archivo empezaba con un informe de validación (texto derivado). */
+  descartoInforme: boolean;
+}
+
+/**
+ * Las directivas de ingesta (`[unidad-confirmada=…]`, `[vencimientos=…]`) y el
+ * informe de validación antepuesto (`# INFORME DE VALIDACION ARITMETICA … ---
+ * DATOS ORIGINALES:`) los escribe el servidor con la confirmación de la
+ * solicitud. Un ARCHIVO subido no puede traerlos: si los trae (al inicio, tras
+ * un informe imitado o en informes anidados), se descartan todos los niveles y
+ * sólo queda el dato tabular (ICU-01). Sin ellos devuelve el texto intacto.
+ */
+export function descartarConfirmacionesDelArchivo(text: string): TextoDelArchivo {
+  let actual = text ?? '';
+  let descartoDirectivas = false;
+  let descartoInforme = false;
+  for (;;) {
+    const directivas = leerDirectivasIngesta(actual);
+    if (directivas.tieneDirectivas) {
+      descartoDirectivas = true;
+      actual = directivas.resto;
+    }
+    const seccion = extractUploadDataSection(actual);
+    // Un informe SIN sección de datos no trae nada tabular que confirmar: se
+    // conserva como texto (p. ej. un informe descargado que se sube como
+    // contexto del chat) en vez de vaciar el documento.
+    if (!seccion.hadValidationReport || !seccion.data.trim()) break;
+    descartoInforme = true;
+    actual = seccion.data;
+  }
+  return { text: actual, descartoDirectivas, descartoInforme };
 }
 
 // ---------------------------------------------------------------------------
@@ -465,6 +516,14 @@ function resolveConfirmations(
     } else {
       unidadConfirmada = options.unidadConfirmada;
     }
+  }
+  if ((unidadConfirmada === 'miles' || unidadConfirmada === 'millones') && MARCA_XLSX_A_CENTAVOS_RE.test(text ?? '')) {
+    errores.push(
+      `La unidad (${unidadConfirmada} de pesos) se confirmó sobre el texto de un XLSX que se leyó con sus ` +
+        'celdas redondeadas a dos decimales de la unidad: reexpresarlo publicaría cifras aproximadas. ' +
+        'Para confirmar la unidad vuelva a subir el archivo con la unidad (campo unitMultiplier de ' +
+        '/api/upload, como hace el formulario del informe), que lo lee a precisión completa.',
+    );
   }
   const vencimientos: Record<string, Vencimiento> = { ...(lectura.vencimientos ?? {}) };
   for (const [codigo, plazo] of Object.entries(options.vencimientos ?? {})) {

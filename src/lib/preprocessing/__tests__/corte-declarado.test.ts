@@ -188,3 +188,121 @@ describe('P4 (c) — fecha de corte declarada en el título', () => {
     expect(s.virtualCloseAdjustment?.justification).toMatch(/NOTA OBLIGATORIA/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// ICU-03 — la fecha de corte en el ENCABEZADO de la columna de saldo ("Saldo a
+// 30/06/2025", "Saldo junio 2025", "Saldo 2025-06"), formato habitual de los
+// exports de ERP, se ignoraba: el P&G de 6 meses se trataba como anual (días
+// de cartera 60,8 en vez de 30,4) y la nota de base afirmaba que el archivo no
+// declaraba la fecha.
+// ---------------------------------------------------------------------------
+describe('ICU-03 — fecha de corte en el encabezado de la columna de saldo', () => {
+  // 6 meses: ingresos 600.000; cartera 100.000 → días de cartera ≈ 30,4 (× 12/6).
+  const FILAS = [
+    '11050501,Caja,150000',
+    '11100501,Bancos,250000',
+    '13050501,Clientes,100000',
+    '15200101,PPE,500000',
+    '22050101,Proveedores,150000',
+    '23359501,Otros por pagar,100000',
+    '25050101,Salarios,50000',
+    '24080101,IVA,100000',
+    '31050501,Capital,280000',
+    '33050501,Reserva,200000',
+    '41350501,Ventas,600000',
+    '51050601,Sueldos,300000',
+    '61350501,Costo de ventas,180000',
+  ];
+  const leer = (header: string, ...preambulo: string[]) => {
+    const parsed = parseUploadedTrialBalanceText([...preambulo, `codigo,nombre,${header}`, ...FILAS].join('\n'));
+    return preprocessTrialBalance(parsed.rows, { openingPeriods: parsed.openingPeriods });
+  };
+
+  it.each([
+    'Saldo a 30/06/2025',
+    'Saldo final 30-06-2025',
+    'Saldo a junio 30 de 2025',
+    'Saldo al 30 de junio de 2025',
+    'Saldo junio 2025',
+    'Saldo Jun-2025',
+    'Saldo 2025-06',
+    'Saldo 06/2025',
+  ])('"%s" → corte 2025-06 de 6 meses, KPIs anualizados y nota con la fecha', (header) => {
+    const s = leer(header).primary;
+    expect(s.period).toBe('2025-06');
+    expect(s.periodoTipo).toBe('parcial');
+    expect(s.controlTotals.mesesPeriodo).toBe(6);
+    expect(s.controlTotals.diasCartera).toBeCloseTo(30.42, 1);
+    expect(s.corteDeclarado).toMatchObject({ tipo: 'parcial', meses: 6 });
+    expect(s.controlTotals.kpiBaseNota).toMatch(/P&G de 6 meses \(corte declarado en el archivo/);
+    expect(s.controlTotals.kpiBaseNota).not.toMatch(/no declara/);
+    expect(s.validation.adjustments.some((a) => /encabezado de la columna/.test(a))).toBe(true);
+  });
+
+  it('"Saldo a 31/12/2025": periodo 2025 cerrado con la fecha del encabezado', () => {
+    const s = leer('Saldo a 31/12/2025').primary;
+    expect(s.period).toBe('2025');
+    expect(s.periodoTipo).toBe('cerrado');
+    expect(s.controlTotals.kpiBaseNota).toMatch(/12 meses \(cierre anual\) \(corte declarado en el archivo/);
+  });
+
+  it('comparativo con fechas en los encabezados: cada columna con su mes', () => {
+    const csv = [
+      'codigo,nombre,Saldo a 30/06/2024,Saldo a 30/06/2025',
+      '110505,Caja,250000,300000',
+      '310505,Capital,250000,300000',
+    ].join('\n');
+    const out = preprocessTrialBalance(parseTrialBalanceCSVWithMeta(csv).rows);
+    expect(out.periods.map((p) => p.period)).toEqual(['2024-06', '2025-06']);
+  });
+
+  it('saldo inicial y final del mes con fecha: apertura 2025-05, cierre 2025-06 (año corrido, sin bloqueo R12)', () => {
+    const csv = [
+      'codigo,nombre,Saldo inicial a 31/05/2025,Saldo final a 30/06/2025',
+      '110505,Caja,1000000000,1100000000',
+      '220505,Proveedores,400000000,400000000',
+      '310505,Capital,100000000,100000000',
+      '413505,Ventas,800000000,950000000',
+      '513505,Gastos,300000000,350000000',
+    ].join('\n');
+    const parsed = parseUploadedTrialBalanceText(csv);
+    expect(parsed.openingPeriods).toEqual(['2025-05']);
+    const out = preprocessTrialBalance(parsed.rows, { openingPeriods: parsed.openingPeriods });
+    expect(out.primary.period).toBe('2025-06');
+    expect(out.comparative?.saldosDeApertura).toBe(true);
+    expect((out.primary.validation.curatorBlockingReasons ?? []).some((r) => r.startsWith('[CUR-R12]'))).toBe(false);
+  });
+
+  it('"Saldo inicial al 1 de enero de 2025 | Saldo final 2025": la apertura sigue siendo el cierre 2024', () => {
+    const csv = [
+      'codigo,nombre,Saldo inicial al 1 de enero de 2025,Saldo final 2025',
+      '110505,Caja,250000,300000',
+      '310505,Capital,250000,300000',
+    ].join('\n');
+    const meta = parseTrialBalanceCSVWithMeta(csv);
+    expect(meta.balanceColumns.map((c) => c.period)).toEqual(['2024', '2025']);
+  });
+
+  it('una fecha que no se interpreta (a mitad de mes) no se presenta como "el archivo no declara la fecha"', () => {
+    const s = leer('Saldo a 15/06/2025').primary;
+    expect(s.period).toBe('2025');
+    expect(s.controlTotals.kpiBaseNota).toMatch(/SUPUESTO de cierre anual/);
+    expect(s.controlTotals.kpiBaseNota).not.toMatch(/no declara la fecha de corte/);
+    expect(s.controlTotals.kpiBaseNota).toMatch(/«Saldo a 15\/06\/2025» no se interpretó/);
+  });
+
+  it('API v1: título con corte y etiqueta del llamador → la nota cita la fecha no aplicada en vez de negarla', async () => {
+    const { buildRawRowsFromInput, preprocessBuiltRows } = await import('@/lib/api/trial-balances');
+    const csv = ['Balance de prueba a junio 30 de 2025', 'codigo,nombre,saldo', ...FILAS].join('\n');
+    const built = buildRawRowsFromInput({ csv, period_label: '2025' });
+    if (!built.ok) throw new Error('build');
+    const s = preprocessBuiltRows(built, '2025').primary;
+    expect(s.controlTotals.kpiBaseNota).not.toMatch(/no declara la fecha de corte/);
+    expect(s.controlTotals.kpiBaseNota).toMatch(/«Balance de prueba a junio 30 de 2025»/);
+  });
+
+  it('sin ninguna fecha en el archivo la nota conserva "no declara la fecha de corte"', () => {
+    const s = leer('Saldo 2025').primary;
+    expect(s.controlTotals.kpiBaseNota).toMatch(/no declara la fecha de corte/);
+  });
+});

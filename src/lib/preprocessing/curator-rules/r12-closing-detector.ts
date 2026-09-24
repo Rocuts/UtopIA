@@ -29,7 +29,10 @@
 //     y bloquea para que el usuario confirme o pase el asiento de cierre.
 //     Con evidencia de dividendos (2360/35) el caso es ambiguo (un resultado
 //     distribuido íntegramente produce el mismo patrimonio): hallazgo 'alto'
-//     sin bloqueo.
+//     sin bloqueo. Una columna de SALDO INICIAL del ejercicio (1 de enero) se
+//     evalúa igual: su P&G debe estar en cero y, si no, el saldo final lo
+//     incluye (recalculo-final2-01). Sólo la apertura intermedia de un corte
+//     parcial (saldo inicial del mes, P&G del año corrido) queda fuera.
 //
 // R12 NO muta saldos. Escribe `snapshot.findings.librosNoCerrados`,
 // `snapshot.closingDetectorAudit` y, en el caso (2), un bloqueo post-curator.
@@ -203,16 +206,31 @@ export function runR12(snapshot: PeriodSnapshot, prev: PeriodSnapshot | null = n
     const ingresosMov = formatCents(
       BigInt(pygAcumulado.ingresosNetosMovimientoRaw.replace('.', '')),
     );
+    const apertura = pygAcumulado.saldosDeApertura === true;
+    const origen = apertura
+      ? `El saldo inicial de ${snapshot.period} (columna de apertura, leída como el cierre de ` +
+        `${pygAcumulado.comparativePeriod}) trae en las clases 4-7 un resultado de ` +
+        `$${formatCOPExact(pygAcumulado.utilidadComparativo)} que no ingresó al patrimonio. Si es ` +
+        `el saldo al 1 de enero, el periodo ${pygAcumulado.comparativePeriod} no se cerró y, como el ` +
+        `saldo final es el saldo inicial más los movimientos, las cuentas de resultado de ` +
+        `${snapshot.period} están ACUMULADAS (${pygAcumulado.comparativePeriod} + ${snapshot.period}).`
+      : `El periodo comparativo ${pygAcumulado.comparativePeriod} tiene resultado de ` +
+        `$${formatCOPExact(pygAcumulado.utilidadComparativo)} que no ingresó al patrimonio de ` +
+        `${snapshot.period}: las cuentas de resultado de ${snapshot.period} pueden estar ` +
+        `ACUMULADAS (${pygAcumulado.comparativePeriod} + ${snapshot.period}).`;
     const description =
-      `[${snapshot.period}] El periodo comparativo ${pygAcumulado.comparativePeriod} tiene ` +
-      `resultado de $${formatCOPExact(pygAcumulado.utilidadComparativo)} que no ingresó al ` +
-      `patrimonio de ${snapshot.period}: las cuentas de resultado de ${snapshot.period} pueden ` +
-      `estar ACUMULADAS (${pygAcumulado.comparativePeriod} + ${snapshot.period}). Resultado ` +
+      `[${snapshot.period}] ${origen} Resultado ` +
       `publicado (saldo final de clases 4-7): $${formatCOPExact(pygAcumulado.utilidadPublicada)}. ` +
       `Si el P&G es acumulado, el resultado del ejercicio ${snapshot.period} sería ` +
-      `$${movimiento} (saldo final − saldo ${pygAcumulado.comparativePeriod}) y los ingresos ` +
-      `netos del ejercicio $${ingresosMov}. El sistema no transforma las cifras: confirme el ` +
-      `cierre del periodo ${pygAcumulado.comparativePeriod} o cargue el balance con el P&G del ejercicio.`;
+      `$${movimiento} (saldo final − ${apertura ? 'saldo inicial' : `saldo ${pygAcumulado.comparativePeriod}`}) ` +
+      `y los ingresos netos del ejercicio $${ingresosMov}. El sistema no transforma las cifras: confirme el ` +
+      `cierre del periodo ${pygAcumulado.comparativePeriod} o cargue el balance con el P&G del ejercicio.` +
+      (apertura && periodoTipo !== 'parcial'
+        ? ' Si el saldo inicial es el de un mes (balance mensual, p. ej. el de diciembre con saldo ' +
+          'inicial al 30 de noviembre), exporte el balance del ejercicio con saldo inicial al 1 de ' +
+          'enero, o rotule la columna con su fecha (p. ej. "Saldo inicial 01/12/2025" o "Saldo a ' +
+          '30/11/2025") para que el P&G se lea como el del año corrido.'
+        : '');
 
     if (pygAcumuladoBloqueante) {
       addCuratorBlocker(snapshot, 'CUR-R12', description);
@@ -252,9 +270,19 @@ function detectPygAcumulado(
 ): PygAcumuladoAudit | undefined {
   if (!prev) return undefined;
   // Comparativo de SALDOS DE APERTURA (columna 'saldo inicial/anterior',
-  // ingesta-09): su P&G es el acumulado a esa fecha y por definición no está en
-  // el patrimonio; no es un ejercicio anterior sin cerrar (cross-dep W3-A).
-  if (prev.saldosDeApertura === true) return undefined;
+  // ingesta-09). Una apertura INTERMEDIA (saldo inicial del mes en un corte
+  // parcial) trae el P&G del año corrido a esa fecha: no está en el patrimonio
+  // y no es un ejercicio anterior sin cerrar (cross-dep W3-A). La apertura del
+  // EJERCICIO (1 de enero) debe traer las clases 4-7 en cero; si trae resultado
+  // que no entró al patrimonio, el saldo final lo incluye por identidad (final
+  // = inicial + movimientos) y la prueba es la misma que la de un comparativo
+  // de cierre (recalculo-final2-01).
+  if (prev.saldosDeApertura === true && !esAperturaDelEjercicio(snapshot)) return undefined;
+  // Un corte anterior DEL MISMO ejercicio (2025-11 frente a 2025, o 2025-05
+  // frente a 2025-06; columnas con fecha en el encabezado, ICU-03) trae el P&G
+  // del año corrido a esa fecha: por construcción no está en el patrimonio y
+  // no es un ejercicio anterior sin cerrar.
+  if (esCorteAnteriorDelMismoEjercicio(prev.period, snapshot.period)) return undefined;
   const prevUtilidadCents = centsOf(prev, 'utilidadNeta');
   const prevUtilidad = Number(prevUtilidadCents) / 100;
   if (Math.abs(prevUtilidad) <= UTILIDAD_MATERIALITY) return undefined;
@@ -286,7 +314,36 @@ function detectPygAcumulado(
     utilidadMovimientoRaw: centsToCanonical(utilidadPublicadaCents - prevUtilidadCents),
     ingresosNetosMovimientoRaw: centsToCanonical(ingresosNetosNow - ingresosNetosPrev),
     variacionResultadosAnterioresRaw: centsToCanonical(deltaResultadosAnteriores),
+    ...(prev.saldosDeApertura === true ? { saldosDeApertura: true } : {}),
   };
+}
+
+/**
+ * `true` si la columna de saldo inicial del periodo es la apertura del
+ * ejercicio contable (1 de enero; C.Co. Art. 34: corte anual al 31 de
+ * diciembre). Un periodo anual o de tipo indeterminado se trata como anual (la
+ * misma opción conservadora que el traslado del resultado; la recomendación
+ * explica cómo rotular un corte intermedio con el mes). En un corte parcial la
+ * apertura es la del ejercicio sólo si el corte es de enero ('2025-01') o el
+ * archivo declara el rango desde enero ("De Enero 2025 a Junio 2025"); si no,
+ * puede ser el saldo inicial del mes y su P&G es el del año corrido.
+ */
+function esAperturaDelEjercicio(snapshot: PeriodSnapshot): boolean {
+  if ((snapshot.periodoTipo ?? 'indeterminado') !== 'parcial') return true;
+  if (/^\d{4}-01$/.test(snapshot.period)) return true;
+  const texto = snapshot.corteDeclarado?.texto ?? '';
+  return /\b(?:de|desde|from)\s+(?:el\s+)?(?:1\s+de\s+)?(?:enero|january)\b/i.test(texto);
+}
+
+/**
+ * `true` si `prev` es un corte intermedio (`AAAA-MM` / `AAAA-Qn`) del mismo año
+ * que `period` (`AAAA` o `AAAA-MM`): ambos pertenecen al mismo ejercicio.
+ */
+function esCorteAnteriorDelMismoEjercicio(prev: string, period: string): boolean {
+  const p = prev.match(/^(\d{4})-(?:0[1-9]|1[0-2]|Q[1-4])$/i);
+  if (!p) return false;
+  const actual = period.match(/^(\d{4})(?:-(?:0[1-9]|1[0-2]|Q[1-4]))?$/i);
+  return actual !== null && actual[1] === p[1];
 }
 
 type CentsKey = 'activo' | 'pasivo' | 'utilidadNeta' | 'ingresosNetos';

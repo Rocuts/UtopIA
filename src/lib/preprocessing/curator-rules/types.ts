@@ -453,6 +453,11 @@ export interface PygAcumuladoAudit {
   ingresosNetosMovimientoRaw: string;
   /** Variación de resultados anteriores (patrimonio sin resultado del año, sin aportes). */
   variacionResultadosAnterioresRaw: string;
+  /**
+   * `true` si el comparativo es la columna de saldo inicial del ejercicio
+   * (recalculo-final2-01): el resultado alternativo es saldo final − inicial.
+   */
+  saldosDeApertura?: boolean;
 }
 
 export interface ClosingDetectorAudit {

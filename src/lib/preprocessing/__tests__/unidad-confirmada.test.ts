@@ -224,3 +224,122 @@ describe('P4 (a) — unidad confirmada por el usuario', () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// recalculo-final2-02 / ICU-02 — con la unidad confirmada, un importe con un
+// único separador seguido de EXACTAMENTE 3 cifras ('848,123') se leía como
+// agrupación de miles y quedaba × 1.000 en silencio (el balance podía cuadrar
+// y publicarse). En miles, 3 decimales son la precisión al peso: el separador
+// decimal se decide por archivo (celdas con los dos separadores, grupos
+// repetidos, fracciones de otra longitud; si no hay, ';' ⇒ coma decimal) y, sin
+// evidencia, el importe es ambiguo y bloquea con motivo. En pesos sin unidad
+// '1.234' sigue siendo mil doscientos treinta y cuatro.
+// ---------------------------------------------------------------------------
+describe('unidad confirmada: importes con 3 decimales (recalculo-final2-02 / ICU-02)', () => {
+  const saldos = (csv: string, unidad: 'miles' | 'millones', periodo = '2025') =>
+    Object.fromEntries(
+      parseTrialBalanceCSVWithMeta(csv, { unidadConfirmada: unidad }).rows.map((r) => [r.code, r.balancesByPeriod[periodo]]),
+    );
+  const U4 = [
+    'codigo;nombre;nivel;saldo 2024 (miles de pesos);saldo 2025 (miles de pesos)',
+    '110505;Caja general;Auxiliar;20000;30000',
+    '111005;Bancos cuenta corriente;Auxiliar;848,123;848,123',
+    '220505;Proveedores nacionales;Auxiliar;10000;20000',
+    '238095;Otras cuentas por pagar;Auxiliar;848,123;848,123',
+    '311505;Capital suscrito y pagado;Auxiliar;10000;10000',
+  ].join('\n');
+
+  it("CSV con ';' y sin otra evidencia: coma decimal ('848,123' miles = $848.123)", () => {
+    const s = saldos(U4, 'miles');
+    expect(s['111005']).toBe(848_123);
+    expect(s['238095']).toBe(848_123);
+    expect(s['110505']).toBe(30_000_000);
+    const p = preprocessTrialBalance(parseTrialBalanceCSVWithMeta(U4, { unidadConfirmada: 'miles' }).rows).primary;
+    expect(p.controlTotals.cents!.activo).toBe(BigInt(3_084_812_300)); // $30.848.123,00
+    expect(p.validation.blocking).toBe(false);
+  });
+
+  it("millones con coma decimal en otra celda ('5,5'): '848,123' millones = $848.123.000", () => {
+    const csv = U4.replace(/miles de pesos/g, 'millones de pesos').replace('10000;10000', '10000;10000').replace(
+      '110505;Caja general;Auxiliar;20000;30000',
+      '110505;Caja general;Auxiliar;20000;5,5',
+    );
+    const s = saldos(csv, 'millones');
+    expect(s['110505']).toBe(5_500_000);
+    expect(s['111005']).toBe(848_123_000);
+  });
+
+  it("es-CO con ambos separadores en otra celda ('1.000,152'): '232,848' = $232.848 y el balance cuadra", () => {
+    // A = 232,848 + 1.000,152 + 767,000 = 2.000,000 miles = P 500,000 + K 1.500,000.
+    const csv = [
+      'codigo;nombre;Saldo 2025 (miles de pesos)',
+      '11050501;Caja;232,848',
+      '11100501;Bancos;1.000,152',
+      '15200101;PPE;767,000',
+      '22050101;Proveedores;500,000',
+      '31050501;Capital;1.500,000',
+    ].join('\n');
+    const s = saldos(csv, 'miles');
+    expect(s['11050501']).toBe(232_848);
+    expect(s['11100501']).toBe(1_000_152);
+    expect(s['15200101']).toBe(767_000);
+    const p = preprocessTrialBalance(parseTrialBalanceCSVWithMeta(csv, { unidadConfirmada: 'miles' }).rows).primary;
+    expect(p.controlTotals.cents!.activo).toBe(BigInt(200_000_000));
+    expect(p.validation.blocking).toBe(false);
+  });
+
+  it("la lectura errónea que cuadraba ('500,000' en caja y proveedores) ya no infla el activo", () => {
+    const csv = [
+      'codigo;nombre;Saldo 2025 (miles de pesos)',
+      '11050501;Caja;500,000',
+      '15200101;PPE;1.000,000',
+      '22050101;Proveedores;500,000',
+      '31050501;Capital;1.000,000',
+    ].join('\n');
+    const p = preprocessTrialBalance(parseTrialBalanceCSVWithMeta(csv, { unidadConfirmada: 'miles' }).rows).primary;
+    expect(p.controlTotals.activo).toBe(1_500_000);
+  });
+
+  it("grupos de miles repetidos ('1.234.567') fijan la coma como decimal y '848.123' como miles", () => {
+    const csv = [
+      'codigo,nombre,Saldo 2025 (miles de pesos)',
+      '110505,Caja,1.234.567',
+      '111005,Bancos,848.123',
+      '310505,Capital,2.082.690',
+    ].join('\n');
+    const s = saldos(csv, 'miles');
+    expect(s['111005']).toBe(848_123_000);
+    expect(s['110505']).toBe(1_234_567_000);
+  });
+
+  it("sin evidencia del separador (',' como separador de campos y '848.123'): importe ambiguo → motivo bloqueante, nunca × 1.000 en silencio", () => {
+    const csv = [
+      'codigo,nombre,saldo 2025',
+      'Cifras en miles de pesos,,',
+      '110505,Caja general,30000',
+      '111005,Bancos cuenta corriente,848.123',
+      '238095,Otras cuentas por pagar,848.123',
+      '311505,Capital,30000',
+    ].join('\n');
+    const meta = parseTrialBalanceCSVWithMeta(csv, { unidadConfirmada: 'miles' });
+    const p = preprocessTrialBalance(meta.rows).primary;
+    expect(p.validation.blocking).toBe(true);
+    expect(p.validation.reasons.join(' ')).toMatch(/Cuenta 111005: el saldo "848\.123".*ambiguo.*miles/);
+    expect(p.controlTotals.activo).not.toBe(1_006_123_000 + 30_000_000);
+  });
+
+  it('en pesos sin unidad la regla morfológica no cambia: "1.234" = 1.234', () => {
+    const csv = ['codigo;nombre;Saldo 2025', '110505;Caja;1.234', '310505;Capital;1.234'].join('\n');
+    const meta = parseTrialBalanceCSVWithMeta(csv);
+    expect(meta.rows[0].balancesByPeriod['2025']).toBe(1234);
+  });
+
+  it("API v1 csv con unit='miles' lee lo mismo que el upload", async () => {
+    const { buildRawRowsFromInput } = await import('@/lib/api/trial-balances');
+    const built = buildRawRowsFromInput({ csv: U4, period_label: '2025', unit: 'miles' });
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    const byCode = Object.fromEntries(built.rows.map((r) => [r.code, r.balancesByPeriod['2025']]));
+    expect(byCode['111005']).toBe(848_123);
+  });
+});

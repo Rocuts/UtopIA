@@ -96,7 +96,8 @@ const TRIAL_BALANCE_SCHEMA = {
       type: 'string',
       description:
         'Periodo primario. Si el CSV declara la fecha de corte en su título ("Balance a junio 30 ' +
-        'de 2025") y la columna de saldo sólo trae el año, el periodo es el corte AAAA-MM ' +
+        'de 2025") y la columna de saldo sólo trae el año, o en el encabezado de la columna de ' +
+        'saldo ("Saldo a 30/06/2025", "Saldo junio 2025"), el periodo es el corte AAAA-MM ' +
         '(2025-06) aunque se haya enviado period_label "2025"; el detalle lo explica en ' +
         'validation_notes (tb-2026-09-24.3).',
     },

@@ -29,9 +29,10 @@ vi.mock('@/lib/upload/blob-client', () => ({
 }));
 vi.mock('@/lib/upload/preprocessed-handoff', () => ({ rememberUploadedPreprocessed: () => {} }));
 
+import { collectMissingRequired, isUnitPending } from '../niifIntakeValidation';
 import { useDocumentExtraction, type ExtractionState } from '../useDocumentExtraction';
 
-function respuesta(rawData: string, confirmed: 'miles' | null) {
+function respuesta(rawData: string, confirmed: 'miles' | 'millones' | null) {
   return {
     success: true,
     filename: 'x.csv',
@@ -87,5 +88,58 @@ describe('useDocumentExtraction — confirmación de unidad', () => {
     const state = holder.state as ExtractionState;
     expect(state.extracted?.rawText.split('\n')[0]).toBe('[unidad-confirmada=miles]');
     expect(state.extracted?.unit?.confirmed).toBe('miles');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ICU-04 — carrera: con una reconfirmación en vuelo (miles → millones) el texto
+// aún lleva la unidad anterior; el paso "Revisar" y el envío deben esperar a
+// que llegue la nueva lectura (o repetirla si falló).
+// ---------------------------------------------------------------------------
+describe('ICU-04 — envío mientras se reconfirma la unidad', () => {
+  const empresa = { company: { name: 'X SAS', nit: '900123456-1' } as never, fiscalPeriod: '2025', niifGroup: 2 as const };
+
+  beforeEach(() => {
+    uploadDocument.mockReset();
+  });
+
+  it('con la confirmación en vuelo la unidad sigue pendiente y el paso no es válido', async () => {
+    const hook = useDocumentExtraction();
+    uploadDocument.mockResolvedValueOnce(respuesta('codigo,nombre,saldo (miles)\nA', null));
+    await hook.uploadAndExtract(new File(['a'], 'a.csv'));
+    uploadDocument.mockResolvedValueOnce(respuesta('[unidad-confirmada=miles]\ncodigo,nombre,saldo (miles)\nA', 'miles'));
+    await hook.confirmUnit('miles');
+    expect(isUnitPending(holder.state as ExtractionState)).toBe(false);
+
+    let resolver!: (v: unknown) => void;
+    uploadDocument.mockReturnValueOnce(new Promise((r) => (resolver = r)));
+    const enVuelo = hook.confirmUnit('millones');
+
+    const s = holder.state as ExtractionState;
+    expect(s.unitConfirmation.status).toBe('confirming');
+    expect(s.extracted?.rawText.split('\n')[0]).toBe('[unidad-confirmada=miles]');
+    expect(isUnitPending(s)).toBe(true);
+    expect(collectMissingRequired(empresa, s.extracted!.rawText, { unitPending: isUnitPending(s) }).length).toBeGreaterThan(0);
+
+    resolver(respuesta('[unidad-confirmada=millones]\ncodigo,nombre,saldo (miles)\nA', 'millones'));
+    await enVuelo;
+    const fin = holder.state as ExtractionState;
+    expect(fin.extracted?.rawText.split('\n')[0]).toBe('[unidad-confirmada=millones]');
+    expect(isUnitPending(fin)).toBe(false);
+  });
+
+  it('si la reconfirmación falla, la unidad elegida no se aplicó: sigue pendiente', async () => {
+    const hook = useDocumentExtraction();
+    uploadDocument.mockResolvedValueOnce(respuesta('[unidad-confirmada=miles]\ncodigo,nombre,saldo (miles)\nA', 'miles'));
+    await hook.uploadAndExtract(new File(['a'], 'a.csv'));
+    uploadDocument.mockRejectedValueOnce(new Error('red'));
+    await hook.confirmUnit('millones');
+    const s = holder.state as ExtractionState;
+    expect(s.unitConfirmation.status).toBe('error');
+    expect(isUnitPending(s)).toBe(true);
+  });
+
+  it('con la ruta manual (sin archivo) no hay unidad pendiente', () => {
+    expect(isUnitPending({ status: 'idle', extracted: null, unitConfirmation: { status: 'idle' } })).toBe(false);
   });
 });

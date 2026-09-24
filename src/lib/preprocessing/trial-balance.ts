@@ -116,6 +116,12 @@ export interface NotaIngesta {
    * P4-c): determina `periodoTipo` y la nota de base de los KPIs.
    */
   corte?: { tipo: 'cerrado' | 'parcial'; meses: number; texto: string };
+  /**
+   * ICU-03: el archivo trae una fecha («texto») que no se interpretó como
+   * fecha de corte de `period`. La nota de base de los KPIs la cita en vez de
+   * afirmar que el archivo no declara la fecha.
+   */
+  fechaSinInterpretar?: string;
 }
 
 export interface ValidatedAccount {
@@ -595,6 +601,12 @@ export interface PeriodSnapshot {
    * archivo no declara la fecha de corte.
    */
   corteDeclarado?: { tipo: 'cerrado' | 'parcial'; meses: number; texto: string };
+  /**
+   * ICU-03: fecha que trae el archivo y que no se interpretó como corte de
+   * este periodo (a mitad de mes, rango que no empieza en enero, etiqueta
+   * impuesta por el llamador). Sólo con `corteDeclarado` ausente.
+   */
+  fechaSinInterpretar?: string;
   /**
    * Excepciones de vencimiento declaradas por el usuario que movieron saldo
    * entre corriente y no corriente en este periodo (P4-b). Ausente sin
@@ -1219,10 +1231,15 @@ function natureBalance(code: string, debit: number, credit: number): number {
   return value === 0 ? 0 : value;
 }
 
-function readBalanceCell(cols: string[], col: BalanceColumn, code: string, exponente = 0): AmountCell {
-  const first = parseAmountCell(cols[col.index], exponente);
+function readBalanceCell(
+  cols: string[],
+  col: BalanceColumn,
+  code: string,
+  unidad: LecturaUnidad = SIN_UNIDAD,
+): AmountCell {
+  const first = parseAmountCell(cols[col.index], unidad);
   if (col.creditIndex === undefined) return first;
-  const credit = parseAmountCell(cols[col.creditIndex], exponente);
+  const credit = parseAmountCell(cols[col.creditIndex], unidad);
   if (first.kind === 'unreadable') return first;
   if (credit.kind === 'unreadable') return credit;
   if (first.kind === 'empty' && credit.kind === 'empty') return first;
@@ -1233,6 +1250,14 @@ function readBalanceCell(cols: string[], col: BalanceColumn, code: string, expon
 
 function unreadableMessage(code: string, header: string, cell: UnreadableCell): string {
   const shown = cell.raw.length > 40 ? `${cell.raw.slice(0, 40)}…` : cell.raw;
+  if (cell.ambiguoEn) {
+    return (
+      `Cuenta ${code}: el saldo "${shown}" de la columna "${header}" es ambiguo con la unidad ` +
+      `confirmada (${cell.ambiguoEn} de pesos): con tres cifras tras el único separador puede ser ` +
+      'un decimal o una agrupación de miles, y el archivo no permite deducir su separador decimal. ' +
+      'Exporte los importes con separador de miles y decimal, o con un número de decimales distinto de tres.'
+    );
+  }
   if (cell.fueraDeRango) {
     return (
       `Cuenta ${code}: el saldo "${shown}" de la columna "${header}" está fuera del rango de ` +
@@ -1308,6 +1333,29 @@ export function parseTrialBalanceCSVWithMeta(
   const unidadDeclarada = detectUnidadDeclarada([...preambulo, ...lineasSinCuenta], rawHeaders);
   const unidadAplicada = options.unidadConfirmada ?? null;
   const exponente = unidadAplicada ? EXPONENTE_UNIDAD[unidadAplicada] : 0;
+  // Con la unidad confirmada, '848,123' (tres cifras tras el único separador)
+  // puede ser decimal (precisión al peso en miles) o agrupación: el separador
+  // decimal se decide por archivo (recalculo-final2-02 / ICU-02).
+  const lecturaUnidad: LecturaUnidad =
+    unidadAplicada && exponente > 0
+      ? {
+          exponente,
+          unidad: unidadAplicada,
+          separadorDecimal: separadorDecimalDelArchivo(
+            lines.slice(layout.lineIndex + 1).flatMap((line) => {
+              const cols = parseLine(line, separator);
+              const code = codeOf(cols);
+              if (!code || !/^\d/.test(code)) return [];
+              const idx = [
+                ...balanceColumns.flatMap((c) => (c.creditIndex === undefined ? [c.index] : [c.index, c.creditIndex])),
+                ...(balanceColumns.length === 0 ? [debitIdx, creditIdx] : []),
+              ];
+              return idx.filter((i) => i >= 0).map((i) => cols[i] ?? '');
+            }),
+            separator,
+          ),
+        }
+      : SIN_UNIDAD;
   const corteDeclarado = detectCorteDeclarado(preambulo);
 
   for (let i = layout.lineIndex + 1; i < lines.length; i++) {
@@ -1352,7 +1400,7 @@ export function parseTrialBalanceCSVWithMeta(
       // Caso normal: hay columnas de saldo identificadas. Cada columna
       // alimenta su periodo correspondiente.
       for (const col of balanceColumns) {
-        const cell = readBalanceCell(cols, col, code, exponente);
+        const cell = readBalanceCell(cols, col, code, lecturaUnidad);
         if (cell.kind === 'number') {
           balancesByPeriod[col.period] = cell.value;
           numericPeriods.add(col.period);
@@ -1363,8 +1411,8 @@ export function parseTrialBalanceCSVWithMeta(
     } else if (debitIdx !== -1 || creditIdx !== -1) {
       // Solo hay debito/credito: derivamos el balance segun naturaleza PUC.
       // Un débito o crédito ilegible NO se vuelve 0 (niif-preproceso-05).
-      const debit = debitIdx !== -1 ? parseAmountCell(cols[debitIdx], exponente) : EMPTY_CELL;
-      const credit = creditIdx !== -1 ? parseAmountCell(cols[creditIdx], exponente) : EMPTY_CELL;
+      const debit = debitIdx !== -1 ? parseAmountCell(cols[debitIdx], lecturaUnidad) : EMPTY_CELL;
+      const credit = creditIdx !== -1 ? parseAmountCell(cols[creditIdx], lecturaUnidad) : EMPTY_CELL;
       if (debit.kind === 'unreadable') {
         rowIssues.push({ period: dcPeriod, message: unreadableMessage(code, rawHeaders[debitIdx], debit) });
       }
@@ -1430,9 +1478,13 @@ export function parseTrialBalanceCSVWithMeta(
     const year = corteDeclarado.year;
     // Sólo una columna cuyo encabezado trae ese año: una etiqueta impuesta por
     // el llamador (`forcePeriod` de la hoja, `currentYear` del API) no se toca.
+    // Una columna que trae su propia fecha en el encabezado (ICU-03) ya tiene
+    // su corte y no se re-rotula con el del título.
     const periodoDelAnio =
       !options.forcePeriod &&
-      balanceColumns.some((c) => c.period === year && explicitPeriodOf(c.header) === year);
+      balanceColumns.some(
+        (c) => c.period === year && explicitPeriodOf(c.header) === year && corteDeEncabezado(c.header) === null,
+      );
     if (corteDeclarado.month !== 12 && periodoDelAnio) {
       const label = `${year}-${String(corteDeclarado.month).padStart(2, '0')}`;
       relabelPeriod(rows, year, label);
@@ -1456,6 +1508,61 @@ export function parseTrialBalanceCSVWithMeta(
           `Fecha de corte declarada en el archivo («${corteDeclarado.texto}»): periodo ${year} de ` +
           '12 meses (cierre anual).',
         corte: { tipo: 'cerrado', meses: 12, texto: corteDeclarado.texto },
+      });
+    }
+  }
+  // ICU-03: la fecha de corte del ENCABEZADO de la columna ya fijó su periodo
+  // (`explicitPeriodOf`); aquí queda la nota que la cita, con el tipo de
+  // periodo y los meses, igual que la del título.
+  const periodosConCorte = new Set(notas.filter((n) => n.corte).map((n) => n.period));
+  for (const col of columnasFinales) {
+    if (col.kind === 'opening') continue;
+    const c = corteDeEncabezado(col.header);
+    if (!c) continue;
+    const label = etiquetaDeCorte(c);
+    if (col.period !== label || periodosConCorte.has(label) || !numericPeriods.has(label)) continue;
+    periodosConCorte.add(label);
+    const texto = textoDeLinea(col.header);
+    notas.push({
+      period: label,
+      message:
+        c.month === 12
+          ? `Fecha de corte en el encabezado de la columna («${texto}»): periodo ${label} de 12 meses (cierre anual).`
+          : `Fecha de corte en el encabezado de la columna («${texto}»): corte ${label} (P&G de ${c.month} meses).`,
+      corte: { tipo: c.month === 12 ? 'cerrado' : 'parcial', meses: c.month, texto },
+    });
+  }
+  // ICU-03: si el archivo trae una fecha que no fijó el corte de un periodo de
+  // sólo año (a mitad de mes, un rango que no empieza en enero, o una etiqueta
+  // impuesta por el llamador), la nota de base de los KPIs la cita en vez de
+  // afirmar que el archivo no declara la fecha. Bajo `forcePeriod` el corte del
+  // título lo aplica `raw-data`, que conoce la hoja.
+  const tituloSinAplicar =
+    corteDeclarado && !options.forcePeriod && !periodosConCorte.has(corteDeclarado.year)
+      ? corteDeclarado.texto
+      : null;
+  const soloAnioSinCorte = columnasFinales.filter(
+    (c) => c.kind !== 'opening' && /^\d{4}$/.test(c.period) && !periodosConCorte.has(c.period) && numericPeriods.has(c.period),
+  );
+  if (soloAnioSinCorte.length > 0) {
+    const candidatas = [
+      ...(tituloSinAplicar ? [tituloSinAplicar] : []),
+      ...[...preambulo, ...soloAnioSinCorte.map((c) => c.header)]
+        .filter((t) => tieneFecha(t) && corteDeLinea(t) === null && corteDeEncabezado(t) === null)
+        .map(textoDeLinea),
+    ];
+    for (const period of new Set(soloAnioSinCorte.map((c) => c.period))) {
+      // Sólo una fecha del año del periodo puede ser su corte: la fecha de
+      // impresión del reporte (enero del año siguiente) o la de otro periodo
+      // no se cita en la nota de base de éste.
+      const fechaSinInterpretar = candidatas.find((t) => t.includes(period));
+      if (!fechaSinInterpretar) continue;
+      notas.push({
+        period,
+        message:
+          `El archivo trae la fecha «${fechaSinInterpretar}», que no se interpretó como fecha de corte ` +
+          `del periodo ${period} (sólo se leen cortes a fin de mes o rangos desde enero del año de la columna).`,
+        fechaSinInterpretar,
       });
     }
   }
@@ -1715,6 +1822,98 @@ function detectCorteDeclarado(preambulo: string[]): CorteDeclarado | null {
   return { year: String(elegido.year), month: elegido.month, texto: elegido.texto };
 }
 
+/** `AAAA-MM` de un corte parcial; `AAAA` a diciembre (convención de cierre anual). */
+function etiquetaDeCorte(c: { year: number; month: number }): string {
+  return c.month === 12 ? String(c.year) : `${c.year}-${String(c.month).padStart(2, '0')}`;
+}
+
+const NO_LETRA_ANTES = '(?<![a-z])';
+const NO_LETRA_DESPUES = '(?![a-z])';
+/** "junio 30 de 2025" (mes, día, año). */
+const ENC_MES_DIA_ANIO_RE = new RegExp(
+  `${NO_LETRA_ANTES}(${MES_ALT})${NO_LETRA_DESPUES}\\s+${DIA}\\s+(?:de\\s+|del\\s+)?(20\\d{2})(?!\\d)`,
+);
+/** "30 de junio de 2025" (día, mes, año). */
+const ENC_DIA_MES_ANIO_RE = new RegExp(
+  `(?<!\\d)${DIA}\\s+de\\s+(${MES_ALT})${NO_LETRA_DESPUES}\\s+(?:de\\s+|del\\s+)?(20\\d{2})(?!\\d)`,
+);
+/** "junio 2025", "jun-2025", "junio de 2025" (sin día delante: "1 de enero de 2025" es otra cosa). */
+const ENC_MES_ANIO_RE = new RegExp(
+  `(?<!\\d\\s*(?:de\\s+)?)${NO_LETRA_ANTES}(${MES_ALT})${NO_LETRA_DESPUES}\\s*[-/.]?\\s*(?:de\\s+|del\\s+)?(20\\d{2})(?!\\d)`,
+);
+/** "dic-24", "jun/25" (año de dos cifras pegado al mes). */
+const ENC_MES_ANIO_CORTO_RE = new RegExp(`${NO_LETRA_ANTES}(${MES_ALT})[-/.](\\d{2})(?!\\d)`);
+/** Fecha completa: "30/06/2025", "30-06-2025", "2025-06-30". */
+const ENC_FECHA_NUM_RE = /(?<!\d)(?:(\d{1,2})[/.-](\d{1,2})[/.-](20\d{2})|(20\d{2})-(\d{1,2})-(\d{1,2}))(?!\d)/;
+/** "2025-06" / "2025/06". */
+const ENC_ANIO_MES_RE = /(?<![\d/.-])(20\d{2})[-/](0?[1-9]|1[0-2])(?![\d/.-])/;
+/** "06/2025" / "6-2025". */
+const ENC_MES_NUM_ANIO_RE = /(?<![\d/.-])(0?[1-9]|1[0-2])[-/](20\d{2})(?![\d/.-])/;
+
+/**
+ * Fecha de corte en el ENCABEZADO de una columna de saldo (ICU-03): "Saldo a
+ * 30/06/2025", "Saldo final 30-06-2025", "Saldo a junio 30 de 2025", "Saldo
+ * junio 2025", "Saldo Jun-2025", "Saldo 2025-06", "Saldo 06/2025". Igual que
+ * en el título, sólo cuentan fechas que cierran el mes (un día intermedio no
+ * determina meses completos). `null` si el encabezado no trae mes.
+ */
+function corteDeEncabezado(header: string): { year: number; month: number } | null {
+  const enLinea = corteDeLinea(header);
+  if (enLinea) return enLinea;
+  const t = normalizeHeaderText(header)
+    .replace(/[,;\t"'()]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!t) return null;
+  const num = ENC_FECHA_NUM_RE.exec(t);
+  if (num) {
+    const [, d1, m1, y1, y2, m2, d2] = num;
+    const year = parseInt(y1 ?? y2, 10);
+    const month = parseInt(m1 ?? m2, 10);
+    if (!(month >= 1 && month <= 12)) return null;
+    return cierraElMes(d1 ?? d2, year, month) ? { year, month } : null;
+  }
+  const mda = ENC_MES_DIA_ANIO_RE.exec(t);
+  if (mda) {
+    const month = mesDeNombre(mda[1]);
+    const year = parseInt(mda[3], 10);
+    return month !== null && cierraElMes(mda[2], year, month) ? { year, month } : null;
+  }
+  const dma = ENC_DIA_MES_ANIO_RE.exec(t);
+  if (dma) {
+    const month = mesDeNombre(dma[2]);
+    const year = parseInt(dma[3], 10);
+    return month !== null && cierraElMes(dma[1], year, month) ? { year, month } : null;
+  }
+  const ma = ENC_MES_ANIO_RE.exec(t);
+  if (ma) {
+    const month = mesDeNombre(ma[1]);
+    return month === null ? null : { year: parseInt(ma[2], 10), month };
+  }
+  const corto = ENC_MES_ANIO_CORTO_RE.exec(t);
+  if (corto) {
+    const month = mesDeNombre(corto[1]);
+    return month === null ? null : { year: 2000 + parseInt(corto[2], 10), month };
+  }
+  const am = ENC_ANIO_MES_RE.exec(t);
+  if (am) return { year: parseInt(am[1], 10), month: parseInt(am[2], 10) };
+  const mna = ENC_MES_NUM_ANIO_RE.exec(t);
+  if (mna) return { year: parseInt(mna[2], 10), month: parseInt(mna[1], 10) };
+  return null;
+}
+
+/** Texto con una fecha (mes y año, o fecha numérica), interpretable o no. */
+const FECHA_EN_TEXTO_RE = new RegExp(
+  `${NO_LETRA_ANTES}(?:${MES_ALT})${NO_LETRA_DESPUES}[^\\n]{0,12}?20\\d{2}(?!\\d)` +
+    `|(?<!\\d)\\d{1,2}[/.-]\\d{1,2}[/.-](?:20)?\\d{2}(?!\\d)` +
+    `|(?<!\\d)20\\d{2}[-/]\\d{1,2}(?!\\d)` +
+    `|(?<![\\d/.-])\\d{1,2}[-/]20\\d{2}(?!\\d)`,
+);
+
+function tieneFecha(texto: string): boolean {
+  return FECHA_EN_TEXTO_RE.test(normalizeHeaderText(texto));
+}
+
 /** Reetiqueta el periodo `from` como `to` en saldos y problemas de lectura. */
 function relabelPeriod(rows: RawAccountRow[], from: string, to: string): void {
   for (let i = 0; i < rows.length; i++) {
@@ -1737,7 +1936,49 @@ function explicitPeriodOf(header: string): string | null {
   const bracket = header
     .trim()
     .match(/^saldo\s*\[(\d{4}(?:-(?:0[1-9]|1[0-2]|Q[1-4]))?|\d{4}-\d{2}-\d{2}\.\.\d{4}-\d{2}-\d{2})\]$/i)?.[1];
-  return bracket ?? detectYearFromString(header);
+  if (bracket) return bracket;
+  // ICU-03: "Saldo a 30/06/2025", "Saldo junio 2025", "Saldo 2025-06" → corte
+  // 2025-06; a diciembre la etiqueta queda en el año (cierre anual).
+  const corte = corteDeEncabezado(header);
+  if (corte) return etiquetaDeCorte(corte);
+  return detectYearFromString(header);
+}
+
+/** Mes anterior a `c` (enero → diciembre del año anterior). */
+function mesAnterior(c: { year: number; month: number }): { year: number; month: number } {
+  return c.month === 1 ? { year: c.year - 1, month: 12 } : { year: c.year, month: c.month - 1 };
+}
+
+/**
+ * Columna de APERTURA con fecha de día 1 en el encabezado ("Saldo inicial
+ * 01/06/2025", "Saldo inicial al 1 de junio de 2025"): su saldo es el cierre
+ * del mes anterior (2025-05; el 1 de enero, el cierre del año anterior).
+ * `null` si el encabezado no trae una fecha de día 1.
+ */
+function aperturaDeDiaUno(header: string): string | null {
+  const t = normalizeHeaderText(header)
+    .replace(/[,;\t"'()]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  let fecha: { dia: number; year: number; month: number | null } | null = null;
+  const num = ENC_FECHA_NUM_RE.exec(t);
+  if (num) {
+    const [, d1, m1, y1, y2, m2, d2] = num;
+    fecha = { dia: parseInt(d1 ?? d2, 10), year: parseInt(y1 ?? y2, 10), month: parseInt(m1 ?? m2, 10) };
+  } else {
+    const dma = ENC_DIA_MES_ANIO_RE.exec(t);
+    const mda = dma ? null : ENC_MES_DIA_ANIO_RE.exec(t);
+    if (dma) fecha = { dia: parseInt(dma[1], 10), year: parseInt(dma[3], 10), month: mesDeNombre(dma[2]) };
+    else if (mda) fecha = { dia: parseInt(mda[2], 10), year: parseInt(mda[3], 10), month: mesDeNombre(mda[1]) };
+  }
+  if (!fecha || fecha.dia !== 1 || fecha.month === null || fecha.month < 1 || fecha.month > 12) return null;
+  return etiquetaDeCorte(mesAnterior({ year: fecha.year, month: fecha.month }));
+}
+
+/** Año de una etiqueta `AAAA`, `AAAA-MM` o `AAAA-Qn`; `null` para otras. */
+function anioDeEtiqueta(period: string | null | undefined): number | null {
+  const m = (period ?? '').match(/^(\d{4})(?:-(?:0[1-9]|1[0-2]|Q[1-4]))?$/i);
+  return m ? parseInt(m[1], 10) : null;
 }
 
 const BALANCE_KIND_PRIORITY: Record<BalanceColumnKind, number> = {
@@ -1753,15 +1994,19 @@ const BALANCE_KIND_PRIORITY: Record<BalanceColumnKind, number> = {
  * Reglas (ingesta-06, ingesta-07, niif-preproceso-02):
  *  1. "Saldo débito / saldo crédito" (o deudor / acreedor) con el mismo resto
  *     de encabezado forman UNA columna neta por naturaleza PUC.
- *  2. Un encabezado con año (`20\d{2}`, "Dic-24", `saldo [2025-06]`) es de ese
+ *  2. Un encabezado con año (`20\d{2}`, "Dic-24", `saldo [2025-06]`) o con
+ *     fecha de corte ("Saldo a 30/06/2025" → 2025-06, ICU-03) es de ese
  *     periodo, también bajo `forcePeriod`. Si la apertura y el cierre traen el
- *     mismo año ("Saldo Inicial 2025 | Saldo Final 2025"), la apertura es el
- *     cierre del año anterior.
+ *     mismo año ("Saldo Inicial 2025 | Saldo Final 2025", o "Saldo final
+ *     30/06/2025"), la apertura es el cierre del año anterior; si traen el
+ *     mismo mes ("Saldo inicial junio 2025 | Saldo final junio 2025"), el del
+ *     mes anterior. Una apertura fechada el día 1 ("Saldo inicial 01/06/2025")
+ *     es el cierre del mes anterior (2025-05).
  *  3. Sin año, el cierre ("saldo final", "nuevo saldo", "saldo actual") o el
  *     saldo neutro ("saldo") es el periodo actual (`forcePeriod`,
  *     `currentYear` o `DEFAULT_PERIOD`); la apertura ("saldo inicial", "saldo
- *     anterior") o el comparativo es el periodo previo (año − 1 o
- *     `current_anterior`). Bajo `forcePeriod` (una hoja = un periodo) la
+ *     anterior") o el comparativo es el periodo previo (año − 1, con el año
+ *     de las columnas `AAAA` o `AAAA-MM`, o `current_anterior`). Bajo `forcePeriod` (una hoja = un periodo) la
  *     apertura sin año no crea un periodo nuevo.
  *  4. Dos columnas que caen en el mismo periodo NO se deduplican en silencio:
  *     se conserva la de cierre y se reporta un problema bloqueante. Ya no hay
@@ -1777,9 +2022,15 @@ function detectBalanceColumns(
     header: string;
     kind: BalanceColumnKind;
     year: string | null;
+    /** Mes y año de corte que declara el encabezado (ICU-03), si lo trae. */
+    corte: { year: number; month: number } | null;
   };
   const candidates: Candidate[] = [];
   const pairIndices = new Set<number>();
+  // Periodo del encabezado según el tipo de columna: una apertura fechada el
+  // día 1 es el cierre del mes anterior.
+  const periodoDeEncabezado = (header: string, kind: BalanceColumnKind): string | null =>
+    (kind === 'opening' ? aperturaDeDiaUno(header) : null) ?? explicitPeriodOf(header);
 
   // 1. Pares "saldo débito / saldo crédito".
   const debitSide = new Map<string, number>();
@@ -1801,23 +2052,27 @@ function detectBalanceColumns(
     if (creditIndex === undefined) continue;
     pairIndices.add(debitIndex);
     pairIndices.add(creditIndex);
+    const kind = classifyBalanceHeader(key);
     candidates.push({
       index: debitIndex,
       creditIndex,
       header: `${rawHeaders[debitIndex]} / ${rawHeaders[creditIndex]}`,
-      kind: classifyBalanceHeader(key),
-      year: explicitPeriodOf(rawHeaders[debitIndex]) ?? explicitPeriodOf(rawHeaders[creditIndex]),
+      kind,
+      year: periodoDeEncabezado(rawHeaders[debitIndex], kind) ?? periodoDeEncabezado(rawHeaders[creditIndex], kind),
+      corte: corteDeEncabezado(rawHeaders[debitIndex]) ?? corteDeEncabezado(rawHeaders[creditIndex]),
     });
   }
 
   // 2. Columnas de saldo simples.
   rawHeaders.forEach((raw, index) => {
     if (pairIndices.has(index) || !isBalanceHeader(raw)) return;
+    const kind = classifyBalanceHeader(raw);
     candidates.push({
       index,
       header: raw,
-      kind: classifyBalanceHeader(raw),
-      year: explicitPeriodOf(raw),
+      kind,
+      year: periodoDeEncabezado(raw, kind),
+      corte: corteDeEncabezado(raw),
     });
   });
   candidates.sort((a, b) => a.index - b.index);
@@ -1827,9 +2082,13 @@ function detectBalanceColumns(
   const forced = options.forcePeriod;
   const isYear = (p: string | null | undefined): p is string => !!p && /^\d{4}$/.test(p);
   const isOpeningKind = (k: BalanceColumnKind) => k === 'opening' || k === 'prior';
+  // Año de las columnas de cierre con año o con corte `AAAA-MM` ("Saldo a
+  // 30/06/2025"): sin él la apertura sin año quedaba "current_anterior" y, como
+  // las etiquetas sin fecha se ordenan al final, pasaba a ser el primario.
   const explicitCurrentYears = candidates
-    .filter((c) => isYear(c.year) && !isOpeningKind(c.kind))
-    .map((c) => parseInt(c.year!, 10));
+    .filter((c) => !isOpeningKind(c.kind))
+    .map((c) => anioDeEtiqueta(c.year))
+    .filter((y): y is number => y !== null);
   const contextYear = parseInt(forced ?? options.currentYear ?? '', 10);
   const baseYear = !Number.isNaN(contextYear)
     ? contextYear
@@ -1853,13 +2112,27 @@ function detectBalanceColumns(
     resolved.push({ index: c.index, creditIndex: c.creditIndex, period, kind: c.kind, header: c.header });
   }
 
-  // "Saldo Inicial 2025 | Saldo Final 2025": la apertura de 2025 es el cierre 2024.
+  // Apertura y cierre del mismo periodo: la apertura es el cierre del periodo
+  // anterior. "Saldo Inicial 2025 | Saldo Final 2025" (o "| Saldo final
+  // 30/06/2025", corte del mismo año) → 2024; "Saldo inicial junio 2025 |
+  // Saldo final junio 2025" (el mes del encabezado) → 2025-05. Sin esto la
+  // apertura "2025" (= diciembre) se ordenaba después del corte 2025-06 y
+  // pasaba a ser el periodo primario.
+  const cortePorIndice = new Map(candidates.map((c) => [c.index, c.corte]));
   for (const r of resolved) {
-    if (r.kind !== 'opening' || !isYear(r.period)) continue;
-    const clash = resolved.some(
-      (o) => o !== r && o.period === r.period && !isOpeningKind(o.kind),
-    );
-    if (clash) r.period = String(parseInt(r.period, 10) - 1);
+    if (r.kind !== 'opening') continue;
+    const cierres = resolved.filter((o) => o !== r && !isOpeningKind(o.kind));
+    const corte = cortePorIndice.get(r.index) ?? null;
+    if (corte && cierres.some((o) => o.period === r.period)) {
+      r.period = etiquetaDeCorte(mesAnterior(corte));
+    } else if (
+      isYear(r.period) &&
+      cierres.some(
+        (o) => o.period === r.period || (o.period.startsWith(`${r.period}-`) && anioDeEtiqueta(o.period) !== null),
+      )
+    ) {
+      r.period = String(parseInt(r.period, 10) - 1);
+    }
   }
 
   // 4. Colisiones: una columna por periodo, y la ambigüedad se reporta.
@@ -2065,7 +2338,9 @@ function inferActividadFromSnapshot(
   const evidencia: string[] = [];
   const activoTotal = snap.controlTotals.activo;
   const activoCorriente = snap.controlTotals.activoCorriente;
-  const ingresos = snap.controlTotals.ingresos;
+  // Ingresos netos de devoluciones 4175 (no la Σ firmada de la clase 4, que
+  // depende de la exportación del ERP — recalculo-final2-05).
+  const ingresos = snap.controlTotals.ingresosNetos ?? Math.abs(snap.controlTotals.ingresos);
 
   if (activoTotal <= 0) return undefined;
 
@@ -2542,6 +2817,7 @@ function buildSnapshotForPeriod(
     mesesPeriodo,
     periodo: period,
     corteDeclarado: notasIngesta.corte,
+    fechaSinInterpretar: notasIngesta.fechaSinInterpretar,
   });
 
   const cents: ControlTotalsCents = {
@@ -2766,6 +3042,7 @@ function buildSnapshotForPeriod(
     // dice "De Enero 2025 a Diciembre 2025").
     periodoTipo: notasIngesta.corte?.tipo ?? inferPeriodoTipo(period),
     ...(notasIngesta.corte ? { corteDeclarado: notasIngesta.corte } : {}),
+    ...(notasIngesta.fechaSinInterpretar ? { fechaSinInterpretar: notasIngesta.fechaSinInterpretar } : {}),
     ...(vencimientosAplicados.length > 0 ? { vencimientosAplicados } : {}),
     classes,
     controlTotals,
@@ -3154,6 +3431,8 @@ interface DerivedKpiInputs {
   pygDisponible?: boolean;
   /** Fecha de corte declarada en el archivo (P4-c): la nota de base la cita. */
   corteDeclarado?: NotaIngesta['corte'];
+  /** ICU-03: fecha del archivo que no se interpretó como corte (se cita). */
+  fechaSinInterpretar?: string;
 }
 
 interface DerivedKpis {
@@ -3303,6 +3582,7 @@ export function refreshDerivedKpis(snap: PeriodSnapshot, prev: PeriodSnapshot | 
       ...kpiInputsFromTotals(ct, snap.period, patrimonioPromedio, activoPromedio),
       pygDisponible: snap.saldosDeApertura !== true,
       corteDeclarado: snap.corteDeclarado,
+      fechaSinInterpretar: snap.fechaSinInterpretar,
     }),
   );
   // EBITDA con la definición ÚNICA de `pillars/ebitda.ts` (ratios-kpis-05 /
@@ -3475,7 +3755,10 @@ function computeDerivedKpis(inputs: DerivedKpiInputs): DerivedKpis {
       : meses === 12
         ? soloAnio && !corte
           ? `Base 365 días. Periodo ${inputs.periodo}: 12 meses por SUPUESTO de cierre anual (la ` +
-            'etiqueta sólo trae el año y el archivo no declara la fecha de corte); ROE, ROA, ' +
+            (inputs.fechaSinInterpretar
+              ? `etiqueta sólo trae el año y la fecha del archivo «${inputs.fechaSinInterpretar}» no se ` +
+                'interpretó como fecha de corte de meses completos); ROE, ROA, '
+              : 'etiqueta sólo trae el año y el archivo no declara la fecha de corte); ROE, ROA, ') +
             'rotación de activos y días de cartera/inventario/proveedores sin anualizar. Si el ' +
             'balance es un corte intermedio, declare la fecha de corte (p. ej. «a junio 30 de ' +
             '2025») o rotule el periodo con el mes (AAAA-MM) para anualizarlos.'
@@ -3587,18 +3870,117 @@ function parseLine(line: string, separator: string): string[] {
 //     Excel → ilegible, nunca un importe aproximado.
 //   - U+2212 y los guiones tipográficos son signo menos; el guion solo ("-")
 //     es el cero del formato contable de Excel y cuenta como celda vacía.
-// Ambigüedad residual irreducible: String(1.234) === "1.234" (un valor < 1.000
-// con exactamente 3 decimales) se lee como mil doscientos treinta y cuatro. Se
-// resuelve en el PRODUCTOR del CSV (nunca más de 2 decimales), no aquí.
+// Ambigüedad residual irreducible EN PESOS: String(1.234) === "1.234" (un
+// valor < 1.000 con exactamente 3 decimales) se lee como mil doscientos
+// treinta y cuatro. Se resuelve en el PRODUCTOR del CSV (nunca más de 2
+// decimales), no aquí.
+// Con la unidad CONFIRMADA en miles / millones tres decimales son la precisión
+// al peso ('848,123' miles = $848.123): ahí esa forma se lee con el separador
+// decimal del archivo (`separadorDecimalDelArchivo`) y, sin evidencia, es un
+// importe ambiguo que bloquea con motivo (recalculo-final2-02 / ICU-02).
 // ---------------------------------------------------------------------------
 
-type UnreadableCell = { kind: 'unreadable'; raw: string; scientific: boolean; fueraDeRango?: boolean };
+type UnreadableCell = {
+  kind: 'unreadable';
+  raw: string;
+  scientific: boolean;
+  fueraDeRango?: boolean;
+  /** Unidad confirmada con la que el importe es ambiguo (recalculo-final2-02). */
+  ambiguoEn?: UnidadMonetaria;
+};
 type AmountCell = { kind: 'empty' } | { kind: 'number'; value: number } | UnreadableCell;
 
 const EMPTY_CELL: AmountCell = { kind: 'empty' };
 const SUB_CENT = 0.005;
 const GROUPED_DOT = /^[1-9]\d{0,2}(\.\d{3})+$/;
 const GROUPED_COMMA = /^[1-9]\d{0,2}(,\d{3})+$/;
+/** Un único separador seguido de exactamente 3 cifras: '848,123', '1.234'. */
+const UN_GRUPO_DE_TRES = /^[1-9]\d{0,2}[.,]\d{3}$/;
+
+type SeparadorDecimal = '.' | ',';
+
+/**
+ * Cómo leer los importes de un archivo: sin unidad (pesos, regla morfológica)
+ * o con la unidad confirmada (P4-a), su exponente y el separador decimal del
+ * archivo (`null` = el archivo no da evidencia).
+ */
+interface LecturaUnidad {
+  exponente: number;
+  unidad: UnidadMonetaria | null;
+  separadorDecimal: SeparadorDecimal | null;
+}
+const SIN_UNIDAD: LecturaUnidad = { exponente: 0, unidad: null, separadorDecimal: null };
+
+/**
+ * Separador decimal de un archivo con la unidad confirmada (recalculo-final2-02
+ * / ICU-02). En miles, la precisión al peso son tres decimales ('848,123' =
+ * $848.123), la misma forma que una agrupación de miles. Evidencia, por
+ * celda de importe: los dos separadores (el último es el decimal), un
+ * separador repetido con grupos de tres (es de miles: el decimal es el otro),
+ * o un único separador que no puede ser de miles ('5,5', '0,125',
+ * '1234,567'). Sin evidencia en las celdas, un archivo separado por ';' usa
+ * coma decimal (exportación es-CO de Excel). Evidencia contradictoria o
+ * ninguna: `null` (los importes '848,123' quedan ambiguos y bloquean).
+ */
+function separadorDecimalDelArchivo(celdas: string[], separadorDeCampos: string): SeparadorDecimal | null {
+  const votos = new Set<SeparadorDecimal>();
+  for (const celda of celdas) {
+    const limpia = limpiarCeldaImporte(celda);
+    if (limpia.kind !== 'text' || !/^[\d.,]+$/.test(limpia.s)) continue;
+    const s = limpia.s;
+    const dots = (s.match(/\./g) ?? []).length;
+    const commas = (s.match(/,/g) ?? []).length;
+    if (dots > 0 && commas > 0) {
+      votos.add(s.lastIndexOf(',') > s.lastIndexOf('.') ? ',' : '.');
+    } else if (dots + commas > 1) {
+      const sep: SeparadorDecimal = dots > 0 ? '.' : ',';
+      if ((sep === '.' ? GROUPED_DOT : GROUPED_COMMA).test(s)) votos.add(sep === '.' ? ',' : '.');
+    } else if (dots + commas === 1 && !UN_GRUPO_DE_TRES.test(s)) {
+      votos.add(dots > 0 ? '.' : ',');
+    }
+  }
+  if (votos.size === 1) return [...votos][0];
+  if (votos.size === 0 && separadorDeCampos === ';') return ',';
+  return null;
+}
+
+type CeldaLimpia = { kind: 'empty' } | { kind: 'text'; s: string; negative: boolean };
+
+/**
+ * Normaliza el texto de una celda de importe: moneda, espacios, prefijo de
+ * texto de Excel, apóstrofo de millones y signo (paréntesis, menos al inicio o
+ * al final, guiones tipográficos). El guion solo es el cero del formato
+ * contable (celda vacía).
+ */
+function limpiarCeldaImporte(original: string): CeldaLimpia {
+  let s = original
+    .replace(/[−‒–—﹣－]/g, '-')
+    .replace(/\b(COP|USD|EUR)\b/gi, '')
+    .replace(/[$€£"\s]/g, '')
+    // Apóstrofo inicial = prefijo de texto de Excel; interior = separador de
+    // millones latinoamericano ("1'234.567"), equivalente al punto de miles.
+    .replace(/^['’`´]/, '')
+    .replace(/['’`´]/g, '.');
+  if (s.length === 0 || /^-+$/.test(s)) return { kind: 'empty' };
+
+  let negative = false;
+  const paren = s.match(/^\((.*)\)$/);
+  if (paren) {
+    negative = true;
+    s = paren[1];
+  }
+  if (s.endsWith('-')) {
+    negative = !negative;
+    s = s.slice(0, -1);
+  }
+  if (s.startsWith('-')) {
+    negative = !negative;
+    s = s.slice(1);
+  }
+  if (s.startsWith('+')) s = s.slice(1);
+  if (s.length === 0) return { kind: 'empty' };
+  return { kind: 'text', s, negative };
+}
 
 /**
  * `true` si el importe (pesos) se representa al centavo en el contrato actual
@@ -3691,37 +4073,15 @@ export function reexpresarFilasPorUnidad(
   return { rows: out, errores };
 }
 
-function parseAmountCell(val: string | undefined | null, exponente = 0): AmountCell {
+function parseAmountCell(val: string | undefined | null, lectura: LecturaUnidad = SIN_UNIDAD): AmountCell {
   if (val === undefined || val === null) return EMPTY_CELL;
   const original = String(val).trim();
   const unreadable = (scientific = false): AmountCell => ({ kind: 'unreadable', raw: original, scientific });
+  const exponente = lectura.exponente;
 
-  let s = original
-    .replace(/[−‒–—﹣－]/g, '-')
-    .replace(/\b(COP|USD|EUR)\b/gi, '')
-    .replace(/[$€£"\s]/g, '')
-    // Apóstrofo inicial = prefijo de texto de Excel; interior = separador de
-    // millones latinoamericano ("1'234.567"), equivalente al punto de miles.
-    .replace(/^['’`´]/, '')
-    .replace(/['’`´]/g, '.');
-  if (s.length === 0 || /^-+$/.test(s)) return EMPTY_CELL;
-
-  let negative = false;
-  const paren = s.match(/^\((.*)\)$/);
-  if (paren) {
-    negative = true;
-    s = paren[1];
-  }
-  if (s.endsWith('-')) {
-    negative = !negative;
-    s = s.slice(0, -1);
-  }
-  if (s.startsWith('-')) {
-    negative = !negative;
-    s = s.slice(1);
-  }
-  if (s.startsWith('+')) s = s.slice(1);
-  if (s.length === 0) return EMPTY_CELL;
+  const limpia = limpiarCeldaImporte(original);
+  if (limpia.kind === 'empty') return EMPTY_CELL;
+  const { s, negative } = limpia;
 
   const sci = s.match(/^(\d+(?:[.,]\d+)?)[eE]([-+]?\d+)$/);
   if (sci) {
@@ -3748,7 +4108,14 @@ function parseAmountCell(val: string | undefined | null, exponente = 0): AmountC
     normalized = s;
   } else {
     const sep = dots > 0 ? '.' : ',';
-    if ((sep === '.' ? GROUPED_DOT : GROUPED_COMMA).test(s)) {
+    if (exponente > 0 && UN_GRUPO_DE_TRES.test(s)) {
+      // Unidad confirmada: '848,123' es decimal o agrupación según el
+      // separador decimal del archivo; sin evidencia es ambiguo (bloquea).
+      if (lectura.separadorDecimal === null) {
+        return { kind: 'unreadable', raw: original, scientific: false, ambiguoEn: lectura.unidad ?? undefined };
+      }
+      normalized = lectura.separadorDecimal === sep ? s.replace(sep, '.') : s.replace(sep, '');
+    } else if ((sep === '.' ? GROUPED_DOT : GROUPED_COMMA).test(s)) {
       normalized = s.split(sep).join('');
     } else if (dots + commas === 1) {
       normalized = s.replace(sep, '.');
@@ -3783,7 +4150,7 @@ function parseAmountCell(val: string | undefined | null, exponente = 0): AmountC
  * ilegibles como motivo de validación.
  */
 export function parseNumber(val: string | undefined): number {
-  const cell = parseAmountCell(val);
+  const cell = parseAmountCell(val, SIN_UNIDAD);
   return cell.kind === 'number' ? cell.value : NaN;
 }
 
@@ -4003,17 +4370,23 @@ function notaSupuestoClase7(
 function collectNotasIngesta(
   rows: RawAccountRow[],
   period: string,
-): { mensajes: string[]; corte: NotaIngesta['corte'] | undefined } {
+): { mensajes: string[]; corte: NotaIngesta['corte'] | undefined; fechaSinInterpretar: string | undefined } {
   const mensajes = new Set<string>();
   let corte: NotaIngesta['corte'] | undefined;
+  let fechaSinInterpretar: string | undefined;
   for (const row of rows) {
     for (const nota of row.notasIngesta ?? []) {
       if (nota.period !== null && nota.period !== period) continue;
       mensajes.add(nota.message);
       if (nota.corte && nota.period === period) corte ??= nota.corte;
+      if (nota.fechaSinInterpretar && nota.period === period) fechaSinInterpretar ??= nota.fechaSinInterpretar;
     }
   }
-  return { mensajes: [...mensajes].map((m) => `[${period}] ${m}`), corte };
+  return {
+    mensajes: [...mensajes].map((m) => `[${period}] ${m}`),
+    corte,
+    fechaSinInterpretar: corte ? undefined : fechaSinInterpretar,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -4441,7 +4814,15 @@ function buildMultiPeriodValidationReport(
     lines.push(`- **Activo Total:** $${formatCOP(snap.controlTotals.activo)} (corriente $${formatCOP(snap.controlTotals.activoCorriente)} + no corriente $${formatCOP(snap.controlTotals.activoNoCorriente)})`);
     lines.push(`- **Pasivo Total:** $${formatCOP(snap.controlTotals.pasivo)} (corriente $${formatCOP(snap.controlTotals.pasivoCorriente)} + no corriente $${formatCOP(snap.controlTotals.pasivoNoCorriente)})`);
     lines.push(`- **Patrimonio Total:** $${formatCOP(snap.controlTotals.patrimonio)}`);
-    lines.push(`- **Ingresos:** $${formatCOP(snap.controlTotals.ingresos)}`);
+    // Ingresos canónicos (recalculo-final2-05): la Σ firmada de la clase 4
+    // (`controlTotals.ingresos`) depende de cómo el ERP exporta la 4175.
+    const ctR = snap.controlTotals;
+    const ingresosNetosR = ctR.ingresosNetos ?? Math.abs(ctR.ingresos);
+    lines.push(
+      `- **Ingresos operacionales netos (grupo 41 − devoluciones 4175):** ` +
+        `$${formatCOP(ctR.ingresosOperacionalesNetos ?? ingresosNetosR)}`,
+    );
+    lines.push(`- **Ingresos netos (clase 4 neta de devoluciones 4175):** $${formatCOP(ingresosNetosR)}`);
     lines.push(`- **Gastos+Costos:** $${formatCOP(snap.controlTotals.gastos)}`);
     lines.push(`- **Utilidad Neta:** $${formatCOP(snap.controlTotals.utilidadNeta)}`);
     lines.push('');
