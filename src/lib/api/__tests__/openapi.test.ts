@@ -44,6 +44,43 @@ describe('buildOpenApiDocument', () => {
   });
 });
 
+// niif-preproceso-07 (IW2): el esquema publicado cubre los campos que el API
+// ya serializa (summarize / serializeTrialBalanceDetail en trial-balances.ts).
+describe('TrialBalance — contrato de respuesta alineado con la serialización', () => {
+  type Schema = {
+    properties: Record<string, { description?: string; properties?: Record<string, unknown>; enum?: unknown[] }>;
+    description?: string;
+  };
+  const schemas = (doc as unknown as { components: { schemas: Record<string, Schema & { allOf?: Schema[] }> } })
+    .components.schemas;
+  const tb = schemas.TrialBalance;
+
+  it('declara sign_convention (natural | algebraica | null)', () => {
+    expect(tb.properties.sign_convention.enum).toEqual(['natural', 'algebraica', null]);
+  });
+
+  it('control_totals declara los ajustes del curador y documenta equation_delta', () => {
+    const ct = tb.properties.control_totals.properties as Record<string, { description?: string }>;
+    for (const k of ['virtual_close_adjustment', 'reclassified_from_3605', 'equity_anchor_adjustment']) {
+      expect(ct, k).toHaveProperty(k);
+    }
+    expect(ct.equation_delta.description).toMatch(/archivo de origen/);
+    expect(ct.equation_delta.description).toMatch(/Cierre Virtual/);
+  });
+
+  it('status=unbalanced cubre también los motivos de integridad', () => {
+    expect(tb.properties.status.description).toMatch(/integridad/);
+  });
+
+  it('el detalle (GET /v1/trial-balances/{id}) declara validation_reasons', () => {
+    const detail = schemas.TrialBalanceDetail;
+    const extra = detail.allOf?.find((s) => s.properties?.validation_reasons);
+    expect(extra?.properties.validation_reasons).toMatchObject({ type: 'array', items: { type: 'string' } });
+    const get = (doc.paths['/v1/trial-balances/{id}'] as { get: { responses: { '200': { content: Record<string, { schema: { $ref: string } }> } } } }).get;
+    expect(get.responses['200'].content['application/json'].schema.$ref).toBe('#/components/schemas/TrialBalanceDetail');
+  });
+});
+
 describe('anti-drift rutas ↔ contrato', () => {
   const V1_DIR = join(process.cwd(), 'src/app/api/v1');
 
