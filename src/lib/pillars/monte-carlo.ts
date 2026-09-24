@@ -1,16 +1,33 @@
 // ---------------------------------------------------------------------------
-// Monte Carlo — motor de simulación determinístico para proyección de flujo
-// de caja a 12 meses (estándar Bank of England 2024+, 9.600 iteraciones).
+// Monte Carlo — ESCENARIO SIMULADO de flujo de caja a 12 meses.
 // ---------------------------------------------------------------------------
+// Supuestos (se exponen en `MonteCarloResult.supuestos` y la UI los muestra —
+// auditoría valoracion-22):
+//   - Sólo varían los ingresos mensuales: normal i.i.d. con σ = 15 % del
+//     ingreso mensual base (σ anual relativo ≈ 15 % / √12). Por defecto 9.600
+//     iteraciones y semilla 42 (reproducible).
+//   - Egresos = egresos contables del periodo repartidos por mes, fijos; no se
+//     modelan impuestos, capital de trabajo ni estacionalidad.
+//   - Base mensual = ingresos NETOS (4175) y egresos del periodo divididos por
+//     los meses cubiertos del snapshot (shared-metrics.monthsCovered).
+//   - "ROI" = utilidad simulada a 12 meses / PPE neto (cuentas 15xx de la
+//     clase 1, netas de 1592/1597-1599). Sin PPE ⇒ N/D (ratios-kpis-21: antes
+//     buscaba una "clase 15" inexistente y caía al activo no corriente).
+//   - El histograma se construye con los ROI SIMULADOS (no con una PDF normal).
 // Exports públicos:
 //   mulberry32(seed)          → PRNG de 32 bits, determinístico
 //   normalRandom(rng, m, s)   → variate normal via Box-Muller
 //   computeDistribution(arr)  → p10/p50/p90/mean/stdev
+//   buildHistogram(arr, n)    → bins empíricos
 //   runMonteCarlo(snapshot)   → MonteCarloResult completo
 // ---------------------------------------------------------------------------
 
 import type { PeriodSnapshot } from '@/lib/preprocessing/trial-balance';
+
+import { isVirtualCuratorAccount } from './ebitda';
+import { ingresosNetosPeriodo, monthsCovered } from './shared-metrics';
 import type {
+  MonteCarloHistogramBin,
   MonteCarloOptions,
   MonteCarloResult,
   MonteCarloDistribution,
@@ -84,6 +101,45 @@ export function computeDistribution(values: number[]): MonteCarloDistribution {
   return { p10, p50, p90, mean, stdev };
 }
 
+/**
+ * Histograma empírico de `values` con `nBins` intervalos de igual ancho en
+ * [min, max]. Los conteos suman values.length.
+ */
+export function buildHistogram(values: number[], nBins = 20): MonteCarloHistogramBin[] {
+  const n = values.length;
+  if (n === 0) return [];
+  let min = Infinity;
+  let max = -Infinity;
+  for (const v of values) {
+    if (v < min) min = v;
+    if (v > max) max = v;
+  }
+  if (min === max) return [{ from: min, to: max, count: n }];
+  const width = (max - min) / nBins;
+  const bins: MonteCarloHistogramBin[] = Array.from({ length: nBins }, (_, i) => ({
+    from: min + i * width,
+    to: i === nBins - 1 ? max : min + (i + 1) * width,
+    count: 0,
+  }));
+  for (const v of values) {
+    const idx = Math.min(nBins - 1, Math.floor((v - min) / width));
+    bins[idx].count++;
+  }
+  return bins;
+}
+
+/** PPE neto = Σ cuentas de la clase 1 con prefijo 15 (incluye correctoras
+ *  1592/1597-1599 con su saldo crédito). null si no hay grupo 15 o es ≤ 0. */
+function ppeNeto(snapshot: PeriodSnapshot): number | null {
+  const clase1 = snapshot.classes.find((c) => c.code === 1);
+  const cuentas = (clase1?.accounts ?? []).filter(
+    (a) => a.code.startsWith('15') && !isVirtualCuratorAccount(a.code),
+  );
+  if (cuentas.length === 0) return null;
+  const neto = cuentas.reduce((s, a) => s + a.balance, 0);
+  return neto > 0 ? neto : null;
+}
+
 // ─── Motor principal ─────────────────────────────────────────────────────────
 
 const DEFAULT_ITERATIONS = 9600;
@@ -110,24 +166,16 @@ export function runMonteCarlo(
   const sigma = opts?.ingresoSigma ?? DEFAULT_SIGMA;
   const seed = opts?.seed ?? DEFAULT_SEED;
 
-  const { controlTotals, classes } = snapshot;
+  const { controlTotals } = snapshot;
 
-  // Parámetros base
-  const ingresoMesBase = controlTotals.ingresos / 12;
-  const egresoMesBase = controlTotals.gastos / 12;
+  // Parámetros base (mensuales, sobre los meses cubiertos por el snapshot)
+  const meses = monthsCovered(snapshot);
+  const ingresoMesBase = ingresosNetosPeriodo(controlTotals) / meses;
+  const egresoMesBase = controlTotals.gastos / meses;
   const cajaInicial = controlTotals.efectivoCuenta11;
 
-  // Inversión PPE (Clase 15) — suma de saldos de las cuentas
-  const clase15 = classes.find((c) => c.code === 15);
-  let inversionPPE = 0;
-  if (clase15 && clase15.accounts.length > 0) {
-    for (const acc of clase15.accounts) {
-      inversionPPE += acc.balance;
-    }
-  } else {
-    // Fallback: activo no corriente
-    inversionPPE = controlTotals.activoNoCorriente;
-  }
+  // PPE neto (grupo 15 de la clase 1). null ⇒ ROI N/D.
+  const inversionPPE = ppeNeto(snapshot);
 
   // PRNG único para toda la simulación (determinístico)
   const rng = mulberry32(seed);
@@ -165,7 +213,7 @@ export function runMonteCarlo(
     const s = samples[i];
     cajaFinalValues[i] = s.caja;
     utilidadValues[i] = s.utilidadAcumulada;
-    if (inversionPPE > 0) {
+    if (inversionPPE !== null) {
       roiValues[i] = s.utilidadAcumulada / inversionPPE;
     }
     if (s.mesQuiebre !== null) {
@@ -186,17 +234,32 @@ export function runMonteCarlo(
   const cajaFinal = computeDistribution(cajaFinalValues);
   const utilidadAcumulada = computeDistribution(utilidadValues);
   const roiProbabilistico: MonteCarloDistribution | null =
-    inversionPPE > 0 ? computeDistribution(roiValues) : null;
+    inversionPPE !== null ? computeDistribution(roiValues) : null;
+  const roiHistograma = inversionPPE !== null ? buildHistogram(roiValues) : null;
 
   return {
     iterations: N,
     cajaFinal,
     utilidadAcumulada,
     roiProbabilistico,
+    roiHistograma,
     probabilidadQuiebre12m,
     mesQuiebreMediano,
     inversionPPE,
     seed,
+    supuestos: {
+      distribucion: 'normal-iid-mensual',
+      variable: 'ingresos',
+      ingresoSigmaMensual: sigma,
+      horizonteMeses: H,
+      iteraciones: N,
+      semilla: seed,
+      mesesBase: meses,
+      exclusionesEs:
+        'Egresos contables fijos; no modela impuestos, capital de trabajo ni estacionalidad. Escenario simulado, no pronóstico.',
+      exclusionesEn:
+        'Fixed book outflows; does not model taxes, working capital or seasonality. Simulated scenario, not a forecast.',
+    },
     generatedAt: new Date().toISOString(),
   };
 }

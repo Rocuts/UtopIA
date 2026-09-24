@@ -393,7 +393,7 @@ export interface CapexEventInput {
 }
 
 export interface MonteCarloOptions {
-  /** Número de simulaciones. Default 9600 (estándar Bank of England 2024+). */
+  /** Número de simulaciones. Default 9600. */
   iterations?: number;
   /** Horizonte en meses. Default 12. */
   horizonMonths?: number;
@@ -416,6 +416,29 @@ export interface MonteCarloDistribution {
   stdev: number;
 }
 
+/** Intervalo del histograma empírico (valores simulados). */
+export interface MonteCarloHistogramBin {
+  from: number;
+  to: number;
+  count: number;
+}
+
+/** Supuestos del escenario simulado (se muestran en la UI). */
+export interface MonteCarloAssumptions {
+  distribucion: 'normal-iid-mensual';
+  /** Única variable estocástica. */
+  variable: 'ingresos';
+  /** σ relativa al ingreso mensual base. */
+  ingresoSigmaMensual: number;
+  horizonteMeses: number;
+  iteraciones: number;
+  semilla: number;
+  /** Meses cubiertos por el snapshot usados para la base mensual. */
+  mesesBase: number;
+  exclusionesEs: string;
+  exclusionesEn: string;
+}
+
 export interface MonteCarloResult {
   /** N de simulaciones efectivamente corridas. */
   iterations: number;
@@ -423,15 +446,19 @@ export interface MonteCarloResult {
   cajaFinal: MonteCarloDistribution;
   /** Utilidad acumulada 12m (distribución). */
   utilidadAcumulada: MonteCarloDistribution;
-  /** ROI = utilidadAcumulada / inversiónPPE (Clase 15). null si no hay PPE. */
+  /** Utilidad simulada 12m / PPE neto (grupo 15 de la clase 1). null sin PPE. */
   roiProbabilistico: MonteCarloDistribution | null;
+  /** Histograma empírico de los ROI simulados. null sin PPE. */
+  roiHistograma: MonteCarloHistogramBin[] | null;
   /** Probabilidad [0,1] de que la caja cruce 0 antes del mes 12. */
   probabilidadQuiebre12m: number;
   /** Mes esperado de quiebre (mediana de los meses donde caja<0; null si <50%). */
   mesQuiebreMediano: number | null;
-  /** Inversión PPE base (Clase 15) usada para el ROI. */
-  inversionPPE: number;
+  /** PPE neto (cuentas 15xx de la clase 1) usado para el ROI. null sin PPE. */
+  inversionPPE: number | null;
   /** Seed usada (para reproducibilidad). */
   seed: number;
+  /** Supuestos del escenario (distribución, σ, horizonte, N, semilla). */
+  supuestos: MonteCarloAssumptions;
   generatedAt: string;
 }
