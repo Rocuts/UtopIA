@@ -189,14 +189,8 @@ export interface EscudoExecutiveCardsAudit {
   /** Utilidad neta del periodo que leyó el pilar (controlTotals.utilidadNeta).
    *  single-source-validator la compara directamente (ratios-kpis-10). */
   utilidadNeta?: number;
-  /** @deprecated Retirado (ratios-kpis-10): era utilidadNeta × 35 %, una
-   *  métrica fiscal heurística. Ya no se produce; se conserva opcional sólo
-   *  por compatibilidad de lectura. */
-  rentaTeorica?: number;
   /** Saldo de cuenta 2205 (Proveedores) — proxy de exigible 30 días. */
   proveedoresCuenta2205: number;
-  /** @deprecated Retirado (ratios-kpis-10); ya no se produce. */
-  tasaRenta?: number;
   /** Cantidad de períodos usados para promedio (1 = anual, 3 = trimestre). */
   periodosUsados: number;
   /** Suma COP de eventos CapEx en los próximos 6 meses (monthOffset ≤ 6).
@@ -287,9 +281,6 @@ export interface FuturoExecutiveCardsAudit {
   /** Utilidad neta del periodo que leyó el pilar (controlTotals.utilidadNeta).
    *  single-source-validator la compara directamente (ratios-kpis-10). */
   utilidadNeta?: number;
-  /** @deprecated Retirado (ratios-kpis-10): era max(0, UN) × (1 + CAGR ?? 5 %),
-   *  insumo de una provisión fiscal heurística. Ya no se produce. */
-  utilidadProyectadaAnual?: number;
   /** Provisión tributaria proyectada: null sin base fiscal verificada. */
   provisionTributariaFutura: number | null;
   /** Capacidad de inversión (shared-metrics.capacidadInversion): null sin base
@@ -299,8 +290,6 @@ export interface FuturoExecutiveCardsAudit {
   reserva60Dias: number;
   /** Caja proyectada al final del horizonte (escenario base). */
   cajaProyectada36mBase: number;
-  /** @deprecated Retirado (ratios-kpis-10); ya no se produce. */
-  tasaRenta?: number;
 }
 
 export interface FuturoExecutiveCards {
