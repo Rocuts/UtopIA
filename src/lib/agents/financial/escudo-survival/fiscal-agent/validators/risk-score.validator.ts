@@ -45,23 +45,45 @@ function f01EsCero(f01Cents: string): boolean | null {
  * Contexto que precede a un «N/100» que NO es el score de la entidad sino un
  * umbral, un rango, un límite o el aporte de un factor (re-auditoría
  * 2026-09-24, NT-07): «supera el umbral de 60/100», «rango 61-80/100»,
- * «aporta 30 de 100 puntos posibles», «un score superior a 60/100». La
- * palabra clave puede estar hasta 40 caracteres antes del número, sin dígitos
- * ni la palabra «score / puntaje / puntuación» en medio («el umbral del Modo
- * Supervivencia es 60/100»). Límite documentado: «hasta la fecha, el riesgo es
- * 45/100» no se juzga (se prefiere no bloquear una prosa ambigua).
+ * «aporta 30 de 100 puntos posibles», «un score superior a 60/100».
+ *
+ * Revisión adversarial de NT-07: con una ventana de 40 caracteres para
+ * cualquier clave, «se ubica en el rango muy alto con 72/100», «por encima
+ * de su nivel previo, 72/100» o «alcanza el máximo nivel de riesgo, 72/100»
+ * dejaban de verificarse y un score distinto del determinista llegaba al
+ * cliente. Ahora:
+ *   - los sustantivos de referencia (umbral, límite, tope, threshold, limit)
+ *     admiten hasta 40 caracteres antes del número («el umbral del Modo
+ *     Supervivencia es 60/100»), sin dígitos, sin «score / puntaje /
+ *     puntuación», sin «con / with» y sin «, : ;» en medio;
+ *   - los comparativos y aportes (superior a, supera, hasta, máximo, aporta,
+ *     above, up to…) sólo cuando el número va inmediatamente después (con un
+ *     artículo o «de» a lo sumo): «superior a 60/100», «aporta 30/100»;
+ *   - «rango» / «range» sólo con los extremos del rango («rango de 41 a
+ *     60/100»); el guion («61-80/100») lo cubre ANTES_DE_RANGO.
  */
-const CLAVES_REFERENCIA = [
-  'umbral(?:es)?', 'rango', 'l[íi]mite', 'tope', 'hasta', 'm[áa]ximo', 'm[íi]nimo', 'aporta(?:n)?',
-  'superior(?:es)?\\s+a', 'inferior(?:es)?\\s+a', 'mayor(?:es)?\\s+(?:a|que)', 'menor(?:es)?\\s+(?:a|que)',
-  'por\\s+encima\\s+de', 'por\\s+debajo\\s+de', 'm[áa]s\\s+de', 'menos\\s+de', 'supera(?:r|n)?', 'entre\\s+\\d{1,3}\\s+y',
-  'threshold', 'range', 'limit', 'up\\s+to', 'max(?:imum)?', 'min(?:imum)?', 'contributes?',
-  'above', 'below', 'exceeds?', 'more\\s+than', 'less\\s+than', 'between\\s+\\d{1,3}\\s+and',
-].join('|');
-const ANTES_DE_REFERENCIA = new RegExp(
-  `\\b(?:${CLAVES_REFERENCIA})\\b(?:(?!score|puntaje|puntuaci)[^\\d]){0,40}$`,
+const SUSTANTIVOS_REFERENCIA = ['umbral(?:es)?', 'l[íi]mite', 'tope', 'thresholds?', 'limits?'].join('|');
+const ANTES_DE_SUSTANTIVO = new RegExp(
+  `\\b(?:${SUSTANTIVOS_REFERENCIA})\\b(?:(?!score|puntaje|puntuaci|\\bcon\\b|\\bwith\\b)[^\\d,:;]){0,40}$`,
   'i',
 );
+const COMPARATIVOS_REFERENCIA = [
+  'hasta', 'm[áa]ximo', 'm[íi]nimo', 'aporta(?:n)?',
+  'superior(?:es)?\\s+a', 'inferior(?:es)?\\s+a', 'mayor(?:es)?\\s+(?:a|que)', 'menor(?:es)?\\s+(?:a|que)',
+  'por\\s+encima\\s+de', 'por\\s+debajo\\s+de', 'm[áa]s\\s+de', 'menos\\s+de', 'supera(?:r|n)?',
+  'entre\\s+\\d{1,3}\\s+y', 'up\\s+to', 'max(?:imum)?', 'min(?:imum)?', 'contributes?',
+  'above', 'below', 'exceeds?', 'more\\s+than', 'less\\s+than', 'between\\s+\\d{1,3}\\s+and',
+].join('|');
+const ANTES_DE_COMPARATIVO = new RegExp(
+  `\\b(?:${COMPARATIVOS_REFERENCIA})\\b(?:\\s+(?:el|la|los|las|un|una|de|del|the|a|an|of))?\\s*$`,
+  'i',
+);
+/** «rango de 41 a 60/100», «range from 41 to 60/100». */
+const ANTES_DE_RANGO_EXPLICITO = /\b(?:rango|range)\s+(?:(?:de|del|from)\s+)?\d{1,3}\s*(?:a|al|y|to|and|[-–])\s*$/i;
+const ANTES_DE_REFERENCIA = {
+  test: (antes: string): boolean =>
+    ANTES_DE_SUSTANTIVO.test(antes) || ANTES_DE_COMPARATIVO.test(antes) || ANTES_DE_RANGO_EXPLICITO.test(antes),
+};
 /** «61-80/100»: el número cierra un rango. */
 const ANTES_DE_RANGO = /\d\s*[-–]\s*$/;
 /** «30 de 100 puntos posibles» / «30 of 100 possible points». */

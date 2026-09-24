@@ -318,6 +318,31 @@ describe('NT-07 — M3.L2.3: umbral, rango y aporte de un factor no son el score
     );
     expect(scoresCitadosEnProsa('Score 72/100 (umbral 60/100); el puntaje real es 45/100.')).toEqual([72, 45]);
   });
+
+  // Revisión adversarial de NT-07: la ventana de 40 caracteres para cualquier
+  // clave dejaba sin verificar el score de la entidad en frases corrientes.
+  it.each([
+    'La entidad se ubica en el rango muy alto con 45/100.',
+    'The entity falls in the high range at 45/100.',
+    'El riesgo se ubica por encima de su nivel previo, 45/100.',
+    'La empresa alcanza el máximo nivel de riesgo, 45/100.',
+    'Supera ampliamente el nivel medio: 45/100.',
+    'Hasta la fecha, el riesgo es 45/100.',
+    'El umbral de alerta no se alcanza, con 45/100.',
+  ])('un score distinto tras una clave lejana sigue fallando: %s', (narrativa) => {
+    expect(scoresCitadosEnProsa(narrativa)).toEqual([45]);
+    expect(erroresDe(validateRiskScore({ ...base, narrativa }))).toContain('M3.L2.3_narrativa_cita_score_determinista');
+  });
+
+  it.each([
+    'Score 72/100, rango de 61 a 80/100.',
+    'Score 72/100; un score superior a 60/100 activa el Modo Supervivencia.',
+    'Score 72/100; el factor tet_baja aporta hasta 30/100.',
+    'Score 72/100, above the 60/100 threshold; the survival threshold is 60/100.',
+    'Score 72/100 (nivel muy alto, entre 61 y 80/100).',
+  ])('referencias honestas cercanas no fallan: %s', (narrativa) => {
+    expect(erroresDe(validateRiskScore({ ...base, narrativa }))).toEqual([]);
+  });
 });
 
 describe('NT-08 — M6.L2.2: enumeraciones en inglés («and», «Article»)', () => {
