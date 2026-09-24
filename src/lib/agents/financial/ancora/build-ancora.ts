@@ -4,8 +4,10 @@
 // Calcula A01..A19, X01..X04, F01..F10, checks y nitDigito desde el
 // `PreprocessedBalance`. Diseñado para no fallar — cuando un campo opcional
 // del preprocesador no está poblado (e.g. snapshot comparativo ausente),
-// emite "0" como sentinel y nunca lanza. La pipeline downstream sigue
-// adelante con un Âncora parcial; el route emite el SSE event aun así.
+// emite "0" como sentinel y nunca lanza. Sin preprocesado (o con un cálculo
+// que no supera la validación Zod) el Âncora completo es un sentinela de
+// ceros MARCADO (`isSentinelAncora`): los productores lo emiten como `null`
+// (`ancoraOrNull`) para que ninguna superficie lo lea como un balance de $0.
 // ---------------------------------------------------------------------------
 
 import type { PreprocessedBalance, PeriodSnapshot, PUCClass } from '@/lib/preprocessing/trial-balance';
@@ -281,9 +283,11 @@ export function buildNiifAncora(
   company: CompanyInfo | undefined,
 ): NiifAncora {
   if (!preprocessed) {
-    // Sin preprocessed no podemos calcular nada determinístico; devolvemos
-    // un Âncora "mínimo" con todos los campos a "0" y nit '0'. El validator
-    // Zod sigue pasando porque "0" matches MoneyCop regex.
+    // Sin preprocessed no podemos calcular nada determinístico. El objeto
+    // "mínimo" que se devuelve (todas las cifras en "0") existe sólo para no
+    // romper el tipo de retorno de los llamadores internos: queda MARCADO
+    // como sentinela y NUNCA debe presentarse como dato (ver
+    // `isSentinelAncora` / `ancoraOrNull`). "0" no es "no hay dato".
     return makeEmptyAncora(company);
   }
 
@@ -321,9 +325,44 @@ export function buildNiifAncora(
   return parsed.data;
 }
 
+// ---------------------------------------------------------------------------
+// Âncora sentinela — "no hay dato" nunca viaja como $0
+// ---------------------------------------------------------------------------
+// El Âncora vacío (sin preprocesado, o cuyo cálculo no superó la validación
+// Zod) lleva "0" en TODAS las cifras y checks que, leídos como datos, suman
+// puntos de calidad (Δ patrimonial "0" = "cuadra al centavo"). La vista de las
+// cuatro áreas lo trataba como un balance real: activos $0, utilidad $0 y un
+// Score NIIF de 80/100 que ningún cálculo respalda. El contrato del producto es
+// que `null`/N/D no es cero, así que el sentinela queda registrado aquí y los
+// productores lo convierten en `null` antes de emitirlo.
+//
+// WeakSet y no un campo del schema: `NiifAncoraSchema` es contrato compartido
+// con la UI y la persistencia; la marca vive sólo en proceso, que es donde se
+// decide si el Âncora se emite o no.
+// ---------------------------------------------------------------------------
+const SENTINEL_ANCORAS = new WeakSet<NiifAncora>();
+
+/**
+ * `true` cuando el Âncora es el sentinela vacío de `buildNiifAncora` (sin
+ * preprocesado o con cálculo inválido): sus "0" no son cifras del cliente.
+ */
+export function isSentinelAncora(ancora: NiifAncora | null | undefined): boolean {
+  return !!ancora && SENTINEL_ANCORAS.has(ancora);
+}
+
+/**
+ * El Âncora listo para emitir: `null` cuando no hay cifras deterministas que
+ * lo respalden. Es la forma que deben usar las superficies (SSE `niif_ancora`,
+ * payload `niif_phase`, persistencia): un Âncora ausente se muestra como N/D.
+ */
+export function ancoraOrNull(ancora: NiifAncora | null | undefined): NiifAncora | null {
+  if (!ancora || isSentinelAncora(ancora)) return null;
+  return ancora;
+}
+
 function makeEmptyAncora(company: CompanyInfo | undefined): NiifAncora {
   const zero: string = '0';
-  return {
+  const sentinel: NiifAncora = {
     periodos: { actual: company?.fiscalPeriod ?? '', comparativo: null },
     nitDigito: extractNitDigit(company?.nit),
     ccvNiif: {
@@ -346,4 +385,6 @@ function makeEmptyAncora(company: CompanyInfo | undefined): NiifAncora {
     version: '1.0',
     computedAt: new Date().toISOString(),
   };
+  SENTINEL_ANCORAS.add(sentinel);
+  return sentinel;
 }

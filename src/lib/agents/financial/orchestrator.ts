@@ -5,7 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import { runNiifAnalyst } from './agents/niif-analyst';
-import { buildNiifAncora } from './ancora/build-ancora';
+import { buildNiifAncora, ancoraOrNull } from './ancora/build-ancora';
 import type { NiifAncora } from './ancora/types';
 import { buildFiscalSnapshot } from './escudo-survival/fiscal-anchor/snapshot';
 import { runStrategyDirector } from './agents/strategy-director';
@@ -27,6 +27,8 @@ import {
 } from '@/lib/preprocessing/raw-data';
 import {
   auditReportEmittable,
+  checkComparativosImpracticablesDeclaration,
+  checkDeterministicCashFlowV3,
   type AuditReportEmittableResult,
   type AuditCompanyContext,
 } from '@/lib/pillars/audit-report-emittable';
@@ -37,10 +39,10 @@ import {
 } from './validators/niif-json-validator';
 import { moneyCopEquals, parseMoneyCop, formatCopFromCents } from './contracts/money';
 import {
+  buildDeterministicCashFlow,
   checkCashFlowInvariants,
   formatCashFlowViolations,
 } from './contracts/deterministic-breakdown';
-import { hasDividendEvidenceAccounts } from '@/lib/preprocessing/curator-rules/dividend-evidence';
 import {
   reconcileActaArithmetic,
   describeActaQualifications,
@@ -52,6 +54,14 @@ import {
   buildQualificationSeal,
 } from './agents/reconcile-anchors';
 import { toNiifAnalysisResult } from './agents/renderer';
+import {
+  reconcileStrategyAnchors,
+  strategyAnchorSources,
+  type QualifiedStrategicAnalysisResult,
+  type StrategyAnchorSources,
+  type StrategyQualifications,
+} from './validators/strategy-anchors';
+import type { NiifReportJson } from './contracts/niif-report';
 
 /** Serializa centavos a MoneyCop, o `undefined` si el ancla no existe. */
 function centsOrUndefined(cents: bigint | undefined): string | undefined {
@@ -248,6 +258,84 @@ export function sellarConSalvedades(
   ].join('\n');
   niif.fullContent = `${seal}\n${niif.fullContent}`;
   niif.balanceSheet = `${seal}\n${niif.balanceSheet}`;
+}
+
+// ---------------------------------------------------------------------------
+// Periodo del informe — una sola fuente determinista (pipeline-flujo-17)
+// ---------------------------------------------------------------------------
+
+/** Año `YYYY` contenido en una etiqueta de periodo, o `null` si no trae año. */
+export function fiscalYearOf(period: string | null | undefined): string | null {
+  const m = /(?:^|\D)(\d{4})(?:\D|$)/.exec(period ?? '');
+  return m ? m[1] : null;
+}
+
+/**
+ * Fija `company` del JSON NIIF desde fuentes deterministas: el periodo del
+ * balance preprocesado (o, sin él, el del intake) y la identidad del intake.
+ *
+ * El LLM emitía `fiscalPeriod`/`comparativePeriod` libremente y E9 sólo cruzaba
+ * el comparativo si el propio LLM declaraba uno: un comparativo inventado o un
+ * año equivocado pasaban sin error y llegaban a los rótulos del Excel. Sin
+ * preprocesado no hay comparativo verificado: se toma el del intake (o null).
+ */
+export function alignReportCompanyPeriods(
+  json: NiifReportJson,
+  company: CompanyInfo,
+  pp: PreprocessedBalance | undefined,
+): { json: NiifReportJson; changed: string[] } {
+  const current = json.company;
+  const fiscalPeriod =
+    (pp ? fiscalYearOf(pp.primary?.period) : null) ??
+    fiscalYearOf(company.fiscalPeriod) ??
+    current.fiscalPeriod;
+  // Comparativo impracticable (§3.14/§10.21): el prompt pide amountComparative
+  // null en todas las líneas y `deriveReportMode` lo trata como LINEA_BASE; no
+  // se rotula una columna comparativa que no se presenta.
+  const comparativePeriod = pp
+    ? pp.comparative && pp.comparativos_impracticables !== true
+      ? fiscalYearOf(pp.comparative.period)
+      : null
+    : fiscalYearOf(company.comparativePeriod);
+  const name = company.name?.trim() ? company.name : current.name;
+  const nit = company.nit?.trim() ? company.nit : current.nit;
+
+  const changed: string[] = [];
+  if (fiscalPeriod !== current.fiscalPeriod) {
+    changed.push(`periodo ${current.fiscalPeriod} → ${fiscalPeriod}`);
+  }
+  if (comparativePeriod !== current.comparativePeriod) {
+    changed.push(
+      `comparativo ${current.comparativePeriod ?? 'ninguno'} → ${comparativePeriod ?? 'ninguno'}`,
+    );
+  }
+  if (name !== current.name) changed.push('razón social');
+  if (nit !== current.nit) changed.push('NIT');
+  if (changed.length === 0) return { json, changed };
+  return {
+    json: { ...json, company: { ...current, fiscalPeriod, comparativePeriod, name, nit } },
+    changed,
+  };
+}
+
+/**
+ * Bloqueante cuando el periodo declarado en el intake no es el del balance.
+ * Con balance 2024 e intake 2025 los totales decían "Periodo actual (2024)" y
+ * la portada "2025": el informe firmaba un año con las cifras de otro.
+ */
+export function periodMismatchMessage(
+  company: CompanyInfo,
+  pp: PreprocessedBalance | undefined,
+  language: 'es' | 'en',
+): string | null {
+  const balanceYear = pp ? fiscalYearOf(pp.primary?.period) : null;
+  const intakeYear = fiscalYearOf(company.fiscalPeriod);
+  if (!balanceYear || !intakeYear || balanceYear === intakeYear) return null;
+  return language === 'es'
+    ? `Periodo: el formulario declara el ejercicio ${intakeYear}, pero el balance de prueba corresponde a ${balanceYear}. ` +
+        `El informe se presenta con las cifras y el periodo del balance (${balanceYear}); confirme el periodo antes de emitir.`
+    : `Period: the intake declares fiscal year ${intakeYear}, but the trial balance is for ${balanceYear}. ` +
+        `The report uses the trial-balance figures and period (${balanceYear}); confirm the period before issuing.`;
 }
 
 /**
@@ -918,104 +1006,15 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
     );
   }
 
-  // --- Seccion C0 — EFE Indirecto Pre-calculado (Curator R2) ---
-  // Bug 3 fix (2026-05-08): el cashFlowIndirecto que produce R2 se inyecta
-  // EXPLICITAMENTE al bloque vinculante para que el Agente 1 NIIF cite los
-  // valores literalmente en el Estado de Flujos de Efectivo, en lugar de
-  // omitir las líneas de capital de trabajo. Si R2 corrió en single-period
-  // mode (sin comparativo), el sub-bloque incluye un warning explícito.
-  const cfi = snap.cashFlowIndirecto;
-  if (cfi) {
-    lines.push('');
-    lines.push('## EFE INDIRECTO PRECALCULADO (Curator R2 — NIC 7)');
-    const isSinglePeriod = cfi.comparativePeriod === '(sin_comparativo)';
-    if (isSinglePeriod) {
-      lines.push(
-        `- MODO PARCIAL — sin balance comparativo: las variaciones asumen ` +
-          `saldo inicial = $0. NO es un EFE oficial NIIF. Pendiente: cargar ` +
-          `balance del año anterior. Severity: medio.`,
-      );
-    } else {
-      lines.push(
-        `- Variación calculada entre periodos ${cfi.comparativePeriod} → ${cfi.period}.`,
-      );
-    }
-    lines.push('### Actividades de Operación');
-    lines.push(`  - Utilidad neta: ${fmtCop(cfi.operating.utilidadNeta)}`);
-    lines.push(
-      `  - (+) Depreciación / Amortización: ${fmtCop(cfi.operating.depreciacionAmortizacion)}`,
-    );
-    lines.push(
-      `  - (+/-) Variación Cuentas por Cobrar (ΔCxC): ${fmtCop(cfi.operating.varCuentasPorCobrar)}`,
-    );
-    lines.push(
-      `  - (+/-) Variación Inventarios (ΔInv): ${fmtCop(cfi.operating.varInventarios)}`,
-    );
-    lines.push(
-      `  - (+/-) Variación Proveedores (ΔProv): ${fmtCop(cfi.operating.varProveedores)}`,
-    );
-    lines.push(
-      `  - (+/-) Variación Cuentas por Pagar (ΔCxP): ${fmtCop(cfi.operating.varCuentasPorPagar)}`,
-    );
-    lines.push(
-      `  - (+/-) Variación Impuestos por Pagar (ΔImp): ${fmtCop(cfi.operating.varImpuestosPorPagar)}`,
-    );
-    lines.push(
-      `  - (+/-) Variación Obligaciones Laborales (ΔLab): ${fmtCop(cfi.operating.varObligacionesLaborales)}`,
-    );
-    lines.push(
-      `  - = Flujo neto Actividades de Operación: ${fmtCop(cfi.operating.total)}`,
-    );
-    lines.push('### Actividades de Inversión');
-    lines.push(`  - Variación PPE bruto: ${fmtCop(cfi.investing.varPPE)}`);
-    lines.push(`  - Otros: ${fmtCop(cfi.investing.otros)}`);
-    lines.push(
-      `  - = Flujo neto Actividades de Inversión: ${fmtCop(cfi.investing.total)}`,
-    );
-    lines.push('### Actividades de Financiación');
-    lines.push(
-      `  - Variación Obligaciones Financieras: ${fmtCop(cfi.financing.varObligacionesFinancieras)}`,
-    );
-    lines.push(
-      `  - Variación Capital + Reservas: ${fmtCop(cfi.financing.varCapitalReservas)}`,
-    );
-    // Dividendos: SÓLO con evidencia real en el balance.
-    //
-    // `dividendosEstimados` de R2 es un tapa-huecos —
-    // `Math.min(0, deltaUtilAcum - utilidadNeta)`— y sobre este mismo balance
-    // fabricó -$1.570.997.737,30 (2,09× la facturación del año, 64,9% del flujo
-    // operativo) a partir de las cuentas VIRTUALES 3605VC/3710VC que inyecta R8.
-    // La cuenta 2360 no existe en el balance. Marcarlo VINCULANTE hizo que el
-    // modelo lo imprimiera obediente en la Nota 6 del informe entregado, con
-    // cita normativa de respaldo y la tabla de financiación vacía. NIC 7 ¶43
-    // prohíbe presentar como flujo una partida que no lo es.
-    if (hasDividendEvidenceAccounts(snap)) {
-      lines.push(
-        `  - Dividendos estimados: ${fmtCop(cfi.financing.dividendosEstimados)}`,
-      );
-    } else {
-      lines.push(
-        `  - Dividendos: NO hay evidencia en el balance (sin movimiento en PUC 2360 ` +
-          `ni en el grupo 35). NO presentes dividendos en el EFE, ni "estimados" ni ` +
-          `de ninguna otra clase, ni los menciones en las notas (NIC 7 ¶43).`,
-      );
-    }
-    lines.push(
-      `  - = Flujo neto Actividades de Financiación: ${fmtCop(cfi.financing.total)}`,
-    );
-    lines.push(`### Cierre`);
-    lines.push(`  - Variación neta de efectivo: ${fmtCop(cfi.netChangeInCash)}`);
-    lines.push(
-      `  - Variación observada en PUC 11: ${fmtCop(cfi.observedChangeInCash)}`,
-    );
-    lines.push(`  - Brecha de reconciliación: ${fmtCop(cfi.reconciliationGap)}`);
-    lines.push(`  - Reconciliado: ${cfi.reconciled ? 'sí' : 'no'}`);
-    lines.push(
-      `- AUTORIDAD: estos valores son VINCULANTES para el Estado de Flujos ` +
-        `de Efectivo del Agente 1 NIIF. Cita las líneas de capital de trabajo ` +
-        `LITERALMENTE — NO omitas ΔInventario ni ΔProveedores aunque sean $0.`,
-    );
-  }
+  // --- Seccion C0 — EFE del curator R2: NO se publica ---
+  // recalculo-11: este bloque imprimía el EFE de R2 con "AUTORIDAD: estos
+  // valores son VINCULANTES" mientras el prompt del Analista NIIF declaraba
+  // que el EFE determinista lo reemplaza. R2 arranca de la utilidad acumulada
+  // y, en el balance real de la auditoría, dejaba una brecha de
+  // $1.559.097.749,11 que el determinista no tiene; Estrategia y Gobierno sólo
+  // veían este bloque. La única fuente vinculante del EFE es ahora la sección
+  // "EFE DETERMINISTA" que `buildBindingTotalsBlock` emite con los dos
+  // periodos (`renderDeterministicCashFlowLines`).
 
   // --- Seccion C — Cierre de Flujo de Efectivo aplicado (Curator R6) ---
   if (
@@ -1033,6 +1032,10 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
       `- Linea de absorcion a reportar: literal "Variaciones en Capital de Trabajo ` +
         `(ajuste de cierre)" en Actividades de Operacion, monto ` +
         `${fmtCop(snap.cashFlowClosureAdjustment)} (con su signo original).`,
+    );
+    lines.push(
+      `- Si este bloque vinculante trae la sección "EFE DETERMINISTA" con cifras, ` +
+        `ese EFE ya cierra contra PUC 11 y la línea de absorción anterior NO se reporta.`,
     );
     if (totals && typeof totals.efectivoCuenta11 === 'number') {
       lines.push(
@@ -1090,6 +1093,60 @@ function pctYoY(current: number | undefined, base: number | undefined): string {
 function absDelta(current: number | undefined, base: number | undefined): string {
   if (typeof current !== 'number' || typeof base !== 'number') return 'ND';
   return fmtCop(current - base);
+}
+
+/**
+ * Sección "EFE DETERMINISTA" del bloque vinculante: el mismo EFE
+ * (`buildDeterministicCashFlow`) que el Analista NIIF recibe renglón a renglón
+ * como "EFE VINCULANTE" y que el gate V3 evalúa. Es la única fuente de cifras
+ * de flujo de efectivo que ven Estrategia y Gobierno (recalculo-11).
+ */
+function renderDeterministicCashFlowLines(
+  primary: PeriodSnapshot,
+  comparative: PeriodSnapshot | null,
+): string[] {
+  const lines: string[] = [''];
+  const efe = comparative ? buildDeterministicCashFlow(primary, comparative) : null;
+  if (!efe) {
+    lines.push('## EFE DETERMINISTA (NIC 7) — no es calculable');
+    lines.push(
+      '- Sin periodo comparativo no hay saldo de apertura contra el cual medir variaciones ' +
+        '(NIC 7 ¶1): el EFE por método indirecto no es calculable. NO presentes cifras de flujo ' +
+        'de efectivo por actividades ni dividendos estimados; la única cifra defendible es el ' +
+        'saldo de efectivo al cierre (PUC 11).',
+    );
+    return lines;
+  }
+
+  const sectionLabel: Record<string, string> = {
+    operating: 'Actividades de Operación',
+    investing: 'Actividades de Inversión',
+    financing: 'Actividades de Financiación',
+  };
+  const money = (cents: bigint) => `${formatCopFromCents(cents)} COP ${moneyCopToken(cents)}`;
+
+  lines.push(
+    `## EFE DETERMINISTA (NIC 7 — única fuente vinculante del EFE, ${efe.comparativePeriod} → ${efe.primaryPeriod})`,
+  );
+  lines.push(
+    '- Calculado desde el balance de prueba por método indirecto; es el mismo EFE que el ' +
+      'Analista NIIF recibe renglón a renglón. Ninguna otra cifra de flujo de efectivo es vinculante.',
+  );
+  for (const section of efe.sections) {
+    lines.push(`- Flujo neto ${sectionLabel[section.section]}: ${money(section.netFlowCents)}`);
+  }
+  lines.push(`- Variación neta de efectivo: ${money(efe.netChangeCents)}`);
+  lines.push(`- Variación observada en PUC 11: ${money(efe.observedChangeCents)}`);
+  lines.push(`- Brecha de reconciliación: ${money(efe.reconciliationGapCents)}`);
+  lines.push(`- Reconciliado: ${efe.reconciled ? 'sí' : 'no'}`);
+  lines.push(
+    efe.dividendEvidence.found
+      ? `- Distribución a socios con evidencia en el balance (${efe.dividendEvidence.accounts.join(', ')}): ` +
+          `${money(efe.dividendEvidence.cashFlowCents)} ya incluida en financiación.`
+      : '- Dividendos: NO hay evidencia en el balance (sin movimiento en PUC 2360 ni en el grupo 35). ' +
+          'NO presentes dividendos en el EFE, ni "estimados" ni de ninguna otra clase (NIC 7 ¶43).',
+  );
+  return lines;
 }
 
 /**
@@ -1161,6 +1218,8 @@ function buildBindingTotalsBlock(preprocessed: unknown): string {
       'NOTA: solo hay un periodo en el balance — modo single-period. Declara "Sin periodo comparativo disponible" en cada estado financiero.',
     );
   }
+
+  lines.push(...renderDeterministicCashFlowLines(primary, comparative));
 
   lines.push('');
   lines.push(
@@ -1284,9 +1343,11 @@ export interface FinancialPipelineContext {
    * CCV Fiscal F01..F10 + checks + nitDigito) calculadas desde el
    * PreprocessedBalance. Disponible para los Agentes 2 (Strategy), 3
    * (Governance) y el pipeline Escudo como fuente de verdad numérica que
-   * NO depende del LLM. Siempre presente: cuando Stage 0 no produjo
-   * `preprocessed`, `buildNiifAncora` devuelve un Âncora "empty" con todos
-   * los campos a "0" sentinel.
+   * NO depende del LLM. Siempre presente en el contexto: cuando Stage 0 no
+   * produjo `preprocessed`, `buildNiifAncora` devuelve un Âncora sentinela
+   * (todos los campos a "0") MARCADO como tal (`isSentinelAncora`). Ese
+   * sentinela es interno: `runNiifPhase` lo emite como `null` y ninguna
+   * superficie debe leer sus ceros como cifras del cliente.
    */
   ancora: NiifAncora;
   /**
@@ -1670,7 +1731,11 @@ export async function runNiifPhase(
   options: OrchestrateFinancialOptions = {},
 ): Promise<{
   niif: NiifAnalysisResult;
-  ancora: NiifAncora;
+  /**
+   * Âncora determinista, o `null` cuando no hay preprocesado que lo respalde
+   * (pipeline-flujo-01): el sentinela de ceros nunca sale de este proceso.
+   */
+  ancora: NiifAncora | null;
   fiscalSnapshot: FiscalSnapshot | undefined;
   context: FinancialPipelineContext;
 }> {
@@ -1716,36 +1781,43 @@ export async function runNiifPhase(
   }
 
   // ---------------------------------------------------------------------------
-  // La columna comparativa del Balance, antes de validar nada.
+  // Periodo y columna comparativa del Balance, antes de validar nada.
   // ---------------------------------------------------------------------------
-  // El completado determinista del desglose (dentro del analista) reemplaza la
-  // sección con la proyección del periodo actual y deja `amountComparative` en
-  // null. Aquí se le pone al lado la proyección del año anterior, que es la
-  // misma función sobre el otro snapshot. Va ANTES del validador porque E9
-  // cruza precisamente esa columna, y antes del sello porque el re-render tiene
-  // que salir con la tabla ya completa. NIIF para las PYMES §3.14.
+  // Periodo (pipeline-flujo-17): `company.fiscalPeriod`/`comparativePeriod` del
+  // JSON los emitía el LLM sin validación, y el Excel los usa como rótulos y
+  // para decidir si hay columna comparativa. Se fijan de forma determinista
+  // desde el preprocesado (o, sin él, desde el intake) ANTES del validador:
+  // E9 sólo cruza el comparativo cuando `comparativePeriod` no es null.
+  //
+  // Columna comparativa: el completado determinista del desglose (dentro del
+  // analista) reemplaza la sección con la proyección del periodo actual y deja
+  // `amountComparative` en null. Aquí se le pone al lado la proyección del año
+  // anterior, que es la misma función sobre el otro snapshot. Va ANTES del
+  // validador porque E9 cruza precisamente esa columna, y antes del sello
+  // porque el re-render tiene que salir con la tabla ya completa. NIIF para las
+  // PYMES §3.14.
   if (niif.json) {
+    let json = niif.json;
+
+    const alignment = alignReportCompanyPeriods(json, context.effectiveCompany, context.ppForAgents);
+    if (alignment.changed.length > 0) {
+      json = alignment.json;
+      onProgress?.({
+        type: 'stage_progress',
+        stage: 1,
+        detail:
+          'Datos de la empresa y periodos del informe fijados desde el balance/intake: ' +
+          alignment.changed.join('; ') + '.',
+      });
+    }
+
     const comparativeSnap = getComparativeSnapshot(context.preprocessed);
     const { json: conComparativo, filled } = fillComparativeBreakdownFromSnapshot(
-      niif.json,
+      json,
       comparativeSnap ?? undefined,
     );
     if (filled.length > 0) {
-      const rerendered = toNiifAnalysisResult(conComparativo);
-      // El sello del analista vive en el CUERPO del Markdown, así que un
-      // re-render lo borraría y dejaría un informe con salvedades sin la
-      // portada que las declara. Se reconstruye desde la misma reconciliación
-      // que lo produjo — es una función pura de ese veredicto.
-      const sello = niif.reconciliation
-        ? buildQualificationSeal(niif.reconciliation, language)
-        : '';
-      niif.json = conComparativo;
-      niif.balanceSheet = sello ? `${sello}\n${rerendered.balanceSheet}` : rerendered.balanceSheet;
-      niif.incomeStatement = rerendered.incomeStatement;
-      niif.cashFlowStatement = rerendered.cashFlowStatement;
-      niif.equityChangesStatement = rerendered.equityChangesStatement;
-      niif.technicalNotes = rerendered.technicalNotes;
-      niif.fullContent = sello ? `${sello}\n${rerendered.fullContent}` : rerendered.fullContent;
+      json = conComparativo;
       onProgress?.({
         type: 'stage_progress',
         stage: 1,
@@ -1753,6 +1825,24 @@ export async function runNiifPhase(
           `Columna comparativa (${comparativeSnap?.period}) completada desde el balance ` +
           `preprocesado en: ${filled.join(', ')}.`,
       });
+    }
+
+    if (json !== niif.json) {
+      const rerendered = toNiifAnalysisResult(json);
+      // El sello del analista vive en el CUERPO del Markdown, así que un
+      // re-render lo borraría y dejaría un informe con salvedades sin la
+      // portada que las declara. Se reconstruye desde la misma reconciliación
+      // que lo produjo — es una función pura de ese veredicto.
+      const sello = niif.reconciliation
+        ? buildQualificationSeal(niif.reconciliation, language)
+        : '';
+      niif.json = json;
+      niif.balanceSheet = sello ? `${sello}\n${rerendered.balanceSheet}` : rerendered.balanceSheet;
+      niif.incomeStatement = rerendered.incomeStatement;
+      niif.cashFlowStatement = rerendered.cashFlowStatement;
+      niif.equityChangesStatement = rerendered.equityChangesStatement;
+      niif.technicalNotes = rerendered.technicalNotes;
+      niif.fullContent = sello ? `${sello}\n${rerendered.fullContent}` : rerendered.fullContent;
     }
   }
 
@@ -1844,7 +1934,14 @@ export async function runNiifPhase(
   // produce estados financieros que cuadran y aun así no son firmables. Antes
   // esa señal moría en el gate del camino legacy; ahora sella el entregable por
   // el mismo canal que el descuadre de renglones.
-  if (context.preflight && !context.preflight.emittable) {
+  //
+  // El pre-vuelo corre sin texto de informe. Los checks que dependen de ese
+  // texto (V15) o del periodo comparativo (V3 sobre el EFE determinista) se
+  // evalúan AQUÍ, con el informe del analista y los dos snapshots, y reemplazan
+  // cualquier resultado de esos códigos que el pre-vuelo hubiera producido
+  // sobre un texto vacío (pipeline-flujo-02, recalculo-11).
+  const gateMessages = collectNiifGateMessages(niif, context, language);
+  if (gateMessages.length > 0) {
     const previous = niif.reconciliation;
     niif.reconciliation = {
       deviations: previous?.deviations ?? [],
@@ -1857,7 +1954,7 @@ export async function runNiifPhase(
         ? '> ## REPORTE CON SALVEDADES — GATE DE EMISIÓN'
         : '> ## REPORT WITH QUALIFICATIONS — ISSUANCE GATE',
       '>',
-      ...context.preflight.blockers.map((b) => `> - ${b.message}`),
+      ...gateMessages.map((m) => `> - ${m}`),
       '',
     ].join('\n');
     // Sólo si el analista no puso ya su propio sello, para no duplicar portada.
@@ -1873,10 +1970,52 @@ export async function runNiifPhase(
 
   return {
     niif,
-    ancora: context.ancora,
+    // Sin preprocesado `context.ancora` es el sentinela de ceros de
+    // `buildNiifAncora`: emitirlo convertía "no hay dato" en un balance de $0
+    // con Score NIIF 80/100 en las cuatro áreas. Se emite `null` (N/D).
+    ancora: ancoraOrNull(context.ancora),
     fiscalSnapshot: context.fiscalSnapshot,
     context,
   };
+}
+
+/**
+ * Bloqueantes del gate de emisión para la fase NIIF: los del pre-vuelo de
+ * Stage 0 más los que sólo pueden evaluarse con el informe del analista y los
+ * dos snapshots.
+ *
+ * - V15 (declaración de impracticabilidad) sobre `niif.fullContent`: en el
+ *   pre-vuelo no hay texto y evaluarla sobre '' sellaba todo balance de un
+ *   solo periodo.
+ * - V3 sobre el EFE determinista (`buildDeterministicCashFlow`), nunca sobre el
+ *   EFE del curator R2.
+ * - Periodo del intake ≠ periodo del balance.
+ */
+function collectNiifGateMessages(
+  niif: NiifAnalysisResult,
+  context: FinancialPipelineContext,
+  language: 'es' | 'en',
+): string[] {
+  const deferred = new Set(['V3', 'V15']);
+  const messages = (context.preflight?.blockers ?? [])
+    .filter((b) => !deferred.has(b.code))
+    .map((b) => b.message);
+
+  const pp = context.ppForAgents;
+  if (pp?.primary) {
+    const v3 = checkDeterministicCashFlowV3(pp.primary, pp.comparative);
+    if (v3) messages.push(v3.message);
+    const v15 = checkComparativosImpracticablesDeclaration(
+      niif.fullContent,
+      { comparativos_impracticables: pp.comparativos_impracticables },
+      pp.primary.period,
+    );
+    if (v15) messages.push(v15.message);
+  }
+
+  const period = periodMismatchMessage(context.effectiveCompany, pp, language);
+  if (period) messages.push(period);
+  return messages;
 }
 
 /**
@@ -1916,13 +2055,29 @@ export interface PhaseHandoffInput {
 }
 
 /**
+ * Modo del reporte para Estrategia y Gobierno: el MISMO que el NIIF.
+ *
+ * Con preprocesado se deriva siempre en servidor (`deriveReportMode`, la
+ * función que usa `prepareFinancialContext`); el valor del caller sólo cuenta
+ * cuando no hay balance. Los endpoints partidos no enviaban `reportMode` y un
+ * balance de un solo periodo (LINEA_BASE en el NIIF y el HTML) corría Estrategia
+ * y Gobierno en 'COMPARATIVO_COMPLETO' (pipeline-flujo-11).
+ */
+function resolvePhaseReportMode(
+  preprocessed: PreprocessedBalance | undefined,
+  requested: ReportMode | undefined,
+): ReportMode | undefined {
+  return preprocessed ? deriveReportMode(preprocessed) : requested;
+}
+
+/**
  * Stage 2: Strategy Director. Consume el NIIF + bindingTotals y produce KPIs.
  * Emite SSE stage_start/stage_complete (stage=2).
  */
 export async function runStrategyPhase(
   input: PhaseHandoffInput,
   options: Pick<OrchestrateFinancialOptions, 'onProgress'> = {},
-): Promise<StrategicAnalysisResult> {
+): Promise<QualifiedStrategicAnalysisResult> {
   const { niifResult, bindingTotals, preprocessed, company, language, instructions, elite, reportMode } = input;
   const { onProgress } = options;
 
@@ -1941,12 +2096,101 @@ export async function runStrategyPhase(
     onProgress,
     elite,
     AbortSignal.timeout(720_000),
-    reportMode,
+    resolvePhaseReportMode(preprocessed, reportMode),
+  );
+
+  // Validación determinista post-LLM (pipeline-flujo-05): el JSON del Director
+  // de Estrategia salía tal cual. Se cruza con tolerancia exacta todo lo que
+  // tiene ancla (rubros del dashboard, KPIs precalculados, DuPont, gate de
+  // liquidez) y se declara lo que no la tiene.
+  const qualified = qualifyStrategyResult(
+    strategy,
+    strategyAnchorSources(preprocessed, niifResult.json),
+    language,
+    onProgress,
   );
 
   onProgress?.({ type: 'stage_complete', stage: 2, label: completeLabel });
 
-  return strategy;
+  return qualified;
+}
+
+/**
+ * Sella la Parte II cuando alguna cifra anclada no coincide y deja constancia
+ * de lo que no pudo verificarse. El veredicto viaja en
+ * `strategyQualifications` (análogo a `actaQualifications`); el sello va en el
+ * cuerpo porque un evento SSE `warning` no llega al entregable.
+ */
+function qualifyStrategyResult(
+  strategy: StrategicAnalysisResult,
+  sources: StrategyAnchorSources,
+  language: 'es' | 'en',
+  onProgress: ((event: FinancialProgressEvent) => void) | undefined,
+): QualifiedStrategicAnalysisResult {
+  const es = language === 'es';
+  let qualifications: StrategyQualifications;
+  let verifiedCount = 0;
+  if (!strategy.json) {
+    qualifications = {
+      clean: false,
+      motivos: [
+        es
+          ? 'El Director de Estrategia no devolvió cifras estructuradas: la Parte II no pudo verificarse contra el balance.'
+          : 'The Strategy Director returned no structured figures: Part II could not be verified against the trial balance.',
+      ],
+      noVerificables: [],
+    };
+  } else {
+    const check = reconcileStrategyAnchors(strategy.json, sources, language);
+    verifiedCount = check.verifiedCount;
+    qualifications = {
+      clean: check.deviations.length === 0,
+      motivos: check.deviations,
+      noVerificables: check.unverifiable,
+    };
+  }
+
+  if (!qualifications.clean) {
+    onProgress?.({
+      type: 'warning',
+      warnings: qualifications.motivos.map((m) => `[Estrategia — anclas] ${m}`),
+    });
+    const seal = [
+      es
+        ? '> ## ANÁLISIS ESTRATÉGICO CON SALVEDADES — CIFRAS SIN RESPALDO'
+        : '> ## STRATEGIC ANALYSIS WITH QUALIFICATIONS — UNSUPPORTED FIGURES',
+      '>',
+      es
+        ? '> Cifras de la Parte II no coinciden con el balance preprocesado. Esta sección NO es emitible tal como está:'
+        : '> Part II figures do not match the preprocessed trial balance. This section is NOT issuable as is:',
+      '>',
+      ...qualifications.motivos.map((m) => `> - ${m}`),
+      '',
+    ].join('\n');
+    strategy.kpiDashboard = `${seal}\n${strategy.kpiDashboard}`;
+    strategy.fullContent = `${seal}\n${strategy.fullContent}`;
+  }
+
+  if (qualifications.noVerificables.length > 0) {
+    const MAX = 12;
+    const shown = qualifications.noVerificables.slice(0, MAX);
+    const rest = qualifications.noVerificables.length - shown.length;
+    const note = [
+      '',
+      es ? '### Verificación determinista de la Parte II' : '### Deterministic verification of Part II',
+      es
+        ? `- Cifras cruzadas contra el balance preprocesado: ${verifiedCount}.`
+        : `- Figures cross-checked against the preprocessed trial balance: ${verifiedCount}.`,
+      (es
+        ? '- No verificables contra anclas deterministas (estimaciones del modelo, no cifras del balance): '
+        : '- Not verifiable against deterministic anchors (model estimates, not trial-balance figures): ') +
+        shown.join('; ') +
+        (rest > 0 ? (es ? `; y ${rest} más.` : `; and ${rest} more.`) : '.'),
+    ].join('\n');
+    strategy.fullContent = `${strategy.fullContent}\n${note}`;
+  }
+
+  return Object.assign(strategy, { strategyQualifications: qualifications });
 }
 
 /**
@@ -1994,7 +2238,7 @@ export async function runGovernancePhase(
     onProgress,
     elite,
     AbortSignal.timeout(720_000),
-    reportMode,
+    resolvePhaseReportMode(preprocessed, reportMode),
   );
 
   // -------------------------------------------------------------------------
@@ -2060,11 +2304,84 @@ export async function runGovernancePhase(
     } else {
       governance.actaQualifications = { clean: true, motivos: [] };
     }
+  } else if (!actaEsperada && acta) {
+    // -----------------------------------------------------------------------
+    // Sin aritmética esperada (no llegó el preprocesado: reanudación tras
+    // recarga, flujo de carga sin preprocesado) el prompt pide applies=false,
+    // pero nada lo verificaba: si el modelo repartía reserva legal, saldo
+    // distribuible o capitalización, el acta salía sin salvedad y exportable
+    // (pipeline-flujo-03). Una cifra de destinación sin ancla no se firma.
+    // -----------------------------------------------------------------------
+    const motivos = describeUnanchoredActaFigures(acta, language);
+    if (motivos.length > 0) {
+      onProgress?.({
+        type: 'warning',
+        warnings: motivos.map((m) => `[Acta — sin ancla] ${m}`),
+      });
+      governance.actaQualifications = { clean: false, motivos };
+      const seal = [
+        language === 'es'
+          ? '> ## ACTA CON SALVEDADES — CIFRAS SIN VERIFICAR'
+          : '> ## MINUTES WITH QUALIFICATIONS — UNVERIFIED FIGURES',
+        '>',
+        language === 'es'
+          ? '> El acta propone cifras de destinación que no pudieron contrastarse con una ' +
+            'aritmética determinista sobre la utilidad del ejercicio. Este documento NO es firmable ' +
+            'ni inscribible tal como está:'
+          : '> The minutes propose allocation figures that could not be checked against ' +
+            'deterministic arithmetic over the period result. This document is NOT signable as issued:',
+        '>',
+        ...motivos.map((m) => `> - ${m}`),
+        '',
+      ].join('\n');
+      governance.shareholderMinutes = `${seal}\n${governance.shareholderMinutes}`;
+      governance.fullContent = `${seal}\n${governance.fullContent}`;
+    }
   }
 
   onProgress?.({ type: 'stage_complete', stage: 3, label: completeLabel });
 
   return governance;
+}
+
+/**
+ * Cifras de destinación del acta que no tienen aritmética determinista contra
+ * la cual reconciliarse (pipeline-flujo-03). Vacío cuando el acta no propone
+ * reparto, reservas ni capitalización con monto.
+ */
+function describeUnanchoredActaFigures(
+  acta: NonNullable<GovernanceResult['json']>['shareholderMinutes'],
+  language: 'es' | 'en',
+): string[] {
+  const isMoney = (v: unknown): v is string => typeof v === 'string' && /^-?\d+$/.test(v);
+  const nonZero = (v: unknown) => isMoney(v) && parseMoneyCop(v) !== BigInt(0);
+  const out: string[] = [];
+
+  const distribution = acta.resultDistribution;
+  const linesWithAmount = (distribution?.lines ?? []).filter((l) => nonZero(l?.amountCop));
+  if (distribution?.applies === true || linesWithAmount.length > 0) {
+    out.push(
+      language === 'es'
+        ? `El acta propone una destinación de utilidades (${linesWithAmount.length} renglón(es) con monto) ` +
+            'sin aritmética determinista verificable: el balance preprocesado no llegó a esta fase. ' +
+            'Regenere el informe con el balance antes de firmar.'
+        : `The minutes propose a profit allocation (${linesWithAmount.length} line(s) with amounts) ` +
+            'without verifiable deterministic arithmetic: the preprocessed trial balance did not reach ' +
+            'this phase. Regenerate the report with the trial balance before signing.',
+    );
+  }
+
+  const capitalization = acta.capitalizationProposal;
+  if (capitalization?.applies === true || nonZero(capitalization?.capitalizationAmountCop)) {
+    out.push(
+      language === 'es'
+        ? 'El acta propone una capitalización sin aritmética determinista verificable sobre la ' +
+            'utilidad del ejercicio.'
+        : 'The minutes propose a capitalization without verifiable deterministic arithmetic over ' +
+            'the period result.',
+    );
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -2272,6 +2589,8 @@ export async function orchestrateFinancialReport(
         actividadInferida: eliteCtx?.actividadInferida,
         reclasificacionesNoCompensacion: eliteCtx?.reclasificacionesNoCompensacion,
       },
+      // V3 sobre el EFE determinista (recalculo-11): requiere el comparativo.
+      { comparativeSnapshot: getComparativeSnapshot(preprocessed) },
     );
     report.emittability = {
       kind: emittableResult.emittable ? 'emittable' : 'no-emitible',
