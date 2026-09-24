@@ -862,6 +862,99 @@ export function clearPreprocessedForResume(
   }
 }
 
+// ─── Intake de la corrida y cuerpo de /niif ──────────────────────────────────
+// Del Doctor de Datos al pipeline (cross-dep I1-4): el ajuste confirmado viaja
+// con su `period` desde el ledger del chat hasta `adjustmentLedger` del cuerpo
+// de /niif. Estas funciones puras son el único camino de ese traspaso (las usan
+// la regeneración con ajustes y `runPipeline`) para poder probarlo de punta a
+// punta sin montar el componente.
+
+/**
+ * Intake con los campos runtime que agregan el Doctor de Datos
+ * (`adjustmentLedger`) y el override "Continuar de todas formas"
+ * (`provisional`). No están en `NiifReportIntake`: viajan sólo en memoria y en
+ * la corrida pendiente persistida.
+ */
+export type NiifRunIntake = NiifReportIntake & {
+  provisional?: ProvisionalFlag;
+  adjustmentLedger?: AdjustmentLedger;
+};
+
+/**
+ * Intake de la regeneración con los ajustes confirmados en el Doctor. Los
+ * ajustes pasan tal cual (con su `period`); aplicar ajustes reales sustituye al
+ * override provisional, que se limpia.
+ */
+export function buildRegenerationIntake(
+  input: NiifReportIntake,
+  applied: Adjustment[],
+): NiifRunIntake {
+  return {
+    ...input,
+    adjustmentLedger: { adjustments: applied },
+    provisional: undefined,
+  };
+}
+
+/**
+ * `company` del cuerpo de /niif. ITEM 5 ORDEN DE CIERRE: T.P. y C.C. viajan si
+ * el intake los trae (lectura defensiva: `CompanyMetadata` todavía no los
+ * declara).
+ */
+export function buildNiifCompanyBody(intake: NiifReportIntake): Record<string, unknown> {
+  const companyExt = intake.company as NiifReportIntake['company'] & {
+    legalRepresentativeId?: string;
+    fiscalAuditorTp?: string;
+    accountantTp?: string;
+  };
+  return {
+    name: intake.company.name,
+    nit: intake.company.nit,
+    entityType: intake.company.entityType,
+    sector: intake.company.sector,
+    city: intake.company.city,
+    legalRepresentative: intake.company.legalRepresentative,
+    legalRepresentativeId: companyExt.legalRepresentativeId,
+    fiscalAuditor: intake.company.fiscalAuditor,
+    fiscalAuditorTp: companyExt.fiscalAuditorTp,
+    accountant: intake.company.accountant,
+    accountantTp: companyExt.accountantTp,
+    niifGroup: intake.niifGroup,
+    fiscalPeriod: intake.fiscalPeriod,
+    comparativePeriod: intake.comparativePeriod,
+  };
+}
+
+/**
+ * Cuerpo de POST /api/financial-report/niif para una corrida completa. El
+ * ledger viaja sólo si trae ajustes; el preprocesado del upload, sólo si el
+ * handoff lo encontró para este mismo `rawData` (ingesta-01).
+ */
+export function buildNiifRequestBody(args: {
+  intake: NiifRunIntake;
+  language: 'es' | 'en';
+  uploadPreprocessed?: unknown;
+}): Record<string, unknown> {
+  const { intake } = args;
+  const body: Record<string, unknown> = {
+    rawData: intake.rawData,
+    company: buildNiifCompanyBody(intake),
+    language: args.language,
+    instructions: intake.specialInstructions,
+    ...(intake.provisional ? { provisional: intake.provisional } : {}),
+  };
+  if (intake.adjustmentLedger?.adjustments?.length) {
+    body.adjustmentLedger = intake.adjustmentLedger;
+  }
+  if (intake.excludedFactIds?.length) {
+    body.excludedFactIds = intake.excludedFactIds;
+  }
+  if (args.uploadPreprocessed !== null && args.uploadPreprocessed !== undefined) {
+    body.preprocessed = args.uploadPreprocessed;
+  }
+  return body;
+}
+
 // Ensamblaje del consolidado. El Markdown lo construye el módulo compartido
 // `buildConsolidatedReportMarkdown` (mismo texto que arma el servidor). Los
 // gates post-render (`validateConsolidatedReport` + `auditReportEmittable`
@@ -2395,12 +2488,7 @@ export function PipelineWorkspace() {
       // Phase 2: same pattern for `adjustmentLedger`, attached locally by
       // handleRegenerateWithAdjustments. Backend route accepts it as
       // optional and applies adjustments post-preprocessing.
-      const intakeWithExtras = (intake ?? null) as
-        | (NiifReportIntake & {
-            provisional?: ProvisionalFlag;
-            adjustmentLedger?: AdjustmentLedger;
-          })
-        | null;
+      const intakeWithExtras = (intake ?? null) as NiifRunIntake | null;
       const provisional = intakeWithExtras?.provisional;
       // En una reanudación sin intake en memoria (recarga), el ledger es el
       // del checkpoint: el mismo con el que /niif ajustó su preprocesado.
@@ -2413,35 +2501,6 @@ export function PipelineWorkspace() {
       // usuario. Las rutas (Tasks 3–6) side-parsean `excludedFactIds` del body.
       const excludedFactIds = intake?.excludedFactIds ?? [];
       const instructions = intake?.specialInstructions;
-
-      // ITEM 5 ORDEN DE CIERRE — propagar T.P. + C.C. al backend si están
-      // presentes en el intake. `companyExt` lookup defensivo: el shape del
-      // intake del workspace todavía puede no declararlos (campos nuevos).
-      const companyExt = intake?.company as
-        | (NiifReportIntake['company'] & {
-            legalRepresentativeId?: string;
-            fiscalAuditorTp?: string;
-            accountantTp?: string;
-          })
-        | undefined;
-      const companyBody = intake
-        ? {
-            name: intake.company.name,
-            nit: intake.company.nit,
-            entityType: intake.company.entityType,
-            sector: intake.company.sector,
-            city: intake.company.city,
-            legalRepresentative: intake.company.legalRepresentative,
-            legalRepresentativeId: companyExt?.legalRepresentativeId,
-            fiscalAuditor: intake.company.fiscalAuditor,
-            fiscalAuditorTp: companyExt?.fiscalAuditorTp,
-            accountant: intake.company.accountant,
-            accountantTp: companyExt?.accountantTp,
-            niifGroup: intake.niifGroup,
-            fiscalPeriod: intake.fiscalPeriod,
-            comparativePeriod: intake.comparativePeriod,
-          }
-        : null;
 
       // Handler común de progress events para las 3 sub-fases — mantiene la
       // misma semántica que el legacy: stage_start/complete actualizan el
@@ -2487,27 +2546,17 @@ export function PipelineWorkspace() {
       // Corrida completa: aquí sí se ejecuta el Analista NIIF. El `else` cuelga
       // de este `try/catch` — no hay más ramas.
       try {
-        const niifBody: Record<string, unknown> = {
-          rawData: intake!.rawData,
-          company: companyBody,
-          language: runLanguage,
-          instructions,
-          ...(provisional ? { provisional } : {}),
-        };
-        if (adjustmentLedger?.adjustments?.length) {
-          niifBody.adjustmentLedger = adjustmentLedger;
-        }
-        if (excludedFactIds.length) {
-          niifBody.excludedFactIds = excludedFactIds;
-        }
         // ingesta-01 — el preprocesado del upload viaja sólo si `rawData` es
         // exactamente el texto que lo produjo (handoff en memoria). El
         // servidor re-deriva igualmente desde `rawData` y lo prefiere; este
         // objeto es el respaldo cuando `rawData` no produce filas.
-        const uploadPreprocessed = recallUploadedPreprocessed(intake!.rawData);
-        if (uploadPreprocessed) {
-          niifBody.preprocessed = uploadPreprocessed;
-        }
+        // T.P./C.C. (ITEM 5), provisional, ledger del Doctor (con el `period`
+        // de cada ajuste) y exclusiones: `buildNiifRequestBody`.
+        const niifBody = buildNiifRequestBody({
+          intake: intakeWithExtras!,
+          language: runLanguage,
+          uploadPreprocessed: recallUploadedPreprocessed(intake!.rawData),
+        });
 
         // Reiniciamos el snapshot de la fase anterior (si hay un retry).
         fiscalSnapshotRef.current = null;
@@ -3203,15 +3252,8 @@ export function PipelineWorkspace() {
       );
       // Mint a NEW reference so the pipeline effect re-fires (it compares
       // identity against `lastProcessedInputRef.current`).
-      const next = {
-        ...pipelineInput,
-        adjustmentLedger: { adjustments: applied },
-        provisional: undefined,
-      } as NiifReportIntake & {
-        adjustmentLedger: AdjustmentLedger;
-        provisional?: ProvisionalFlag;
-      };
-      setPipelineInput(next);
+      // Los ajustes pasan tal cual, con su `period` (cross-dep I1-4).
+      setPipelineInput(buildRegenerationIntake(pipelineInput, applied));
     },
     [pipelineInput, setPipelineInput, backendReport, report],
   );
