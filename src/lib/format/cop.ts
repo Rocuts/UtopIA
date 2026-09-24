@@ -64,50 +64,113 @@ export function formatPesosInteger(value: string | number | null | undefined): s
 }
 
 /**
- * Convert a user-typed Colombian-format string to a JS-numeric string the
- * accounting service can parse:
+ * Interpreta un monto tecleado en formato colombiano y lo devuelve como string
+ * numérico JS (el que acepta el servicio contable, NUMERIC(20,2)), o `null`
+ * cuando la entrada NO es interpretable sin adivinar.
  *
  *   "1.234.567,89"       → "1234567.89"
+ *   "1.500.000,00"       → "1500000.00"
+ *   "850.000"            → "850000"      (punto + 3 dígitos = miles es-CO)
+ *   "1.234.567"          → "1234567"
  *   "1234567,89"         → "1234567.89"
- *   "1234567.89"         → "1234567.89"   (already JS format)
+ *   "1234567.89"         → "1234567.89"  (forma JS/NUMERIC: punto + 1-2 decimales)
  *   "$ 1.234.567,89 COP" → "1234567.89"
- *   "  "                 → "0"
+ *   "(1.234,56)"         → "-1234.56"    (paréntesis contable = negativo)
+ *   "" / "  "            → "0"           (celda sin diligenciar)
+ *   "1,234,567" / "1,234.56" / "12.3456" → null (en-US o ambiguo)
  *
- * The function:
- *   - strips currency symbols and whitespace,
- *   - removes thousands dots (".") only when a comma is present (es-CO style),
- *   - converts the decimal comma to a dot.
- *
- * It is intentionally permissive: callers should validate the result with
- * `Number.isFinite(Number(parsed))` before POSTing if the input was
- * untrusted user text.
+ * Por qué: la versión anterior trataba "sólo puntos" como decimal JS, así que
+ * "850.000" (ochocientos cincuenta mil) quedaba en 850 y "1.234.567" fallaba y
+ * se convertía en "0" en silencio. En es-CO el punto NUNCA es decimal: un punto
+ * seguido de grupos de exactamente 3 dígitos es separador de miles. La única
+ * forma con punto decimal que se acepta es la del servidor (1-2 decimales), que
+ * no puede confundirse con un grupo de miles.
  */
-export function parseCOP(input: string | number | null | undefined): string {
+export function parseCOPStrict(input: string | number | null | undefined): string | null {
   if (input === null || input === undefined) return '0';
-  if (typeof input === 'number') return Number.isFinite(input) ? String(input) : '0';
+  if (typeof input === 'number') {
+    if (!Number.isFinite(input)) return null;
+    const asText = String(input);
+    return /^-?\d+(\.\d+)?$/.test(asText) ? asText : null;
+  }
 
   let s = input.trim();
   if (s === '') return '0';
 
-  // Strip currency symbols and ISO codes.
-  s = s.replace(/\$/g, '').replace(/COP/gi, '').replace(/\s+/g, '');
+  // Símbolos de moneda, código ISO y espacios (incluye NBSP de Intl).
+  s = s.replace(/\$/g, '').replace(/COP/gi, '').replace(/[\s\u00a0]+/g, '');
   if (s === '') return '0';
 
-  const hasComma = s.includes(',');
-  const hasDot = s.includes('.');
-
-  if (hasComma && hasDot) {
-    // Spanish format: dots are thousand separators, comma is decimal.
-    s = s.replace(/\./g, '').replace(',', '.');
-  } else if (hasComma) {
-    // Only a comma → it's the decimal separator.
-    s = s.replace(',', '.');
+  let negative = false;
+  const paren = s.match(/^\((.*)\)$/);
+  if (paren) {
+    negative = true;
+    s = paren[1];
   }
-  // Only a dot → already in JS-numeric form (e.g. "1234567.89").
+  if (s.startsWith('-')) {
+    if (negative) return null; // "(-5)": doble signo, ambiguo
+    negative = true;
+    s = s.slice(1);
+  }
+  if (s === '') return null;
 
-  // Final guard: numeric chars + optional leading sign + at most one dot.
-  if (!/^-?\d+(\.\d+)?$/.test(s)) return '0';
-  return s;
+  let intPart: string;
+  let decPart = '';
+  const GROUPED = /^[1-9]\d{0,2}(\.\d{3})+$/; // miles es-CO: 1.234.567
+  if (s.includes(',')) {
+    const m = s.match(/^(\d+|[1-9]\d{0,2}(?:\.\d{3})+),(\d{1,2})$/);
+    if (!m) return null;
+    intPart = m[1].replace(/\./g, '');
+    decPart = m[2];
+  } else if (s.includes('.')) {
+    if (GROUPED.test(s)) {
+      intPart = s.replace(/\./g, '');
+    } else {
+      const m = s.match(/^(\d+)\.(\d{1,2})$/);
+      if (!m) return null;
+      intPart = m[1];
+      decPart = m[2];
+    }
+  } else if (/^\d+$/.test(s)) {
+    intPart = s;
+  } else {
+    return null;
+  }
+
+  intPart = intPart.replace(/^0+(?=\d)/, '');
+  const isZero = /^0+$/.test(intPart) && /^0*$/.test(decPart);
+  const body = decPart ? `${intPart}.${decPart}` : intPart;
+  return negative && !isZero ? `-${body}` : body;
+}
+
+/**
+ * Contrato legado (string, nunca null) de `parseCOP`: misma interpretación que
+ * `parseCOPStrict`, pero una entrada no interpretable devuelve "0".
+ *
+ * @deprecated para formularios que envían dinero: usar `parseCOPStrict` y
+ *   bloquear el envío cuando devuelve `null`. Un "0" silencioso convierte un
+ *   error de tecleo en un asiento por otro valor.
+ */
+export function parseCOP(input: string | number | null | undefined): string {
+  return parseCOPStrict(input) ?? '0';
+}
+
+/**
+ * Monto es-CO → centavos MoneyCop (string entero con signo), aritmética BigInt
+ * exacta (sin pasar por `Number`, válido por encima de 2^53). `null` si la
+ * entrada no es interpretable.
+ *
+ *   "1.500.000,00" → "150000000"   "850.000" → "85000000"
+ */
+export function parseCOPToCentavos(input: string | number | null | undefined): string | null {
+  const s = parseCOPStrict(input);
+  if (s === null) return null;
+  const negative = s.startsWith('-');
+  const abs = negative ? s.slice(1) : s;
+  const [intPart, fracRaw = ''] = abs.split('.');
+  const cents =
+    BigInt(intPart || '0') * BigInt(100) + BigInt((fracRaw + '00').slice(0, 2) || '0');
+  return (negative ? -cents : cents).toString();
 }
 
 /**

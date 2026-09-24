@@ -2,13 +2,25 @@
 // Dinero en MoneyCop (centavos, string), form↔input tipado, cadena de versiones.
 
 import type { RegistrarHechoInput } from '@/lib/facts/contracts';
+import { parseCOPToCentavos } from '@/lib/format/cop';
 import type { FactDTO } from './dto';
 
-/** Pesos (enteros; tolera separadores) → centavos MoneyCop (BigInt, sin overflow). */
+/**
+ * Pesos en formato es-CO ("1.500.000", "1.500.000,50") → centavos MoneyCop
+ * (BigInt, sin overflow). `null` si el texto no es interpretable.
+ *
+ * Por qué: la versión anterior eliminaba todo lo que no fuera dígito, así que
+ * "1.500.000,00" se guardaba como $150.000.000,00 (×100) y alimentaba el
+ * descuento por donaciones del Art. 257 E.T. El parser es el mismo de
+ * `parseCOP` (un solo criterio de punto de miles / coma decimal).
+ */
+export function pesosToCentavosStrict(pesos: string): string | null {
+  return parseCOPToCentavos(pesos);
+}
+
+/** Contrato legado: igual que `pesosToCentavosStrict`, "0" si no es interpretable. */
 export function pesosToCentavos(pesos: string): string {
-  const digits = pesos.replace(/[^\d]/g, '');
-  if (digits === '') return '0';
-  return (BigInt(digits) * BigInt(100)).toString();
+  return pesosToCentavosStrict(pesos) ?? '0';
 }
 
 /** Centavos → pesos (parte entera; trunca los 2 dígitos de centavos). */
