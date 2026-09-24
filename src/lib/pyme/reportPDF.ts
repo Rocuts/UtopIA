@@ -52,19 +52,25 @@ export type PymeKpiTone = 'positive' | 'negative' | 'neutral';
 
 /**
  * Margen del mes (reportes-export-22). Sin ingresos el margen no existe: la
- * API entrega `margenPct = 0` en ese caso (lib/db/pyme.ts) y el PDF lo
- * imprimía como "0.0%" en verde. Ahora es N/D con tono neutro, y el valor se
- * imprime con coma decimal ("12,5%").
+ * API entrega `margenPct = null` en ese caso (lib/db/pyme.ts; los informes
+ * persistidos antes traen `0`) y el PDF lo imprimía como "0.0%" en verde.
+ * Ahora es N/D con tono neutro, y el valor se imprime con coma decimal
+ * ("12,5%"). La vista web lo reutiliza con `language = 'en'` (N/A, "12.5%").
  */
 export function formatPymeMargin(
   totals: Pick<MonthlySummaryTotals, 'ingresos' | 'margen' | 'margenPct'>,
+  language: 'es' | 'en' = 'es',
 ): { text: string; tone: PymeKpiTone } {
+  const na = language === 'en' ? 'N/A' : 'N/D';
   if (!Number.isFinite(totals.ingresos) || totals.ingresos <= 0) {
-    return { text: 'N/D', tone: 'neutral' };
+    return { text: na, tone: 'neutral' };
   }
-  const pct = Number.isFinite(totals.margenPct) ? totals.margenPct : totals.margen / totals.ingresos;
-  if (!Number.isFinite(pct)) return { text: 'N/D', tone: 'neutral' };
-  return { text: formatPct(pct), tone: pct >= 0 ? 'positive' : 'negative' };
+  const pct =
+    typeof totals.margenPct === 'number' && Number.isFinite(totals.margenPct)
+      ? totals.margenPct
+      : totals.margen / totals.ingresos;
+  if (!Number.isFinite(pct)) return { text: na, tone: 'neutral' };
+  return { text: formatPct(pct, 1, language), tone: pct >= 0 ? 'positive' : 'negative' };
 }
 
 /**

@@ -431,7 +431,11 @@ export interface MonthlySummary {
     ingresos: number;
     egresos: number;
     margen: number;
-    margenPct: number;
+    /**
+     * Margen / ingresos como fracción (0.18 = 18 %). `null` (N/D) cuando el
+     * mes no tiene ingresos: el margen porcentual no existe y no es 0 %.
+     */
+    margenPct: number | null;
   };
   topIngresoCategories: { category: string; amount: number }[];
   topEgresoCategories: { category: string; amount: number }[];
@@ -482,7 +486,9 @@ export async function monthlySummary(
   const ingresos = Number(totalsRow?.ingresos ?? 0);
   const egresos = Number(totalsRow?.egresos ?? 0);
   const margen = ingresos - egresos;
-  const margenPct = ingresos > 0 ? margen / ingresos : 0;
+  // Sin ingresos no hay margen porcentual: N/D (null), nunca 0 %. La pérdida
+  // del mes se lee en `margen` (ver alertas del summarizer).
+  const margenPct = ingresos > 0 ? margen / ingresos : null;
   const entryCount = Number(totalsRow?.entryCount ?? 0);
 
   // Top categorias ingreso.

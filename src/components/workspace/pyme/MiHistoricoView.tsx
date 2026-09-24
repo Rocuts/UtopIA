@@ -28,7 +28,7 @@ interface MonthData {
 interface SummaryResponse {
   ok: boolean;
   summary?: {
-    totals: { ingresos: number; egresos: number; margen: number; margenPct: number };
+    totals: { ingresos: number; egresos: number; margen: number; margenPct: number | null };
   };
 }
 
