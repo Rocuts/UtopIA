@@ -205,13 +205,16 @@ interface Consolidated {
 }
 
 /** /niif → /strategy → /governance reales (LLM mockeado). */
-async function fases(opts: { strategy?: StrategyReportJson; governance?: GovernanceReportJson } = {}): Promise<Phases> {
+async function fases(
+  opts: { strategy?: StrategyReportJson; governance?: GovernanceReportJson; language?: 'es' | 'en' } = {},
+): Promise<Phases> {
+  const language = opts.language ?? 'es';
   const phase = await ok<{ niif: FinancialReport['niifAnalysis']; context: { preprocessed: PreprocessedBalance; bindingTotals: string; company: CompanyInfo } }>(
-    await niif(req('/api/financial-report/niif', { rawData: CSV_PERDIDA_COMPARATIVO, company: COMPANY, language: 'es' })),
+    await niif(req('/api/financial-report/niif', { rawData: CSV_PERDIDA_COMPARATIVO, company: COMPANY, language })),
   );
   const handoff = {
     niifResult: phase.niif, bindingTotals: phase.context.bindingTotals, preprocessed: phase.context.preprocessed,
-    company: phase.context.company, language: 'es',
+    company: phase.context.company, language,
   };
   state.queue.push(opts.strategy ?? estrategia());
   const { strategy } = await ok<{ strategy: FinancialReport['strategicAnalysis'] }>(
@@ -224,10 +227,10 @@ async function fases(opts: { strategy?: StrategyReportJson; governance?: Governa
   return { niifAnalysis: phase.niif, strategicAnalysis: strategy, governance, context: phase.context };
 }
 
-async function consolidar(parts: Parts, company: CompanyInfo): Promise<Consolidated> {
+async function consolidar(parts: Parts, company: CompanyInfo, language: 'es' | 'en' = 'es'): Promise<Consolidated> {
   return ok<Consolidated>(
     await consolidate(
-      req('/api/financial-report/consolidate', { rawData: CSV_PERDIDA_COMPARATIVO, company, language: 'es', reportParts: parts }),
+      req('/api/financial-report/consolidate', { rawData: CSV_PERDIDA_COMPARATIVO, company, language, reportParts: parts }),
     ),
   );
 }
@@ -324,6 +327,14 @@ describe('I3 — paridad: el render del servidor es el Markdown que producen las
     expect(markdownOf(c.report)).toEqual(markdownOf(f));
     expect(c.report.governance.shareholderMinutes).toMatch(/PARTE III CON SALVEDADES — CIFRAS EN PROSA SIN RESPALDO/);
     expect(c.report.strategicAnalysis.kpiDashboard).toMatch(/ANÁLISIS ESTRATÉGICO CON SALVEDADES/);
+  });
+
+  it('en inglés: mismos sellos y notas que las fases', async () => {
+    const f = await fases({ strategy: estrategia(T.activo + BigInt(100_000_000)), governance: gobierno(FAKE), language: 'en' });
+    const c = await consolidar(f, f.context.company, 'en');
+    expect(markdownOf(c.report)).toEqual(markdownOf(f));
+    expect(c.report.governance.shareholderMinutes).toMatch(/PART III WITH QUALIFICATIONS — NARRATIVE FIGURES WITHOUT SUPPORT/);
+    expect(c.report.strategicAnalysis.fullContent).toMatch(/### Deterministic verification of Part II/);
   });
 });
 
