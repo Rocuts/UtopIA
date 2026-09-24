@@ -3225,7 +3225,7 @@ function formatCOP(amount: number): string {
  * balanceGapAttribution, taxProvisionRisk), así que aquí solo proyectamos
  * la severidad + texto en `description`.
  */
-function curatorFindingToDiscrepancy(
+export function curatorFindingToDiscrepancy(
   f: CuratorFinding,
   snap: PeriodSnapshot,
 ): Discrepancy {

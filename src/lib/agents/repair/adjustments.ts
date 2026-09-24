@@ -30,6 +30,8 @@ import type {
   ControlTotalsCents,
   ControlTotalsRaw,
 } from '@/lib/preprocessing/trial-balance';
+import { curatorFindingToDiscrepancy } from '@/lib/preprocessing/trial-balance';
+import { runR8 } from '@/lib/preprocessing/curator-rules/r8-virtual-close';
 import type { Adjustment } from './types';
 
 // ---------------------------------------------------------------------------
@@ -132,6 +134,15 @@ function cloneSnapshot(snap: PeriodSnapshot): PeriodSnapshot {
       reasons: [...snap.validation.reasons],
       suggestedAccounts: [...snap.validation.suggestedAccounts],
       adjustments: [...snap.validation.adjustments],
+      // Subconjuntos de `reasons` que el orquestador nunca degrada (integridad
+      // de la lectura y bloqueos post-R8 del curator). Sin copiarlos, un
+      // balance con ajustes perdía la marca y el Bridge los levantaba.
+      ...(snap.validation.integrityReasons
+        ? { integrityReasons: [...snap.validation.integrityReasons] }
+        : {}),
+      ...(snap.validation.curatorBlockingReasons
+        ? { curatorBlockingReasons: [...snap.validation.curatorBlockingReasons] }
+        : {}),
     },
     discrepancies: snap.discrepancies.map((d) => ({ ...d })),
     missingExpectedAccounts: [...snap.missingExpectedAccounts],
@@ -183,10 +194,12 @@ function cloneBalance(pp: PreprocessedBalance): PreprocessedBalance {
  *   - Cuando un ajuste apunta a una cuenta hoja existente, se SUMA el `amount`
  *     (signed) a su balance.
  *   - controlTotals, summary y equityBreakdown del snapshot afectado se
- *     RECALCULAN desde cero a partir de las hojas resultantes.
- *   - validation, discrepancies, missingExpectedAccounts y validationReport
- *     NO se mutan aqui — el caller debe usar `revalidate()` cuando necesite
- *     el estado de salud post-ajustes.
+ *     RECALCULAN desde cero a partir de las hojas resultantes, y R8 (Cierre
+ *     Virtual) se re-ejecuta sobre ellas: 3605VC/3710VC, los hallazgos CUR-R8
+ *     y el bloqueo `[CUR-R8]` de `validation` reflejan el balance AJUSTADO.
+ *   - El resto de validation, discrepancies, missingExpectedAccounts y
+ *     validationReport NO se mutan aqui — el caller debe usar `revalidate()`
+ *     cuando necesite el estado de salud post-ajustes.
  *
  * Es pura: no muta `balance` ni los `Adjustment[]` recibidos.
  */
@@ -301,9 +314,43 @@ export function applyAdjustments(
   // -------------------------------------------------------------------------
   for (const snap of dirtySnapshots) {
     recomputeSnapshotTotals(snap);
+    resyncVirtualClose(snap);
   }
 
   return { balance: next, affected };
+}
+
+// ---------------------------------------------------------------------------
+// resyncVirtualClose — R8 sobre el snapshot ajustado
+// ---------------------------------------------------------------------------
+// El preprocesador ancló 3605VC a la utilidad PRE-ajuste. Un ajuste a las
+// clases 4-7 cambia la utilidad y, sin volver a correr R8, el patrimonio
+// conservaba el resultado anterior: la ecuación quedaba descuadrada por el
+// monto del ajuste y el bloqueo CUR-R8 del balance original seguía vigente
+// aunque el ajuste lo hubiera resuelto. Hasta la auditoría 2026-09 R8
+// absorbía ese residual en 3710VC y el desfase no se veía.
+//
+// R8 es idempotente (reemplaza sus cuentas virtuales y sus propios bloqueos
+// `[CUR-R8]`), así que se re-ejecuta con la misma regla del preprocesador:
+// si el ajuste explica el descuadre, el bloqueo se retira; si no, queda con
+// el residual post-ajuste exacto al centavo. Sus hallazgos reemplazan los
+// CUR-R8 del curator y de `discrepancies`. Las demás reglas del curator no se
+// re-ejecutan (sus bloqueos se conservan: ver `curatorBlockingReasons`).
+// ---------------------------------------------------------------------------
+
+function resyncVirtualClose(snap: PeriodSnapshot): void {
+  const { virtualCloseAdjustment, findings } = runR8(snap);
+  if (snap.curator) {
+    snap.curator = {
+      ...snap.curator,
+      virtualCloseAdjustment,
+      findings: [...snap.curator.findings.filter((f) => f.code !== 'CUR-R8'), ...findings],
+    };
+  }
+  snap.discrepancies = [
+    ...snap.discrepancies.filter((d) => !d.location.startsWith('[CURATOR CUR-R8 ')),
+    ...findings.map((f) => curatorFindingToDiscrepancy(f, snap)),
+  ];
 }
 
 // ---------------------------------------------------------------------------
