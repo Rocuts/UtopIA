@@ -535,7 +535,7 @@ export async function runNiifAnalyst(
     degradedPasses,
   };
 
-  const rendered = toNiifAnalysisResult(finalReconciled.json);
+  const rendered = toNiifAnalysisResult(finalReconciled.json, { language });
 
   // El sello viaja DENTRO del entregable, no como evento SSE: así llega al
   // informe consolidado, al HTML y al PDF sin que cada superficie tenga que
