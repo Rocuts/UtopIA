@@ -7,11 +7,14 @@ import { getOrCreateWorkspace } from '@/lib/db/workspace';
 import { requireAuthSession } from '@/lib/auth/require-session';
 import { addDocumentsToStore, invalidateVectorStore, getStoragePath } from '@/lib/rag/vectorstore';
 import {
-  parseTrialBalanceCSV,
   preprocessTrialBalance,
-  detectYearFromString,
   type PreprocessedBalance,
 } from '@/lib/preprocessing/trial-balance';
+import {
+  parseUploadedTrialBalanceText,
+  TrialBalanceIngestError,
+} from '@/lib/preprocessing/raw-data';
+import { sanitizeSheetLabel, xlsxRowToCsvLine } from '@/lib/upload/xlsx-csv';
 import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import fs from 'fs';
@@ -257,49 +260,6 @@ function stripBOM(text: string): string {
 }
 
 /**
- * Convierte una celda de ExcelJS a string legible para el LLM.
- * ExcelJS devuelve distintos shapes por celda — sin mapeo explicito,
- * `String(v)` produce `"[object Object]"` para formulas, hyperlinks,
- * rich text y errores, y formatos de fecha inestables para Date.
- *
- * Mapeo:
- *  - null/undefined -> ''
- *  - string        -> as-is
- *  - number        -> solo si es finito (evita NaN/Infinity)
- *  - boolean       -> 'true' / 'false'
- *  - Date          -> YYYY-MM-DD (formato estable)
- *  - formula       -> .result (valor calculado)
- *  - hyperlink     -> .text (etiqueta visible)
- *  - rich text     -> concatenacion de .richText[].text
- *  - error         -> .error (ej. '#DIV/0!')
- *  - otros objetos -> '' (en lugar de '[object Object]')
- */
-function cellToString(v: unknown): string {
-  if (v === null || v === undefined) return '';
-  if (typeof v === 'string') return v;
-  if (typeof v === 'number') return Number.isFinite(v) ? String(v) : '';
-  if (typeof v === 'boolean') return v ? 'true' : 'false';
-  if (v instanceof Date) return v.toISOString().slice(0, 10);
-  if (typeof v === 'object') {
-    const obj = v as Record<string, unknown>;
-    // Formula: { formula: '...', result: <valor> }
-    if ('result' in obj) return cellToString(obj.result);
-    // Rich text: { richText: [{ text: '...' }, ...] }
-    if (Array.isArray(obj.richText)) {
-      return obj.richText
-        .map((piece) => (piece && typeof piece === 'object' && 'text' in piece ? String((piece as { text: unknown }).text ?? '') : ''))
-        .join('');
-    }
-    // Hyperlink: { text: '...', hyperlink: '...' }
-    if (typeof obj.text === 'string') return obj.text;
-    // Error: { error: '#DIV/0!' }
-    if (typeof obj.error === 'string') return obj.error;
-    return '';
-  }
-  return '';
-}
-
-/**
  * Extract text from a scanned (image-only) PDF.
  * Envia el PDF como file part al modelo multimodal via AI SDK con el provider
  * `@ai-sdk/openai` (auth con `OPENAI_API_KEY` directo, sin gateway). El modelo
@@ -530,27 +490,24 @@ async function extractText(buffer: Buffer, filename: string): Promise<string> {
     const blocks: string[] = [];
     workbook.eachSheet((worksheet) => {
       const rows: string[] = [];
-      let header: string | null = null;
-      worksheet.eachRow((row, rowNumber) => {
+      worksheet.eachRow((row) => {
         // row.values es un array sparse con shapes heterogeneos por celda
-        // (formulas, hyperlinks, rich text, errores, Date). cellToString
-        // maneja cada variante y evita basura tipo "[object Object]".
-        const values = row.values as unknown[];
-        const csv = values.slice(1).map(cellToString).join(',');
-        if (rowNumber === 1) header = csv;
-        rows.push(csv);
+        // (formulas, hyperlinks, rich text, errores, Date). xlsxRowToCsvLine
+        // los convierte a texto y escapa cada campo segun RFC 4180: un nombre
+        // de cuenta con coma ("Propiedades, planta y equipo") ya no desplaza
+        // las columnas (ingesta-05).
+        const line = xlsxRowToCsvLine(row.values as unknown[], rows.length === 0);
+        // Filas sin ningún valor (sólo formato) no aportan: si quedaran
+        // primeras, el parser las tomaría como encabezado.
+        if (/^,*$/.test(line)) return;
+        rows.push(line);
       });
       if (rows.length === 0) return;
-      // Detectar año a partir del nombre de hoja (e.g. "2024", "Balance 2025").
-      // Si la hoja se llama explicitamente con un año, lo usamos como
-      // etiqueta de periodo y forzamos toda esa hoja al mismo periodo.
-      const sheetYear = detectYearFromString(worksheet.name);
-      const periodLabel = sheetYear ?? worksheet.name;
-      // Re-emitimos el header en cada bloque para que parseTrialBalanceCSV
-      // pueda procesarlo de forma independiente. Si la primera fila ya es el
-      // header, no hace falta agregarlo otra vez (rows[0] === header).
-      const body = header ? rows.join('\n') : rows.join('\n');
-      blocks.push(`[period=${periodLabel}]\n${body}\n[/period]`);
+      // Cada hoja viaja como bloque etiquetado con su NOMBRE. El periodo lo
+      // decide `parseUploadedTrialBalanceText` (raw-data.ts): encabezados con
+      // año explicito mandan sobre el nombre de la hoja; mes y año del nombre
+      // distinguen hojas del mismo ejercicio.
+      blocks.push(`[period=${sanitizeSheetLabel(worksheet.name)}]\n${rows.join('\n')}\n[/period]`);
     });
     return blocks.join('\n\n');
   }
@@ -682,12 +639,31 @@ interface ProcessDocumentResult {
   success: true;
   filename: string;
   chunks: number;
+  /**
+   * Texto para el chat y el RAG por conversacion. En un balance preprocesado
+   * lleva el informe de validacion antepuesto (`…DATOS ORIGINALES:\n<datos>`).
+   * NO es re-parseable como CSV: para el pipeline NIIF usar `rawData`.
+   */
   extractedText: string;
+  /**
+   * Texto extraido SIN el informe de validacion: el CSV original o los
+   * bloques `[period=<hoja>]` del XLSX. Es lo que /api/financial-report/niif
+   * espera en `rawData` para re-derivar el preprocesado en servidor.
+   */
+  rawData: string;
   validationReport: string | undefined;
   detectedCaseType: DetectedCaseType;
   isTrialBalance: boolean;
   preprocessed: PreprocessedBalance | null;
   detectedPeriods: string[];
+  /** Avisos de ingesta no bloqueantes (p. ej. codigos repetidos sumados). */
+  ingestWarnings: string[];
+  /**
+   * Motivos por los que un balance no se pudo preprocesar (p. ej. dos hojas
+   * con cifras distintas para el mismo periodo). El informe NIIF los devuelve
+   * como 422 si se intenta generar con este archivo.
+   */
+  ingestErrors: string[];
   message: string;
 }
 
@@ -764,58 +740,35 @@ async function processDocument(
 
   // -----------------------------------------------------------------
   // Trial balance preprocessing — if the file looks like accounting
-  // data (CSV/Excel with account codes), run arithmetic validation
-  // and prepend the validation report to the extracted text.
+  // data (CSV/Excel with account codes), run arithmetic validation.
   //
-  // Tambien devolvemos el objeto PreprocessedBalance completo en la
-  // respuesta para que el cliente pueda re-enviarlo a /api/financial-report
-  // sin re-parsear — asi el orchestrator reusa los totales vinculantes.
+  // El parseo es el MISMO que usa el servidor del informe
+  // (`parseUploadedTrialBalanceText`, raw-data.ts): /api/financial-report/niif
+  // re-deriva el preprocesado desde `rawData` y obtiene las mismas filas.
+  // El informe de validacion se antepone SOLO a `extractedText` (chat/RAG);
+  // `rawData` conserva el dato tabular limpio (ingesta-01).
   // -----------------------------------------------------------------
   let validationReport: string | undefined;
   let preprocessed: PreprocessedBalance | null = null;
   let detectedPeriods: string[] = [];
+  const ingestWarnings: string[] = [];
+  const ingestErrors: string[] = [];
+  let extractedText = text;
   if (['.csv', '.xlsx', '.xls'].includes(ext)) {
     try {
-      // Si el texto ya viene segmentado en bloques `[period=YYYY]...[/period]`
-      // (caso Excel con multiples hojas etiquetadas con año), parseamos cada
-      // bloque por separado forzando su periodo y consolidamos las filas.
-      const blockRegex = /\[period=([^\]]+)\]\n([\s\S]*?)\n\[\/period\]/g;
-      const blocks: Array<{ period: string; csv: string }> = [];
-      let m: RegExpExecArray | null;
-      while ((m = blockRegex.exec(text)) !== null) {
-        blocks.push({ period: m[1].trim(), csv: m[2] });
-      }
+      const parsed = parseUploadedTrialBalanceText(text);
+      ingestWarnings.push(...parsed.warnings);
 
-      const allRows: ReturnType<typeof parseTrialBalanceCSV> = [];
-      if (blocks.length > 0) {
-        for (const b of blocks) {
-          const yr = detectYearFromString(b.period) ?? b.period;
-          const parsed = parseTrialBalanceCSV(b.csv, { forcePeriod: yr });
-          // Merge balances by code: si el mismo codigo aparece en varios
-          // bloques, fusionamos balancesByPeriod en una sola fila.
-          for (const row of parsed) {
-            const existing = allRows.find((r) => r.code === row.code);
-            if (existing) {
-              Object.assign(existing.balancesByPeriod, row.balancesByPeriod);
-            } else {
-              allRows.push(row);
-            }
-          }
-        }
-      } else {
-        // CSV sin segmentacion explicita: parser detecta columnas multi-año.
-        const parsed = parseTrialBalanceCSV(text);
-        allRows.push(...parsed);
-      }
-
-      if (allRows.length > 10) {
-        const pp = preprocessTrialBalance(allRows);
+      if (parsed.rows.length > 10) {
+        const pp = preprocessTrialBalance(parsed.rows);
         if (pp.auxiliaryCount > 0) {
           preprocessed = pp;
-          validationReport = pp.validationReport;
+          validationReport = ingestWarnings.length > 0
+            ? `${pp.validationReport}\n\n### Avisos de ingesta\n\n${ingestWarnings.map((w) => `- ${w}`).join('\n')}\n`
+            : pp.validationReport;
           detectedPeriods = pp.periods.map((p) => p.period);
-          // Prepend validation report so agents receive validated data
-          text = `${pp.validationReport}\n\n---\n\nDATOS ORIGINALES:\n${text}`;
+          // Prepend validation report so chat agents receive validated data
+          extractedText = `${validationReport}\n\n---\n\nDATOS ORIGINALES:\n${text}`;
           // Invalidate workspace-balance tag so ERP sync consumers and
           // cached dashboard queries pick up the freshly uploaded balance.
           // 'default' profile: 5 min stale / 15 min revalidate (same as
@@ -823,8 +776,12 @@ async function processDocument(
           revalidateTag('workspace-balance', 'default');
         }
       }
-    } catch {
-      // Non-critical: if preprocessing fails, the raw text still works
+    } catch (err) {
+      if (err instanceof TrialBalanceIngestError) {
+        // Conflicto de hojas/periodos: no se elige una hoja en silencio.
+        ingestErrors.push(...err.reasons);
+      }
+      // Otros fallos: non-critical, el texto crudo sigue disponible.
     }
   }
 
@@ -833,18 +790,21 @@ async function processDocument(
   // is best suited for so the frontend can auto-suggest the right flow.
   // Uses keyword heuristics (zero LLM) for instant detection.
   // -----------------------------------------------------------------
-  const detectedCaseType = classifyDocument(text, filename, ext);
+  const detectedCaseType = classifyDocument(extractedText, filename, ext);
 
   return {
     success: true,
     filename,
     chunks: chunksCount,
-    extractedText: text,
+    extractedText,
+    rawData: text,
     validationReport,
     detectedCaseType,
     isTrialBalance: !!validationReport,
     preprocessed,
     detectedPeriods,
+    ingestWarnings,
+    ingestErrors,
     message: chunksCount > 0
       ? `Documento "${filename}" procesado en ${chunksCount} fragmentos e indexado.`
       : `Documento "${filename}" procesado exitosamente. Texto extraido disponible para consulta.`,

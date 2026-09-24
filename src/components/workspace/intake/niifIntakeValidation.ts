@@ -26,6 +26,25 @@ export function resolveNiifRawData(
   return (extractedRawText || typedRawData || '').trim();
 }
 
+/**
+ * Texto de balance que el intake NIIF debe usar de una respuesta de
+ * /api/upload.
+ *
+ * POR QUÉ: `extractedText` lleva el informe de validación antepuesto (lo usa
+ * el chat) y no es re-parseable como CSV; enviarlo como `rawData` dejaba el
+ * informe NIIF sin preprocesado, sin totales vinculantes y sin gate 422
+ * (ingesta-01). `rawData` es el dato tabular limpio. Con un servidor anterior
+ * que no expone `rawData` se usa `extractedText` y el servidor del informe
+ * descarta el informe antepuesto.
+ */
+export function pickNiifRawDataFromUpload(upload: {
+  rawData?: string | null;
+  extractedText?: string | null;
+}): string {
+  if (typeof upload.rawData === 'string' && upload.rawData.trim()) return upload.rawData;
+  return upload.extractedText || '';
+}
+
 type RequiredSubset = Pick<NiifReportIntake, 'company' | 'fiscalPeriod' | 'niifGroup'>;
 
 /**
