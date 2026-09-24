@@ -140,14 +140,23 @@ export function provenanceLines(p: ArtifactProvenance, language: Lang): string[]
       : [];
   const adjusted = appliedAdjustmentsCount(p.adjustments);
   const adjustments = adjusted > 0 ? [fill(t.adjustmentsLine, { count: String(adjusted) })] : [];
+  // procedencia-R2-01: el sello dice qué certifica (cifras de los estados y
+  // anclas verificadas por el código) y qué no (narrativa IA, rotulada).
   if (p.kind === 'unverified') {
-    return [p.draft ? t.unverifiedDraftTitle : t.unverifiedTitle, t.unverifiedBody, ...draft, ...adjustments];
+    return [
+      p.draft ? t.unverifiedDraftTitle : t.unverifiedTitle,
+      t.unverifiedBody,
+      ...draft,
+      t.scopeLine,
+      ...adjustments,
+    ];
   }
   const v = p.provenance;
   return [
     p.draft ? t.verifiedDraftTitle : t.verifiedTitle,
     t.verifiedBody,
     ...draft,
+    t.scopeLine,
     ...adjustments,
     fill(t.versionLine, { reportId: v.reportId, createdAt: v.createdAt }),
     fill(t.reportHashLine, { hash: v.reportHash }),

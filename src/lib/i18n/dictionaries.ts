@@ -1800,6 +1800,8 @@ export const dict = {
         'Documento marcado BORRADOR: el HTML no superó la verificación numérica automática contra el informe (ver el aviso BORRADOR). No es un documento definitivo y no debe firmarse en este estado.',
       draftWatermarkLine:
         'Documento con la marca {mark}: no es un documento definitivo y no debe firmarse en este estado.',
+      scopeLine:
+        'Alcance del sello: cubre las cifras de los estados financieros y las anclas que el código verifica contra el balance. La narrativa generada por IA (notas, acta, análisis) va rotulada "no auditada": el código sólo contrasta las cifras que puede anclar al balance y el resto no queda certificado por este sello.',
       adjustmentsLine:
         'Ajustes del Doctor de Datos: las cifras incluyen {count} ajuste(s) confirmado(s) por el usuario sobre el balance recibido (detalle en el anexo de ajustes).',
       sourceHashAdjustedLine: 'Huella SHA-256 del balance preprocesado (con los ajustes confirmados): {hash}',
@@ -3575,6 +3577,8 @@ export const dict = {
         'Document marked DRAFT: the HTML did not pass the automatic numeric verification against the report (see the DRAFT notice). It is not a final document and must not be signed in this state.',
       draftWatermarkLine:
         'Document marked {mark}: it is not a final document and must not be signed in this state.',
+      scopeLine:
+        'Seal scope: it covers the figures of the financial statements and the anchors the code verifies against the trial balance. The AI-generated narrative (notes, minutes, analysis) is labelled "not audited": the code only checks the figures it can anchor to the trial balance, and the rest is not certified by this seal.',
       adjustmentsLine:
         'Data Doctor adjustments: the figures include {count} adjustment(s) confirmed by the user on the received trial balance (details in the adjustments annex).',
       sourceHashAdjustedLine: 'Preprocessed trial balance SHA-256 fingerprint (with the confirmed adjustments): {hash}',

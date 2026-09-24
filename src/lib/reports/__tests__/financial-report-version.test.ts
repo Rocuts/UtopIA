@@ -396,3 +396,19 @@ describe('R2-06 — motivos BORRADOR del sello', () => {
     expect(withDraftReasons(VERIFIED, [])).toBe(VERIFIED);
   });
 });
+
+describe('R2-01 — el sello precisa su alcance', () => {
+  it('verificada y no verificada: cubre cifras de los estados y anclas; la narrativa IA va rotulada no auditada (es/en)', () => {
+    for (const p of [VERIFIED, UNVERIFIED]) {
+      const es = provenanceLines(p, 'es').join('\n');
+      expect(es).toMatch(/Alcance del sello: cubre las cifras de los estados financieros y las anclas/);
+      expect(es).toMatch(/narrativa generada por IA .*"no auditada"/);
+      const en = provenanceLines(p, 'en').join('\n');
+      expect(en).toMatch(/Seal scope: it covers the figures of the financial statements and the anchors/);
+      expect(en).toMatch(/AI-generated narrative .*"not audited"/);
+    }
+    // El título y el cuerpo siguen siendo los dos primeros renglones.
+    expect(provenanceLines(VERIFIED, 'es')[0]).toBe('PROCEDENCIA VERIFICADA');
+    expect(provenanceLines(UNVERIFIED, 'es')[1]).toMatch(/si lo traía/);
+  });
+});
