@@ -13,15 +13,7 @@
 import React, { useState } from 'react';
 import { PYME } from '../design/tokens';
 import { NORMATIVA_2026 as N } from '../data/normativa2026';
-import {
-  auxTransporteAplicable,
-  pilaEmpleado,
-  pilaEmpleador,
-  horaExtraDiurna,
-  dominicalDiurnoDia,
-  netoEmpleado,
-  costoRealEmpleado,
-} from '../data/calc';
+import { liquidarMes } from '../data/calc';
 import {
   SectionHeader,
   Card,
@@ -46,22 +38,19 @@ export function LiquidarMes({ go }: ScreenProps) {
   const [domingosTrabajados, setDomingosTrabajados] = useState<number>(0);
   const [otrosDescuentos, setOtrosDescuentos] = useState<number>(0);
 
-  // ── Cálculo (montos derivados solo con funciones de calc.ts) ──
-  const aux = auxTransporteAplicable(salario);
-  // ASUNCIÓN: calc.ts no expone un prorrateo del devengado base; se prorratea el
-  // sueldo y el auxilio por días/30 (misma convención diaria que dominicalDiurnoDia).
-  const sueldoProrateado = salario * (diasTrabajados / 30);
-  const auxProrateado = aux * (diasTrabajados / 30);
-  const extras = horaExtraDiurna() * horasExtraDiurnas; // valor hora ya recargada × cantidad
-  const dominicales = dominicalDiurnoDia(salario) * domingosTrabajados;
-  const devengado = sueldoProrateado + auxProrateado + extras + dominicales;
-
-  const pEmpleado = pilaEmpleado(salario, diasTrabajados);
-  const pPatron = pilaEmpleador(salario, diasTrabajados);
-  // Neto y costo real SIEMPRE desde calc.ts (no recalcular la fórmula a mano).
-  const neto = netoEmpleado(devengado, salario, diasTrabajados, otrosDescuentos);
-  // Costo del mes = devengado + PILA patrón; sin provisiones (esto es caja del mes).
-  const costoReal = costoRealEmpleado(devengado, salario, diasTrabajados, 0);
+  // ── Cálculo: todo sale de calc.ts (la hora extra sobre el salario del
+  // empleado, no la del SMMLV — contab-nomina-22 c) ──
+  const {
+    sueldoProrrateado: sueldoProrateado,
+    auxProrrateado: auxProrateado,
+    extras,
+    dominicales,
+    devengado,
+    pilaEmpleado: pEmpleado,
+    pilaEmpleador: pPatron,
+    neto,
+    costoReal,
+  } = liquidarMes({ salario, diasTrabajados, horasExtraDiurnas, domingosTrabajados, otrosDescuentos });
 
   return (
     <Stack gap={12}>
