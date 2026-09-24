@@ -231,7 +231,8 @@ function parseVencimientos(valor: string): {
  */
 export function escribirDirectivasIngesta(text: string, directivas: Partial<DirectivasIngesta>): string {
   const actual = leerDirectivasIngesta(text);
-  const base = actual.tieneDirectivas ? actual.resto : text ?? '';
+  // Sin BOM: tras las directivas quedaría al inicio de la línea de encabezado.
+  const base = (actual.tieneDirectivas ? actual.resto : text ?? '').replace(/^\uFEFF/, '');
   const unidad =
     directivas.unidadConfirmada !== undefined ? directivas.unidadConfirmada : actual.unidadConfirmada;
   const venc = directivas.vencimientos !== undefined ? directivas.vencimientos : actual.vencimientos;

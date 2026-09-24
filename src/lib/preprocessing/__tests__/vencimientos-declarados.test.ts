@@ -180,6 +180,9 @@ describe('P4 (b) — excepciones de vencimiento declaradas por el usuario', () =
       '[vencimientos=1205:no_corriente;2105:no_corriente]',
     ]);
     // Quitar la unidad conserva las excepciones y el cuerpo.
+    // Un BOM inicial no queda pegado al encabezado detrás de las directivas.
+    const conBom = escribirDirectivasIngesta(`\uFEFF${CSV}`, { vencimientos: { '2105': 'no_corriente' } });
+    expect(conBom.split('\n')[1]).toBe(CSV.split('\n')[0]);
     const sinUnidad = escribirDirectivasIngesta(una, { unidadConfirmada: null });
     expect(sinUnidad.split('\n')[0]).toBe('[vencimientos=1205:no_corriente;2105:no_corriente]');
     expect(sinUnidad.endsWith(CSV)).toBe(true);
