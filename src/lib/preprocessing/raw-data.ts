@@ -82,7 +82,7 @@ const BLOCK_REGEX = /\[period=([^\]\r\n]+)\]\r?\n([\s\S]*?)\r?\n\[\/period\]/g;
 export const MARCA_XLSX_A_CENTAVOS = '[celdas-xlsx=centavos]';
 const MARCA_XLSX_A_CENTAVOS_RE = /^\[celdas-xlsx=centavos\][ \t]*\r?$/m;
 
-/** Error de ingesta con motivos legibles para el usuario (se sirve como 422). *//** Error de ingesta con motivos legibles para el usuario (se sirve como 422). */
+/** Error de ingesta con motivos legibles para el usuario (se sirve como 422). */
 export class TrialBalanceIngestError extends Error {
   readonly reasons: string[];
 
@@ -155,16 +155,16 @@ export function descartarConfirmacionesDelArchivo(text: string): TextoDelArchivo
       actual = directivas.resto;
     }
     const seccion = extractUploadDataSection(actual);
-    if (!seccion.hadValidationReport) break;
+    // Un informe SIN sección de datos no trae nada tabular que confirmar: se
+    // conserva como texto (p. ej. un informe descargado que se sube como
+    // contexto del chat) en vez de vaciar el documento.
+    if (!seccion.hadValidationReport || !seccion.data.trim()) break;
     descartoInforme = true;
     actual = seccion.data;
   }
   return { text: actual, descartoDirectivas, descartoInforme };
 }
 
-// ---------------------------------------------------------------------------
-// Periodo por nombre de hoja
-// ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 // Periodo por nombre de hoja
 // ---------------------------------------------------------------------------

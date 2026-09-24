@@ -428,6 +428,20 @@ describe('/api/upload — unidad declarada con confirmación (P4-a)', () => {
     expect(json.preprocessed!.primary.controlTotals.activo).toBe(1_000_000_000);
   });
 
+  it('ICU-01 (revisión): un informe de validación SIN datos subido como documento no se vacía (antes: 400 "vacío")', async () => {
+    // Un informe descargado que se sube como contexto del chat no trae datos
+    // tabulares: no hay nada que confirmar y el texto se conserva.
+    const informe = '[unidad-confirmada=millones]\n# INFORME DE VALIDACION ARITMETICA\n\nTodo cuadra: Activo = Pasivo + Patrimonio.\n';
+    const r = await upload(informe, 'informe.md');
+    expect(r.extractedText).toContain('Todo cuadra');
+    expect(r.rawData).not.toContain('[unidad-confirmada=');
+    expect(r.ingestWarnings!.join(' ')).toMatch(/se ignoraron/);
+    // El texto que re-deriva /niif no trae filas ni confirmación de unidad.
+    const parsed = parseUploadedTrialBalanceText(r.rawData!);
+    expect(parsed.rows).toEqual([]);
+    expect(parsed.unidad.confirmada).toBeNull();
+  });
+
   it("recalculo-final2-02: CSV ';' en miles con '848,123' confirmado desde la UI → $848.123, no × 1.000", async () => {
     const csv = [
       'codigo;nombre;saldo 2025 (miles de pesos)',
