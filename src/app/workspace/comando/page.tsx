@@ -24,7 +24,7 @@ import { buildPnlBridge } from '@/lib/pillars/pnl-bridge';
 import {
   diasAutonomia,
   ingresosNetosPeriodo,
-  monthsCovered,
+  mesesCubiertos,
   pruebaAcida,
   razonCorriente,
 } from '@/lib/pillars/shared-metrics';
@@ -74,23 +74,27 @@ export default async function ComandoPage() {
     // Runway 36 meses · 3 escenarios. Flujos mensuales = ingresos netos y
     // egresos del periodo divididos por los MESES CUBIERTOS (la etiqueta
     // YYYY-MM trae resultados acumulados del año), no por 12 fijo
-    // (ratios-kpis-03).
-    const meses = monthsCovered(snap);
-    const ingresoMes = ingresosNetosPeriodo(ct) / meses;
-    const egresoMes = ct.gastos / meses;
+    // (ratios-kpis-03). Fuente única `mesesCubiertos` (NM-01): sin duración
+    // derivable (rango incompleto, saldo de apertura) no hay flujo mensual
+    // verificable ⇒ runway vacío y sin Monte Carlo, nunca 12 meses supuestos.
+    const meses = mesesCubiertos(snap);
     const runway: RunwayMonth[] = [];
-    let base = ct.efectivoCuenta11;
-    let cons = ct.efectivoCuenta11;
-    let agr = ct.efectivoCuenta11;
-    for (let i = 0; i < 36; i++) {
-      const d = new Date();
-      d.setDate(1);
-      d.setMonth(d.getMonth() + i);
-      const month = d.toLocaleDateString('es-CO', { month: 'short', year: '2-digit' });
-      runway.push({ month, base, conservador: cons, agresivo: agr });
-      base = base + ingresoMes - egresoMes;
-      cons = cons + ingresoMes * 0.85 - egresoMes;
-      agr = agr + ingresoMes * 1.10 - egresoMes;
+    if (meses !== null) {
+      const ingresoMes = ingresosNetosPeriodo(ct) / meses;
+      const egresoMes = ct.gastos / meses;
+      let base = ct.efectivoCuenta11;
+      let cons = ct.efectivoCuenta11;
+      let agr = ct.efectivoCuenta11;
+      for (let i = 0; i < 36; i++) {
+        const d = new Date();
+        d.setDate(1);
+        d.setMonth(d.getMonth() + i);
+        const month = d.toLocaleDateString('es-CO', { month: 'short', year: '2-digit' });
+        runway.push({ month, base, conservador: cons, agresivo: agr });
+        base = base + ingresoMes - egresoMes;
+        cons = cons + ingresoMes * 0.85 - egresoMes;
+        agr = agr + ingresoMes * 1.10 - egresoMes;
+      }
     }
 
     // La serie de inflexión necesitaba "salidas fiscales" = UN × 35 % / 12,
@@ -111,7 +115,8 @@ export default async function ComandoPage() {
     const futuroTrend = buildFuturoBarSeries(balance);
 
     // Monte Carlo — 9.600 sims en ~15ms, corre server-side sin bloquear.
-    const monteCarlo = runMonteCarlo(balance.primary);
+    // Sólo con meses cubiertos derivables (misma base del runway).
+    const monteCarlo = meses !== null ? runMonteCarlo(balance.primary) : undefined;
 
     // Gap attribution del Curator (R3) si hay descuadre.
     const curatorGap = balance.primary.curator?.balanceGapAttribution;

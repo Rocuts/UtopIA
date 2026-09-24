@@ -80,10 +80,10 @@ export function motivoSinMeses(snapshot: PeriodoRef): { es: string; en: string }
 
 /**
  * @deprecated Usa `mesesCubiertos` y trata `null` como N/D. Sólo queda para
- * consumidores fuera de los pilares que todavía esperan un número (Centro de
- * Mando, `src/app/workspace/comando/page.tsx`); con la misma regla del
- * preprocesador para 'AAAA-Qn' y rangos, y 12 sólo cuando la duración no es
- * derivable.
+ * `monte-carlo.ts`, cuyo único llamador (Centro de Mando,
+ * `src/app/workspace/comando/page.tsx`) ya no lo invoca cuando
+ * `mesesCubiertos` es `null` (W5-1); con la misma regla del preprocesador
+ * para 'AAAA-Qn' y rangos, y 12 sólo cuando la duración no es derivable.
  */
 export function monthsCovered(snapshot: PeriodoRef): number {
   return mesesCubiertos(snapshot) ?? 12;
