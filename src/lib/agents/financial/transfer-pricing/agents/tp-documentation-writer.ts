@@ -22,7 +22,11 @@ import type {
   TPDocumentationResult,
   TPProgressEvent,
 } from '../types';
-import type { TpRangeCheck } from '../lib/deterministic';
+import {
+  notaSinMontosDelModelo,
+  tpAjusteCopDeterminista,
+  type TpRangeCheck,
+} from '../lib/deterministic';
 import {
   ART_260_11_FUENTE,
   ART_260_11_SANCIONES,
@@ -100,18 +104,33 @@ export function enforceTpDocumentation(
 ): TpDocumentationReportJson {
   const s = check.stats;
   const ilustrativa = 'ILUSTRATIVA — no presentar: ' + (check.reason ?? '');
+  // Ajuste en COP: "0" dentro del rango; fuera de él N/D (el contrato no trae
+  // la base del PLI en COP por operación — fase 2, pendiente #8).
+  const ajusteCop = tpAjusteCopDeterminista(check);
   return {
     ...json,
+    localFile: {
+      ...json.localFile,
+      conclusionsByOperation: json.localFile.conclusionsByOperation.map((c) => ({
+        ...c,
+        requiredAdjustmentCop: ajusteCop,
+        fiscalImpactNote: notaSinMontosDelModelo(c.fiscalImpactNote, ajusteCop),
+      })),
+    },
     formato1125Rows: json.formato1125Rows.map((r) => ({
       ...r,
       q1Percent: s ? s.q1 : null,
       medianPercent: s ? s.median : null,
       q3Percent: s ? s.q3 : null,
       isWithinRange: check.isWithinRange === true,
-      adjustmentCop: check.isWithinRange === true ? '0' : r.adjustmentCop,
+      adjustmentCop: ajusteCop,
       remarks: check.conclusive ? r.remarks : [ilustrativa, r.remarks].filter(Boolean).join(' | '),
     })),
   };
+}
+
+function fmtAjuste(cents: string | null, lang: 'es' | 'en'): string {
+  return cents === null ? 'N/D' + (lang === 'en' ? ' (no verified PLI base)' : ' (sin base del PLI verificada)') : formatCopFromCents(parseMoneyCop(cents), true);
 }
 
 // ---------------------------------------------------------------------------
@@ -157,7 +176,7 @@ function renderLocalFile(
   const lf = json.localFile;
   const conclusions = lf.conclusionsByOperation
     .map((c) => {
-      const adj = formatCopFromCents(parseMoneyCop(c.requiredAdjustmentCop), true);
+      const adj = fmtAjuste(c.requiredAdjustmentCop, lang);
       const cmp = !check.conclusive
         ? (lang === 'en' ? 'NOT CONCLUSIVE' : 'NO CONCLUYENTE')
         : c.complies ? (lang === 'en' ? 'COMPLIES' : 'CUMPLE') : (lang === 'en' ? 'DOES NOT COMPLY' : 'NO CUMPLE');
@@ -215,7 +234,7 @@ function renderFormato1125(json: TpDocumentationReportJson, lang: 'es' | 'en'): 
   const fmtPct = (v: number | null) => (v === null ? '—' : `${v.toFixed(2)}%`);
   const rows = json.formato1125Rows.map((r) => {
     const amt = formatCopFromCents(parseMoneyCop(r.amountCop), true);
-    const adj = formatCopFromCents(parseMoneyCop(r.adjustmentCop), true);
+    const adj = fmtAjuste(r.adjustmentCop, lang);
     const inRange = r.isWithinRange ? (lang === 'en' ? 'Yes' : 'Sí') : 'No';
     return `| ${r.operationCode} | ${r.relatedPartyName} | ${r.relatedPartyTaxId} | ${r.countryCode} | ${amt} | ${r.methodCode} | ${fmtPct(r.observedPliPercent)} | ${fmtPct(r.q1Percent)} | ${fmtPct(r.medianPercent)} | ${fmtPct(r.q3Percent)} | ${inRange} | ${adj} |`;
   });

@@ -27,6 +27,20 @@ const UVT_BY_YEAR: Record<number, number> = {
 };
 
 /**
+ * Año gravable de un instante, medido en hora de Colombia (America/Bogota).
+ * La UVT se fija por año gravable (Art. 868 E.T.); `getFullYear()` usa la zona
+ * del proceso (UTC en Vercel) y trasladaba al año siguiente las operaciones del
+ * 31-dic posteriores a las 19:00 hora Colombia (tributario-calc-23).
+ */
+export function anioColombia(fecha: Date): number {
+  if (!(fecha instanceof Date) || Number.isNaN(fecha.getTime())) {
+    throw new RangeError('Fecha inválida para determinar el año gravable.');
+  }
+  const y = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota', year: 'numeric' }).format(fecha);
+  return Number(y);
+}
+
+/**
  * Convierte un valor en UVT a COP para un año dado usando el UVT oficial de
  * ESE año. Sin valor oficial tabulado se bloquea el cálculo; nunca se sustituye
  * por una vigencia distinta. Fuente 2026:

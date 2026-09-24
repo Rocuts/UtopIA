@@ -21,6 +21,7 @@
 
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import type { FiscalAnchorBlock } from '../fiscal-anchor/types';
+import type { PlaneacionDescuentos } from './tools/planeacion-tope-258';
 import type { CompanyContext, Language } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -232,6 +233,14 @@ export interface PlaneacionEscenario {
   impuestoBase: string;
   /** Impuesto estimado en el escenario; null si no es cuantificable. */
   impuestoEscenario: string | null;
+  /** Impuesto del escenario antes de descuentos tributarios; null si N/D. */
+  impuestoAntesDescuentos: string | null;
+  /** Descuentos por artículo (Arts. 254, 255, 256, 257, 258-1). */
+  descuentos: PlaneacionDescuentos;
+  /** 25% del impuesto antes de descuentos (Art. 258); calculado en código. */
+  tope258?: string | null;
+  /** Descuentos 255/256/257 por encima del tope (no aplicables); calculado en código. */
+  excesoTope258?: string | null;
   /** Ahorro = base − escenario, recalculado en código; null si el escenario es N/D. */
   ahorroEstimado: string | null;
   /** % de ahorro sobre base; null si N/D. */
@@ -365,12 +374,13 @@ export interface FiscalSynthesisResult {
 // ---------------------------------------------------------------------------
 
 export interface FiscalAgentReport {
-  /** Veredicto de los validadores deterministas conectados (Capa 2, M2, M7). */
+  /** Veredicto de los validadores deterministas conectados (Capa 2, M2, M3, M5, M6, M7). */
   validation: {
     veredicto: 'valida' | 'advertencia' | 'bloqueo';
     errores: number;
     advertencias: number;
     checks: Array<{ name: string; passed: boolean; severity: 'error' | 'warning'; detail?: string; norma?: string }>;
+    /** Módulos sin validador conectado (vacío desde la fase 2, pendiente #8). */
     modulosSinValidar: string[];
   };
   ccv: CcvModuleResult;

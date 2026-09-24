@@ -155,3 +155,20 @@ describe('valoracion-10 — matriz de riesgo y decisión deterministas, sin Mont
     expect('score' in RiskAssessmentReportSchema.shape.riskMatrix.element.shape).toBe(false);
   });
 });
+
+// valoracion-27 — signo en el renderer de factibilidad: un VPN negativo y el
+// acumulado negativo se publican entre paréntesis, con la marca «VPN ≤ 0».
+describe('valoracion-27 — el renderer de factibilidad conserva el signo', () => {
+  it('VPN negativo ⇒ «($…)» y «VPN ≤ 0 ✗»; payback N/D sin recuperación', async () => {
+    agentQueue.push(
+      market,
+      modelJson({ cashFlows: [1, 2, 3, 4, 5].map((year) => ({ year, freeCashFlowCop: pesos(100_000_000) })) }),
+      riskJson({ riskMatrix: [] }),
+    );
+    const rep = await orchestrateFeasibilityStudy({ projectData: SECRET, project, language: 'es', instructions: INSTR });
+    const fm = rep.financialModel;
+    expect(BigInt(fm.metrics!.npvCop) < BigInt(0)).toBe(true);
+    expect(fm.projectEvaluation).toMatch(/\| VPN \| \(\$\d{1,3}(\.\d{3})*,\d{2}\) \| VPN ≤ 0 ✗ \|/);
+    expect(fm.metrics!.paybackYears).toBeNull();
+  });
+});

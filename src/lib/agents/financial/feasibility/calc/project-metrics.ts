@@ -10,7 +10,8 @@
 //               convencionales (≠ 1 cambio de signo) o no hay raíz en el rango
 //   TIRM      = (VF flujos positivos a r / VP flujos negativos a r)^(1/n) − 1
 //               (reinversión y financiación a la tasa de descuento)
-//   Payback   = primer año en que el acumulado ≥ 0, interpolado linealmente
+//   Payback   = año en que el acumulado cruza a ≥ 0 y se sostiene hasta el
+//               final del horizonte, interpolado linealmente (N/D si no)
 //   Payback descontado = ídem sobre VP_t
 //   IR        = Σ VP_t / I0
 //   Punto de equilibrio = CF / (P − CVu) unidades; ingresos = CF × P / (P − CVu)
@@ -91,7 +92,10 @@ function computeIrr(series: number[]): { irr: number | null; note: Bilingual | n
   if (changes > 1) {
     return {
       irr: null,
-      note: { es: 'flujos no convencionales (más de un cambio de signo): TIR no única', en: 'non-conventional cash flows (more than one sign change): IRR not unique' },
+      note: {
+        es: 'flujos no convencionales (más de un cambio de signo): TIR no única — use la TIRM',
+        en: 'non-conventional cash flows (more than one sign change): IRR not unique — use the MIRR',
+      },
     };
   }
   let lo = -0.99;
@@ -129,18 +133,26 @@ function computeMirr(series: number[], rate: number): number | null {
   return Math.pow(fvPositive / pvNegative, 1 / n) - 1;
 }
 
-/** Primer año en que el acumulado (desde −I0) llega a ≥ 0, interpolado. */
+/**
+ * Año en que el acumulado (desde −I0) cruza a ≥ 0 por ÚLTIMA vez y se sostiene
+ * hasta el final del horizonte, interpolado. Si flujos negativos posteriores
+ * devuelven el acumulado a < 0, esa recuperación no cuenta (valoracion-26);
+ * acumulado final < 0 ⇒ N/D.
+ */
 function computePayback(initial: bigint, flows: bigint[]): number | null {
   let cum = -initial;
+  let payback: number | null = null;
   for (let i = 0; i < flows.length; i++) {
     const prev = cum;
     cum += flows[i];
-    if (cum >= ZERO && flows[i] > ZERO) {
+    if (cum < ZERO) {
+      payback = null;
+    } else if (prev < ZERO && flows[i] > ZERO) {
       const fraction = Number(-prev) / Number(flows[i]);
-      return Math.round((i + fraction) * 100) / 100;
+      payback = Math.round((i + fraction) * 100) / 100;
     }
   }
-  return null;
+  return cum >= ZERO ? payback : null;
 }
 
 export function computeProjectMetrics(

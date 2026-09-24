@@ -77,10 +77,10 @@ describe('validateFiscalResponse — integración con catálogo sintético', () 
     expect(checks.some((c) => c.name === 'M5.L2.3_no_cita_concepto_1352' && !c.passed)).toBe(true);
   });
 
-  it('Devolución retenciones OK → todos los checks de M6 pasan', () => {
+  it('Devolución con saldo declarado OK → checks de M6 pasan', () => {
     const checks = validateFiscalResponse(RESP_DEVOLUCION_RETENCIONES, { catalogue: CATALOG });
-    expect(checks.some((c) => c.name === 'M6.L1.1_saldo_favor_coincide_f04' && c.passed)).toBe(true);
-    expect(checks.some((c) => c.name === 'M6.L2.1_retenciones_cita_850_855' && c.passed)).toBe(true);
+    expect(checks.some((c) => c.name === 'M6.L1.1_saldo_publicado_es_el_declarado' && c.passed)).toBe(true);
+    expect(checks.some((c) => c.name === 'M6.L2.2_citas_850_854_855' && c.passed)).toBe(true);
     expect(checks.some((c) => c.name === 'M6.L3.1_requisitos_completos' && c.passed)).toBe(true);
   });
 

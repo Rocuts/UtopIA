@@ -250,3 +250,40 @@ describe('valoracion-08 — puente EV → patrimonio sin doble suma de caja', ()
     expect(desc).toContain('NO se suma otra vez');
   });
 });
+
+// valoracion-27 — pruebas de signo en los renderers del DCF: un FCF negativo
+// (EBIT < 0 ⇒ sin impuesto operacional) y un patrimonio negativo (deuda neta
+// > EV) se publican con signo (paréntesis contables), no en valor absoluto.
+describe('valoracion-27 — el renderer del DCF conserva el signo', () => {
+  it('FCF negativo del primer año y su VP se publican entre paréntesis', async () => {
+    const json = llmDcf();
+    json.projection.rows[0] = {
+      ...json.projection.rows[0],
+      ebitdaCop: pesos(-100_000_000),
+      ebitCop: pesos(-200_000_000),
+      taxCop: pesos(0),
+    };
+    agentQueue.push(json);
+    const res = await runDcfModeler('datos', company, 'es');
+    expect(res.status).toBe('ok');
+    // FCF 2026 = −200M − 0 + 100M − 150M − 50M = −300M
+    expect(res.cashFlowProjections).toContain('($300.000.000,00)');
+    expect(res.cashFlowProjections).toContain('($200.000.000,00)');
+    expect(res.cashFlowProjections).not.toMatch(/\| 2026 \| \$5\.000\.000\.000,00 \| \$100\.000\.000,00 \|/);
+  });
+
+  it('deuda neta mayor que el EV ⇒ patrimonio negativo con signo', async () => {
+    agentQueue.push(
+      llmDcf({
+        valuation: {
+          financialDebtCop: pesos(100_000_000_000),
+          cashAndEquivalentsCop: pesos(0),
+          netDebtCop: pesos(100_000_000_000),
+        },
+      }),
+    );
+    const res = await runDcfModeler('datos', company, 'es');
+    expect(res.status).toBe('ok');
+    expect(res.fullContent).toMatch(/\*\*Equity Value = EV − Deuda Neta:\*\* \(\$\d{1,3}(\.\d{3})*,\d{2}\)/);
+  });
+});

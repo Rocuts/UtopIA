@@ -93,3 +93,25 @@ describe('tax-engine preview — taxTreatments', () => {
     expect(evaluate.mock.calls[0][0].taxTreatments).toBeUndefined();
   });
 });
+
+// tributario-calc-23: el preview calculaba uvtYear con getFullYear(), en la
+// zona del servidor (UTC en Vercel). El 31-dic después de las 19:00 hora
+// Colombia pedía la UVT del año siguiente. Sin uvtYear declarado, el motor la
+// mide en America/Bogota.
+describe('tax-engine preview — año de la UVT', () => {
+  it('sin uvtYear no lo fija con la zona del servidor', async () => {
+    const { anioColombia } = await import('@/lib/accounting/tax-engine/constants');
+    const res = await POST(
+      req({ transactionType: 'purchase', subtotalCop: '500000', transactionDate: '2027-01-01T01:00:00Z' }) as never,
+    );
+    expect(res.status).toBe(200);
+    const call = evaluate.mock.calls[0][0];
+    expect(call.uvtYear).toBeUndefined();
+    expect(anioColombia(call.transactionDate)).toBe(2026);
+  });
+
+  it('respeta el uvtYear declarado', async () => {
+    await POST(req({ transactionType: 'purchase', subtotalCop: '500000', uvtYear: 2025 }) as never);
+    expect(evaluate.mock.calls[0][0].uvtYear).toBe(2025);
+  });
+});

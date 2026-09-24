@@ -10,6 +10,8 @@
 // ---------------------------------------------------------------------------
 
 import type { ProjectInfo } from '../types';
+import { UVT_2026_COP } from '@/lib/accounting/tax-engine/constants';
+import { SMMLV_2026 } from '@/lib/tax/taxCalculator';
 
 export function buildRiskAssessorPrompt(
   project: ProjectInfo,
@@ -44,7 +46,7 @@ Escalas:
 
 Proyecto: "${project.projectName}" — ${project.sector}.${project.estimatedInvestment ? ` Inversion: $${project.estimatedInvestment.toLocaleString('es-CO')} COP.` : ''} Horizonte: ${horizon} anos.${project.city ? ` Ciudad: ${project.city}.` : ''}
 ${project.isZomac ? 'Aplica regimen ZOMAC.' : ''}${project.isZonaFranca ? ' Aplica regimen Zona Franca (riesgo cumplimiento Plan Maestro).' : ''}
-UVT 2026 = $52.374 COP. SMMLV 2026 = $1.750.905 COP.`;
+UVT 2026 = $${UVT_2026_COP.toLocaleString('es-CO')} COP. SMMLV 2026 = $${SMMLV_2026.toLocaleString('es-CO')} COP.`;
 
   return `${guardrail}
 

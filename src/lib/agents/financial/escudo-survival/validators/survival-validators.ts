@@ -14,6 +14,7 @@ import type {
   RetentionAction,
 } from '../types';
 import { UVT_2026, TOPE_INDIVIDUAL_UVT, TET_ALERTA_ROJA } from '../types';
+import { detectarTarifasPjAnteriores } from './tarifa-pj-anterior';
 import { componerActivosImpuestoSnapshot } from '../fiscal-anchor/credito-renta';
 import { buildFiscalAnchorBlockMarkdown } from '../fiscal-anchor/block-builder';
 import type { FiscalAnchorBlock } from '../fiscal-anchor/types';
@@ -780,9 +781,12 @@ function runLayer3(report: EscudoSurvivalReport): LayerResult {
   // C3.5 — tarifa_general_correcta
   // -----------------------------------------------------------------------
   {
-    // Tarifas válidas para personas jurídicas 2026:
-    // 35% (general), 38% (hidroeléctricas), 40% (financieras/seguros/bolsas)
-    // Tarifas prohibidas: 33%, 34% (régimen anterior a Ley 2277/2022)
+    // Tarifas PJ vigentes (Art. 240 E.T., Ley 2277/2022): 35% general, 38%
+    // hidroeléctricas y 40% financieras con sus umbrales. Lo prohibido es
+    // presentar como vigente la tarifa PJ de regímenes anteriores (30-34%).
+    // Antes cualquier 20-32%, 34% o 39% del texto era «tarifa prohibida»: el
+    // 25% de los Arts. 257/258, el 30% del Art. 256 o la marginal del 39% de
+    // personas naturales (Art. 241) — tributario-modulos-22.
     const allMarkdown = [
       report.tet.markdown,
       report.retentionShield.markdown,
@@ -792,10 +796,9 @@ function runLayer3(report: EscudoSurvivalReport): LayerResult {
       report.synthesis.markdown,
     ].join('\n');
 
-    // Buscar menciones de % con valores incorrectos
-    const tarifasProhibidas = allMarkdown.match(/\b(3[12349]|2[0-9]|3[0-2])\s*%/g);
+    const tarifasProhibidas = detectarTarifasPjAnteriores(allMarkdown);
 
-    if (tarifasProhibidas && tarifasProhibidas.length > 0) {
+    if (tarifasProhibidas.length > 0) {
       const unique = Array.from(new Set(tarifasProhibidas)).join(', ');
       checks.push({
         name: 'tarifa_general_correcta',
@@ -803,9 +806,9 @@ function runLayer3(report: EscudoSurvivalReport): LayerResult {
         severity: 'error',
         norma: 'Art. 240 E.T. — Tarifa general 35% vigente (Ley 2277/2022)',
         detail:
-          `Posibles tarifas incorrectas detectadas: ${unique}. ` +
-          'Para personas jurídicas 2026: tarifa general = 35%, hidroeléctricas = 38%, financieras = 40%. ' +
-          'Tarifas como 33% o 34% correspondían al régimen anterior a Ley 2277/2022.',
+          `Tarifa de renta de personas jurídicas no vigente: ${unique}. ` +
+          'Para personas jurídicas 2026: tarifa general = 35%; sobretasas con umbral: hidroeléctricas 38%, financieras 40%. ' +
+          'Las tarifas del 30% al 34% correspondían a regímenes anteriores a la Ley 2277/2022.',
       });
     } else {
       checks.push({
@@ -813,7 +816,7 @@ function runLayer3(report: EscudoSurvivalReport): LayerResult {
         passed: true,
         severity: 'error',
         norma: 'Art. 240 E.T. — Tarifa general 35% vigente (Ley 2277/2022)',
-        detail: 'No se detectaron tarifas prohibidas (33%, 34%). Correcto.',
+        detail: 'No se detectaron tarifas de renta PJ de regímenes anteriores (30%-34%). Correcto.',
       });
     }
   }

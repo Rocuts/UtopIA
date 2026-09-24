@@ -197,10 +197,31 @@ export function computeTpRangeCheck(json: ComparableAnalysisReportJson): TpRange
 }
 
 /**
+ * Motivo del ajuste en COP no determinable. El contrato no trae la base del
+ * PLI en COP por operación (el denominador del indicador: costos, ventas o
+ * activos de la parte analizada), así que (mediana − PLI observado) × base no
+ * se puede calcular en código y la cifra del modelo no se publica (fase 2 de la
+ * auditoría 2026-09-24, pendiente #8).
+ */
+export const TP_AJUSTE_COP_SIN_BASE_MOTIVO =
+  'Ajuste en COP no determinable: el análisis no trae la base del PLI en COP por operación (denominador del indicador), por lo que (mediana − PLI observado) × base no se calcula en código. El ajuste porcentual a la mediana es el calculado; su valor en pesos requiere la base verificada.';
+
+/** Ajuste en COP determinista: "0" dentro del rango; `null` en otro caso. */
+export function tpAjusteCopDeterminista(check: TpRangeCheck): string | null {
+  return check.isWithinRange === true ? '0' : null;
+}
+
+/** Nota del modelo con montos en pesos ⇒ se sustituye por el motivo cuando el ajuste es N/D. */
+export function notaSinMontosDelModelo(nota: string | null, ajusteCop: string | null): string | null {
+  if (ajusteCop !== null) return nota;
+  if (nota === null) return TP_AJUSTE_COP_SIN_BASE_MOTIVO;
+  return /\$\s?\d|\bCOP\s?\d|\d\s?(?:millones|mil\s+millones)\b/i.test(nota) ? TP_AJUSTE_COP_SIN_BASE_MOTIVO : nota;
+}
+
+/**
  * Sobrescribe `interquartileRange` y `armLengthConclusion` con el cálculo
- * determinista. El ajuste en COP no tiene base verificable en esta ruta (el
- * denominador del PLI no llega estructurado): si cumple es "0"; si no, se
- * conserva la estimación del modelo y el render la rotula como tal.
+ * determinista. El ajuste en COP sólo es determinable dentro del rango ("0");
+ * fuera de él no hay base del PLI en COP en el contrato ⇒ null con motivo.
  */
 export function enforceComparableAnalysis(
   json: ComparableAnalysisReportJson,
@@ -208,6 +229,7 @@ export function enforceComparableAnalysis(
 ): ComparableAnalysisReportJson {
   const s = check.stats;
   const complies = check.conclusive && check.isWithinRange === true;
+  const ajusteCop = tpAjusteCopDeterminista(check);
   return {
     ...json,
     interquartileRange: {
@@ -222,8 +244,9 @@ export function enforceComparableAnalysis(
     armLengthConclusion: {
       ...json.armLengthConclusion,
       complies,
-      requiredAdjustmentPercent: check.requiredAdjustmentPercent ?? 0,
-      requiredAdjustmentCop: check.isWithinRange === true ? '0' : json.armLengthConclusion.requiredAdjustmentCop,
+      requiredAdjustmentPercent: check.requiredAdjustmentPercent,
+      requiredAdjustmentCop: ajusteCop,
+      taxImpactNote: notaSinMontosDelModelo(json.armLengthConclusion.taxImpactNote, ajusteCop),
     },
   };
 }

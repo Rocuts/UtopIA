@@ -2,198 +2,145 @@
 // EL ESCUDO — Capa 4 (Agente Fiscal) — Módulo 5 · Defensa DIAN
 // ---------------------------------------------------------------------------
 //
-// Elite Protocol 3 capas para la carta de respuesta a requerimientos DIAN:
+// Valida la carta que el agente PUBLICA contra el esqueleto determinista del
+// `dian-letter-builder` (fase 2 de la auditoría 2026-09-24, pendiente #8). El
+// contrato anterior usaba otra taxonomía («requerimiento_especial_685»,
+// pliego de cargos a 3 meses) que contradecía los plazos corregidos en
+// tributario-modulos-13, por eso el módulo quedaba sin validar.
 //
-//   L1 — Sintaxis estructural
-//        L1.1 carta contiene las 6 secciones obligatorias en orden:
-//             Antecedentes / Posición Jurídica / Soporte Documental /
-//             Defensa Art. 647 / Petición / Firmas
+//   L1 — Estructura
+//        L1.1 la carta trae las secciones del esqueleto (la de diferencia de
+//             criterio sólo si se invoca) y en su orden
 //
-//   L2 — Lógica de negocio (citas y plazos correctos por tipo)
-//        L2.1 plazo correcto según tipo:
-//             Art. 752 → 15 días hábiles
-//             Art. 685 → 1 mes
-//             Art. 715 → pliego cargos, 3 meses (Art. 707)
-//             Art. 702 → liquidación oficial, 2 meses (Art. 720)
-//        L2.2 si invoca diferencia de criterio → cita parágrafo Art. 647 literal
-//        L2.3 si invoca diferencia de criterio → NO cita Concepto 1352/2018
-//             (radicado no verificable en normograma DIAN — blacklist CRITICA)
-//        L2.4 si menciona reducción → cita Art. 709 / 713 / 640
+//   L2 — Plazos, citas y reducciones
+//        L2.1 tipo, plazo y norma del plazo publicados = clasificación
+//             determinista del tipo (classificationFromKind)
+//        L2.1b la carta cita la norma del plazo (aviso)
+//        L2.2 si invoca diferencia de criterio → cita el parágrafo del Art. 647
+//        L2.3 NO cita el Concepto 100208221-1352 (no verificable)
+//        L2.4 si menciona una reducción de sanción → cita una norma de
+//             reducción disponible para ese tipo de actuación
 //
 //   L3 — Defensa tributaria
-//        L3.1 cierre "borrador para revisión contador/abogado" obligatorio
-//        L3.2 cita Art. 647 E.T. (norma raíz de defensa)
+//        L3.1 cierre «borrador para revisión del contador/abogado»
+//        L3.2 actuación con posible sanción por inexactitud sin cita del
+//             Art. 647 (aviso)
 //
 // Cero LLM. Cero red. Cero filesystem.
 // ---------------------------------------------------------------------------
 
-import type { Modulo5DefensaDian, RequerimientoTipo, ValidationCheck } from './types';
 import {
-  citaParagrafo647,
-  citaConcepto1352,
-  citaArt752,
-  citaArt685,
-  citaArt715,
-  citaArt702,
-  citaArt707,
-  citaArt720,
-  citaArt709,
-  citaArt713,
-  citaArt640,
-  citaArt647,
-} from './helpers';
+  DIAN_LETTER_SECTIONS,
+  classificationFromKind,
+  reduccionesDisponibles,
+  type DianLetterSectionId,
+} from '../tools/dian-letter-builder';
+import type { Modulo5DefensaDian, ValidationCheck } from './types';
+import { articulosCitados, citaArticulo, citaConcepto1352, citaParagrafo647 } from './helpers';
 
 // ---------------------------------------------------------------------------
-// Secciones obligatorias
+// Detección de secciones
 // ---------------------------------------------------------------------------
 //
-// Cada sección puede aparecer como heading markdown ("## Antecedentes") o como
-// label en negrita ("**Antecedentes**"). El validator acepta ambas formas.
+// Una sección cuenta cuando su rótulo abre una línea: heading markdown
+// ("## Antecedentes"), negrita ("**Antecedentes**"), numeración
+// ("3. Soporte documental") o rótulo plano ("Petición:").
 // ---------------------------------------------------------------------------
 
-const SECCIONES_OBLIGATORIAS = [
-  'Antecedentes',
-  'Posición Jurídica',
-  'Soporte Documental',
-  'Defensa Art. 647',
-  'Petición',
-  'Firmas',
-] as const;
-
-/**
- * Detecta una sección en el texto. Acepta heading markdown o **negrita**.
- * Tolerante a tildes ("Posición" / "Posicion") y plurales.
- */
-function detectarSeccion(texto: string, seccion: string): { found: boolean; index: number } {
-  const escapado = seccion
-    .replace(/\./g, '\\.')
-    .replace(/[íÍ]/g, '[íi]')
-    .replace(/[áÁ]/g, '[áa]')
-    .replace(/[éÉ]/g, '[ée]')
-    .replace(/[óÓ]/g, '[óo]')
-    .replace(/[úÚ]/g, '[úu]');
-  // Heading markdown (#, ##, ###, etc.) o **negrita** o "Sección:" con dos puntos
-  const patrones = [
-    new RegExp(`^#{1,6}\\s*${escapado}\\b`, 'im'),
-    new RegExp(`\\*\\*\\s*${escapado}\\b[^*]*\\*\\*`, 'i'),
-    new RegExp(`\\b${escapado}\\s*:`, 'i'),
-  ];
-  for (const p of patrones) {
-    const m = texto.match(p);
-    if (m && m.index !== undefined) return { found: true, index: m.index };
-  }
-  return { found: false, index: -1 };
-}
-
-// ---------------------------------------------------------------------------
-// Plazos correctos por tipo de requerimiento
-// ---------------------------------------------------------------------------
-
-interface PlazoEsperado {
-  /** Patrón obligatorio que debe aparecer en el texto. */
-  readonly patron: RegExp;
-  /** Norma que lo soporta. */
-  readonly norma: string;
-  /** Descripción legible del plazo esperado. */
-  readonly descripcion: string;
-  /** Función auxiliar para chequeo de cita normativa principal. */
-  readonly citaPrincipal: (t: string) => boolean;
-}
-
-const PLAZOS: Record<RequerimientoTipo, PlazoEsperado> = {
-  requerimiento_ordinario_752: {
-    patron: /\b15\s+d[íi]as\s+h[áa]biles\b/i,
-    norma: 'Art. 752 E.T.',
-    descripcion: '15 días hábiles',
-    citaPrincipal: citaArt752,
-  },
-  requerimiento_especial_685: {
-    patron: /\b1\s+mes\b|\bun\s+mes\b/i,
-    norma: 'Art. 685 E.T.',
-    descripcion: '1 mes',
-    citaPrincipal: citaArt685,
-  },
-  pliego_cargos_715: {
-    patron: /\b3\s+meses\b|\btres\s+meses\b/i,
-    norma: 'Art. 707 E.T. (plazo respuesta pliego de cargos Art. 715)',
-    descripcion: '3 meses',
-    citaPrincipal: (t: string) => citaArt715(t) && citaArt707(t),
-  },
-  liquidacion_oficial_702: {
-    patron: /\b2\s+meses\b|\bdos\s+meses\b/i,
-    norma: 'Art. 720 E.T. (plazo recurrir liquidación oficial Art. 702)',
-    descripcion: '2 meses',
-    citaPrincipal: (t: string) => citaArt702(t) && citaArt720(t),
-  },
+// Rótulos en español y en inglés (con language = 'en' el modelo traduce los
+// encabezados del esqueleto).
+const PATRON_SECCION: Record<DianLetterSectionId, string> = {
+  antecedentes: '(?:antecedentes|background)',
+  posicion_juridica: '(?:posici[óo]n\\s+jur[íi]dica|legal\\s+position)',
+  soporte_documental:
+    '(?:soportes?\\s+documental(?:es)?|supporting\\s+documents?|documentary\\s+(?:support|evidence))',
+  defensa_647:
+    '(?:defensa[^\\n]{0,60}647|defensa[^\\n]{0,40}diferencia\\s+de\\s+criterio|defen[cs]e[^\\n]{0,60}647|defen[cs]e[^\\n]{0,40}difference\\s+(?:of|in)\\s+(?:criteria|interpretation))',
+  peticion: '(?:petici[óo]n(?:es)?|petition|request(?:s|ed\\s+relief)?\\b)',
+  firmas: '(?:firmas?\\b|signatures?\\b)',
 };
 
-// ---------------------------------------------------------------------------
-// Cierre obligatorio (borrador)
-// ---------------------------------------------------------------------------
+function indiceSeccion(texto: string, id: DianLetterSectionId): number {
+  const re = new RegExp(
+    `^[ \\t]*(?:#{1,6}[ \\t]*|\\*\\*[ \\t]*|(?:\\d+|[IVX]+)[.)][ \\t]+)*${PATRON_SECCION[id]}`,
+    'im',
+  );
+  const m = texto.match(re);
+  return m && m.index !== undefined ? m.index : -1;
+}
 
-/**
- * True si la carta declara explícitamente que es un borrador sujeto a
- * revisión por contador público o abogado.
- */
 function declaraBorrador(texto: string): boolean {
   const t = texto.toLowerCase();
-  const tieneBorrador = /\bborrador\b/.test(t);
-  const tieneRevision = /\brevisi[óo]n\b/.test(t);
+  const tieneBorrador = /\bborrador\b|\bdraft\b/.test(t);
+  const tieneRevision = /\brevisi[óo]n\b|\breview\b/.test(t);
   const tieneProfesional =
     /\bcontador(?:\s+p[úu]blico)?\b/.test(t) ||
     /\babogado\b/.test(t) ||
-    /\brevisor\s+fiscal\b/.test(t);
+    /\brevisor\s+fiscal\b/.test(t) ||
+    /\baccountant\b|\btax\s+(?:attorney|lawyer)\b|\bstatutory\s+auditor\b/.test(t);
   return tieneBorrador && tieneRevision && tieneProfesional;
 }
 
+/**
+ * True si la carta menciona o solicita una reducción DE SANCIÓN (lo que L2.4
+ * exige soportar): la oración habla de reducir y además de sanción, cuarta
+ * parte, mitad, gradualidad, de solicitar / acogerse / aplicar la reducción o
+ * cita una norma de reducción. «La reducción de los ingresos obedece a…» es
+ * un hecho del caso, no una reducción de sanción (revisión de la fase 2,
+ * pendiente #8).
+ */
+const RE_REDUCCION = /\breduc(?:ci[óo]n(?:es)?|ida|ido|ir|e|en)\b|\breduction\b|\breduced\b/i;
+const RE_CONTEXTO_SANCION =
+  /\bsanci[óo]n(?:es)?\b|\bpenalt(?:y|ies)\b|\bcuarta\s+parte\b|\ba\s+la\s+mitad\b|\bgradualidad\b|\bproporcionalidad\b|\bsolicit|\bacog|\baplic(?:ar|a|ación|acion)\b|\brequest|\bArt(?:[íi]culos?|s)?\.?\s*(?:640|644|709|713|716)\b/i;
+
+function mencionaReduccionDeSancion(texto: string): boolean {
+  return texto
+    .split(/(?<=[.;!?])\s+|\n+/)
+    .some((o) => RE_REDUCCION.test(o) && RE_CONTEXTO_SANCION.test(o));
+}
+
+const invocaDiferenciaCriterio = (m5: Modulo5DefensaDian) =>
+  m5.defensaArt647 !== null && m5.defensaArt647.trim().length > 0;
+
 // ---------------------------------------------------------------------------
-// CAPA 1 — Sintaxis estructural
+// CAPA 1 — Estructura
 // ---------------------------------------------------------------------------
 
 export function validateDefensaDianL1(m5: Modulo5DefensaDian): ValidationCheck[] {
   const checks: ValidationCheck[] = [];
-  const texto = m5.cartaTexto;
-
-  // -------------------------------------------------------------------
-  // L1.1 — secciones presentes y en orden
-  // -------------------------------------------------------------------
-  const detectadas = SECCIONES_OBLIGATORIAS.map((s) => ({
-    seccion: s,
-    ...detectarSeccion(texto, s),
-  }));
-
-  const faltantes = detectadas.filter((d) => !d.found).map((d) => d.seccion);
+  const exigidas = DIAN_LETTER_SECTIONS.filter((s) => !s.condicional || invocaDiferenciaCriterio(m5));
+  const detectadas = exigidas.map((s) => ({ titulo: s.titulo, index: indiceSeccion(m5.cartaTexto, s.id) }));
+  const faltantes = detectadas.filter((d) => d.index < 0).map((d) => d.titulo);
   const okPresencia = faltantes.length === 0;
   checks.push({
     name: 'M5.L1.1_secciones_presentes',
     passed: okPresencia,
     severity: 'error',
-    norma: 'INTERNAL',
+    norma: 'INTERNAL — esqueleto dian-letter-builder',
     detail: okPresencia
-      ? `Carta contiene las 6 secciones obligatorias: ${SECCIONES_OBLIGATORIAS.join(' / ')}.`
-      : `Carta NO contiene sección(es): ${faltantes.join(', ')}. Estructura obligatoria: ${SECCIONES_OBLIGATORIAS.join(' / ')}.`,
+      ? `La carta contiene las ${exigidas.length} secciones del esqueleto.`
+      : `La carta NO contiene: ${faltantes.join(', ')}. Estructura: ${exigidas.map((s) => s.titulo).join(' / ')}.`,
   });
 
   if (okPresencia) {
-    let ordenOk = true;
-    let lastIdx = -1;
     let primerFuera: string | null = null;
+    let last = -1;
     for (const d of detectadas) {
-      if (d.index < lastIdx) {
-        ordenOk = false;
-        primerFuera = d.seccion;
+      if (d.index < last) {
+        primerFuera = d.titulo;
         break;
       }
-      lastIdx = d.index;
+      last = d.index;
     }
     checks.push({
       name: 'M5.L1.1b_secciones_ordenadas',
-      passed: ordenOk,
+      passed: primerFuera === null,
       severity: 'error',
-      norma: 'INTERNAL',
-      detail: ordenOk
-        ? 'Secciones aparecen en el orden correcto.'
-        : `Sección "${primerFuera}" aparece fuera de orden. Orden esperado: ${SECCIONES_OBLIGATORIAS.join(' → ')}.`,
+      norma: 'INTERNAL — esqueleto dian-letter-builder',
+      detail:
+        primerFuera === null
+          ? 'Las secciones aparecen en el orden del esqueleto.'
+          : `La sección «${primerFuera}» aparece fuera de orden. Orden: ${exigidas.map((s) => s.titulo).join(' → ')}.`,
     });
   }
 
@@ -201,36 +148,45 @@ export function validateDefensaDianL1(m5: Modulo5DefensaDian): ValidationCheck[]
 }
 
 // ---------------------------------------------------------------------------
-// CAPA 2 — Lógica de negocio
+// CAPA 2 — Plazos, citas y reducciones
 // ---------------------------------------------------------------------------
 
 export function validateDefensaDianL2(m5: Modulo5DefensaDian): ValidationCheck[] {
   const checks: ValidationCheck[] = [];
   const texto = m5.cartaTexto;
-  const plazo = PLAZOS[m5.tipoRequerimiento];
+  const esperado = classificationFromKind(m5.tipoRequerimiento);
 
-  // -------------------------------------------------------------------
-  // L2.1 — plazo correcto + cita principal
-  // -------------------------------------------------------------------
   {
-    const tienePlazo = plazo.patron.test(texto);
-    const tieneCita = plazo.citaPrincipal(texto);
-    const ok = tienePlazo && tieneCita;
+    const ok =
+      esperado.kind === m5.tipoRequerimiento &&
+      m5.plazoRespuesta === esperado.plazoRespuesta &&
+      m5.normaPlazo === esperado.normaPlazo;
     checks.push({
-      name: 'M5.L2.1_plazo_y_cita_correctos',
+      name: 'M5.L2.1_plazo_y_norma_deterministas',
       passed: ok,
       severity: 'error',
-      norma: plazo.norma,
+      norma: esperado.normaPlazo,
       detail: ok
-        ? `Tipo ${m5.tipoRequerimiento}: plazo ${plazo.descripcion} citado correctamente con norma ${plazo.norma}.`
-        : `Tipo ${m5.tipoRequerimiento} requiere plazo "${plazo.descripcion}" (presente: ${tienePlazo}) y cita normativa ${plazo.norma} (presente: ${tieneCita}).`,
+        ? `Tipo ${m5.tipoRequerimiento}: plazo «${m5.plazoRespuesta}» (${m5.normaPlazo}).`
+        : `Tipo ${m5.tipoRequerimiento}: se publicó «${m5.plazoRespuesta}» / «${m5.normaPlazo}»; el esqueleto determinista fija «${esperado.plazoRespuesta}» / «${esperado.normaPlazo}».`,
     });
   }
 
-  // -------------------------------------------------------------------
-  // L2.2 — si invoca diferencia de criterio → cita parágrafo Art. 647
-  // -------------------------------------------------------------------
-  if (m5.invocaDiferenciaCriterio) {
+  if (m5.tipoRequerimiento !== 'desconocido') {
+    const articulos = articulosCitados(m5.normaPlazo);
+    const ok = articulos.length === 0 || articulos.some((a) => citaArticulo(texto, a));
+    checks.push({
+      name: 'M5.L2.1b_carta_cita_norma_del_plazo',
+      passed: ok,
+      severity: 'warning',
+      norma: m5.normaPlazo,
+      detail: ok
+        ? `La carta cita la norma del plazo (${m5.normaPlazo}).`
+        : `La carta no cita ninguno de los artículos de la norma del plazo (${articulos.join(', ')}).`,
+    });
+  }
+
+  if (invocaDiferenciaCriterio(m5)) {
     const ok = citaParagrafo647(texto);
     checks.push({
       name: 'M5.L2.2_diferencia_criterio_cita_par_647',
@@ -238,14 +194,11 @@ export function validateDefensaDianL2(m5: Modulo5DefensaDian): ValidationCheck[]
       severity: 'error',
       norma: 'Art. 647 par. E.T.',
       detail: ok
-        ? 'Defensa diferencia de criterio invoca el parágrafo del Art. 647 — sustento jurídico correcto.'
-        : 'Defensa diferencia de criterio NO cita el parágrafo del Art. 647 E.T. literalmente. Sin esto la defensa carece de soporte normativo y queda en interpretación libre del funcionario DIAN.',
+        ? 'La defensa por diferencia de criterio cita el parágrafo del Art. 647 E.T.'
+        : 'Se invoca la diferencia de criterio pero la carta NO cita el parágrafo del Art. 647 E.T.',
     });
   }
 
-  // -------------------------------------------------------------------
-  // L2.3 — NO cita Concepto 100208221-1352 (no verificable en normograma)
-  // -------------------------------------------------------------------
   {
     const violacion = citaConcepto1352(texto);
     checks.push({
@@ -254,24 +207,22 @@ export function validateDefensaDianL2(m5: Modulo5DefensaDian): ValidationCheck[]
       severity: 'error',
       norma: 'Blacklist normativa — Concepto 100208221-1352 no verificable',
       detail: violacion
-        ? 'La carta cita el Concepto DIAN 100208221-1352 de 2018, cuyo radicado NO es verificable en normograma.dian.gov.co. Citarlo expone al cliente a que DIAN pida verificación y devuelva la carta como infundada. Sustituir por: parágrafo del Art. 647 + Sentencias Sección Cuarta Consejo de Estado.'
-        : 'No se detectó cita al Concepto 100208221-1352 — OK.',
+        ? 'La carta cita el Concepto DIAN 100208221-1352 de 2018, no verificable en normograma. Sustituir por el parágrafo del Art. 647 E.T. y jurisprudencia de la Sección Cuarta.'
+        : 'No se detectó cita al Concepto 100208221-1352.',
     });
   }
 
-  // -------------------------------------------------------------------
-  // L2.4 — si menciona reducción → cita Art. 709 / 713 / 640
-  // -------------------------------------------------------------------
-  if (m5.mencionaReduccion) {
-    const ok = citaArt709(texto) || citaArt713(texto) || citaArt640(texto);
+  if (mencionaReduccionDeSancion(texto)) {
+    const disponibles = [...new Set(reduccionesDisponibles(m5.tipoRequerimiento).flatMap(articulosCitados))];
+    const ok = disponibles.some((a) => citaArticulo(texto, a));
     checks.push({
       name: 'M5.L2.4_reduccion_cita_norma',
       passed: ok,
       severity: 'error',
-      norma: 'Arts. 709 / 713 / 640 E.T.',
+      norma: disponibles.map((a) => `Art. ${a} E.T.`).join(' / '),
       detail: ok
-        ? 'Mención de reducción soportada con norma vigente (Art. 709 / 713 / 640 E.T.).'
-        : 'Carta menciona reducción de sanción pero NO cita Art. 709 (25%), Art. 713 (50%) ni Art. 640. Sin norma soporte, la solicitud de reducción puede ser rechazada por DIAN.',
+        ? 'La mención de reducción está soportada en una norma disponible para este tipo de actuación.'
+        : `La carta menciona una reducción sin citar la norma aplicable a ${m5.tipoRequerimiento} (${disponibles.map((a) => `Art. ${a}`).join(', ')}).`,
     });
   }
 
@@ -282,13 +233,12 @@ export function validateDefensaDianL2(m5: Modulo5DefensaDian): ValidationCheck[]
 // CAPA 3 — Defensa tributaria
 // ---------------------------------------------------------------------------
 
+const ACTUACIONES_CON_INEXACTITUD = new Set(['requerimiento_especial', 'liquidacion_oficial_revision']);
+
 export function validateDefensaDianL3(m5: Modulo5DefensaDian): ValidationCheck[] {
   const checks: ValidationCheck[] = [];
   const texto = m5.cartaTexto;
 
-  // -------------------------------------------------------------------
-  // L3.1 — closing note "borrador para revisión contador/abogado"
-  // -------------------------------------------------------------------
   {
     const ok = declaraBorrador(texto);
     checks.push({
@@ -297,24 +247,21 @@ export function validateDefensaDianL3(m5: Modulo5DefensaDian): ValidationCheck[]
       severity: 'error',
       norma: 'INTERNAL',
       detail: ok
-        ? 'Carta declara explícitamente que es un borrador para revisión por contador público / abogado / revisor fiscal.'
-        : 'Carta NO declara que es un borrador para revisión profesional. Sin esta declaración el output de IA puede usarse directamente y exponer al cliente a errores no controlados (Art. 647 si se presenta defectuosa).',
+        ? 'La carta declara que es un borrador para revisión del contador / abogado / revisor fiscal.'
+        : 'La carta NO declara que es un borrador para revisión profesional antes de su envío.',
     });
   }
 
-  // -------------------------------------------------------------------
-  // L3.2 — cita Art. 647 E.T. (norma raíz de defensa)
-  // -------------------------------------------------------------------
-  {
-    const ok = citaArt647(texto);
+  if (ACTUACIONES_CON_INEXACTITUD.has(m5.tipoRequerimiento)) {
+    const ok = citaArticulo(texto, '647');
     checks.push({
       name: 'M5.L3.2_cita_art_647',
       passed: ok,
-      severity: 'error',
+      severity: 'warning',
       norma: 'Art. 647 E.T.',
       detail: ok
-        ? 'Carta cita Art. 647 E.T. — la norma raíz de defensa por inexactitud está invocada.'
-        : 'Carta NO cita Art. 647 E.T. — la sección "Defensa Art. 647" es estructural pero el cuerpo debe invocar la norma con cita formal.',
+        ? 'La carta cita el Art. 647 E.T. (sanción por inexactitud).'
+        : `Actuación ${m5.tipoRequerimiento} con posible sanción por inexactitud y la carta no cita el Art. 647 E.T.`,
     });
   }
 

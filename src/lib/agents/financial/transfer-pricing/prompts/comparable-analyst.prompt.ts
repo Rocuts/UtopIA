@@ -54,7 +54,7 @@ Producir el estudio de comparabilidad para las transacciones controladas: diseñ
 - Mínimo 4-6 comparables seleccionados por transacción, cada uno con calificación de calidad (alta/media/baja) basada en los 5 factores OCDE.
 - Rango intercuartil calculado: min, Q1, mediana, Q3, max. El PLI observado de la tested party se posiciona explícitamente.
 - Cada ajuste de comparabilidad cuantificado en puntos porcentuales con justificación.
-- Conclusión binaria cumple/no cumple. Si no cumple, ajuste a la mediana cuantificado en centavos COP y en porcentaje.
+- Conclusión binaria cumple/no cumple. Si no cumple, el ajuste a la mediana en porcentaje y en COP lo fija el sistema: requiredAdjustmentCop va en null salvo que la transacción cumpla ("0"), porque la base del PLI en COP no llega verificada.
 - Si un comparable es ilustrativo (sin acceso a base de datos comercial), se marca como simulado y se recomienda validación con datos reales.
 </success_criteria>
 

@@ -10,6 +10,7 @@
 // ---------------------------------------------------------------------------
 
 import type { NormativeArticleEntry } from '../types';
+import { MIN_SANCTION } from '@/lib/tools/sanction-calculator';
 
 export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
   // ─── RENTA — CONCEPTOS GENERALES ──────────────────────────────────────────
@@ -1012,7 +1013,7 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     cita: 'Art. 639 E.T.',
     titulo: 'Sanción mínima',
     resumen:
-      'Ninguna sanción puede ser inferior a 10 UVT. En 2026: 10 × $52.374 = $523.740, que se aproxima a $524.000 COP (Art. 868 E.T.).',
+      `Ninguna sanción puede ser inferior a 10 UVT. En 2026: 10 × $52.374 aproximado al múltiplo de mil = $${MIN_SANCTION.toLocaleString('es-CO')} COP (Art. 868 E.T.).`,
     textoLiteral: null,
     estado: 'VIGENTE_2026',
     modificaciones: [],
@@ -1287,5 +1288,145 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     modificaciones: [],
     urlOficial: 'https://estatuto.co/?articulo=752',
     tags: ['procedimiento', 'DIAN', 'requerimiento', 'informacion', 'plazo', '15_dias_habiles'],
+  },
+
+  // ─── ARTÍCULOS QUE EXIGEN LOS PROPIOS MÓDULOS DEL AGENTE FISCAL ─────────
+  // Revisión de la fase 2 (pendiente #8): el esqueleto de la carta DIAN, el
+  // refund-analyzer y el Score citan estos artículos (y los prompts los
+  // exigen con ALWAYS), pero no estaban en el catálogo: la Capa 2 los
+  // bloqueaba como NO_VERIFICADO y toda carta de defensa o análisis de
+  // devolución honesto quedaba en «bloqueo». Resúmenes tomados del texto
+  // vigente compilado en src/data/tax_docs/estatuto_tributario_completo.md.
+  {
+    id: 'ART_147_ET',
+    cita: 'Art. 147 E.T.',
+    titulo: 'Compensación de pérdidas fiscales de sociedades',
+    resumen:
+      'Las sociedades pueden compensar las pérdidas fiscales con las rentas líquidas ordinarias que obtengan en los doce (12) períodos gravables siguientes, sin perjuicio de la renta presuntiva del ejercicio (inciso mod. art. 88 Ley 1819/2016). Los socios no pueden deducir ni compensar las pérdidas de la sociedad.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=147',
+    tags: ['renta', 'perdidas_fiscales', 'compensacion'],
+  },
+  {
+    id: 'ART_651_ET',
+    cita: 'Art. 651 E.T.',
+    titulo: 'Sanción por no enviar información',
+    resumen:
+      'Sanciona a quienes, obligados a suministrar información tributaria o requeridos para ello, no la suministran dentro del plazo, la suministran con errores o no corresponde a lo solicitado. La cuantía y las reducciones por subsanar la omisión se liquidan según el propio artículo; si la sanción se impone por resolución independiente, se da traslado de cargos por un (1) mes para responder.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=651',
+    tags: ['sancion', 'informacion', 'exogena', 'pliego_cargos'],
+  },
+  {
+    id: 'ART_670_ET',
+    cita: 'Art. 670 E.T.',
+    titulo: 'Sanción por improcedencia de las devoluciones o compensaciones',
+    resumen:
+      'Las devoluciones o compensaciones no constituyen un reconocimiento definitivo: si la DIAN, mediante liquidación oficial, rechaza o modifica el saldo a favor, deben reintegrarse las sumas devueltas o compensadas en exceso más los intereses moratorios, aumentados en un 50%. Con documentos falsos o fraude se impone además una sanción del 500% del monto devuelto en forma improcedente.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=670',
+    tags: ['sancion', 'devolucion', 'saldo_favor', 'improcedencia'],
+  },
+  {
+    id: 'ART_684_ET',
+    cita: 'Art. 684 E.T.',
+    titulo: 'Facultades de fiscalización e investigación',
+    resumen:
+      'La Administración Tributaria tiene amplias facultades de fiscalización e investigación para asegurar el cumplimiento de las normas sustanciales: adelantar investigaciones, citar o requerir al contribuyente o a terceros, exigir la presentación de documentos y ordenar la exhibición de libros y comprobantes, entre otras.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=684',
+    tags: ['procedimiento', 'DIAN', 'fiscalizacion', 'requerimiento'],
+  },
+  {
+    id: 'ART_686_ET',
+    cita: 'Art. 686 E.T.',
+    titulo: 'Deber de atender requerimientos',
+    resumen:
+      'Contribuyentes y no contribuyentes deben atender los requerimientos de informaciones y pruebas relacionadas con las investigaciones de la DIAN. El plazo mínimo para responder requerimientos ordinarios o solicitudes de información es de quince (15) días calendario (Art. 261 de la Ley 223 de 1995).',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=686',
+    tags: ['procedimiento', 'DIAN', 'requerimiento', 'ordinario', 'plazo', '15_dias_calendario'],
+  },
+  {
+    id: 'ART_703_ET',
+    cita: 'Art. 703 E.T.',
+    titulo: 'El requerimiento especial como requisito previo a la liquidación',
+    resumen:
+      'Antes de la liquidación de revisión, la DIAN envía al contribuyente, por una sola vez, un requerimiento especial con todos los puntos que se propone modificar y la explicación de sus razones.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=703',
+    tags: ['procedimiento', 'DIAN', 'requerimiento_especial'],
+  },
+  {
+    id: 'ART_707_ET',
+    cita: 'Art. 707 E.T.',
+    titulo: 'Respuesta al requerimiento especial',
+    resumen:
+      'Dentro de los tres (3) meses siguientes a la notificación del requerimiento especial, el contribuyente formula por escrito sus objeciones, solicita pruebas, subsana las omisiones que permita la ley y puede pedir inspecciones tributarias conducentes.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=707',
+    tags: ['procedimiento', 'DIAN', 'requerimiento_especial', 'plazo', '3_meses'],
+  },
+  {
+    id: 'ART_716_ET',
+    cita: 'Art. 716 E.T.',
+    titulo: 'Consecuencia de la no presentación de la declaración con motivo del emplazamiento',
+    resumen:
+      'Vencido el término del emplazamiento para declarar (Art. 715 E.T.) sin que se presente la declaración, la DIAN aplica la sanción por no declarar del Art. 643 E.T.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=716',
+    tags: ['procedimiento', 'DIAN', 'emplazamiento', 'no_declarar', 'sancion'],
+  },
+  {
+    id: 'ART_807_ET',
+    cita: 'Art. 807 E.T.',
+    titulo: 'Cálculo y aplicación del anticipo',
+    resumen:
+      'Los contribuyentes del impuesto sobre la renta liquidan en su declaración un anticipo del impuesto del año siguiente, calculado sobre el impuesto determinado según el procedimiento del artículo: 25% el primer año, 50% el segundo y 75% los siguientes.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=807',
+    tags: ['renta', 'anticipo', 'declaracion'],
+  },
+  {
+    id: 'ART_857_ET',
+    cita: 'Art. 857 E.T.',
+    titulo: 'Rechazo e inadmisión de las solicitudes de devolución o compensación',
+    resumen:
+      'Las solicitudes de devolución o compensación se rechazan en forma definitiva, entre otras causales, cuando se presentan extemporáneamente o cuando el saldo ya fue objeto de devolución, compensación o imputación anterior; las demás causales de rechazo e inadmisión están en el propio artículo.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=857',
+    tags: ['devolucion', 'saldo_favor', 'rechazo', 'inadmision'],
+  },
+  {
+    id: 'ART_860_ET',
+    cita: 'Art. 860 E.T.',
+    titulo: 'Devolución con presentación de garantía',
+    resumen:
+      'Si con la solicitud se presenta una garantía a favor de la Nación, otorgada por entidad bancaria o compañía de seguros, por el monto objeto de devolución más las sanciones del Art. 670 E.T., la DIAN hace la entrega dentro de los veinte (20) días siguientes.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=860',
+    tags: ['devolucion', 'garantia', 'plazo', '20_dias'],
   },
 ] as const;

@@ -313,12 +313,15 @@ export const ComparableAnalysisReportSchema = z.object({
     complies: z
       .boolean()
       .describe('True si la transacción cumple plena competencia (Art. 260-4 ET)'),
-    requiredAdjustmentCop: MoneyCop.describe(
-      'Ajuste a la mediana requerido en centavos COP. "0" si cumple.',
+    // Fase 2 de la auditoría 2026-09-24 (pendiente #8): sin la base del PLI en
+    // COP por operación el ajuste no es calculable en código ⇒ null (N/D).
+    requiredAdjustmentCop: MoneyCop.nullable().describe(
+      'Ajuste a la mediana requerido en centavos COP. "0" si cumple; null si no hay base del PLI en COP verificable (el código lo fija).',
     ),
     requiredAdjustmentPercent: z
       .number()
-      .describe('Ajuste relativo al PLI observado (porcentaje). 0 si cumple.'),
+      .nullable()
+      .describe('Ajuste relativo al PLI observado (porcentaje). 0 si cumple; null si no determinable.'),
     taxImpactNote: z
       .string()
       .nullable()
@@ -371,7 +374,9 @@ export const Formato1125RowSchema = z.object({
   medianPercent: z.number().nullable(),
   q3Percent: z.number().nullable(),
   isWithinRange: z.boolean(),
-  adjustmentCop: MoneyCop.describe('Ajuste aplicado en centavos COP. "0" si no aplica.'),
+  adjustmentCop: MoneyCop.nullable().describe(
+    'Ajuste aplicado en centavos COP. "0" si no aplica; null si no hay base del PLI en COP verificable.',
+  ),
   remarks: z.string().nullable(),
 });
 
@@ -411,7 +416,9 @@ export const TpDocumentationReportSchema = z.object({
         z.object({
           transactionDescription: z.string().min(1),
           complies: z.boolean(),
-          requiredAdjustmentCop: MoneyCop,
+          requiredAdjustmentCop: MoneyCop.nullable().describe(
+            'Ajuste en centavos COP. "0" si cumple; null si no hay base del PLI en COP verificable.',
+          ),
           fiscalImpactNote: z.string().nullable(),
         }),
       )

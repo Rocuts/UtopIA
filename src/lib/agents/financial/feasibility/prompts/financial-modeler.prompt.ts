@@ -12,6 +12,8 @@
 // ---------------------------------------------------------------------------
 
 import type { ProjectInfo } from '../types';
+import { UVT_2026_COP } from '@/lib/accounting/tax-engine/constants';
+import { SMMLV_2026 } from '@/lib/tax/taxCalculator';
 import { buildMacroVigenteBlock, type MacroSnapshot } from '../../valuation/macro-context';
 import { buildZomacContextBlock } from '../tax/zomac';
 
@@ -44,7 +46,7 @@ ALWAYS aplica solo los incentivos tributarios que el proyecto califique explicit
     Construccion A (riskFreeBasis = TES_COP_ex_default): Rf = TES 10Y COP − diferencial soberano; Ke = Rf + Beta x ERP madura + CRP + SP.
     Construccion B (riskFreeBasis = UST_USD_fisher): Ke USD = UST 10Y + Beta x ERP madura + CRP + SP; Ke COP = (1 + Ke USD) x (1 + inflacion COP) / (1 + inflacion USD) − 1.
 - Tarifa renta general (Art. 240 E.T.): 35%. IVA general (Art. 468): 19%. GMF (Art. 871): 0,4%.
-- ICA municipal: 0,2-1,4% segun acuerdos. UVT 2026 = $52.374. SMMLV 2026 = $1.750.905.
+- ICA municipal: 0,2-1,4% segun acuerdos. UVT 2026 = $${UVT_2026_COP.toLocaleString('es-CO')}. SMMLV 2026 = $${SMMLV_2026.toLocaleString('es-CO')} (Decreto transitorio 0159/2026).
 - Depreciacion fiscal Art. 137 E.T. (Decreto 1625/2016, Ley 1819/2016):
     Construcciones 45a 2,22%; acueductos 40a 2,50%; flota aerea 30a 3,33%; ferrea 20a 5%;
     maquinaria/equipo 10a 10%; equipo medico 8a 12,5%; equipo de computacion/comunicaciones 5a 20%.
@@ -108,9 +110,10 @@ function buildTaxContext(project: ProjectInfo, horizon: number, now?: Date): str
 
   if (project.isZonaFranca) {
     blocks.push(`Incentivo Zona Franca activo:
-- Tarifa renta: 20% (Art. 240-1 E.T.). Cero arancel/IVA en importaciones de insumos y bienes de capital. IVA exento en ventas Zona Franca al exterior.
-- Requiere compromiso de inversion y empleo segun Plan Maestro (Decreto 2147/2016).
-- Ley 2277/2022: tarifa dual 20% sobre exportaciones (con Plan de Internacionalizacion MinCIT) y 35% sobre el resto.`);
+- Tarifa renta del usuario industrial (Art. 240-1 E.T., mod. art. 11 Ley 2277/2022): 20% sobre la renta liquida gravable multiplicada por la proporcion de ingresos por exportacion (con Plan de Internacionalizacion MinCIT) y tarifa general 35% sobre el resto. El 20% NO aplica a toda la renta.
+- Usuarios comerciales de zona franca: tarifa general 35% (el Art. 240-1 regula solo a usuarios industriales). Regimen del art. 101 Ley 1819/2016 solo para quien cumplio sus condiciones antes del 13-dic-2022 (Sentencia C-384/2023).
+- Cero arancel/IVA en importaciones de insumos y bienes de capital. IVA exento en ventas Zona Franca al exterior.
+- Requiere compromiso de inversion y empleo segun Plan Maestro (Decreto 2147/2016).`);
   }
 
   if (project.isEconomiaNaranja) {

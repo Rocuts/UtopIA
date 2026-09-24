@@ -66,5 +66,17 @@ ${input.instructions ?? '(sin instrucciones adicionales)'}
     signal: opts.signal,
   });
 
-  return json;
+  // Tipo, plazo, norma del plazo y reducciones: siempre los del esqueleto
+  // determinista (fase 2 de la auditoría 2026-09-24, pendiente #8). El prompt
+  // pide copiarlos; si el modelo los cambia, se publican los del builder.
+  return {
+    ...json,
+    data: {
+      ...json.data,
+      tipoRequerimiento: skeleton.classification.kind,
+      plazoRespuesta: skeleton.classification.plazoRespuesta,
+      normaPlazo: skeleton.classification.normaPlazo,
+      reduccionesDisponibles: skeleton.reduccionesDisponibles,
+    },
+  };
 }

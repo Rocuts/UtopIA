@@ -6,6 +6,7 @@ import { formatCopFromCents } from '@/lib/agents/financial/contracts/money';
 import { buildPlaneacionPrompt } from '../prompts/planeacion.prompt';
 import { planeacionModuleSchema } from '../schemas';
 import { callFiscalAgent } from '../runtime';
+import { aplicarTope258Escenario } from '../tools/planeacion-tope-258';
 import type { FiscalAgentInput, PlaneacionEscenario, PlaneacionModuleResult } from '../types';
 
 export interface PlaneacionAgentOptions {
@@ -64,27 +65,41 @@ ${input.instructions ?? '(sin instrucciones adicionales)'}
 
   // impuestoBase = F02; ahorro = base − escenario y % en BigInt (auditoría
   // 2026-09, tributario-modulos-16). Escenario N/D ⇒ ahorro N/D.
+  // Tope conjunto del Art. 258 por escenario aplicado en código sobre el
+  // desglose de descuentos (fase 2 de la auditoría 2026-09-24, pendiente #8).
   const base = BigInt(anchor.f02);
+  const avisos: string[] = [];
   const fix = (e: PlaneacionEscenario): PlaneacionEscenario => {
-    if (e.impuestoEscenario === null || !/^-?\d+$/.test(e.impuestoEscenario)) {
-      return { ...e, impuestoBase: anchor.f02, impuestoEscenario: null, ahorroEstimado: null, ahorroPct: null };
+    const tope = aplicarTope258Escenario(e.impuestoAntesDescuentos ?? null, e.descuentos, e.impuestoEscenario);
+    if (tope.motivo) avisos.push(`Escenario ${e.nombre}: ${tope.motivo}`);
+    if (tope.excesoTope258 !== null && BigInt(tope.excesoTope258) > BigInt(0)) {
+      avisos.push(
+        `Escenario ${e.nombre}: los descuentos de los Arts. 255, 256 y 257 exceden el tope conjunto del 25% del Art. 258 E.T. en ${formatCopFromCents(BigInt(tope.excesoTope258))}; el impuesto del escenario se recalculó con el tope.`,
+      );
     }
-    const esc = BigInt(e.impuestoEscenario);
+    const conTope = { ...e, impuestoBase: anchor.f02, tope258: tope.tope258, excesoTope258: tope.excesoTope258 };
+    const impuesto = tope.impuestoEscenario;
+    if (impuesto === null || !/^-?\d+$/.test(impuesto)) {
+      return { ...conTope, impuestoEscenario: null, ahorroEstimado: null, ahorroPct: null };
+    }
+    const esc = BigInt(impuesto);
     const ahorro = base - esc > BigInt(0) ? base - esc : BigInt(0);
     // Porcentaje con 2 decimales, redondeo half-up (escala ×10⁵ antes de dividir).
     const pct = base > BigInt(0) ? Math.round(Number((ahorro * BigInt(100_000)) / base) / 10) / 100 : null;
-    return { ...e, impuestoBase: anchor.f02, ahorroEstimado: ahorro.toString(), ahorroPct: pct };
+    return { ...conTope, impuestoEscenario: impuesto, ahorroEstimado: ahorro.toString(), ahorroPct: pct };
   };
   const { conservador, base: escBase, agresivo } = json.data.escenarios;
+  const escenarios = { conservador: fix(conservador), base: fix(escBase), agresivo: fix(agresivo) };
   return {
     ...json,
     data: {
       ...json.data,
-      escenarios: { conservador: fix(conservador), base: fix(escBase), agresivo: fix(agresivo) },
+      escenarios,
     },
     warnings: [
       ...json.warnings,
       'Escenarios medidos contra F02 (UAI × 35%): estimación contable, no liquidación. Sólo cuentan partidas conciliatorias incrementales no reconocidas ya en la UAI.',
+      ...avisos,
     ],
   };
 }

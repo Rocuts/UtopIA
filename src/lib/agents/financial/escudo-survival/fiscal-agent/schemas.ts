@@ -150,12 +150,29 @@ export type RiskScoreModuleSchema = z.infer<typeof riskScoreModuleSchema>;
 // Módulo 4 — Planeación Tributaria
 // ---------------------------------------------------------------------------
 
+/**
+ * Descuentos tributarios del escenario por artículo (fase 2 de la auditoría
+ * 2026-09-24, pendiente #8): sin el desglose el tope conjunto del Art. 258 no
+ * es verificable. null = el escenario no toma ese descuento.
+ */
+export const planeacionDescuentosSchema = z.object({
+  art254Cents: moneyCop.nullable(),
+  art255Cents: moneyCop.nullable(),
+  art256Cents: moneyCop.nullable(),
+  art257Cents: moneyCop.nullable(),
+  art258_1Cents: moneyCop.nullable(),
+});
+
 export const planeacionEscenarioSchema = z.object({
   nombre: z.enum(['conservador', 'base', 'agresivo']),
   impuestoBase: moneyCop,
   // null cuando el escenario no es cuantificable con los datos (N/D ≠ 0).
-  // impuestoBase, ahorroEstimado y ahorroPct los recalcula el agente en código.
+  // impuestoBase, ahorroEstimado y ahorroPct los recalcula el agente en código;
+  // impuestoEscenario también cuando hay impuesto antes de descuentos (tope
+  // del Art. 258 aplicado en código — tools/planeacion-tope-258.ts).
   impuestoEscenario: moneyCop.nullable(),
+  impuestoAntesDescuentos: moneyCop.nullable(),
+  descuentos: planeacionDescuentosSchema,
   ahorroEstimado: moneyCop.nullable(),
   ahorroPct: z.number().nullable(),
   articulosAplicables: z.array(citaNormativa).max(20),

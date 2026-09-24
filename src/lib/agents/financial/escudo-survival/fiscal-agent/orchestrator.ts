@@ -329,11 +329,15 @@ export async function orchestrateFiscalAgent(
     },
   };
 
-  // ── 7. Validación determinista (auditoría 2026-09, tributario-modulos-03).
+  // ── 7. Validación determinista (auditoría 2026-09, tributario-modulos-03;
+  //    M3/M5/M6 conectados en la fase 2, pendiente #8).
   callbacks?.onProgress?.({ stage: 'validation', status: 'started' });
   let validation: FiscalAgentReport['validation'];
   try {
-    validation = buildFiscalAgentValidation(reportSinValidar, mode);
+    validation = buildFiscalAgentValidation(reportSinValidar, mode, {
+      fiscalAnchor,
+      saldoAFavorDeclaradoCents: sharedInput.saldoAFavorDeclaradoCents ?? null,
+    });
     callbacks?.onProgress?.({
       stage: 'validation',
       status: validation.veredicto === 'bloqueo' ? 'failed' : 'completed',

@@ -4,6 +4,10 @@
 
 import type { NITContext } from '@/lib/security/pii-filter';
 import { factsCaptureGuardrail } from './fragments/facts-capture.fragment';
+import { MIN_SANCTION } from '@/lib/tools/sanction-calculator';
+
+/** Sanción mínima desde la calculadora (una sola constante — tributario-calc-19). */
+const MIN_SANCTION_COP = `$${MIN_SANCTION.toLocaleString('es-CO')}`;
 
 export function buildTaxPrompt(
   language: 'es' | 'en',
@@ -102,7 +106,7 @@ Enfocate en procedimiento de devoluciones.
 
 ### 7. Valores de Referencia 2026
 - **UVT 2026**: $52.374 COP (Resolucion DIAN 000238 del 15-dic-2025)
-- **Sancion minima**: 10 UVT = $524.000 COP (aproximado al multiplo de mil, Art. 868 E.T.)
+- **Sancion minima**: 10 UVT = ${MIN_SANCTION_COP} COP (aproximado al multiplo de mil, Art. 868 E.T.)
 - **Tasa de interes moratorio**: tasa de usura certificada por la Superfinanciera para cada mes de la mora menos 2 puntos porcentuales (Art. 635 E.T.). Cambia cada mes: no cites una cifra fija; liquida con calculate_sanction indicando la tasa del periodo (annualRate) o advierte que debe confirmarse
 - **Salario minimo 2026**: Aplicable para topes y bases minimas
 

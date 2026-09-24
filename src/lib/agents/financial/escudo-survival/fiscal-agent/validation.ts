@@ -10,12 +10,13 @@
 //   - Capa 2 (Motor Normativo): citas y blacklist sobre todo el texto emitido.
 //   - M2 (Conciliación): identidades y tope del Art. 258 sobre las cifras ya
 //     recalculadas en código.
+//   - M3 (Score): invariantes del cálculo determinista y prosa del modelo que
+//     lo cita (fase 2, pendiente #8).
+//   - M5 (Defensa DIAN): tipo/plazo del esqueleto determinista y estructura,
+//     citas y cierre de la carta (fase 2, pendiente #8).
+//   - M6 (Devoluciones): saldo DECLARADO, viabilidad y que la prosa no
+//     presente F04 como saldo a favor (fase 2, pendiente #8).
 //   - M7 (Formato): cierre, reservas léxicas, formato es-CO del dictamen.
-// No conectado (requiere rediseño del contrato del validador): M3 (factores
-// distintos a los de computeRiskScore), M5 (tipos de requerimiento con otra
-// taxonomía) y M6 (exige origen del saldo y F04 como saldo a favor, que ya no
-// se publica). El Score y las Devoluciones se sobrescriben con el cálculo
-// determinista en sus agentes.
 // ---------------------------------------------------------------------------
 
 import { MOTOR_NORMATIVO_CATALOG } from '../normative';
@@ -25,9 +26,21 @@ import {
   type FiscalModuleId,
   type FiscalResponse,
   type Modulo2Conciliacion,
+  type Modulo3RiskScore,
+  type Modulo5DefensaDian,
+  type Modulo6Devoluciones,
   type ValidationCheck,
 } from './validators';
-import type { ConciliacionModuleResult, FiscalAgentMode, FiscalAgentReport } from './types';
+import type { FiscalAnchorBlock } from '../fiscal-anchor/types';
+import type {
+  ConciliacionModuleResult,
+  DefensaDianModuleResult,
+  DevolucionesModuleResult,
+  FiscalAgentMode,
+  FiscalAgentReport,
+  RiskScoreModuleResult,
+  SupervivenciaModuleResult,
+} from './types';
 
 export interface FiscalAgentValidation {
   veredicto: 'valida' | 'advertencia' | 'bloqueo';
@@ -36,6 +49,13 @@ export interface FiscalAgentValidation {
   checks: ValidationCheck[];
   /** Módulos cuyo validador no se pudo conectar (contrato incompatible). */
   modulosSinValidar: string[];
+}
+
+/** Insumos deterministas que el reporte no repite y que M3/M6 necesitan. */
+export interface FiscalAgentValidationContext {
+  fiscalAnchor: Pick<FiscalAnchorBlock, 'f01' | 'f04'>;
+  /** Saldo a favor liquidado en el Formulario 110 que recibió el agente. */
+  saldoAFavorDeclaradoCents: string | null;
 }
 
 function absSum(values: readonly string[]): bigint {
@@ -71,18 +91,63 @@ function toModulo2(c: ConciliacionModuleResult): Modulo2Conciliacion {
   };
 }
 
+function toModulo3(
+  r: RiskScoreModuleResult,
+  supervivencia: SupervivenciaModuleResult | null,
+  mode: FiscalAgentMode,
+  ctx: FiscalAgentValidationContext,
+): Modulo3RiskScore {
+  return {
+    score: r.data.score,
+    nivel: r.data.nivel,
+    factores: r.data.factores.map((f) => ({ factor: f.factor, puntos: f.puntos })),
+    publicable: r.data.publicable,
+    noPublicableMotivo: r.data.noPublicableMotivo,
+    f01Cents: ctx.fiscalAnchor.f01,
+    narrativa: [r.markdown, r.data.interpretacion].join('\n\n'),
+    recomendaciones: r.data.recomendaciones,
+    modoSupervivenciaActivo: mode === 'supervivencia' ? (supervivencia?.data.activo ?? false) : null,
+  };
+}
+
+function toModulo5(d: DefensaDianModuleResult): Modulo5DefensaDian {
+  return {
+    tipoRequerimiento: d.data.tipoRequerimiento,
+    plazoRespuesta: d.data.plazoRespuesta,
+    normaPlazo: d.data.normaPlazo,
+    cartaTexto: d.data.cartaCompleta,
+    defensaArt647: d.data.defensaArt647,
+  };
+}
+
+function toModulo6(d: DevolucionesModuleResult, ctx: FiscalAgentValidationContext): Modulo6Devoluciones {
+  return {
+    saldoDeclaradoCents: ctx.saldoAFavorDeclaradoCents,
+    saldoAFavorCents: d.data.saldoAFavor,
+    viabilidad: d.data.viabilidad,
+    f04Cents: ctx.fiscalAnchor.f04,
+    textoAnalisis: [d.markdown, ...d.data.riesgosIdentificados].join('\n\n'),
+    documentosRequeridos: d.data.documentosRequeridos,
+    pasosProcedimentales: d.data.pasosProcedimentales,
+  };
+}
+
 export function buildFiscalAgentValidation(
   report: Omit<FiscalAgentReport, 'validation'>,
   mode: FiscalAgentMode,
+  ctx: FiscalAgentValidationContext,
 ): FiscalAgentValidation {
-  const modulos: FiscalModuleId[] = ['M7'];
+  const modulos: FiscalModuleId[] = ['M3', 'M7'];
   if (report.conciliacion) modulos.push('M2');
+  if (report.defensaDian) modulos.push('M5');
+  if (report.devoluciones) modulos.push('M6');
   const rawText = [
     report.ccv.markdown,
     report.riskScore.markdown,
     report.conciliacion?.markdown,
     report.planeacion?.markdown,
     report.defensaDian?.markdown,
+    report.defensaDian?.data.cartaCompleta,
     report.devoluciones?.markdown,
     report.supervivencia?.markdown,
     report.synthesis.markdown,
@@ -92,24 +157,19 @@ export function buildFiscalAgentValidation(
   const response: FiscalResponse = {
     modulos,
     modulo2: report.conciliacion ? toModulo2(report.conciliacion) : null,
-    modulo3: null,
-    modulo5: null,
-    modulo6: null,
+    modulo3: toModulo3(report.riskScore, report.supervivencia, mode, ctx),
+    modulo5: report.defensaDian ? toModulo5(report.defensaDian) : null,
+    modulo6: report.devoluciones ? toModulo6(report.devoluciones, ctx) : null,
     modulo7: { textoSalida: report.synthesis.markdown, modo: mode === 'quick' ? 'quick' : 'full' },
     rawText,
   };
   const checks = validateFiscalResponse(response, { catalogue: MOTOR_NORMATIVO_CATALOG });
   const v = summarizeFiscalChecks(checks);
-  const modulosSinValidar = [
-    'M3 (Score: se publica el cálculo determinista)',
-    ...(report.defensaDian ? ['M5 (Defensa DIAN: taxonomía de requerimientos distinta)'] : []),
-    ...(report.devoluciones ? ['M6 (Devoluciones: se publica el análisis determinista)'] : []),
-  ];
   return {
     veredicto: v.veredicto,
     errores: v.errores,
     advertencias: v.advertencias,
     checks,
-    modulosSinValidar,
+    modulosSinValidar: [],
   };
 }
