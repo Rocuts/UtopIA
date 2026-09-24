@@ -116,6 +116,12 @@ export interface NotaIngesta {
    * P4-c): determina `periodoTipo` y la nota de base de los KPIs.
    */
   corte?: { tipo: 'cerrado' | 'parcial'; meses: number; texto: string };
+  /**
+   * ICU-03: el archivo trae una fecha («texto») que no se interpretó como
+   * fecha de corte de `period`. La nota de base de los KPIs la cita en vez de
+   * afirmar que el archivo no declara la fecha.
+   */
+  fechaSinInterpretar?: string;
 }
 
 export interface ValidatedAccount {
@@ -595,6 +601,12 @@ export interface PeriodSnapshot {
    * archivo no declara la fecha de corte.
    */
   corteDeclarado?: { tipo: 'cerrado' | 'parcial'; meses: number; texto: string };
+  /**
+   * ICU-03: fecha que trae el archivo y que no se interpretó como corte de
+   * este periodo (a mitad de mes, rango que no empieza en enero, etiqueta
+   * impuesta por el llamador). Sólo con `corteDeclarado` ausente.
+   */
+  fechaSinInterpretar?: string;
   /**
    * Excepciones de vencimiento declaradas por el usuario que movieron saldo
    * entre corriente y no corriente en este periodo (P4-b). Ausente sin
@@ -1466,9 +1478,13 @@ export function parseTrialBalanceCSVWithMeta(
     const year = corteDeclarado.year;
     // Sólo una columna cuyo encabezado trae ese año: una etiqueta impuesta por
     // el llamador (`forcePeriod` de la hoja, `currentYear` del API) no se toca.
+    // Una columna que trae su propia fecha en el encabezado (ICU-03) ya tiene
+    // su corte y no se re-rotula con el del título.
     const periodoDelAnio =
       !options.forcePeriod &&
-      balanceColumns.some((c) => c.period === year && explicitPeriodOf(c.header) === year);
+      balanceColumns.some(
+        (c) => c.period === year && explicitPeriodOf(c.header) === year && corteDeEncabezado(c.header) === null,
+      );
     if (corteDeclarado.month !== 12 && periodoDelAnio) {
       const label = `${year}-${String(corteDeclarado.month).padStart(2, '0')}`;
       relabelPeriod(rows, year, label);
@@ -1493,6 +1509,58 @@ export function parseTrialBalanceCSVWithMeta(
           '12 meses (cierre anual).',
         corte: { tipo: 'cerrado', meses: 12, texto: corteDeclarado.texto },
       });
+    }
+  }
+  // ICU-03: la fecha de corte del ENCABEZADO de la columna ya fijó su periodo
+  // (`explicitPeriodOf`); aquí queda la nota que la cita, con el tipo de
+  // periodo y los meses, igual que la del título.
+  const periodosConCorte = new Set(notas.filter((n) => n.corte).map((n) => n.period));
+  for (const col of columnasFinales) {
+    if (col.kind === 'opening') continue;
+    const c = corteDeEncabezado(col.header);
+    if (!c) continue;
+    const label = etiquetaDeCorte(c);
+    if (col.period !== label || periodosConCorte.has(label) || !numericPeriods.has(label)) continue;
+    periodosConCorte.add(label);
+    const texto = textoDeLinea(col.header);
+    notas.push({
+      period: label,
+      message:
+        c.month === 12
+          ? `Fecha de corte en el encabezado de la columna («${texto}»): periodo ${label} de 12 meses (cierre anual).`
+          : `Fecha de corte en el encabezado de la columna («${texto}»): corte ${label} (P&G de ${c.month} meses).`,
+      corte: { tipo: c.month === 12 ? 'cerrado' : 'parcial', meses: c.month, texto },
+    });
+  }
+  // ICU-03: si el archivo trae una fecha que no fijó el corte de un periodo de
+  // sólo año (a mitad de mes, un rango que no empieza en enero, o una etiqueta
+  // impuesta por el llamador), la nota de base de los KPIs la cita en vez de
+  // afirmar que el archivo no declara la fecha. Bajo `forcePeriod` el corte del
+  // título lo aplica `raw-data`, que conoce la hoja.
+  const tituloSinAplicar =
+    corteDeclarado && !options.forcePeriod && !periodosConCorte.has(corteDeclarado.year)
+      ? corteDeclarado.texto
+      : null;
+  const soloAnioSinCorte = columnasFinales.filter(
+    (c) => c.kind !== 'opening' && /^\d{4}$/.test(c.period) && !periodosConCorte.has(c.period) && numericPeriods.has(c.period),
+  );
+  if (soloAnioSinCorte.length > 0) {
+    const fechaSinInterpretar =
+      tituloSinAplicar ??
+      [...preambulo, ...soloAnioSinCorte.map((c) => c.header)]
+        .filter((t) => tieneFecha(t) && corteDeLinea(t) === null && corteDeEncabezado(t) === null)
+        .map(textoDeLinea)[0] ??
+      null;
+    if (fechaSinInterpretar) {
+      for (const period of new Set(soloAnioSinCorte.map((c) => c.period))) {
+        notas.push({
+          period,
+          message:
+            `El archivo trae la fecha «${fechaSinInterpretar}», que no se interpretó como fecha de corte ` +
+            `del periodo ${period} (sólo se leen cortes a fin de mes o rangos desde enero del año de la columna).`,
+          fechaSinInterpretar,
+        });
+      }
     }
   }
   if (notas.length > 0 && rows.length > 0) {
@@ -1751,6 +1819,98 @@ function detectCorteDeclarado(preambulo: string[]): CorteDeclarado | null {
   return { year: String(elegido.year), month: elegido.month, texto: elegido.texto };
 }
 
+/** `AAAA-MM` de un corte parcial; `AAAA` a diciembre (convención de cierre anual). */
+function etiquetaDeCorte(c: { year: number; month: number }): string {
+  return c.month === 12 ? String(c.year) : `${c.year}-${String(c.month).padStart(2, '0')}`;
+}
+
+const NO_LETRA_ANTES = '(?<![a-z])';
+const NO_LETRA_DESPUES = '(?![a-z])';
+/** "junio 30 de 2025" (mes, día, año). */
+const ENC_MES_DIA_ANIO_RE = new RegExp(
+  `${NO_LETRA_ANTES}(${MES_ALT})${NO_LETRA_DESPUES}\\s+${DIA}\\s+(?:de\\s+|del\\s+)?(20\\d{2})(?!\\d)`,
+);
+/** "30 de junio de 2025" (día, mes, año). */
+const ENC_DIA_MES_ANIO_RE = new RegExp(
+  `(?<!\\d)${DIA}\\s+de\\s+(${MES_ALT})${NO_LETRA_DESPUES}\\s+(?:de\\s+|del\\s+)?(20\\d{2})(?!\\d)`,
+);
+/** "junio 2025", "jun-2025", "junio de 2025" (sin día delante: "1 de enero de 2025" es otra cosa). */
+const ENC_MES_ANIO_RE = new RegExp(
+  `(?<!\\d\\s*(?:de\\s+)?)${NO_LETRA_ANTES}(${MES_ALT})${NO_LETRA_DESPUES}\\s*[-/.]?\\s*(?:de\\s+|del\\s+)?(20\\d{2})(?!\\d)`,
+);
+/** "dic-24", "jun/25" (año de dos cifras pegado al mes). */
+const ENC_MES_ANIO_CORTO_RE = new RegExp(`${NO_LETRA_ANTES}(${MES_ALT})[-/.](\\d{2})(?!\\d)`);
+/** Fecha completa: "30/06/2025", "30-06-2025", "2025-06-30". */
+const ENC_FECHA_NUM_RE = /(?<!\d)(?:(\d{1,2})[/.-](\d{1,2})[/.-](20\d{2})|(20\d{2})-(\d{1,2})-(\d{1,2}))(?!\d)/;
+/** "2025-06" / "2025/06". */
+const ENC_ANIO_MES_RE = /(?<![\d/.-])(20\d{2})[-/](0?[1-9]|1[0-2])(?![\d/.-])/;
+/** "06/2025" / "6-2025". */
+const ENC_MES_NUM_ANIO_RE = /(?<![\d/.-])(0?[1-9]|1[0-2])[-/](20\d{2})(?![\d/.-])/;
+
+/**
+ * Fecha de corte en el ENCABEZADO de una columna de saldo (ICU-03): "Saldo a
+ * 30/06/2025", "Saldo final 30-06-2025", "Saldo a junio 30 de 2025", "Saldo
+ * junio 2025", "Saldo Jun-2025", "Saldo 2025-06", "Saldo 06/2025". Igual que
+ * en el título, sólo cuentan fechas que cierran el mes (un día intermedio no
+ * determina meses completos). `null` si el encabezado no trae mes.
+ */
+function corteDeEncabezado(header: string): { year: number; month: number } | null {
+  const enLinea = corteDeLinea(header);
+  if (enLinea) return enLinea;
+  const t = normalizeHeaderText(header)
+    .replace(/[,;\t"'()]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!t) return null;
+  const num = ENC_FECHA_NUM_RE.exec(t);
+  if (num) {
+    const [, d1, m1, y1, y2, m2, d2] = num;
+    const year = parseInt(y1 ?? y2, 10);
+    const month = parseInt(m1 ?? m2, 10);
+    if (!(month >= 1 && month <= 12)) return null;
+    return cierraElMes(d1 ?? d2, year, month) ? { year, month } : null;
+  }
+  const mda = ENC_MES_DIA_ANIO_RE.exec(t);
+  if (mda) {
+    const month = mesDeNombre(mda[1]);
+    const year = parseInt(mda[3], 10);
+    return month !== null && cierraElMes(mda[2], year, month) ? { year, month } : null;
+  }
+  const dma = ENC_DIA_MES_ANIO_RE.exec(t);
+  if (dma) {
+    const month = mesDeNombre(dma[2]);
+    const year = parseInt(dma[3], 10);
+    return month !== null && cierraElMes(dma[1], year, month) ? { year, month } : null;
+  }
+  const ma = ENC_MES_ANIO_RE.exec(t);
+  if (ma) {
+    const month = mesDeNombre(ma[1]);
+    return month === null ? null : { year: parseInt(ma[2], 10), month };
+  }
+  const corto = ENC_MES_ANIO_CORTO_RE.exec(t);
+  if (corto) {
+    const month = mesDeNombre(corto[1]);
+    return month === null ? null : { year: 2000 + parseInt(corto[2], 10), month };
+  }
+  const am = ENC_ANIO_MES_RE.exec(t);
+  if (am) return { year: parseInt(am[1], 10), month: parseInt(am[2], 10) };
+  const mna = ENC_MES_NUM_ANIO_RE.exec(t);
+  if (mna) return { year: parseInt(mna[2], 10), month: parseInt(mna[1], 10) };
+  return null;
+}
+
+/** Texto con una fecha (mes y año, o fecha numérica), interpretable o no. */
+const FECHA_EN_TEXTO_RE = new RegExp(
+  `${NO_LETRA_ANTES}(?:${MES_ALT})${NO_LETRA_DESPUES}[^\\n]{0,12}?20\\d{2}(?!\\d)` +
+    `|(?<!\\d)\\d{1,2}[/.-]\\d{1,2}[/.-](?:20)?\\d{2}(?!\\d)` +
+    `|(?<!\\d)20\\d{2}[-/]\\d{1,2}(?!\\d)` +
+    `|(?<![\\d/.-])\\d{1,2}[-/]20\\d{2}(?!\\d)`,
+);
+
+function tieneFecha(texto: string): boolean {
+  return FECHA_EN_TEXTO_RE.test(normalizeHeaderText(texto));
+}
+
 /** Reetiqueta el periodo `from` como `to` en saldos y problemas de lectura. */
 function relabelPeriod(rows: RawAccountRow[], from: string, to: string): void {
   for (let i = 0; i < rows.length; i++) {
@@ -1773,7 +1933,12 @@ function explicitPeriodOf(header: string): string | null {
   const bracket = header
     .trim()
     .match(/^saldo\s*\[(\d{4}(?:-(?:0[1-9]|1[0-2]|Q[1-4]))?|\d{4}-\d{2}-\d{2}\.\.\d{4}-\d{2}-\d{2})\]$/i)?.[1];
-  return bracket ?? detectYearFromString(header);
+  if (bracket) return bracket;
+  // ICU-03: "Saldo a 30/06/2025", "Saldo junio 2025", "Saldo 2025-06" → corte
+  // 2025-06; a diciembre la etiqueta queda en el año (cierre anual).
+  const corte = corteDeEncabezado(header);
+  if (corte) return etiquetaDeCorte(corte);
+  return detectYearFromString(header);
 }
 
 const BALANCE_KIND_PRIORITY: Record<BalanceColumnKind, number> = {
@@ -2580,6 +2745,7 @@ function buildSnapshotForPeriod(
     mesesPeriodo,
     periodo: period,
     corteDeclarado: notasIngesta.corte,
+    fechaSinInterpretar: notasIngesta.fechaSinInterpretar,
   });
 
   const cents: ControlTotalsCents = {
@@ -2804,6 +2970,7 @@ function buildSnapshotForPeriod(
     // dice "De Enero 2025 a Diciembre 2025").
     periodoTipo: notasIngesta.corte?.tipo ?? inferPeriodoTipo(period),
     ...(notasIngesta.corte ? { corteDeclarado: notasIngesta.corte } : {}),
+    ...(notasIngesta.fechaSinInterpretar ? { fechaSinInterpretar: notasIngesta.fechaSinInterpretar } : {}),
     ...(vencimientosAplicados.length > 0 ? { vencimientosAplicados } : {}),
     classes,
     controlTotals,
@@ -3192,6 +3359,8 @@ interface DerivedKpiInputs {
   pygDisponible?: boolean;
   /** Fecha de corte declarada en el archivo (P4-c): la nota de base la cita. */
   corteDeclarado?: NotaIngesta['corte'];
+  /** ICU-03: fecha del archivo que no se interpretó como corte (se cita). */
+  fechaSinInterpretar?: string;
 }
 
 interface DerivedKpis {
@@ -3341,6 +3510,7 @@ export function refreshDerivedKpis(snap: PeriodSnapshot, prev: PeriodSnapshot | 
       ...kpiInputsFromTotals(ct, snap.period, patrimonioPromedio, activoPromedio),
       pygDisponible: snap.saldosDeApertura !== true,
       corteDeclarado: snap.corteDeclarado,
+      fechaSinInterpretar: snap.fechaSinInterpretar,
     }),
   );
   // EBITDA con la definición ÚNICA de `pillars/ebitda.ts` (ratios-kpis-05 /
@@ -3513,7 +3683,10 @@ function computeDerivedKpis(inputs: DerivedKpiInputs): DerivedKpis {
       : meses === 12
         ? soloAnio && !corte
           ? `Base 365 días. Periodo ${inputs.periodo}: 12 meses por SUPUESTO de cierre anual (la ` +
-            'etiqueta sólo trae el año y el archivo no declara la fecha de corte); ROE, ROA, ' +
+            (inputs.fechaSinInterpretar
+              ? `etiqueta sólo trae el año y la fecha del archivo «${inputs.fechaSinInterpretar}» no se ` +
+                'interpretó como fecha de corte de meses completos); ROE, ROA, '
+              : 'etiqueta sólo trae el año y el archivo no declara la fecha de corte); ROE, ROA, ') +
             'rotación de activos y días de cartera/inventario/proveedores sin anualizar. Si el ' +
             'balance es un corte intermedio, declare la fecha de corte (p. ej. «a junio 30 de ' +
             '2025») o rotule el periodo con el mes (AAAA-MM) para anualizarlos.'
@@ -4125,17 +4298,23 @@ function notaSupuestoClase7(
 function collectNotasIngesta(
   rows: RawAccountRow[],
   period: string,
-): { mensajes: string[]; corte: NotaIngesta['corte'] | undefined } {
+): { mensajes: string[]; corte: NotaIngesta['corte'] | undefined; fechaSinInterpretar: string | undefined } {
   const mensajes = new Set<string>();
   let corte: NotaIngesta['corte'] | undefined;
+  let fechaSinInterpretar: string | undefined;
   for (const row of rows) {
     for (const nota of row.notasIngesta ?? []) {
       if (nota.period !== null && nota.period !== period) continue;
       mensajes.add(nota.message);
       if (nota.corte && nota.period === period) corte ??= nota.corte;
+      if (nota.fechaSinInterpretar && nota.period === period) fechaSinInterpretar ??= nota.fechaSinInterpretar;
     }
   }
-  return { mensajes: [...mensajes].map((m) => `[${period}] ${m}`), corte };
+  return {
+    mensajes: [...mensajes].map((m) => `[${period}] ${m}`),
+    corte,
+    fechaSinInterpretar: corte ? undefined : fechaSinInterpretar,
+  };
 }
 
 // ---------------------------------------------------------------------------
