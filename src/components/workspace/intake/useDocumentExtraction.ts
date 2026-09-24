@@ -256,10 +256,14 @@ export function useDocumentExtraction() {
       const data = await uploadDocument(file, file.name, undefined, {
         unitMultiplier: MULTIPLICADOR_UNIDAD[unidad],
       });
+      // Si mientras tanto el usuario subió otro archivo (o reinició), esta
+      // respuesta es del archivo anterior: no reemplaza la lectura vigente.
+      if (lastFileRef.current !== file) return;
       const extracted = buildExtractedFields(data);
       rememberUploadedPreprocessed(extracted.rawText, data.preprocessed);
       setState(s => ({ ...s, extracted, unitConfirmation: { status: 'idle', error: null } }));
     } catch (err) {
+      if (lastFileRef.current !== file) return;
       setState(s => ({
         ...s,
         unitConfirmation: {
