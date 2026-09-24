@@ -19,6 +19,7 @@ import { ArrowDown, ArrowRight, ArrowUp } from 'lucide-react';
 
 import { CountUp } from '@/components/ui/ParallaxWrapper';
 import { Card } from '@/components/ui/Card';
+import { formatBigCop, formatDecimal, formatPct } from '@/lib/charts/format';
 import type {
   ExecutiveCard,
   ExecutiveCardColor,
@@ -202,11 +203,11 @@ function formatCardValue(
   isEs: boolean,
 ): string {
   if (value === null) return '—';
-  if (unit === 'cop') return formatCopAbbr(value);
+  if (unit === 'cop') return formatBigCop(value, isEs ? 'es' : 'en');
   if (unit === 'score') return formatScore(value);
   if (unit === 'count') return formatCount(value);
-  if (unit === 'pct') return `${(value * 100).toFixed(1)}%`;
-  if (unit === 'ratio') return value.toFixed(2);
+  if (unit === 'pct') return formatPct(value, 1, isEs ? 'es' : 'en');
+  if (unit === 'ratio') return formatDecimal(value, 2, isEs ? 'es' : 'en');
   return String(value);
 }
 
@@ -220,7 +221,7 @@ function formatDelta(
   const abs = Math.abs(value);
   if (unit === 'cop') {
     const sign = value > 0 ? '+' : '−';
-    return `${sign}${formatCopAbbr(abs).replace(/^\$/, '$')}`;
+    return `${sign}${formatBigCop(abs, isEs ? 'es' : 'en')}`;
   }
   if (unit === 'score') {
     const sign = value > 0 ? '+' : '−';
@@ -232,11 +233,11 @@ function formatDelta(
   }
   if (unit === 'pct') {
     const sign = value > 0 ? '+' : '−';
-    return `${sign}${(abs * 100).toFixed(1)} pp`;
+    return `${sign}${formatDecimal(abs * 100, 1, isEs ? 'es' : 'en')} pp`;
   }
   if (unit === 'ratio') {
     const sign = value > 0 ? '+' : '−';
-    return `${sign}${abs.toFixed(2)}`;
+    return `${sign}${formatDecimal(abs, 2, isEs ? 'es' : 'en')}`;
   }
   return null;
 }
@@ -251,24 +252,6 @@ function formatCount(value: number): string {
   return `${Math.round(value)}`;
 }
 
-/** Formato COP abreviado: $X,XB / $X,XM / $X.XXX. Negativo se prefija con −. */
-function formatCopAbbr(amount: number): string {
-  const abs = Math.abs(amount);
-  const sign = amount < 0 ? '−' : '';
-  if (abs >= 1_000_000_000) {
-    const v = (amount / 1_000_000_000).toFixed(1).replace('.', ',');
-    return `${sign}$${v.replace(/^-/, '')}B`;
-  }
-  if (abs >= 1_000_000) {
-    const v = (amount / 1_000_000).toFixed(0);
-    return `${sign}$${v.replace(/^-/, '')}M`;
-  }
-  if (abs >= 1_000) {
-    const v = (amount / 1_000).toFixed(0);
-    return `${sign}$${v.replace(/^-/, '')}K`;
-  }
-  return `${sign}$${Math.abs(amount).toFixed(0)}`;
-}
 
 // ---------------------------------------------------------------------------
 // Color tokens (deliberadamente fuera del sistema n-XXX para diferenciar)

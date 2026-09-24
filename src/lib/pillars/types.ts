@@ -110,9 +110,11 @@ export interface ExecutiveCard {
    *  (ej. FCF sin periodo comparativo). */
   value: number | null;
   /** Unidad para formateo en UI:
-   *  - cop: pesos colombianos abreviados ($1,2B / $1,2M).
-   *  - pct: porcentaje (multiplica por 100, sufijo %).
-   *  - ratio: número crudo (toFixed(2)).
+   *  - cop: pesos colombianos abreviados con `formatBigCop` de
+   *    lib/charts/format ($1,2 mil M / $1,2 M; negativos entre paréntesis;
+   *    en inglés $1.2B / $1.2M).
+   *  - pct: porcentaje (multiplica por 100, sufijo %, coma decimal en es).
+   *  - ratio: número con dos decimales (coma decimal en es).
    *  - count: entero sin decimales (errores, anomalías).
    *  - score: 0-100 sufijo /100.
    *  - months: meses (entero, sufijo "meses"/"months"). */

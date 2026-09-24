@@ -14,6 +14,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { GlassModal } from '@/components/ui/GlassModal';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/context/LanguageContext';
+import { formatBigCop } from '@/lib/charts/format';
 import type { CapexEvent } from '@/lib/pillars/futuro-bars';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -30,12 +31,13 @@ function parseCopInput(raw: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-/** Formatea valor COP abreviado para la lista. Ej: $1.200M / $450K */
-function formatCopShort(v: number): string {
-  const abs = Math.abs(v);
-  if (abs >= 1_000_000_000) return `$${(abs / 1_000_000_000).toFixed(1)}B`;
-  if (abs >= 1_000_000) return `$${Math.round(abs / 1_000_000).toLocaleString('es-CO')}M`;
-  return `$${Math.round(abs).toLocaleString('es-CO')}`;
+/**
+ * COP abreviado para la lista (ratios-kpis-27): `$1,2 mil M` / `$450 mil` en
+ * español — nunca `B`, que en español se lee como billón (10^12) — y
+ * `$1.2B` / `$450K` en inglés. Los eventos son salidas: se muestra la magnitud.
+ */
+function formatCopShort(v: number, isEs: boolean): string {
+  return formatBigCop(Math.abs(v), isEs ? 'es' : 'en');
 }
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -222,8 +224,8 @@ export function CapexEventsModal({
           <div className="flex items-center justify-between mb-1">
             <span className="text-xs text-n-500 uppercase tracking-wide font-mono">
               {isEs
-                ? `${events.length} evento${events.length !== 1 ? 's' : ''} · Total ${formatCopShort(totalCop)}`
-                : `${events.length} event${events.length !== 1 ? 's' : ''} · Total ${formatCopShort(totalCop)}`}
+                ? `${events.length} evento${events.length !== 1 ? 's' : ''} · Total ${formatCopShort(totalCop, isEs)}`
+                : `${events.length} event${events.length !== 1 ? 's' : ''} · Total ${formatCopShort(totalCop, isEs)}`}
             </span>
           </div>
 
@@ -240,7 +242,7 @@ export function CapexEventsModal({
                 <p className="text-xs text-n-500">
                   {isEs ? `Mes ${ev.monthOffset}` : `Month ${ev.monthOffset}`}
                   {' · '}
-                  <span className="text-gold-400">{formatCopShort(ev.amountCop)}</span>
+                  <span className="text-gold-400">{formatCopShort(ev.amountCop, isEs)}</span>
                 </p>
               </div>
               <button
