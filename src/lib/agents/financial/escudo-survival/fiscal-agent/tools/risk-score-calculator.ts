@@ -12,19 +12,26 @@
 //        F09 1-14%       → +20
 //        F09 15-25%      → +5
 //        F09 > 25%       → +0
-//   2. Margen neto alto:
+//   2. Margen neto alto (utilidad neta / ingresos netos de devoluciones — el
+//      mismo `margenNeto` del preprocesador):
 //        > 90%           → +25
 //        70-90%          → +15
 //        30-70%          → +5
 //        < 30%           → +0
-//   3. Costo de ventas bajo (Clases 6+7 / Ingresos):
+//   3. Costo bajo (costos y gastos sin impuesto / ingresos netos):
 //        < 1%            → +20
 //        1-10%           → +10
 //        > 10%           → +0
-//   4. Crecimiento ingresos inusual (vs comparativo si existe):
+//   4. Crecimiento ingresos inusual (ingresos netos vs comparativo de IGUAL
+//      duración, si existe):
 //        > 100%          → +15
 //        50-100%         → +8
 //        < 50%           → +0
+//   Base de ingresos: `controlTotals.cents.ingresosNetos` (|ordinarias| −
+//   |4175|), invariante a la convención de signos del ERP. Nunca la Σ firmada
+//   de la clase 4 (`cents.ingresos`), que suma las devoluciones cuando el ERP
+//   las exporta con el signo de las ventas (auditoría 2026-09-24,
+//   recalculo-final-01).
 //   5. Saldo a favor sin solicitar: 0 puntos — F04 es una estimación
 //      contable, no un saldo a favor determinable (auditoría 2026-09).
 //
@@ -37,6 +44,7 @@
 // ---------------------------------------------------------------------------
 
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
+import { mesesCubiertos, periodsComparable } from '@/lib/pillars/shared-metrics';
 import { formatCopFromCents, serializeMoneyCop } from '@/lib/agents/financial/contracts/money';
 import type { FiscalAnchorBlock } from '../../fiscal-anchor/types';
 import type { RiskFactorBreakdown, RiskNivel } from '../types';
@@ -78,9 +86,9 @@ function pctRatioCents(num: bigint, denom: bigint): number {
 }
 
 /**
- * Ingresos del periodo anterior (comparativo) en BigInt cents, si están
- * disponibles. Retorna `null` cuando no hay periodo comparativo materializado
- * en `controlTotals.cents` (single-period balance).
+ * Ingresos netos de devoluciones del periodo anterior (comparativo) en BigInt
+ * cents, si están disponibles. Retorna `null` cuando no hay periodo
+ * comparativo materializado en `controlTotals.cents` (single-period balance).
  */
 function ingresosComparativoCents(
   pp: PreprocessedBalance,
@@ -89,7 +97,7 @@ function ingresosComparativoCents(
   if (!comp) return null;
   const cents = comp.controlTotals.cents;
   if (!cents) return null;
-  return cents.ingresos;
+  return cents.ingresosNetos;
 }
 
 // ---------------------------------------------------------------------------
@@ -249,12 +257,12 @@ function factorSinProvisionRenta(
 }
 
 // ---------------------------------------------------------------------------
-// Factor 2 — Margen neto alto (utilidadNeta / ingresos)
+// Factor 2 — Margen neto alto (utilidadNeta / ingresos netos)
 // ---------------------------------------------------------------------------
 
 function factorMargenNeto(pp: PreprocessedBalance): RiskFactorBreakdown {
   const cents = pp.primary.controlTotals.cents;
-  if (!cents || cents.ingresos <= ZERO) {
+  if (!cents || cents.ingresosNetos <= ZERO) {
     return {
       factor: 'margen_alto',
       descripcion: 'Margen neto sobre ingresos',
@@ -262,7 +270,7 @@ function factorMargenNeto(pp: PreprocessedBalance): RiskFactorBreakdown {
       detalle: 'No hay ingresos materializados — factor no aplicable.',
     };
   }
-  const margenPct = pctRatioCents(cents.utilidadNeta, cents.ingresos);
+  const margenPct = pctRatioCents(cents.utilidadNeta, cents.ingresosNetos);
   let puntos: number;
   let detalle: string;
   if (margenPct > 90) {
@@ -290,7 +298,7 @@ function factorCostoBajo(pp: PreprocessedBalance): RiskFactorBreakdown {
   // operativos totales — el cálculo refinado por clase requiere acceso al
   // árbol de cuentas que no exponemos a este tool.
   const cents = pp.primary.controlTotals.cents;
-  if (!cents || cents.ingresos <= ZERO) {
+  if (!cents || cents.ingresosNetos <= ZERO) {
     return {
       factor: 'costo_bajo',
       descripcion: 'Relación costo-ingreso',
@@ -301,7 +309,7 @@ function factorCostoBajo(pp: PreprocessedBalance): RiskFactorBreakdown {
   // gastos = clase 5+6+7 (incluye impuesto causado). Para costo "operativo",
   // restamos impuesto causado.
   const costoOperativo = cents.gastos - cents.impuestoCausado;
-  const ratioPct = pctRatioCents(costoOperativo, cents.ingresos);
+  const ratioPct = pctRatioCents(costoOperativo, cents.ingresosNetos);
   let puntos: number;
   let detalle: string;
   if (ratioPct < 1) {
@@ -332,7 +340,21 @@ function factorCrecimiento(pp: PreprocessedBalance): RiskFactorBreakdown {
       detalle: 'No hay periodo comparativo materializado — factor no aplicable.',
     };
   }
-  const crecimientoPct = pctRatioCents(cents.ingresos - prev, prev);
+  // Mismo criterio que el CAGR del pilar Futuro: un acumulado parcial contra
+  // un año completo (o un saldo de apertura) no es un crecimiento.
+  if (!periodsComparable(pp.primary, pp.comparative!)) {
+    const ma = mesesCubiertos(pp.primary);
+    const mb = mesesCubiertos(pp.comparative!);
+    return {
+      factor: 'crecimiento_inusual',
+      descripcion: 'Crecimiento de ingresos vs periodo anterior',
+      puntos: 0,
+      detalle:
+        `Periodos de distinta duración o sin duración determinable (${ma ?? 'N/D'} vs ` +
+        `${mb ?? 'N/D'} meses) — crecimiento no comparable; factor no aplicable.`,
+    };
+  }
+  const crecimientoPct = pctRatioCents(cents.ingresosNetos - prev, prev);
   let puntos: number;
   let detalle: string;
   if (crecimientoPct > 100) {
