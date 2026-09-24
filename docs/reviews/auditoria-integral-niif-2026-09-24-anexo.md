@@ -6,7 +6,12 @@ estado sale de los reportes de corrección de cada paquete y de las olas de inte
 significa cambio con prueba de regresión (o, para rótulos y documentación, cambio verificado por la suite).
 Los títulos son los del auditor (abreviados); los hallazgos de seguridad se describen en términos genéricos.
 
-Resumen de estado: Corregido: 259; Corregido en parte (ver Pendientes): 10
+La fase 2 (código final `54802609`) actualizó el estado de los 10 hallazgos que la fase 1 dejó "en parte" (columna
+Estado de la tabla principal) y añade dos secciones al final: los hallazgos de la fase 1 que no figuraban en este
+índice y se atendieron en la fase 2 (tres quedan en parte), y los 55 hallazgos de la re-auditoría final con su commit.
+
+Resumen de estado de la tabla principal: al cierre de la fase 1, Corregido 259 y Corregido en parte 10; tras la fase 2,
+Corregido 264 y En parte 5 (ver *Pendientes* del informe).
 
 | ID | Área | Severidad | Hallazgo | Estado |
 |---|---|---|---|---|
@@ -51,7 +56,7 @@ Resumen de estado: Corregido: 259; Corregido en parte (ver Pendientes): 10
 | ingesta-04 | ingesta | alta | XLSX multihoja: hojas del mismo año se pisan y mezclan cuentas; hojas sin año eligen el periodo primario por orden alfabético | Corregido |
 | ingesta-08 | ingesta | alta | Detección de columnas frágil (tildes, Windows-1252, filas de título): el balance no se preprocesa y el upload lo oculta | Corregido |
 | ingesta-10 | ingesta | alta | API v1 `rows` no normaliza la convención de signos; la misma data por `csv` da totales distintos | Corregido |
-| ingesta-14 | ingesta | alta | Siigo (alliances), Alegra, World Office, SAP B1, Dynamics y Odoo arman el 'balance de prueba' sólo con movimientos del mes (sin saldo inicial) | Corregido en parte (ver Pendientes) |
+| ingesta-14 | ingesta | alta | Siigo (alliances), Alegra, World Office, SAP B1, Dynamics y Odoo arman el 'balance de prueba' sólo con movimientos del mes (sin saldo inicial) | En parte: sin cambio en la fase 2 (saldos acumulados por conector; Pendientes #14) |
 | niif-contrato-01 | niif-contrato | alta | Utilidad Bruta y EBIT anclados incluyen los ingresos NO operacionales (grupo 42) y el validador obliga a presentarlos así | Corregido |
 | niif-contrato-02 | niif-contrato | alta | El EFE que emite el LLM no se cruza contra el EFE determinista: secciones reclasificadas, efectivo inicial inventado o dividendos fabricados pasan todos los… | Corregido |
 | niif-contrato-03 | niif-contrato | alta | EFE determinista ('EFE VINCULANTE'): apropiación de reservas y capitalización de utilidades (no monetarias) se presentan como flujos de financiación | Corregido |
@@ -118,14 +123,14 @@ Resumen de estado: Corregido: 259; Corregido en parte (ver Pendientes): 10
 | contab-nomina-16 | contab-nomina | media | Base de provisiones incluye asientos en borrador | Corregido |
 | contab-nomina-17 | contab-nomina | media | Saldos iniciales: la cuenta balanceadora 3705 no es postable en el PUC sembrado y el diseño cuadra en patrimonio hasta un 30 % de cuentas desconocidas | Corregido |
 | contab-nomina-19 | contab-nomina | media | Costo laboral en producción (/api/pyme/empleados): exoneración 114-1 incondicional, sin tope IBC de 25 SMMLV y sin salario integral | Corregido |
-| contab-nomina-20 | contab-nomina | media | Aporte del dueño independiente: cita norma inexequible (Ley 1955 art. 244), 40 % sin costos presuntos, sin tope 25 SMMLV ni FSP | Corregido en parte (ver Pendientes) |
+| contab-nomina-20 | contab-nomina | media | Aporte del dueño independiente: cita norma inexequible (Ley 1955 art. 244), 40 % sin costos presuntos, sin tope 25 SMMLV ni FSP | En parte: sin cambio en la fase 2 (Pendientes #15) |
 | contab-nomina-21 | contab-nomina | media | Documento RAG de retención laboral (Arts. 383-388) con topes obsoletos: renta exenta 25 % "240 UVT/mes" y límite "1.340 UVT mensuales" | Corregido |
 | e2e-niif-09 | re-auditoría e2e-niif | media | Rótulos del LLM sin validar: fechas de otro periodo en el ECP, cuentas mal rotuladas y 'ganancia' en una pérdida | Corregido |
 | e2e-niif-10 | re-auditoría e2e-niif | media | Notas de los estados y notas técnicas (Pass-3) con cifras falsas: se exportan sin validar y sin el aviso de narrativa IA | Corregido |
 | e2e-niif-11 | re-auditoría e2e-niif | media | HTML emitible con cifras falsas en prosa o abreviadas: pérdida $4M (real $40M), EBITDA positivo, ROE 25 % y corte 2024 | Corregido |
 | e2e-niif-12 | re-auditoría e2e-niif | media | Subtotales sin código del ESF con el signo invertido pasan (se compara el valor absoluto) | Corregido |
 | e2e-niif-13 | re-auditoría e2e-niif | media | /html devuelve 400 siempre desde la UI: el company que envía PipelineWorkspace (effectiveCompany) no trae `signatories` y CompanyInfoSchema la exige | Corregido |
-| e2e-niif-14 | re-auditoría e2e-niif | media | Parte II: rótulos o KPIs fuera de la regex y tendencias con comparativo se declaran 'no verificables' y se exportan con signo o cifra falsos | Corregido en parte (ver Pendientes) |
+| e2e-niif-14 | re-auditoría e2e-niif | media | Parte II: rótulos o KPIs fuera de la regex y tendencias con comparativo se declaran 'no verificables' y se exportan con signo o cifra falsos | En parte: la fase 2 publica N/D los KPIs sin ancla y verifica ingresos y variaciones del dashboard (P3, F-html); quedan filas de dinero sin ancla (Pendientes #1) |
 | e2e-niif-15 | re-auditoría e2e-niif | media | Centro de Alertas (enlazado desde el Insight Inbox del header) muestra 6 alertas fijas como 'detectadas por la IA' con cifras del cliente y sin rótulo de demo | Corregido |
 | ingesta-07 | ingesta | media | 'Saldo Débito / Saldo Crédito' con tilde se interpretan como dos periodos: pasivo y patrimonio del periodo actual quedan en 0 | Corregido |
 | ingesta-09 | ingesta | media | 'Saldo Anterior' (apertura del periodo) se etiqueta como año previo: el P&G comparativo sale 0 en vez de N/D | Corregido |
@@ -134,7 +139,7 @@ Resumen de estado: Corregido: 259; Corregido en parte (ver Pendientes): 10
 | ingesta-15 | ingesta | media | isAuxiliary = code.length >= 6 duplica saldos cuando el ERP entrega informes jerárquicos (subcuenta + auxiliares) | Corregido |
 | ingesta-16 | ingesta | media | trialBalanceToCSV serializa importes float crudos: la suma de centavos se infla al re-parsear (ruta ERP → pipeline) | Corregido |
 | ingesta-17 | ingesta | media | Los conectores sólo entienden 'YYYY-MM': los periodos anuales y trimestrales generan fechas NaN | Corregido |
-| ingesta-18 | ingesta | media | La ingesta ERP no llega a los informes: la UI de sync siempre da 400, el cron y el webhook descartan el resultado y el pipeline nunca recibe conexiones | Corregido en parte (ver Pendientes) |
+| ingesta-18 | ingesta | media | La ingesta ERP no llega a los informes: la UI de sync siempre da 400, el cron y el webhook descartan el resultado y el pipeline nunca recibe conexiones | En parte: sin cambio en la fase 2 (Pendientes #14) |
 | ingesta-21 | ingesta | media | query_erp: el 'Resultado operacional' ignora la clase 7 y usa valores absolutos; los conectores intercambian la clase 5 (gastos) y la 6 (costos) | Corregido |
 | ingesta-24 | ingesta | media | Extracto CSV en orden descendente: endingBalance toma la fila más antigua del último día y el control de continuidad da falsos avisos | Corregido |
 | ingesta-25 | ingesta | media | Extracto CSV: se ignora la columna de naturaleza (D/C) y un débito exportado con signo negativo invierte el movimiento | Corregido |
@@ -155,7 +160,7 @@ Resumen de estado: Corregido: 259; Corregido en parte (ver Pendientes): 10
 | niif-preproceso-14 | niif-preproceso | media | R18 invoca la 'causal de disolución por pérdidas (Art. 459 C.Co.)', derogada por la Ley 2069 de 2020, y además con la fórmula invertida | Corregido |
 | niif-preproceso-16 | niif-preproceso | media | EFE (R2) sólo modela los grupos 13/14/15/21-25/31-33/36-37: inversiones (12), intangibles (16), diferidos (17), otros activos (18) y pasivos 26-29 se cierran… | Corregido |
 | niif-preproceso-19 | niif-preproceso | media | El detector de 'saldo a favor de renta' usa 1805 (Bienes de arte y cultura en el PUC), todo 1355 (incluye ICA, IVA retenido e impuestos descontables) y 5404… | Corregido |
-| niif-preproceso-21 | niif-preproceso | media | Corriente/no corriente fijado sólo por grupo PUC, sin vencimientos: 21 siempre corriente, 28 siempre no corriente (anticipos de clientes), 12/13 siempre corr… | Corregido en parte (ver Pendientes) |
+| niif-preproceso-21 | niif-preproceso | media | Corriente/no corriente fijado sólo por grupo PUC, sin vencimientos: 21 siempre corriente, 28 siempre no corriente (anticipos de clientes), 12/13 siempre corr… | Corregido en la fase 2 (P4, I2, I4, I5): excepciones de vencimiento declaradas por cuenta, ESF partido por plazo y E27; el grupo PUC sigue como supuesto revelado (excepciones por defecto: decisión de negocio, Pendientes #18) |
 | niif-preproceso-22 | niif-preproceso | media | R1 lleva sobregiros y anticipos con saldo contrario a '2810ZZ' (grupo 28 → pasivo NO corriente) y no recalcula efectivoCuenta11 ni deudoresCuenta13 | Corregido |
 | niif-preproceso-24 | niif-preproceso | media | EBIT, margen operativo y cobertura de intereses incluyen ingresos NO operacionales (grupo 42); el gasto financiero cae a todo el grupo 53 cuando falta 5305 | Corregido |
 | niif-preproceso-25 | niif-preproceso | media | Días de cartera sobre todo el grupo 13 (incluye 1355 anticipos de impuestos, 1330 y 1365) y 365 días fijos incluso en cortes parciales | Corregido |
@@ -181,7 +186,7 @@ Resumen de estado: Corregido: 259; Corregido en parte (ver Pendientes): 10
 | prompts-normativa-14 | prompts-normativa | media | Pasivos laborales: el prompt manda repartir el saldo de la Clase 25 en 38,17 / 4,58 / 38,17 / 19,08 % cuando no hay auxiliares | Corregido |
 | prompts-normativa-15 | prompts-normativa | media | Conocimiento NIIF: deterioro PYMES descrito como pérdida esperada, activos contingentes 'posibles' y tasa de NIIF 16 incompleta | Corregido |
 | prompts-normativa-16 | prompts-normativa | media | Chat contable: criterios de Grupo 1 inexactos y criterios de Grupo 3 derogados | Corregido |
-| prompts-normativa-17 | prompts-normativa | media | Chat tributario: beneficios derogados presentados como vigentes, plazo de devolución con garantía erróneo y tasa moratoria mal definida | Corregido en parte (ver Pendientes) |
+| prompts-normativa-17 | prompts-normativa | media | Chat tributario: beneficios derogados presentados como vigentes, plazo de devolución con garantía erróneo y tasa moratoria mal definida | Corregido en la fase 2 (P5, tributario-calc-18): usura del mes − 2 pp con fuente o N/D; tabla mensual en *Operación* |
 | prompts-normativa-18 | prompts-normativa | media | El corpus RAG en producción conserva el régimen de dividendos derogado y la lectura anual del tope de 100 UVT del Art. 771-5 que anuló el Consejo de Estado | Corregido |
 | prompts-normativa-20 | prompts-normativa | media | Dictamen del revisor fiscal: empresa en marcha y asuntos clave aplicados en contra de las NIA vigentes (570 revisada y 701) | Corregido |
 | prompts-normativa-23 | prompts-normativa | media | Instrucción de citar la 'impracticabilidad' (§3.14, §10.21, §29.27, NIC 7 §50) cuando falta un dato, en contra del contrato N/D y de la REGLA 2 ('§' prohibido) | Corregido |
@@ -211,25 +216,25 @@ Resumen de estado: Corregido: 259; Corregido en parte (ver Pendientes): 10
 | reportes-export-18 | reportes-export | media | Grilla de KPIs del PDF: categorías rotuladas por posición y KPIs 10–12 descartados | Corregido |
 | tributario-calc-05 | tributario-calc | media | Motor Normativo toma el dígito de verificación como 'último dígito del NIT' para el calendario | Corregido |
 | tributario-calc-06 | tributario-calc | media | get_tax_calendar presenta fechas calculadas por el scraper (verified:false) como 'OFICIAL_DIAN_VERIFICADO — puedes presentarlas como definitivas' | Corregido |
-| tributario-calc-07 | tributario-calc | media | Calendario nacional 2026 incompleto: sin Régimen SIMPLE, precios de transferencia, INC ni ingresos y patrimonio | Corregido en parte (ver Pendientes) |
+| tributario-calc-07 | tributario-calc | media | Calendario nacional 2026 incompleto: sin Régimen SIMPLE, precios de transferencia, INC ni ingresos y patrimonio | En parte: sin cambio en la fase 2 (Pendientes #16) |
 | tributario-calc-09 | tributario-calc | media | Reglas sembradas de retención incompletas o con criterio distinto al DUR: sin compras, sin 6 % a no declarantes, honorarios por 'declarante' y sin Art. 383 p… | Corregido |
 | tributario-calc-11 | tributario-calc | media | Balanza 'Régimen Simple vs Ordinario' (/workspace/pyme/pagos) muestra un 'impuesto ordinario' subestimado | Corregido |
 | tributario-calc-12 | tributario-calc | media | Calculadora de sanciones sin reducción Art. 640 num. 1-2, sin corrección previa al vencimiento y sin el incremento del par. 1 del Art. 644 | Corregido |
 | tributario-calc-13 | tributario-calc | media | Prompts de auditoría y planeación con cuantías de sanción desactualizadas (Art. 651 '5 %', Art. 647 'reducible al 50 %', zona franca '20 %') | Corregido |
 | tributario-calc-16 | tributario-calc | media | Neteo 'determinista' del descuento Art. 257 se rotula TOTAL VINCULANTE sobre un impuesto a cargo producido por el LLM y con tope 25 % sólo para donaciones | Corregido |
 | tributario-calc-17 | tributario-calc | media | Prompts ordenan emitir '0' cuando un dato fiscal no es calculable (N/D ≠ 0) | Corregido |
-| tributario-modulos-03 | tributario-modulos | media | Ningún validador determinista se ejecuta en producción (survival-validators, fiscal-agent/validators, fiscal-anchor-validators); los de Capa 4 ni siquiera ac… | Corregido en parte (ver Pendientes) |
+| tributario-modulos-03 | tributario-modulos | media | Ningún validador determinista se ejecuta en producción (survival-validators, fiscal-agent/validators, fiscal-anchor-validators); los de Capa 4 ni siquiera ac… | Corregido en la fase 2 (P5): M3/M5/M6 conectados, ningún módulo sin validar |
 | tributario-modulos-04 | tributario-modulos | media | Agente Fiscal: montos de Conciliación, Devoluciones y Supervivencia vienen del LLM sin sobrescritura ni recomputo (incluidos los marcados 'intocables') | Corregido |
 | tributario-modulos-05 | tributario-modulos | media | Score de Riesgo DIAN mostrado es el del LLM; se pierde `publicable` y el schema no admite 2 de los 7 factores deterministas | Corregido |
 | tributario-modulos-06 | tributario-modulos | media | /api/escudo-survival (TET calculator) sigue calculando la TTD con el LLM ('TTD ~ TET' sobre UAI) e impuesto adicional; TET tautológica y fallback 'verde' | Corregido |
 | tributario-modulos-07 | tributario-modulos | media | Anti-DIAN (bancarización Art. 771-5 §1) aplica el 40% sobre la propia caja y usa el SALDO de 1105 como 'pagos en efectivo'; costosTotales duplica la clase 6… | Corregido |
 | tributario-modulos-08 | tributario-modulos | media | Planeación tributaria: 'Cálculo dual TMT' del LLM con impuesto a cargo = MAX(35% renta, 15%×UAI) y tmtAplicable=true por defecto; el 'TOTAL VINCULANTE' del A… | Corregido |
 | tributario-modulos-09 | tributario-modulos | media | Precios de transferencia: umbrales de obligatoriedad con UVT 2026 fija aunque el periodo sea 2025, y conclusión del LLM sin chequeo de coherencia | Corregido |
-| tributario-modulos-10 | tributario-modulos | media | Precios de transferencia: rango intercuartil, 'dentro del rango' y 'CUMPLE' los calcula el LLM (incluso con comparables simulados) y no se recalculan desde s… | Corregido en parte (ver Pendientes) |
+| tributario-modulos-10 | tributario-modulos | media | Precios de transferencia: rango intercuartil, 'dentro del rango' y 'CUMPLE' los calcula el LLM (incluso con comparables simulados) y no se recalculan desde s… | Corregido en la fase 2 (P5): ajuste en COP N/D con motivo sin base determinista |
 | tributario-modulos-12 | tributario-modulos | media | Modo 'devolucion' del Agente Fiscal (ofrecido en la UI) siempre falla | Corregido |
 | tributario-modulos-14 | tributario-modulos | media | Tope individual Art. 771-5 §2 descrito 'por NIT' en el Agente Fiscal, contra la sentencia 26676/2023 (se mide por transacción) | Corregido |
 | tributario-modulos-15 | tributario-modulos | media | F09 (razón contable) se sigue usando como proxy de la TTD: +20 puntos 'debajo del umbral 15% de TTD' y tarjeta CCV en rojo bajo 15% con norma Art. 240 par. 6 | Corregido |
-| tributario-modulos-16 | tributario-modulos | media | Planeación (Agente Fiscal, módulo 4): ahorros medidos contra F02 = UAI×35% usando deducciones ya incluidas en la UAI y con el Art. 254 dentro del tope del Ar… | Corregido en parte (ver Pendientes) |
+| tributario-modulos-16 | tributario-modulos | media | Planeación (Agente Fiscal, módulo 4): ahorros medidos contra F02 = UAI×35% usando deducciones ya incluidas en la UAI y con el Art. 254 dentro del tope del Ar… | Corregido en la fase 2 (P5, NT-01): tope del Art. 258 verificado en código por escenario; residual en Pendientes #13 |
 | tributario-modulos-17 | tributario-modulos | media | Sanciones de precios de transferencia (Art. 260-11) incorrectas en los prompts del estudio | Corregido |
 | tributario-modulos-18 | tributario-modulos | media | Conciliación fiscal: se cita el Decreto 2235/2017 (concesiones/APP) como reglamento del Formato 2516 y el umbral 45.000 UVT se expresa con UVT 2026 para cual… | Corregido |
 | tributario-modulos-19 | tributario-modulos | media | Impuesto diferido con tarifa fija 35% para toda diferencia, sin ganancia ocasional (15%) ni tarifas especiales; Art. 137 'maquinaria 15 años'; invariantes no… | Corregido |
@@ -279,3 +284,137 @@ Resumen de estado: Corregido: 259; Corregido en parte (ver Pendientes): 10
 | valoracion-15 | valoracion | baja | Sintetizador: la regla de rango ni la de pesos, divergencia ni bandera roja se validan (contrato afirma lo contrario) | Corregido |
 | valoracion-16 | valoracion | baja | Citas normativas erróneas en valoración: Circular 115-000011/2008 (es de Revisoría Fiscal) y Art. 90 E.T. mal resumido | Corregido |
 | valoracion-19 | valoracion | baja | Analista de Mercado: clasificación MIPYME por activos (500 SMMLV) derogada y cifra calculada con el SMMLV 2025 | Corregido |
+
+## Hallazgos de la fase 1 fuera de este índice, atendidos en la fase 2
+
+Hallazgos de severidad baja (o residuales) que la fase 1 dejó "no procesados" y los paquetes de la fase 2 verificaron
+contra el código antes de corregirlos. "Ya corregido" significa que el paquete comprobó que el defecto no reproducía en
+la base `e631415` y lo dejó registrado con prueba.
+
+| ID | Paquete | Hallazgo (breve) | Estado |
+|---|---|---|---|
+| niif-preproceso-33 | P1, I1 | El preprocesado del cliente se aceptaba sin recomputar sus totales | Corregido: se re-deriva y 422 si difiere |
+| niif-contrato-21 | P1 | Exportación sin anclas cuando no llegaba el balance | Corregido: por referencia siempre hay anclas del balance persistido |
+| tributario-modulos-24 | P1 | `/api/escudo/fiscal-anchor` persistía cifras del cliente | Corregido: sólo el snapshot y el Âncora de la versión persistida |
+| reportes-export-23 | P1 | PDF de cierre mensual con una ruta de almacenamiento predecible | Corregido: ruta no adivinable (el enlace viaja en la notificación) |
+| pipeline-flujo-19 | P1 | "Generar HTML" no hacía nada sin preprocesado | Corregido: mensaje visible es/en |
+| niif-contrato-18 | P2 | Ejemplo de la Corrección 2 de la spec v2.1 aritméticamente inconsistente | Corregido: nota de enmienda en la spec |
+| niif-contrato-19 | P2 | Numeración de notas sin control determinista | Corregido: numeración global determinista |
+| niif-contrato-20 | P2 | Faltaban pruebas del EFE determinista con un informe rico | Corregido: mutación de ±1 centavo sobre el informe de tres cortes |
+| niif-contrato-22 | P2, I2 | Casos borde de `money.ts` | Corregido: `RangeError` fuera de 2^53, piso de negativos, conversión exacta en PDF y Excel |
+| niif-contrato-23 | P2 | `curatorFlags` eran eco del LLM | Corregido: deterministas y exigidos por E26 |
+| reportes-export-20 | P2 | Orden de columnas comparativas Excel ≠ PDF; color de variación sin naturaleza | Corregido |
+| reportes-export-21 | P2, I2, I4 | Método "indirect" crudo, paginación "00 / 00", índice sin números, páginas en blanco, año fijo | Corregido (incluida la compilación en `868bf409`) |
+| ratios-kpis-28 | P2 | Fallbacks con otra fórmula o 0 cuando el KPI es null | Ya corregido (reportes-export-12) |
+| pipeline-flujo-20 | P3, I1 | El dashboard abreviaba miles de millones como "B" | Corregido: millones; spec v10.1 alineada |
+| pipeline-flujo-21 | P3, I1 | `provisional` inerte en el camino partido | Corregido: BORRADOR en consolidado, versión persistida, PDF y sello |
+| pipeline-flujo-23 | P3 | Sin prueba de traza de cifras | Corregido: traza de tres cifras de punta a punta |
+| prompts-normativa-21 | P3, I1 | Citas inexactas en prompts de aseguramiento y fiscales | Corregido: citas con fuente del corpus; Formato 2516 por el Decreto 1998/2017 |
+| valoracion-21 | P3, I2 | DCF mezclaba base nominal y real | Corregido: base nominal en prompt y contrato (`cashFlowBasis`) |
+| ingesta-30 | P4 | Upload y API v1 sin rango seguro de centavos | Corregido (motivo de integridad; `rows` fuera de rango → 400) |
+| niif-preproceso-29 | P4 | `periodoTipo` "cerrado" casi inalcanzable | Corregido: corte declarado a diciembre |
+| niif-preproceso-30 | P4 | Cobertura contaba cuentas virtuales del curador | Corregido |
+| niif-preproceso-31, recalculo-15 | P4 | README de fixtures desactualizado | Corregido |
+| niif-preproceso-32 | P4 | Clase 7 restada sin revelar el supuesto | Corregido: nota del supuesto |
+| recalculo-13, recalculo-14 | P4 | EBIT con grupo 42; R12 con la Σ firmada | Ya corregidos; registrados con prueba |
+| ingesta-26 | P4 | MT940: año de la fecha de entrada | Corregido |
+| ingesta-22 | P4 | Paginación de Siigo Nube / alliances | Corregido: conteo real y verificación del total |
+| tributario-calc-18 | P5 | Tasa de mora de agosto aplicada en septiembre | Corregido: usura del mes − 2 pp o N/D (tabla mensual en *Operación*) |
+| tributario-calc-19 | P5 | Sanción mínima escrita a mano | Corregido: `MIN_SANCTION` |
+| tributario-calc-20 | P5 | Seed de UVT con una resolución inexistente | Ya corregido |
+| tributario-calc-21 | P5 | `validateLines` con violaciones falsas | Corregido |
+| tributario-calc-22 | P5 | Evaluador de riesgo publicaba "medio / 50" al fallar | Corregido: N/D con motivo |
+| tributario-calc-23 | P5 | Año de la UVT según la zona horaria del servidor | Corregido: America/Bogota (motor y vista previa) |
+| tributario-modulos-21 | P5 | Sobretasas del Art. 240 sin umbral ni vigencia | Corregido: verificadas en código |
+| tributario-modulos-22 | P5 | C3.5 marcaba tarifas legítimas | Corregido |
+| tributario-modulos-23 | P5 | Excepciones de la TTD imprecisas | Corregido: texto literal del par. 6 |
+| prompts-normativa-25 | P5, I2, I4, I5 | Tarifas y citas menores en módulos satélite | Corregido contra el corpus (NIC 36.33(b) sin texto en el corpus) |
+| valoracion-24 | P5, I2, I3, I5 | Runway de Comando con salidas fiscales de 35 % × UN | Corregido: función pura con escenarios rotulados es/en |
+| valoracion-25 | P5 | KPIs de valoración con N/D convertido en 0 | Corregido |
+| valoracion-26 | P5 | Payback, TIR no única e IR con I0 = 0 | Corregido |
+| valoracion-27 | P5 | Pruebas de valoración y factibilidad faltantes | En parte: P5 no añadió pruebas de las páginas `/workspace/valor` y de macroeconomía (Pendientes #24) |
+| auditoria-calidad-24 | P6 | Benford sin control de tamaño muestral | Corregido: MAD de Nigrini; monto sólo de los dígitos desviados |
+| auditoria-calidad-25 | P6 | Expectativa errónea de números redondos | Corregido |
+| auditoria-calidad-26 | P6 | Fin de semana en UTC y festivos sólo de 2026 | Corregido |
+| auditoria-calidad-27 | P6 | Tercero "nuevo" contra cualquier periodo | Corregido |
+| auditoria-calidad-28 | P6 | Validador de fuente única marcaba crítico toda pérdida | Ya corregido (ratios-kpis-10) |
+| auditoria-calidad-29 | P6 | Tolerancias distintas de la ecuación patrimonial | Corregido: $0 en centavos |
+| auditoria-calidad-30 | P6, I1 | Incoherencias del sello de la Parte V | En parte: render corregido y enmienda 13; D5/D7/D13 pendiente de decisión |
+| auditoria-calidad-31 | P6, I1, I3 | V10 exigido al SIMPLE; umbrales del Revisor Fiscal con ">" | En parte: V10 por régimen del intake; umbrales sin fuente en el corpus |
+| contab-nomina-22 | P6 | Módulo `src/modules/pyme` no montado | Corregido: declarado no montado con guarda |
+| contab-nomina-23 | P6 | Seed de activos fijos con Art. 137 desactualizado | Corregido (seed sin consumidores) |
+| contab-nomina-24 | P6 | Tasas redondeadas en provisiones | Corregido: 1/12 y 15/360 exactos |
+| contab-nomina-25 | P6 | Saldos del cierre con coma flotante | Corregido: centavos BigInt |
+| contab-nomina-26 | P6, I1, ronda final | Periodo 13 solapado con diciembre | Corregido en acción y ruta (también el rango dentro del mes) |
+| ratios-kpis-26 | P6, I1 | Sentinel con fórmulas propias o 0 | Corregido: N/D |
+| ratios-kpis-27 | P6, I1, I2, I4, I5 | Abreviaturas con punto decimal y "B" | Corregido en gráficos, pilares, KPIs y PDF |
+| ratios-kpis-29 | P6, I1 | IPC 4,5 % rotulado como meta del BanRep | Corregido: supuesto de escenario rotulado |
+| reportes-export-19 | P6, I2 | Negativos y abreviaturas incoherentes | Corregido |
+| reportes-export-22 | P6, I1 | Informe Pyme con margen 0 % sin ingresos | Corregido: N/D y alerta por resultado |
+
+## Re-auditoría final de la fase 2 (55 hallazgos)
+
+Seis auditores nuevos sobre la rama con toda la fase 2 (antes de la ronda final). Dimensiones: e2e-niif (extremo a
+extremo), ICU (ingesta, contabilidad y UI), narrativa, NT (normativa y tributario), procedencia y recalculo-final.
+Severidad del auditor; "regresión" = introducido por la fase 2. Estado verificado en el código final (`54802609`) con
+las pruebas de regresión de cada commit.
+
+| ID | Dimensión | Severidad | Hallazgo (breve) | Estado | Commit(s) |
+|---|---|---|---|---|---|
+| e2e-niif2-01 | e2e-niif | alta | E21 anclaba grupos de renglones unidos por un código compartido: importes reasignables entre grupos con la suma intacta | Corregido | `3eb5c863`, `ee56c037`, `df94ab9c`, `404cc247`, `54802609` |
+| e2e-niif2-02 | e2e-niif | alta (regresión) | Un total del ESF que `/niif` corregía quedaba sellado en la versión persistida (422 en todas las salidas) | Corregido | `f3a3779b` |
+| e2e-niif2-03 | e2e-niif | media | HTML: ORI sin conciliar y comparativos del EFE/ECP validados por pertenencia a un conjunto | Corregido | `6d3a8657`, `7c6ca07f`, `40cdc48d` |
+| e2e-niif2-04 | e2e-niif | baja | HTML de dos cortes con utilidad bloqueado por la columna comparativa vacía del EFE | Corregido | `6d3a8657` |
+| e2e-niif2-05 | e2e-niif | baja (regresión) | El Excel de un informe en inglés pedido desde la UI salía en español | Corregido | `58d27c95` |
+| e2e-niif2-06 | e2e-niif | baja | `/html` sin referencia no aplicaba el sello de prosa de la Parte I | Corregido | `78fcaaa9`, `c9ce24e8` |
+| e2e-niif2-07 | e2e-niif | baja | Advertencias falsas "Utilidad Neta reportado $0,00" leídas de la fila del ECP | Corregido | `993e859f` |
+| ICU-01 | ICU | media (regresión) | Un CSV podía confirmar su propia unidad con contenido incrustado en el archivo | Corregido | `5325bdd0`, `1f6da8bd` |
+| ICU-02 | ICU | media | Con la unidad confirmada, un importe de tres decimales se leía ×1.000 | Corregido | `f8d70c98` |
+| ICU-03 | ICU | media | La fecha de corte del encabezado de la columna de saldo se ignoraba | Corregido | `192a8d1f`, `1e200642`, `a38be8e3` |
+| ICU-04 | ICU | baja | Durante una reconfirmación de unidad se podía enviar con la unidad anterior | Corregido | `98043259` |
+| ICU-05 | ICU | baja | Periodos contables con un rango fuera del (año, mes) declarado | Corregido | `8f3a4032`, `98fe207b` |
+| ICU-06 | ICU | baja | Sentinel T3 disparado por inventario culpaba al margen | Corregido | `d108963d`, `34123c65` |
+| ICU-07 | ICU | baja | Rótulo de unidad pendiente y tooltips del Escudo sin idioma | Corregido | `98043259`, `98fe207b`, `34ddb769` |
+| ICU-08 | ICU | baja (preexistente) | Texto legible en `text-n-400` y sólo en español en el histórico Pyme | Corregido | `9653d5e2` |
+| narrativa-01 | narrativa | alta (regresión) | Acta honesta sellada: "el 10 % de la utilidad neta, es decir $Y" se juzgaba como la utilidad | Corregido | `4fad3913`, `4aaee004` |
+| narrativa-02 | narrativa | alta (regresión) | "Total de activos fijos" o "de pasivos laborales" se cruzaban contra el total del balance | Corregido | `4fad3913` |
+| narrativa-03 | narrativa | media (regresión) | El desglose del efectivo y "otros ingresos operacionales" sellaban notas honestas | Corregido | `4fad3913`, `4aaee004` |
+| narrativa-04 | narrativa | media (regresión) | Con tres cortes, las Partes II/III sellaban saldos que el propio informe imprime | Corregido | `4fad3913`, `2eb113a4` |
+| narrativa-05 | narrativa | media (regresión) | "Comparativa con los estados al 31-12-2024" sellaba por fecha de corte | Corregido | `4fad3913` |
+| narrativa-06 | narrativa | baja (regresión) | "ROE negativo de 80,0 %" se acusaba contra −80 % | Corregido | `4fad3913` |
+| narrativa-07 | narrativa | baja (regresión) | "$2 mil M" se leía como $2.000 | Corregido | `993e859f` |
+| narrativa-08 | narrativa | alta | R6 del HTML juzgaba proyecciones, metas e impactos que la Parte II acepta | Corregido (límite documentado en R6) | `e8fc779e`, `40cdc48d`, `d5c1dc23` |
+| narrativa-09 | narrativa | alta | Cifras falsas con el vocabulario contable habitual quedaban fuera del validador | Corregido | `4fad3913`, `4aaee004` |
+| narrativa-10 | narrativa | alta | Dividendos, capitalización y apropiaciones del acta con otra redacción no se cruzaban | Corregido | `4fad3913`, `4aaee004`, `2bb40676` |
+| narrativa-11 | narrativa | media | Montos con la escala o la moneda en palabra no se reconocían | Corregido | `993e859f`, `80940e02` |
+| narrativa-12 | narrativa | media | Un verbo de variación antes de la cifra eximía el nivel | Corregido | `4fad3913`, `4aaee004` |
+| narrativa-13 | narrativa | media | Cifra negativa impresa sin signo bajo un rótulo neutro | Corregido | `4fad3913`, `4aaee004` |
+| narrativa-14 | narrativa | media | Filas del dashboard de la Parte II sin ancla y variaciones sin recálculo | Residual documentado: ingresos anclados y variaciones verificadas; otras filas de dinero siguen "no verificables" (Pendientes #1) | `813cae21`, `522547ed` |
+| narrativa-15 | narrativa | media | La cifra de un KPI publicado N/D sobrevivía en la prosa de la Parte II | Corregido | `813cae21`, `e8fc779e`, `522547ed` |
+| narrativa-16 | narrativa | baja | R8 reconocía la columna comparativa sólo con ciertos encabezados | Corregido | `6d3a8657` |
+| NT-01 | NT | media | Tope conjunto del Art. 258 evitable dejando el desglose vacío | Corregido (residual sin cita de artículos: Pendientes #13) | `0eef8a49`, `4c6e7662` |
+| NT-02 | NT | media | El Régimen Simple del intake no llegaba al Dictamen Tributario | Corregido | `79292422`, `98fe207b` |
+| NT-03 | NT | media | Capa 2 bloqueaba la resolución de la UVT que cita cada módulo | Corregido | `2ba9c8d7` |
+| NT-04 | NT | media | Resúmenes del corpus RAG contradecían sus fuentes primarias | Corregido en el repositorio; requiere `npm run db:ingest` | `7aafbdd6` |
+| NT-05 | NT | baja | El prompt TET atribuía una tarifa del 32 % al AG 2022 | Corregido | `822da6de` |
+| NT-06 | NT | baja (regresión) | M5.L2.4 tomaba "reducir la adición" como reducción de sanción | Corregido | `830d2b93`, `9da9bfe7` |
+| NT-07 | NT | baja (regresión) | M3.L2.3 leía umbrales o rangos como otro score | Corregido | `e60a1a35`, `21d64aad` |
+| NT-08 | NT | baja (regresión) | M6.L2.2 no reconocía listas de artículos en inglés | Corregido | `cc191fb9` |
+| NT-09 | NT | baja (regresión) | Art. 36-3 presentado como aplicable pasaba como advertencia | Corregido | `7579532b`, `60b7424c` |
+| NT-10 | NT | baja | El filtro de montos del ajuste de precios de transferencia N/D no cubría otras unidades | Corregido | `8119410d`, `fc65c8f7` |
+| NT-11 | NT | baja (preexistente) | Calendario DIAN del Escudo en día UTC | Corregido | `824f0756` |
+| NT-12 | NT | baja (preexistente) | Sentencia citada sin fuente en el corpus | Corregido: retirada del catálogo | `10a1d896` |
+| procedencia-R2-01 | procedencia | alta | Cifra falsa en la prosa con terminología habitual salía con procedencia verificada | Corregido | `4fad3913`, `4aaee004`, `9ee3fc93`, `a8e736ba` |
+| procedencia-R2-02 | procedencia | media | PDF y HTML verificados no divulgaban los ajustes del Doctor de Datos | Corregido (el Editor Jefe no recibe el ledger; el HTML lo divulga en el aviso de procedencia) | `11c437e2` |
+| procedencia-R2-03 | procedencia | media | `/html` sin referencia no tenía los endurecimientos de `/export` sin referencia | Corregido | `78fcaaa9`, `c9ce24e8` |
+| procedencia-R2-04 | procedencia | media | Firmantes y Revisor Fiscal del acta salían del JSON sin cruzarse con el intake | Corregido | `49e22ede` |
+| procedencia-R2-05 | procedencia | baja | La huella de la versión no cubría el balance, el contrato ni la fecha persistidos | Corregido (formato v2; las versiones v1 conservan su huella) | `5ac6c010` |
+| procedencia-R2-06 | procedencia | baja | El sello sólo reconocía el BORRADOR del override | Corregido | `81070631` |
+| procedencia-R2-07 | procedencia | baja (regresión) | Las ediciones "Aplicar al reporte" se descartaban en silencio sin referencia | Corregido: se declaran en la UI, en el sello y en `X-Report-Edit-Dropped` | `87b16159` |
+| recalculo-final2-01 | recalculo-final | alta | Con una columna "Saldo inicial" cuyo P&G no se cerró, R12 no detectaba el P&G acumulado | Corregido (límites en Pendientes #12) | `0966fbf6`, `1e200642` |
+| recalculo-final2-02 | recalculo-final | media (regresión) | Unidad confirmada en CSV: importe de tres decimales ×1.000 en silencio | Corregido | `f8d70c98` |
+| recalculo-final2-03 | recalculo-final | media | EFE: la revaluación del grupo 38 sin contrapartida en el 19 inflaba operación | Corregido (enmienda 14) | `101e0624`, `71e641dc`, `a1ee6645`, `54802609` |
+| recalculo-final2-04 | recalculo-final | baja (regresión) | Unidad confirmada fuera del upload sobre un XLSX ya redondeado | Corregido: 422 que pide reenviar el archivo | `ea871bb2` |
+| recalculo-final2-05 | recalculo-final | baja | R7, el informe de validación y el Doctor usaban la Σ firmada de la clase 4 | Corregido (también la alerta DEV del Âncora) | `9f6e25a0`, `98fe207b` |
+
+Resumen: 55 hallazgos (9 altos, 21 medios, 25 bajos); 54 corregidos y 1 residual documentado (narrativa-14).

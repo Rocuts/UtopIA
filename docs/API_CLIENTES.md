@@ -144,7 +144,21 @@ curl -X POST $BASE/api/v1/trial-balances \
   decimal en **centavos exactos** (sin coma flotante) y el detalle lo revela en
   `validation_notes[]`. `unit: "pesos"` confirma que los importes ya están en pesos pese a la
   leyenda. Un importe de `rows[]` que tras reexpresarlo excede 2^53 centavos es `400
-  validation_failed` con el puntero del campo.
+  validation_failed` con el puntero del campo. Sólo cuenta el parámetro `unit`: el contenido
+  del CSV no puede confirmar su propia unidad.
+- **Importes de tres decimales con la unidad confirmada (auditoría 2026-09-24, fase 2)**: en
+  miles, tres decimales son la precisión al peso (`848,123` miles = $848.123), la misma forma
+  que una agrupación de miles. Con `unit: "miles"` o `"millones"`, un importe del `csv` con un
+  único separador seguido de exactamente tres cifras se lee con el separador decimal que
+  muestra el propio archivo (una celda con los dos separadores, grupos de miles repetidos o
+  una fracción de otra longitud); sin esa evidencia, un CSV separado por `;` se lee con coma
+  decimal. Si el archivo no da evidencia o la da contradictoria, el importe es **ambiguo**: la
+  remisión queda `unbalanced` con el motivo en `validation_reasons[]` ("… es ambiguo con la
+  unidad confirmada …"), nunca se multiplica ×1.000 en silencio (en la plataforma, `/niif`
+  responde 422 con el mismo motivo). Solución: exportar con separador de miles y decimal, o
+  con un número de decimales distinto de tres. `rows[]` no tiene esta ambigüedad (cada
+  importe es un número JSON) y en pesos, sin `unit`, la lectura no cambia (`1.234` = mil
+  doscientos treinta y cuatro).
 
   ```json
   {"csv": "codigo;nombre;saldo 2025 (miles de pesos)\n110505;Caja;1000\n…", "unit": "miles"}
@@ -160,11 +174,32 @@ curl -X POST $BASE/api/v1/trial-balances \
   una fila de título ("Balance de prueba a junio 30 de 2025", "Corte: 30/06/2025") y la
   columna de saldo sólo trae el año, el `period_label` de la respuesta es el corte `AAAA-MM`
   (`2025-06`, P&G de 6 meses y KPIs anualizados) aunque se haya enviado `period_label: "2025"`;
-  `validation_notes[]` cita el texto del archivo. Un corte a diciembre deja el año.
+  `validation_notes[]` cita el texto del archivo. Un corte a diciembre deja el año. Si la
+  columna de saldo no trae año y el cliente envía `period_label`, se conserva la etiqueta del
+  cliente y `validation_notes[]` dice que la fecha del título no se interpretó.
+- **Fecha de corte en el encabezado de la columna de saldo (auditoría 2026-09-24, fase 2)**:
+  un encabezado con fecha de fin de mes ("Saldo a 30/06/2025", "Saldo al 30 de junio de 2025",
+  "Saldo junio 2025", "Saldo Jun-2025", "Saldo 2025-06", "Saldo 06/2025") fija el periodo de esa
+  columna: el `period_label` es `2025-06` aunque se haya enviado `period_label: "2025"`, y
+  `validation_notes[]` lo cita ("Fecha de corte en el encabezado de la columna …"). Un 31 de
+  diciembre deja el año (periodo cerrado de 12 meses). Una fecha a mitad de mes no se
+  interpreta: el periodo queda con el año y `validation_notes[]` dice que la fecha no se
+  interpretó. Con saldo inicial y final fechados, cada columna toma su mes.
+- **P&G acumulado en la columna de saldo inicial (auditoría 2026-09-24, fase 2)**: con
+  columnas "Saldo inicial | Saldo final" del ejercicio, si el saldo inicial trae resultados
+  (clases 4-7) que no se trasladaron al patrimonio, el P&G del periodo sería acumulado: la
+  remisión queda `unbalanced` con el motivo `CUR-R12` en `validation_reasons[]`. Si la columna
+  es la apertura de un mes y no del ejercicio, fecharla en el encabezado ("Saldo inicial
+  01/12/2025") evita el bloqueo.
+- **Versión del preprocesador**: los tres comportamientos anteriores de la fase 2 (importes
+  ambiguos, fecha del encabezado y P&G acumulado en la columna de saldo inicial) se publicaron
+  con el mismo `preprocessor_version` `tb-2026-09-24.3`. La regla de evolución de esta guía pide
+  subirlo cuando el preprocesador cambia de forma observable; queda registrado como pendiente
+  en la auditoría.
 - `GET /v1/trial-balances/{id}` **recomputa** desde las filas crudas con el preprocesador
   vigente (filosofía anti-desync del repo: no se persiste el `PreprocessedBalance`) y añade
   `validation_reasons[]` + `validation_notes[]` (notas no bloqueantes: unidad reexpresada,
-  excepciones de vencimiento, fecha de corte declarada, riesgo de liquidez) +
+  excepciones de vencimiento, fecha de corte declarada o no interpretada, riesgo de liquidez) +
   `classification_note` + `discrepancies[]` + `curator_findings[]`. `preprocessor_version`
   viaja en cada respuesta.
 - Las filas crudas se guardan **cifradas** con el vault AES-256-GCM (Ley 1581 — la
@@ -172,6 +207,14 @@ curl -X POST $BASE/api/v1/trial-balances \
   lleva PII.
 - `DELETE /v1/trial-balances/{id}` = borrado físico (derecho de supresión).
 - Emite el webhook `trial_balance.processed` al crearse.
+- **Alcance del contrato**: las rutas internas de la plataforma (`/api/financial-report/*`,
+  `/api/financial-quality`, `/api/financial-audit`, `/api/fiscal-audit-opinion`, `/api/escudo/*`)
+  no forman parte de `/api/v1`. Sus cambios de la fase 2 de la auditoría (versión persistida
+  por `reportRef`, 422 `PREPROCESSED_MISMATCH`, 422 `REPORT_PARTS_REQUIRED`, 422
+  `BALANCE_VALIDATION_FAILED` del Escudo) no afectan a este API; están en la sección
+  *Operación antes de desplegar* de
+  [la auditoría integral](reviews/auditoria-integral-niif-2026-09-24.md) y en
+  [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Webhooks (Standard Webhooks v1.0.0)
 
