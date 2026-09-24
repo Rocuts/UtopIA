@@ -5,7 +5,7 @@
 // Con tres cortes el Markdown, el PDF Élite y el Excel imprimen la segunda
 // columna del EFE (periodo actual | comparativo, el mismo orden en las tres
 // superficies) y el ECP de los dos periodos apilado en orden cronológico. Con
-// dos cortes imprimen la nota determinista de impracticabilidad en lugar de
+// dos cortes imprimen la nota determinista de comparativo no presentado en lugar de
 // la leyenda genérica. Los prompts y TOTALES VINCULANTES dejan de pedir al
 // modelo cifras comparativas del EFE.
 // ---------------------------------------------------------------------------
@@ -73,7 +73,7 @@ describe('Markdown (agents/renderer.ts)', () => {
     expect(ecp).not.toMatch(/no presentada/);
   });
 
-  it('dos cortes: una sola columna y la nota determinista de impracticabilidad', () => {
+  it('dos cortes: una sola columna y la nota determinista de comparativo no presentado', () => {
     const json = dos();
     const efe = renderCashFlowStatement(json);
     expect(efe).toContain('| Rubro | 2025 |');
@@ -215,6 +215,10 @@ describe('Prompt NIIF y TOTALES VINCULANTES', () => {
     expect(ctx3.bindingTotalsBlock).toContain('## EFE Y ECP DEL PERIODO COMPARATIVO 2024');
     expect(ctx3.bindingTotalsBlock).toMatch(/Variación neta de efectivo: \$15\.000\.000,00 COP/);
     const ctx2 = await prepareFinancialContext({ rawData: csvDosCortes(), company: COMPANY, language: 'es' });
-    expect(ctx2.bindingTotalsBlock).toMatch(/- EFE: Estado de flujos de efectivo — información comparativa 2024 no presentada/);
+    // Integración I2 (prompts-normativa-23): la nota pide el corte; no declara impracticabilidad.
+    expect(ctx2.bindingTotalsBlock).toMatch(
+      /- EFE: Estado de flujos de efectivo — comparativo 2024 no presentado: el balance no incluye el corte de cierre anterior al periodo comparativo \(2023\)/,
+    );
+    expect(ctx2.bindingTotalsBlock).not.toMatch(/Impracticabilidad declarada/);
   });
 });

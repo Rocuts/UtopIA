@@ -21,7 +21,7 @@
 
 import ExcelJS from 'exceljs';
 import type { FinancialReport } from '@/lib/agents/financial/types';
-import { formatCopFromCents, parseMoneyCop } from '@/lib/agents/financial/contracts/money';
+import { formatCopFromPesos, parseMoneyCop } from '@/lib/agents/financial/contracts/money';
 import type { NiifReportJson } from '@/lib/agents/financial/contracts/niif-report';
 import { StrategyReportSchema } from '@/lib/agents/financial/contracts/strategy-report';
 import { applyKpiAnchors } from '@/lib/agents/financial/validators/strategy-anchors';
@@ -80,10 +80,14 @@ const COLORS = {
 
 const FONT_MAIN = 'Calibri';
 
-// Colombian currency format codes.
-// The [$-es-CO] LCID prefix forces Excel to render with Colombian locale rules:
-//   thousands separator = "."  |  decimal separator = ","
-// producing: $1.234.567,89  (regardless of the viewer's OS regional settings).
+// Formatos de moneda COP.
+// En un código de formato de Excel, `,` y `.` NO son caracteres literales: son
+// los marcadores del separador de miles y del decimal que el visor toma de su
+// configuración regional (sistema o aplicación). El prefijo [$-es-CO] fija la
+// configuración regional de fechas, nombres de mes y símbolos, pero NO fuerza
+// los separadores (reportes-export-19): en un equipo es-CO la celda se ve
+// $1.234.567,89 y en uno en-US, $1,234,567.89. El valor numérico es el mismo;
+// las cifras incrustadas en texto usan `fmtCopPesos`, que sí es es-CO fijo.
 //
 // La sección negativa usa PARÉNTESIS — misma convención NIIF que
 // `formatCopFromCents` (contracts/money.ts) y que los estados financieros del
@@ -121,13 +125,10 @@ function centsToPesos(value: string): number {
  * workbook sale ahora de la misma aritmética exacta en centavos.
  */
 function fmtCopPesos(pesos: number): string {
-  if (!Number.isFinite(pesos)) return 'N/D';
   // Pesos → centavos exactos por el texto decimal (redondeo simétrico al
   // centavo y sin pasar por un `number` de centavos, que deja de ser exacto
-  // por encima de 2^53 — niif-contrato-22).
-  const fixed = pesos.toFixed(2);
-  if (!/^-?\d+\.\d{2}$/.test(fixed)) return 'N/D';
-  return formatCopFromCents(BigInt(fixed.replace('.', '')), false);
+  // por encima de 2^53 — niif-contrato-22). Mismo helper que el PDF.
+  return formatCopFromPesos(pesos, false);
 }
 
 // ---------------------------------------------------------------------------
@@ -392,8 +393,8 @@ function addCashFlowAndEquitySheets(
   const cp = json.company.comparativePeriod;
   // Columna comparativa del EFE y ECP del periodo comparativo (auditoría
   // 2026-09-24, pendiente #3): los calcula el código desde el corte anterior
-  // al comparativo. Sin ellos, la nota determinista de impracticabilidad
-  // (NIIF para las PYMES 3.14 / 10.21) se declara en el propio estado
+  // al comparativo. Sin ellos, la nota determinista de comparativo no
+  // presentado (NIIF para las PYMES 3.14) se declara en el propio estado
   // (reportes-export-13). Orden de columnas: periodo actual | comparativo,
   // igual que el PDF.
   const cf = json.cashFlow;

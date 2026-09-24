@@ -20,6 +20,7 @@ import {
   GoldRule,
   MarkdownToPdf,
   TopoOrnament,
+  TocAnchor,
 } from '../primitives';
 import {
   CREAM_50,
@@ -52,8 +53,10 @@ export function BreakEvenPage({ doc }: Props) {
         position: 'relative',
       }}
     >
+      <TocAnchor id="breakEven" />
       {/* Decorative topo ornament — bottom-left, low opacity */}
       <View
+        fixed
         style={{
           position: 'absolute',
           bottom: 0,
@@ -65,7 +68,7 @@ export function BreakEvenPage({ doc }: Props) {
       >
         <TopoOrnament
           variant="corner-bl"
-          opacity={1}
+          opacity={0.08}
           areaAccent="valor"
           seed={37}
           width={PAGE_W * 0.28}
@@ -96,7 +99,7 @@ export function BreakEvenPage({ doc }: Props) {
       </View>
 
       <GoldRule />
-      <PageNumberBadge pageNumber={0} />
+      <PageNumberBadge />
     </Page>
   );
 }

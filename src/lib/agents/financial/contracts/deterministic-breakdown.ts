@@ -28,6 +28,11 @@ import type { PeriodSnapshot } from '@/lib/preprocessing/trial-balance';
 import { pesosToCents } from '@/lib/preprocessing/curator-rules/sync-control-totals';
 import { DIVIDEND_EVIDENCE_PREFIXES } from '@/lib/preprocessing/curator-rules/dividend-evidence';
 import { isContraAsset } from '@/lib/preprocessing/curator-rules/contra-asset-registry';
+import {
+  isCurrentLiabilityCode,
+  isNonCurrentLiabilityCode,
+  r1OriginGroup,
+} from '@/lib/preprocessing/curator-rules/balance-groups';
 import type { EquityChangeRowJson, NiifReportJson } from './niif-report';
 
 const ZERO = BigInt(0);
@@ -232,6 +237,108 @@ export function termOfGroup(
   if (section === 'equity') return null;
   const map = TERM_BY_GROUP[section];
   return Object.prototype.hasOwnProperty.call(map, group) ? map[group] : null;
+}
+
+export type BalanceTerm = 'current' | 'nonCurrent';
+
+/** Renglón del desglose del ESF con el plazo con el que el preprocesador lo cuenta. */
+export interface TermBreakdownRow extends BreakdownRow {
+  /** `null` en patrimonio o si el plazo no es determinable desde el código. */
+  term: BalanceTerm | null;
+}
+
+/**
+ * Plazo con el que el preprocesador cuenta UNA cuenta del snapshot en
+ * `controlTotals.activoCorriente` / `pasivoCorriente` (integración P4-b):
+ *
+ *   1. la excepción de vencimiento declarada por el usuario que el
+ *      preprocesador aplicó (`snapshot.vencimientosAplicados`, por código);
+ *   2. las virtuales de R1 (`2810ZZ-130505`) siguen al grupo de su cuenta de
+ *      ORIGEN (`isCurrentLiabilityCode`, niif-preproceso-22), no al prefijo 28;
+ *   3. el resto, por grupo PUC (`termOfGroup`).
+ *
+ * `declared` es el mapa código → plazo de la sección (ver `declaredTermsOf`).
+ */
+function termOfAccount(
+  section: BreakdownSection,
+  rawCode: string,
+  group: string,
+  declared: ReadonlyMap<string, BalanceTerm>,
+): BalanceTerm | null {
+  if (section === 'equity') return null;
+  const override = declared.get(rawCode);
+  if (override) return override;
+  if (section === 'liabilities' && r1OriginGroup(rawCode) !== null) {
+    if (isCurrentLiabilityCode(rawCode)) return 'current';
+    if (isNonCurrentLiabilityCode(rawCode)) return 'nonCurrent';
+    return null;
+  }
+  return termOfGroup(section, group);
+}
+
+/** Excepciones de vencimiento aplicadas por el preprocesador a una sección, por código de cuenta. */
+function declaredTermsOf(snapshot: PeriodSnapshot, section: BreakdownSection): Map<string, BalanceTerm> {
+  const seccion = section === 'assets' ? 'activo' : section === 'liabilities' ? 'pasivo' : null;
+  const out = new Map<string, BalanceTerm>();
+  if (seccion === null) return out;
+  for (const a of snapshot.vencimientosAplicados ?? []) {
+    if (a.seccion !== seccion) continue;
+    out.set(a.codigo, a.vencimiento === 'corriente' ? 'current' : 'nonCurrent');
+  }
+  return out;
+}
+
+/**
+ * Desglose por grupo PUC PARTIDO por plazo (integración P4-b, auditoría
+ * 2026-09-24). `buildDeterministicBreakdown` agrega por grupo de dos dígitos y
+ * el completado del ESF ubicaba cada grupo por `termOfGroup`; con excepciones
+ * de vencimiento declaradas (1205 → no corriente) o con virtuales de R1
+ * (`2810ZZ-13xxxx`, pasivo corriente por su origen) el subtotal impreso del ESF
+ * no era `controlTotals.activoCorriente` / `pasivoCorriente`, las cifras de los
+ * KPIs de liquidez, del gate y del PDF.
+ *
+ * Cada hoja se clasifica con `termOfAccount` (la misma regla del preprocesador)
+ * y se agrega por (grupo, plazo): un grupo con cuentas de los dos plazos da
+ * DOS renglones con el mismo código de grupo, uno en cada bloque. Σ renglones
+ * de un plazo = subtotal del preprocesador al centavo; Σ de los renglones de
+ * un grupo = el renglón de `buildDeterministicBreakdown`. Sin excepciones ni
+ * virtuales de R1 devuelve exactamente los renglones de
+ * `buildDeterministicBreakdown` con `term = termOfGroup(grupo)`.
+ */
+export function buildDeterministicBreakdownByTerm(
+  snapshot: PeriodSnapshot,
+  section: BreakdownSection,
+): TermBreakdownRow[] {
+  const classCode = CLASS_BY_SECTION[section];
+  const puc = snapshot.classes.find((c) => c.code === classCode);
+  if (!puc) return [];
+  const declared = declaredTermsOf(snapshot, section);
+
+  const byKey = new Map<string, { group: string; term: BalanceTerm | null; cents: bigint }>();
+  for (const account of puc.accounts) {
+    if (!account.isLeaf) continue;
+    const rawCode = String(account.code).trim();
+    const code = rawCode.replace(/\D/g, '');
+    if (code.length < 2) continue;
+    const group = code.slice(0, 2);
+    const term = termOfAccount(section, rawCode, group, declared);
+    const key = `${group}|${term ?? ''}`;
+    const prev = byKey.get(key);
+    const cents = pesosToCents(account.balance);
+    if (prev) prev.cents += cents;
+    else byKey.set(key, { group, term, cents });
+  }
+
+  const order = (t: BalanceTerm | null) => (t === 'current' ? 0 : t === 'nonCurrent' ? 1 : 2);
+  return [...byKey.values()]
+    .filter((r) => r.cents !== ZERO)
+    .sort((a, b) => a.group.localeCompare(b.group) || order(a.term) - order(b.term))
+    .map((r) => ({
+      account: r.group,
+      label: GROUP_LABELS[r.group] ?? `Grupo ${r.group}`,
+      cents: r.cents,
+      term: r.term,
+    }));
 }
 
 // ===========================================================================
@@ -1405,8 +1512,15 @@ export function deterministicCuratorFlags(snapshot: PeriodSnapshot): {
 // APERTURA: el corte anterior al comparativo (tres cortes) o los saldos
 // iniciales del comparativo. Con ese corte, `buildDeterministicCashFlow` y el
 // ECP por grupo patrimonial se calculan igual que los del periodo actual; sin
-// él, el comparativo es impracticable y se dice con una nota determinista —
+// él, el comparativo no se presenta y se dice con una nota determinista —
 // nunca con cifras del modelo.
+//
+// La nota NO declara impracticabilidad (integración I2, hallazgo
+// prompts-normativa-23): que el balance recibido no traiga el corte anterior
+// no significa que la entidad no pueda obtenerlo. Dice qué falta y lo pide
+// ("suministre ese corte"). La impracticabilidad sólo la declaran el
+// preprocesador o la entidad (`comparativos_impracticables`, Regla R1), y en
+// ese caso el informe no tiene periodo comparativo y no hay nota que redactar.
 // ---------------------------------------------------------------------------
 
 /** Forma mínima del preprocesado que necesita la base comparativa. */
@@ -1416,9 +1530,11 @@ export interface ComparativeStatementsSource {
   comparativos_impracticables?: boolean;
 }
 
+export type ComparativeNoteLanguage = 'es' | 'en';
+
 /**
  * Base determinista de los comparativos del EFE y del ECP. Cada estado trae
- * sus cifras o, si no son calculables, la nota de impracticabilidad.
+ * sus cifras o, si no son calculables, la nota de comparativo no presentado.
  */
 export interface ComparativeStatementsBasis {
   /** Año (o etiqueta) del periodo comparativo del informe. */
@@ -1426,11 +1542,25 @@ export interface ComparativeStatementsBasis {
   /** Corte usado como apertura del periodo comparativo; `null` si no existe. */
   openingPeriod: string | null;
   cashFlow: DeterministicCashFlow | null;
-  /** Nota de impracticabilidad del EFE comparativo; `null` cuando se presenta. */
+  /** Nota del EFE comparativo no presentado; `null` cuando se presenta. */
   cashFlowNote: string | null;
   equityRows: EquityChangeRowJson[] | null;
-  /** Nota de impracticabilidad del ECP comparativo; `null` cuando se presenta. */
+  /** Nota del ECP comparativo no presentado; `null` cuando se presenta. */
   equityNote: string | null;
+  /** Idioma de las notas (default `'es'`). */
+  language?: ComparativeNoteLanguage;
+}
+
+/**
+ * Por qué un estado comparativo no se presenta, en los dos idiomas del
+ * informe. `request` = qué insumo lo haría calculable ("suministre …");
+ * ausente cuando lo que falla es el propio balance (no concilia, grupos sin
+ * columna), que se revisa en lugar de pedirse.
+ */
+export interface ComparativeGap {
+  es: string;
+  en: string;
+  request?: { es: string; en: string };
 }
 
 function yearOfPeriodLabel(period: string | null | undefined): string | null {
@@ -1445,19 +1575,38 @@ function copOf(cents: bigint): string {
   return `${negative ? '-' : ''}$${whole},${abs.slice(-2)}`;
 }
 
-/** Nota de impracticabilidad de un estado comparativo, redactada por el código. */
-export function comparativeImpracticabilityNote(
+const STATEMENT_NAMES: Record<'cashFlow' | 'equity', Record<ComparativeNoteLanguage, string>> = {
+  cashFlow: { es: 'Estado de flujos de efectivo', en: 'Statement of cash flows' },
+  equity: { es: 'Estado de cambios en el patrimonio', en: 'Statement of changes in equity' },
+};
+
+/**
+ * Nota de un estado comparativo NO presentado, redactada por el código.
+ * Dice qué falta y, cuando es un insumo, lo pide: NIIF para las PYMES 3.14
+ * exige comparativos. No declara impracticabilidad (ver la cabecera).
+ */
+export function comparativeNotPresentedNote(
   statement: 'cashFlow' | 'equity',
   comparativePeriod: string,
-  reason: string,
+  gap: ComparativeGap,
+  language: ComparativeNoteLanguage = 'es',
 ): string {
-  const name =
-    statement === 'cashFlow'
-      ? 'Estado de flujos de efectivo'
-      : 'Estado de cambios en el patrimonio';
+  const name = STATEMENT_NAMES[statement][language];
+  if (language === 'en') {
+    return (
+      `${name} — ${comparativePeriod} comparative not presented: ${gap.en}` +
+      (gap.request
+        ? `; IFRS for SMEs 3.14 requires comparative information — ${gap.request.en}.`
+        : '.') +
+      ' No estimated figures are substituted.'
+    );
+  }
   return (
-    `${name} — información comparativa ${comparativePeriod} no presentada: ${reason}. ` +
-    'Impracticabilidad declarada (NIIF para las PYMES 3.14 y 10.21); no se sustituye por cifras estimadas.'
+    `${name} — comparativo ${comparativePeriod} no presentado: ${gap.es}` +
+    (gap.request
+      ? `; NIIF para las PYMES 3.14 exige comparativos — ${gap.request.es}.`
+      : '.') +
+    ' No se sustituye por cifras estimadas.'
   );
 }
 
@@ -1465,34 +1614,61 @@ export function comparativeImpracticabilityNote(
  * Motivo por el que el periodo comparativo no tiene saldo de apertura
  * utilizable, o `null` si el corte anterior sirve de apertura.
  */
-function comparativeOpeningReason(
+function comparativeOpeningGap(
   comparative: PeriodSnapshot,
   opening: PeriodSnapshot | null,
   cy: string,
   priorYear: string | null,
-): string | null {
+): ComparativeGap | null {
+  const prior = priorYear ?? null;
   if (comparative.saldosDeApertura === true) {
-    return (
-      `la columna ${cy} del archivo es de saldos de apertura: no hay estado de resultados ` +
-      `del periodo ${cy} con el cual explicar sus variaciones`
-    );
+    return {
+      es:
+        `la columna ${cy} del archivo es de saldos de apertura y no hay estado de resultados ` +
+        `del periodo ${cy} con el cual explicar sus variaciones`,
+      en:
+        `the ${cy} column of the file holds opening balances and there is no ${cy} income ` +
+        `statement to explain its movements`,
+      request: {
+        es: `suministre el balance de prueba de cierre de ${cy}${prior ? ` y el de cierre de ${prior}` : ''}`,
+        en: `provide the ${cy} closing trial balance${prior ? ` and the ${prior} closing trial balance` : ''}`,
+      },
+    };
   }
   if (!opening) {
-    return (
-      `el balance de prueba no trae el corte anterior al periodo comparativo` +
-      `${priorYear ? ` (${priorYear})` : ''} ni los saldos iniciales de ${cy}: sin saldo de ` +
-      `apertura del periodo comparativo no hay variaciones que medir`
-    );
+    return {
+      es:
+        `el balance no incluye el corte de cierre anterior al periodo comparativo` +
+        `${prior ? ` (${prior})` : ''} ni los saldos iniciales de ${cy}`,
+      en:
+        `the trial balance does not include the closing cut before the comparative period` +
+        `${prior ? ` (${prior})` : ''} nor the ${cy} opening balances`,
+      request: { es: 'suministre ese corte', en: 'provide that cut' },
+    };
   }
   const oy = yearOfPeriodLabel(opening.period);
   if (priorYear === null || oy !== priorYear) {
-    return (
-      `el corte anterior disponible (${opening.period}) no es el cierre inmediatamente anterior ` +
-      `al periodo comparativo${priorYear ? ` (${priorYear})` : ''}`
-    );
+    return {
+      es:
+        `el corte anterior disponible (${opening.period}) no es el cierre inmediatamente anterior ` +
+        `al periodo comparativo${prior ? ` (${prior})` : ''}`,
+      en:
+        `the earlier cut available (${opening.period}) is not the closing immediately before ` +
+        `the comparative period${prior ? ` (${prior})` : ''}`,
+      request: prior
+        ? { es: `suministre el corte de cierre de ${prior}`, en: `provide the ${prior} closing cut` }
+        : { es: 'suministre ese corte', en: 'provide that cut' },
+    };
   }
   if (opening.periodoTipo === 'parcial' && opening.saldosDeApertura !== true) {
-    return `el corte anterior (${opening.period}) es un corte parcial, no el cierre del ejercicio ${priorYear}`;
+    return {
+      es: `el corte anterior (${opening.period}) es un corte parcial, no el cierre del ejercicio ${priorYear}`,
+      en: `the earlier cut (${opening.period}) is a partial cut, not the ${priorYear} year-end closing`,
+      request: {
+        es: `suministre el corte de cierre del ejercicio ${priorYear}`,
+        en: `provide the ${priorYear} year-end closing cut`,
+      },
+    };
   }
   return null;
 }
@@ -1590,7 +1766,7 @@ function equityRow(
 export function buildDeterministicEquityChanges(
   opening: PeriodSnapshot,
   closing: PeriodSnapshot,
-): { rows: EquityChangeRowJson[] } | { reason: string } {
+): { rows: EquityChangeRowJson[] } | { reason: string; reasonEn?: string } {
   const o = equityColumnsOfSnapshot(opening);
   const c = equityColumnsOfSnapshot(closing);
   const unmapped = Array.from(new Set([...o.unmappedGroups, ...c.unmappedGroups])).sort();
@@ -1600,6 +1776,10 @@ export function buildDeterministicEquityChanges(
         `el patrimonio registra saldos en grupos sin columna propia en el estado ` +
         `(${unmapped.join(', ')}: revalorización del patrimonio, dividendos decretados en ` +
         `acciones u otros de la clase 3), y el estado por columnas no los reflejaría`,
+      reasonEn:
+        `equity carries balances in groups without their own column in the statement ` +
+        `(${unmapped.join(', ')}: equity revaluation, share dividends declared or other ` +
+        `class 3 groups), which the column layout would not reflect`,
     };
   }
   const cy = yearOfPeriodLabel(closing.period) ?? closing.period;
@@ -1716,9 +1896,11 @@ export function buildDeterministicEquityChanges(
  * preprocesado. `null` cuando el informe no tiene periodo comparativo (un solo
  * corte, o comparativo impracticable según el preprocesador — el mismo
  * criterio con que el orquestador fija `company.comparativePeriod`).
+ * `language` fija el idioma de las notas de comparativo no presentado.
  */
 export function buildComparativeStatementsBasis(
   source: ComparativeStatementsSource | null | undefined,
+  language: ComparativeNoteLanguage = 'es',
 ): ComparativeStatementsBasis | null {
   const comparative = source?.comparative;
   if (!comparative || typeof comparative !== 'object' || source?.comparativos_impracticables === true) {
@@ -1730,31 +1912,46 @@ export function buildComparativeStatementsBasis(
   const idx = periods.findIndex((p) => p && p.period === comparative.period);
   const opening = idx > 0 ? periods[idx - 1] : null;
 
-  const openingReason = comparativeOpeningReason(comparative, opening, cy, priorYear);
+  const openingGap = comparativeOpeningGap(comparative, opening, cy, priorYear);
   let cashFlow: DeterministicCashFlow | null = null;
-  let cashFlowReason = openingReason;
+  let cashFlowGap = openingGap;
   let equityRows: EquityChangeRowJson[] | null = null;
-  let equityReason = openingReason;
-  if (openingReason === null && opening) {
+  let equityGap = openingGap;
+  if (openingGap === null && opening) {
     const efe = buildDeterministicCashFlow(comparative, opening);
     if (efe && efe.reconciled) {
       cashFlow = efe;
     } else if (efe) {
-      cashFlowReason =
-        `el EFE determinista del periodo ${cy} no concilia con la variación del efectivo (PUC 11): ` +
-        `brecha ${copOf(efe.reconciliationGapCents)}`;
+      const gap = copOf(efe.reconciliationGapCents);
+      cashFlowGap = {
+        es:
+          `el EFE determinista del periodo ${cy} no concilia con la variación del efectivo (PUC 11): ` +
+          `brecha ${gap}; revise el balance de prueba de ese periodo`,
+        en:
+          `the deterministic ${cy} cash flow statement does not reconcile with the change in cash ` +
+          `(PUC 11): gap ${gap}; review that period's trial balance`,
+      };
     }
     const ecp = buildDeterministicEquityChanges(opening, comparative);
     if ('rows' in ecp) equityRows = ecp.rows;
-    else equityReason = ecp.reason;
+    else equityGap = { es: ecp.reason, en: ecp.reasonEn ?? ecp.reason };
   }
+  const fallback: ComparativeGap = {
+    es: `sin saldo de apertura del periodo ${cy} no hay variaciones que medir`,
+    en: `without ${cy} opening balances there are no movements to measure`,
+  };
   return {
     comparativePeriod: cy,
     openingPeriod: opening?.period ?? null,
     cashFlow,
-    cashFlowNote: cashFlow ? null : comparativeImpracticabilityNote('cashFlow', cy, cashFlowReason ?? ''),
+    cashFlowNote: cashFlow
+      ? null
+      : comparativeNotPresentedNote('cashFlow', cy, cashFlowGap ?? fallback, language),
     equityRows,
-    equityNote: equityRows ? null : comparativeImpracticabilityNote('equity', cy, equityReason ?? ''),
+    equityNote: equityRows
+      ? null
+      : comparativeNotPresentedNote('equity', cy, equityGap ?? fallback, language),
+    language,
   };
 }
 
@@ -1777,7 +1974,8 @@ const NET_INCOME_NEUTRAL_LABEL = 'Utilidad (pérdida) neta del ejercicio';
 
 /**
  * Adjunta al informe la columna comparativa del EFE y el ECP del periodo
- * comparativo desde la base determinista (o la nota de impracticabilidad).
+ * comparativo desde la base determinista (o la nota de comparativo no
+ * presentado).
  * Función pura: toda cifra comparativa que imprimen esos dos estados sale de
  * aquí; las que el modelo hubiera escrito se descartan.
  *
@@ -1891,10 +2089,14 @@ export function attachComparativeStatements(
       cashClosingComparative: null,
       comparativeNote: basis
         ? (basis.cashFlowNote ??
-          comparativeImpracticabilityNote(
+          comparativeNotPresentedNote(
             'cashFlow',
             basis.comparativePeriod,
-            'el EFE del periodo actual no es calculable y no hay partidas contra las cuales alinear el comparativo',
+            {
+              es: 'el EFE del periodo actual no es calculable y no hay partidas contra las cuales alinear el comparativo',
+              en: 'the current-period cash flow statement is not computable and there are no items to align the comparative with',
+            },
+            basis.language ?? 'es',
           ))
         : null,
     };

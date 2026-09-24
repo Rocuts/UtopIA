@@ -26,6 +26,7 @@ import {
   AuthorityChip,
   PaginationFooter,
   TopoOrnament,
+  TocAnchor,
 } from '../primitives';
 import {
   N0,
@@ -59,8 +60,8 @@ import {
 } from '../tokens';
 
 // Landscape A4
-const LW = PAGE_H;
-const LH = PAGE_W;
+const LW = PAGE_W; // 842 pt
+const LH = PAGE_H; // 595 pt
 const MARGIN = 48;
 
 // Sage tint for subtotal rows — lightened verdad
@@ -615,8 +616,10 @@ export function NormativeAppendix({ doc }: Props) {
         position: 'relative',
       }}
     >
+      <TocAnchor id="appendix" />
       {/* Topo ornament — bottom-left corner */}
       <View
+        fixed
         style={{
           position: 'absolute',
           bottom: 0,
@@ -628,7 +631,7 @@ export function NormativeAppendix({ doc }: Props) {
       >
         <TopoOrnament
           variant="ribbons"
-          opacity={1}
+          opacity={0.05}
           areaAccent="verdad"
           width={240}
           height={200}
@@ -678,7 +681,7 @@ export function NormativeAppendix({ doc }: Props) {
         </View>
       )}
 
-      <PaginationFooter pageNumber={0} totalPages={0} sectionLabel="Anexo Normativo" />
+      <PaginationFooter sectionLabel="Anexo Normativo" />
     </Page>
   );
 }

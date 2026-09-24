@@ -44,8 +44,11 @@ import { parseMoneyCop, serializeMoneyCop } from '../contracts/money';
 import { sumStatementDetail } from '../contracts/statement-lines';
 import {
   buildDeterministicBreakdown,
+  buildDeterministicBreakdownByTerm,
   termOfGroup,
+  type BalanceTerm,
   type BreakdownSection,
+  type TermBreakdownRow,
 } from '../contracts/deterministic-breakdown';
 import type { PeriodSnapshot } from '@/lib/preprocessing/trial-balance';
 import type { NiifReportJson } from '../contracts/niif-report';
@@ -507,26 +510,63 @@ interface BalanceLine {
   anomalyFlag: null;
 }
 
-const TERM_SUBTOTAL_LABELS: Record<'assets' | 'liabilities', Record<'current' | 'nonCurrent', string>> = {
+/** Renglón de detalle con el plazo del preprocesador (`null` = sin plazo). */
+interface TermedLine {
+  line: BalanceLine;
+  term: BalanceTerm | null;
+}
+
+const TERM_SUBTOTAL_LABELS: Record<'assets' | 'liabilities', Record<BalanceTerm, string>> = {
   assets: { current: 'Total activo corriente', nonCurrent: 'Total activo no corriente' },
   liabilities: { current: 'Total pasivo corriente', nonCurrent: 'Total pasivo no corriente' },
 };
 
+/** Clave de un renglón de la proyección: grupo PUC + plazo. */
+function projectionKey(account: string, term: BalanceTerm | null): string {
+  return `${account}|${term ?? ''}`;
+}
+
+/**
+ * Proyección determinista de una sección para el ESF.
+ *
+ * Activo y pasivo se parten por plazo con `buildDeterministicBreakdownByTerm`
+ * (integración P4-b): un grupo con cuentas de los dos plazos —excepción de
+ * vencimiento declarada, virtual de R1 que sigue a su origen— da un renglón
+ * por bloque, y los subtotales coinciden con `controlTotals.activoCorriente` /
+ * `pasivoCorriente` al centavo. Si algún grupo no tiene plazo determinable (o
+ * es patrimonio) se vuelve a la agregación por grupo sin plazo: la sección se
+ * presenta sin subtotales y la nota de `termPresentationNote` lo declara.
+ */
+function projectSection(
+  snapshot: PeriodSnapshot,
+  section: BreakdownSection,
+): { rows: TermBreakdownRow[]; byTerm: boolean } {
+  if (section !== 'equity') {
+    const byTerm = buildDeterministicBreakdownByTerm(snapshot, section);
+    if (byTerm.every((r) => r.term !== null)) return { rows: byTerm, byTerm: true };
+  }
+  return {
+    rows: buildDeterministicBreakdown(snapshot, section).map((r) => ({ ...r, term: null })),
+    byTerm: false,
+  };
+}
+
 /**
  * Ordena renglones de grupo PUC de dos dígitos en bloques corriente / no
- * corriente con su subtotal (level 3, sin código), según la misma partición
- * del preprocesador (`termOfGroup`). Auditoría 2026-09 (niif-contrato-07):
- * NIIF PYMES 4.4 exige presentar por separado corriente y no corriente.
+ * corriente con su subtotal (level 3, sin código), según el plazo de cada
+ * renglón. Auditoría 2026-09 (niif-contrato-07): NIIF PYMES 4.4 exige
+ * presentar por separado corriente y no corriente. Integración P4-b: el plazo
+ * viaja con el renglón (`TermedLine`), no se deduce del código, porque un
+ * mismo grupo puede tener porción corriente y no corriente.
  *
- * Devuelve `null` si algún grupo no tiene plazo determinable (o si la sección
- * es patrimonio): el llamador presenta la sección sin subtotales y declara la
+ * Devuelve `null` si algún renglón no tiene plazo (o si la sección es
+ * patrimonio): el llamador presenta la sección sin subtotales y declara la
  * presentación en `balanceSheet.notes`.
  */
-function layoutByTerm(section: BreakdownSection, detail: BalanceLine[]): BalanceLine[] | null {
+function layoutByTerm(section: BreakdownSection, detail: TermedLine[]): BalanceLine[] | null {
   if (section === 'equity') return null;
-  const blocks: Record<'current' | 'nonCurrent', BalanceLine[]> = { current: [], nonCurrent: [] };
-  for (const line of detail) {
-    const term = termOfGroup(section, (line.account ?? '').trim());
+  const blocks: Record<BalanceTerm, BalanceLine[]> = { current: [], nonCurrent: [] };
+  for (const { line, term } of detail) {
     if (term === null) return null;
     blocks[term].push(line);
   }
@@ -600,7 +640,7 @@ export function completeBreakdownFromSnapshot<T extends ReconcilableReport>(
 
   for (const gap of gaps) {
     const section = SECTION_BY_STATEMENT[gap.statement];
-    const rows = buildDeterministicBreakdown(snapshot, section);
+    const { rows, byTerm } = projectSection(snapshot, section);
     if (rows.length === 0) continue;
 
     const previous = balanceSheet[section] as ReadonlyArray<{
@@ -613,42 +653,48 @@ export function completeBreakdownFromSnapshot<T extends ReconcilableReport>(
     const labelByAccount = new Map(
       previous.filter((l) => l.account).map((l) => [l.account as string, l.label]),
     );
-    // Cifra comparativa del MISMO grupo PUC, por la misma proyección
+    // Cifra comparativa del MISMO grupo PUC y plazo, por la misma proyección
     // determinista. Ver la nota de `fillComparativeBreakdownFromSnapshot`.
-    const comparativeByAccount = buildComparativeCentsByAccount(comparativeSnapshot, section);
+    const comparativeByKey = buildComparativeCentsByKey(comparativeSnapshot, section, byTerm);
 
-    const detail: BalanceLine[] = rows.map((row) => ({
-      account: row.account,
-      label: labelByAccount.get(row.account) ?? row.label,
-      amountPrimary: serializeMoneyCop(row.cents),
-      amountComparative: comparativeByAccount?.has(row.account)
-        ? serializeMoneyCop(comparativeByAccount.get(row.account)!.cents)
-        : null,
-      level: 2,
-      // Se emite CON signo: una correctora agregada dentro de su grupo ya viene
-      // neta, y forzar valor absoluto convertiría una reducción en un aumento.
-      isAbsolute: false,
-      // `confidence` y `anomalyFlag` son obligatorios en StatementLineV8Schema
-      // (aceptan null, pero la clave tiene que existir — el contrato de Zod
-      // strict mode del repo prohíbe `.optional()`). Sin ellos
-      // `NiifReportSchema.safeParse` rechaza el reensamblaje entero y
-      // `runNiifAnalyst` lanza, tumbando el informe completo. Medido en una
-      // corrida real antes de que ningún test unitario lo notara, porque los
-      // fixtures de test usan `as unknown as NiifReportJson` y nunca vuelven a
-      // pasar por el schema.
-      confidence: 'high',
-      // Una cifra derivada del preprocesador no puede tener anomalía sectorial:
-      // no la derivó el modelo.
-      anomalyFlag: null,
-    }));
+    const detail: TermedLine[] = rows.map((row) => {
+      const cmp = comparativeByKey?.get(projectionKey(row.account, row.term));
+      return {
+        term: row.term,
+        line: {
+          account: row.account,
+          label: labelByAccount.get(row.account) ?? row.label,
+          amountPrimary: serializeMoneyCop(row.cents),
+          amountComparative: cmp ? serializeMoneyCop(cmp.cents) : null,
+          level: 2,
+          // Se emite CON signo: una correctora agregada dentro de su grupo ya viene
+          // neta, y forzar valor absoluto convertiría una reducción en un aumento.
+          isAbsolute: false,
+          // `confidence` y `anomalyFlag` son obligatorios en StatementLineV8Schema
+          // (aceptan null, pero la clave tiene que existir — el contrato de Zod
+          // strict mode del repo prohíbe `.optional()`). Sin ellos
+          // `NiifReportSchema.safeParse` rechaza el reensamblaje entero y
+          // `runNiifAnalyst` lanza, tumbando el informe completo. Medido en una
+          // corrida real antes de que ningún test unitario lo notara, porque los
+          // fixtures de test usan `as unknown as NiifReportJson` y nunca vuelven a
+          // pasar por el schema.
+          confidence: 'high',
+          // Una cifra derivada del preprocesador no puede tener anomalía sectorial:
+          // no la derivó el modelo.
+          anomalyFlag: null,
+        },
+      };
+    });
     // Corriente / no corriente con subtotales anclados a la partición del
-    // preprocesador; si algún grupo no tiene plazo, presentación sin
-    // subtotales declarada en las notas (niif-contrato-07).
+    // preprocesador (niif-contrato-07; excepciones de vencimiento y virtuales
+    // de R1 incluidas, integración P4-b); si algún grupo no tiene plazo,
+    // presentación sin subtotales declarada en las notas.
     const laidOut = layoutByTerm(section, detail);
+    const plain = detail.map((d) => d.line);
     if (!laidOut && section !== 'equity') {
-      balanceSheet.notes = [...balanceSheet.notes, termPresentationNote(section, detail)];
+      balanceSheet.notes = [...balanceSheet.notes, termPresentationNote(section, plain)];
     }
-    balanceSheet[section] = (laidOut ?? detail) as T['balanceSheet'][typeof section];
+    balanceSheet[section] = (laidOut ?? plain) as T['balanceSheet'][typeof section];
     completed.push(gap.statement);
   }
 
@@ -677,18 +723,68 @@ export function completeBreakdownFromSnapshot<T extends ReconcilableReport>(
 // ---------------------------------------------------------------------------
 
 /**
- * Renglones del periodo comparativo indexados por grupo PUC, o `null` si no hay
- * snapshot anterior. La etiqueta viaja con la fila —la produce el propio
- * `buildDeterministicBreakdown`— para no duplicar aquí el diccionario PUC↔NIIF.
+ * Renglones del periodo comparativo indexados por grupo PUC y plazo
+ * (`projectionKey`), o `null` si no hay snapshot anterior. La etiqueta viaja
+ * con la fila —la produce el propio `buildDeterministicBreakdown`— para no
+ * duplicar aquí el diccionario PUC↔NIIF.
+ *
+ * `byTerm = true` exige la partición por plazo del snapshot comparativo (con
+ * SUS excepciones de vencimiento y virtuales de R1); si en ese snapshot algún
+ * grupo no tiene plazo, devuelve `null` y el llamador decide. `byTerm = false`
+ * agrega por grupo sin plazo (clave `grupo|`), como antes de P4-b.
  */
-function buildComparativeCentsByAccount(
+function buildComparativeCentsByKey(
   comparativeSnapshot: PeriodSnapshot | undefined,
   section: BreakdownSection,
-): Map<string, { cents: bigint; label: string }> | null {
+  byTerm: boolean,
+): Map<string, { account: string; term: BalanceTerm | null; cents: bigint; label: string }> | null {
   if (!comparativeSnapshot) return null;
-  const rows = buildDeterministicBreakdown(comparativeSnapshot, section);
-  if (rows.length === 0) return null;
-  return new Map(rows.map((r) => [r.account, { cents: r.cents, label: r.label }]));
+  const projection = projectSection(comparativeSnapshot, section);
+  if (projection.rows.length === 0) return null;
+  const rows = byTerm
+    ? projection.byTerm
+      ? projection.rows
+      : null
+    : buildDeterministicBreakdown(comparativeSnapshot, section).map((r) => ({ ...r, term: null }));
+  if (!rows) return null;
+  return new Map(
+    rows.map((r) => [
+      projectionKey(r.account, r.term),
+      { account: r.account, term: r.term, cents: r.cents, label: r.label },
+    ]),
+  );
+}
+
+/**
+ * Plazo de cada renglón de detalle de una sección ya dispuesta en bloques por
+ * el completado determinista: el subtotal "Total … corriente" / "Total … no
+ * corriente" que cierra el bloque. Devuelve `null` si la sección no tiene
+ * exactamente esa forma (renglón al final sin subtotal, u otro renglón sin
+ * código): el llamador vuelve a la clasificación por grupo.
+ */
+function recoverTermsFromLayout(
+  section: BreakdownSection,
+  lines: ReadonlyArray<{ account: string | null; label: string; level: number }>,
+): Array<BalanceTerm> | null {
+  if (section === 'equity') return null;
+  const labels = TERM_SUBTOTAL_LABELS[section];
+  const terms: BalanceTerm[] = [];
+  let pending = 0;
+  for (const line of lines) {
+    if (line.account !== null) {
+      pending++;
+      continue;
+    }
+    const term: BalanceTerm | null =
+      line.level === 3 && line.label === labels.current
+        ? 'current'
+        : line.level === 3 && line.label === labels.nonCurrent
+          ? 'nonCurrent'
+          : null;
+    if (term === null || pending === 0) return null;
+    for (; pending > 0; pending--) terms.push(term);
+  }
+  return pending === 0 ? terms : null;
 }
 
 /**
@@ -707,6 +803,11 @@ function buildComparativeCentsByAccount(
  * toca: mapear una cuenta auxiliar del modelo a un grupo del comparativo
  * produciría doble conteo, que es exactamente lo que
  * `completeBreakdownFromSnapshot` evita reemplazando en vez de mezclar.
+ *
+ * Integración P4-b: cuando la sección viene del completado determinista por
+ * plazo, cada renglón conserva su bloque (el subtotal que lo cierra) y la
+ * columna comparativa se parte con los plazos del snapshot comparativo, de
+ * modo que los subtotales comparativos también son sus `controlTotals`.
  */
 export function fillComparativeBreakdownFromSnapshot<T extends ReconcilableReport>(
   json: T,
@@ -720,9 +821,6 @@ export function fillComparativeBreakdownFromSnapshot<T extends ReconcilableRepor
   for (const [statement, section] of Object.entries(SECTION_BY_STATEMENT) as Array<
     [LineGap['statement'], BreakdownSection]
   >) {
-    const comparativeByAccount = buildComparativeCentsByAccount(comparativeSnapshot, section);
-    if (!comparativeByAccount) continue;
-
     const lines = balanceSheet[section] as ReadonlyArray<{
       account: string | null;
       label: string;
@@ -736,41 +834,114 @@ export function fillComparativeBreakdownFromSnapshot<T extends ReconcilableRepor
     if (lines.length === 0) continue;
 
     // Firma de "esto ya es la proyección determinista": todos los renglones de
-    // detalle llevan código de grupo PUC de dos dígitos y ninguno se repite; los
-    // únicos renglones sin código son los subtotales corriente / no corriente
-    // que agrega el completado (niif-contrato-07).
+    // detalle llevan código de grupo PUC de dos dígitos y ninguno se repite
+    // dentro de su bloque; los únicos renglones sin código son los subtotales
+    // corriente / no corriente que agrega el completado (niif-contrato-07).
     const detailLines = lines.filter((l) => l.account !== null);
     const hasTermSubtotals = detailLines.length !== lines.length;
     const codes = detailLines.map((l) => (l.account ?? '').trim());
-    const esProyeccionDeterminista =
-      codes.every((c) => /^\d{2}$/.test(c)) &&
-      new Set(codes).size === codes.length &&
-      lines.every((l) => l.account !== null || l.level === 3);
-    if (!esProyeccionDeterminista) continue;
+    if (!codes.every((c) => /^\d{2}$/.test(c))) continue;
+    if (!lines.every((l) => l.account !== null || l.level === 3)) continue;
 
-    const yaTieneComparativo = detailLines.every((l) => l.amountComparative !== null);
-    const gruposFaltantes = [...comparativeByAccount.keys()].filter((g) => !codes.includes(g));
-    if (yaTieneComparativo && gruposFaltantes.length === 0) continue;
+    // Plazo de cada renglón: el del bloque del completado por plazo (P4-b) o,
+    // si la sección no tiene esa forma, el del grupo PUC (comportamiento previo).
+    const recovered = hasTermSubtotals ? recoverTermsFromLayout(section, lines) : null;
+    const terms: Array<BalanceTerm | null> =
+      recovered ?? codes.map((c) => (hasTermSubtotals ? termOfGroup(section, c) : null));
+    const keys = codes.map((c, i) => projectionKey(c, recovered ? terms[i] : null));
+    if (new Set(keys).size !== keys.length) continue;
 
-    const conComparativo = detailLines.map((l) => {
-      const cmp = comparativeByAccount.get(l.account ?? '');
+    let comparativeByKey = buildComparativeCentsByKey(comparativeSnapshot, section, recovered !== null);
+    let detail = detailLines.map((l, i) => ({ line: l, term: terms[i], key: keys[i] }));
+    if (recovered !== null && comparativeByKey === null) {
+      // El comparativo tiene un grupo sin plazo determinable: la sección
+      // entera vuelve a la agregación por grupo, sin subtotales.
+      comparativeByKey = buildComparativeCentsByKey(comparativeSnapshot, section, false);
+      if (!comparativeByKey) continue;
+      const byGroup = new Map<string, (typeof detailLines)[number]>();
+      for (const l of detailLines) {
+        const prev = byGroup.get(l.account!);
+        byGroup.set(
+          l.account!,
+          prev
+            ? {
+                ...prev,
+                amountPrimary: serializeMoneyCop(parseMoneyCop(prev.amountPrimary) + parseMoneyCop(l.amountPrimary)),
+                amountComparative: null,
+              }
+            : l,
+        );
+      }
+      detail = [...byGroup.values()].map((l) => ({ line: l, term: null, key: projectionKey(l.account!, null) }));
+    }
+    if (!comparativeByKey) continue;
+    const lostLayout = recovered !== null && detail.some((d) => d.term === null);
+
+    // Renglón que YA trae cifra comparativa en un bloque distinto del que le
+    // da al grupo el snapshot comparativo (revisión I2). El completado
+    // determinista del analista deja la columna comparativa en null, así que
+    // esa cifra la escribió el modelo, con su propia ubicación del grupo (p.
+    // ej. 17 en corriente con subtotales rotulados como los del completado).
+    // Añadir el grupo en el otro bloque y conservar la cifra del modelo lo
+    // contaría dos veces. Si el grupo tiene un solo renglón en la sección, la
+    // cifra comparativa del grupo (todos sus plazos) va a ese renglón, como
+    // antes de P4-b; si tiene varios, no hay forma segura de repartirla y la
+    // sección se deja como la entregó el modelo.
+    const comparativeKeysByGroup = new Map<string, string[]>();
+    for (const [k, v] of comparativeByKey) {
+      comparativeKeysByGroup.set(v.account, [...(comparativeKeysByGroup.get(v.account) ?? []), k]);
+    }
+    const linesPerGroup = new Map<string, number>();
+    for (const d of detail) linesPerGroup.set(d.line.account!, (linesPerGroup.get(d.line.account!) ?? 0) + 1);
+    const claimed = new Map<string, bigint>();
+    const consumed = new Set<string>();
+    let ambiguous = false;
+    for (const d of detail) {
+      if (d.line.amountComparative === null || comparativeByKey.has(d.key)) continue;
+      const groupKeys = comparativeKeysByGroup.get(d.line.account!);
+      if (!groupKeys) continue;
+      if (linesPerGroup.get(d.line.account!) !== 1) {
+        ambiguous = true;
+        break;
+      }
+      claimed.set(d.key, groupKeys.reduce((acc, k) => acc + comparativeByKey!.get(k)!.cents, ZERO));
+      for (const k of groupKeys) consumed.add(k);
+    }
+    if (ambiguous) continue;
+
+    const yaTieneComparativo = detail.every((d) => d.line.amountComparative !== null);
+    const faltantes = [...comparativeByKey.keys()].filter(
+      (k) => !consumed.has(k) && !detail.some((d) => d.key === k),
+    );
+    if (yaTieneComparativo && faltantes.length === 0 && !lostLayout) continue;
+
+    const conComparativo: TermedLine[] = detail.map(({ line: l, term, key }) => {
+      const cmp = comparativeByKey!.get(key);
+      const groupCents = claimed.get(key);
       return {
-        ...l,
-        amountComparative: cmp
-          ? serializeMoneyCop(cmp.cents)
-          : // El grupo no existía el año anterior: `null` es la verdad (cuenta
-            // nueva del periodo), no un cero que el lector leería como saldo.
-            l.amountComparative,
-        confidence: 'high',
+        term,
+        line: {
+          ...l,
+          amountComparative: cmp
+            ? serializeMoneyCop(cmp.cents)
+            : groupCents !== undefined
+              ? serializeMoneyCop(groupCents)
+              : // El grupo no existía el año anterior: `null` es la verdad (cuenta
+                // nueva del periodo), no un cero que el lector leería como saldo.
+                l.amountComparative,
+          confidence: 'high',
+        } as unknown as BalanceLine,
       };
     });
 
-    const nuevos = gruposFaltantes
-      .sort((a, b) => a.localeCompare(b))
-      .map((grupo) => {
-        const cmp = comparativeByAccount.get(grupo)!;
-        return {
-          account: grupo,
+    const nuevos: TermedLine[] = faltantes.sort().map((k) => {
+      const cmp = comparativeByKey!.get(k)!;
+      return {
+        // Sin la forma del completado por plazo, el grupo nuevo va al bloque
+        // de su grupo PUC (comportamiento previo a P4-b).
+        term: recovered !== null ? cmp.term : hasTermSubtotals ? termOfGroup(section, cmp.account) : null,
+        line: {
+          account: cmp.account,
           label: cmp.label,
           amountPrimary: '0',
           amountComparative: serializeMoneyCop(cmp.cents),
@@ -778,18 +949,18 @@ export function fillComparativeBreakdownFromSnapshot<T extends ReconcilableRepor
           isAbsolute: false,
           confidence: 'high',
           anomalyFlag: null,
-        };
-      });
+        },
+      };
+    });
 
     const merged = [...conComparativo, ...nuevos].sort((a, b) =>
-      (a.account ?? '').localeCompare(b.account ?? ''),
-    ) as unknown as BalanceLine[];
-    balanceSheet[section] = ((hasTermSubtotals ? layoutByTerm(section, merged) : null) ??
-      merged) as unknown as T['balanceSheet'][typeof section];
+      (a.line.account ?? '').localeCompare(b.line.account ?? ''),
+    );
+    const laidOut = hasTermSubtotals && !lostLayout ? layoutByTerm(section, merged) : null;
+    balanceSheet[section] = (laidOut ?? merged.map((m) => m.line)) as unknown as T['balanceSheet'][typeof section];
     filled.push(statement);
   }
 
   if (filled.length === 0) return { json, filled: [] };
   return { json: { ...json, balanceSheet }, filled };
 }
-

@@ -14,6 +14,7 @@ import {
   NormativePill,
   PageNumberBadge,
   TopoOrnament,
+  TocAnchor,
 } from '../primitives';
 import { OrbitalPillars } from '../charts/OrbitalPillars';
 import {
@@ -36,10 +37,9 @@ import {
 
 interface Props {
   doc: EditorialReport;
-  pageNumber?: number;
 }
 
-export function OrbitalPillarsPage({ doc, pageNumber = 1 }: Props) {
+export function OrbitalPillarsPage({ doc }: Props) {
   if (!doc.pillars) return null;
 
   const { pillars } = doc;
@@ -61,6 +61,7 @@ export function OrbitalPillarsPage({ doc, pageNumber = 1 }: Props) {
         position: 'relative',
       }}
     >
+      <TocAnchor id="pillars" />
       {/* Full-bleed topo contour at 8% opacity (spec §3.9) */}
       <View
         style={{
@@ -74,7 +75,7 @@ export function OrbitalPillarsPage({ doc, pageNumber = 1 }: Props) {
       >
         <TopoOrnament
           variant="full-bleed"
-          opacity={1}
+          opacity={0.08}
           areaAccent="valor"
           seed={39}
           width={PAGE_W}
@@ -157,7 +158,7 @@ export function OrbitalPillarsPage({ doc, pageNumber = 1 }: Props) {
       </View>
 
       <GoldRule />
-      <PageNumberBadge pageNumber={pageNumber} />
+      <PageNumberBadge />
     </Page>
   );
 }

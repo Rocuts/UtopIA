@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 // El analista real (`runNiifAnalyst`) con el LLM mockeado: el Pass-2 intenta
 // escribir cifras comparativas en el EFE y el código las descarta y adjunta
-// las deterministas (tres cortes) o la nota de impracticabilidad (dos cortes).
+// las deterministas (tres cortes) o la nota de comparativo no presentado (dos cortes).
 // La fase (`runNiifPhase`) valida con las mismas anclas y no sella.
 // ---------------------------------------------------------------------------
 
@@ -122,7 +122,9 @@ describe('runNiifPhase — comparativos del EFE y del ECP', () => {
     const phase = await fase(csv, pp);
     const json = phase.niif.json!;
     expect(json.cashFlow.sections.flatMap((s) => s.lines).every((l) => l.amountComparative === null)).toBe(true);
-    expect(json.cashFlow.comparativeNote).toMatch(/no presentada.*3\.14 y 10\.21/);
+    // Integración I2 (prompts-normativa-23): dato no suministrado ≠ impracticabilidad.
+    expect(json.cashFlow.comparativeNote).toMatch(/comparativo 2024 no presentado: el balance no incluye el corte de cierre anterior al periodo comparativo.*3\.14 exige comparativos — suministre ese corte/);
+    expect(json.cashFlow.comparativeNote).not.toMatch(/mpracticab|10\.21/);
     expect(json.equityChanges.comparativeRows).toBeNull();
     expect(json.equityChanges.comparativeNote).toMatch(/Estado de cambios en el patrimonio/);
     expect(phase.niif.reconciliation?.clean).toBe(true);

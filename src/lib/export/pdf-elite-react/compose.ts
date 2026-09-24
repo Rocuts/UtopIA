@@ -37,6 +37,7 @@ import type {
   RecommendationItem,
   ReportMeta,
   SignatureBlockSpec,
+  TocAnchorId,
   TocEntry,
   WaterfallItem,
 } from './types';
@@ -65,7 +66,7 @@ import {
   niifJsonToIncomeTable,
   type StatementTableContext,
 } from './compose-statements-from-json';
-import { formatCopFromCents } from '@/lib/agents/financial/contracts/money';
+import { formatCopFromPesos } from '@/lib/agents/financial/contracts/money';
 import { narrativeDisclaimer, resolvePeriodoTipos } from '../statement-presentation';
 import { revenueBreakdown, type RevenueBreakdown } from '../revenue';
 
@@ -734,22 +735,37 @@ function buildCover(report: FinancialReport, language: 'es' | 'en') {
 }
 
 function buildTocEntries(language: 'es' | 'en', includePillars: boolean): TocEntry[] {
+  // Orden del documento (EditorialReportDoc). Cada entrada lleva el ancla de
+  // la página que abre la sección: `render.ts` la numera con la página real y
+  // omite las secciones que no se imprimieron (reportes-export-21). La entrada
+  // "Resumen ejecutivo" se retiró: ninguna página del informe la sostenía.
   const isEs = language === 'es';
   const entries: TocEntry[] = [];
-  const push = (label: string, uppercase: boolean) =>
-    entries.push({ label, page: 1, uppercase });
-  push(isEs ? 'Carta del director' : 'Director letter', false);
-  push(isEs ? 'Resumen ejecutivo' : 'Executive summary', false);
-  push(isEs ? 'TEMA 1: Indicadores clave' : 'TOPIC 1: Key indicators', true);
-  push(isEs ? 'TEMA 2: Cascada de utilidad' : 'TOPIC 2: Profit waterfall', true);
-  push(isEs ? 'TEMA 3: Diales de salud' : 'TOPIC 3: Health dials', true);
-  if (includePillars) {
-    push(isEs ? 'TEMA 4: Pilares' : 'TOPIC 4: Pillars', true);
-  }
-  push(isEs ? 'TEMA 5: Estados financieros' : 'TOPIC 5: Financial statements', true);
-  push(isEs ? 'TEMA 6: Notas' : 'TOPIC 6: Notes', true);
-  push(isEs ? 'TEMA 7: Recomendaciones' : 'TOPIC 7: Recommendations', true);
-  push(isEs ? 'Apéndice normativo' : 'Normative appendix', false);
+  let topic = 0;
+  const push = (es: string, en: string, anchor: TocAnchorId, isTopic: boolean) => {
+    const label = isEs ? es : en;
+    if (isTopic) topic += 1;
+    entries.push({
+      label: isTopic ? `${isEs ? 'TEMA' : 'TOPIC'} ${topic}: ${label}` : label,
+      page: 1,
+      uppercase: isTopic,
+      anchor,
+    });
+  };
+  push('Carta del director', 'Director letter', 'director', false);
+  push('Indicadores clave', 'Key indicators', 'kpi', true);
+  push('Estados financieros', 'Financial statements', 'statements', true);
+  push('Cascada de utilidad', 'Profit waterfall', 'waterfall', true);
+  push('Diales de salud', 'Health dials', 'dials', true);
+  push('Punto de equilibrio', 'Break-even point', 'breakEven', true);
+  push('Flujo de caja proyectado', 'Projected cash flow', 'projectedCashFlow', true);
+  if (includePillars) push('Pilares', 'Pillars', 'pillars', true);
+  push('Notas', 'Notes', 'notes', true);
+  push('Recomendaciones', 'Recommendations', 'recommendations', true);
+  push('Acta de asamblea', 'Shareholders minutes', 'minutes', false);
+  push('Auditoría especializada', 'Specialized audit', 'audit', false);
+  push('Meta-auditoría de calidad', 'Quality meta-audit', 'quality', false);
+  push('Apéndice normativo', 'Normative appendix', 'appendix', false);
   return entries;
 }
 
@@ -1587,13 +1603,15 @@ function formatBindingTotals(t: ControlTotals): string {
  * mismo entregable, y dos redondeos distintos (`toLocaleString` sobre float vs
  * aritmética exacta en centavos). Se unifica en el helper canónico.
  *
- * `controlTotals` viaja en PESOS (number); el helper trabaja en centavos, por
- * eso el ×100 redondeado — el mismo redondeo al centavo que usa el
- * preprocesador (`toRawString`).
+ * `controlTotals` viaja en PESOS (number); el helper trabaja en centavos. La
+ * conversión va por el texto decimal (`formatCopFromPesos`), igual que
+ * `fmtCopPesos` del Excel: `Math.round(n * 100)` deja de ser un entero seguro
+ * por encima de ~$90 billones y, desde niif-contrato-22, `formatCopFromCents`
+ * lanza RangeError con él (integración I2).
  */
 function formatCop(n: number | undefined | null): string {
   if (typeof n !== 'number' || !Number.isFinite(n)) return 'N/D';
-  return formatCopFromCents(Math.round(n * 100), false);
+  return formatCopFromPesos(n, false);
 }
 
 function formatRatio(n: number | undefined | null): string {

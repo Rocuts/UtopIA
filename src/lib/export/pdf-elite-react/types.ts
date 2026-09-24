@@ -338,11 +338,38 @@ export interface CoverSpec {
   accentArea: AreaKey;
 }
 
+/**
+ * Sección del informe que la tabla de contenido puede numerar. Cada página que
+ * abre una sección lleva un `<TocAnchor id=…>` (reportes-export-21).
+ */
+export type TocAnchorId =
+  | 'director'
+  | 'kpi'
+  | 'statements'
+  | 'waterfall'
+  | 'dials'
+  | 'breakEven'
+  | 'projectedCashFlow'
+  | 'pillars'
+  | 'notes'
+  | 'recommendations'
+  | 'minutes'
+  | 'audit'
+  | 'quality'
+  | 'appendix';
+
 export interface TocEntry {
   label: string;
+  /**
+   * Página real en el PDF. La fija `render.ts` tras una pasada de medición
+   * (`resolveTocEntries`); `<= 1` = sin número (la página 1 es la portada) y
+   * la tabla imprime '—'.
+   */
   page: number;
   /** TEMA N: ... va uppercase, secciones de front-matter no. */
   uppercase: boolean;
+  /** Página que abre la sección; sin ancla la entrada no se puede numerar. */
+  anchor?: TocAnchorId;
 }
 
 export interface TocSpec {

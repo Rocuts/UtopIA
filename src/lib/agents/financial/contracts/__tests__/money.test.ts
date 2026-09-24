@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pctFloorMoneyCop, minMoneyCop } from '../money';
+import { pctFloorMoneyCop, minMoneyCop, pesosNumberToCents, formatCopFromPesos } from '../money';
 
 describe('pctFloorMoneyCop', () => {
   it('25% de 5.000.000.000 centavos = 1.250.000.000', () => {
@@ -49,5 +49,23 @@ describe('niif-contrato-22 — casos borde de money.ts', () => {
     expect(parseMoneyCop('-0')).toBe(BigInt(0));
     expect(serializeMoneyCop(parseMoneyCop('-0'))).toBe('0');
     expect(serializeMoneyCop(parseMoneyCop('007'))).toBe('7');
+  });
+});
+
+describe('pesosNumberToCents / formatCopFromPesos — pesos number → centavos exactos (integración I2)', () => {
+  it('convierte por el texto decimal, también por encima de 2^53 centavos', () => {
+    expect(pesosNumberToCents(1234.56)).toBe(BigInt(123456));
+    expect(pesosNumberToCents(-0.004)).toBe(BigInt(0));
+    expect(pesosNumberToCents(100_000_000_000_000)).toBe(BigInt('10000000000000000'));
+    expect(formatCopFromPesos(100_000_000_000_000)).toBe('$100.000.000.000.000,00');
+    expect(formatCopFromPesos(-1234.5)).toBe('($1.234,50)');
+    expect(formatCopFromPesos(-1234.5, true)).toBe('$1.234,50');
+  });
+
+  it('no finito o sin notación decimal fija → null / N/D', () => {
+    expect(pesosNumberToCents(Number.NaN)).toBeNull();
+    expect(pesosNumberToCents(Number.POSITIVE_INFINITY)).toBeNull();
+    expect(pesosNumberToCents(1e21)).toBeNull();
+    expect(formatCopFromPesos(1e21)).toBe('N/D');
   });
 });

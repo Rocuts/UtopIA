@@ -740,8 +740,9 @@ export function cashFlowHasComparativeColumn(cf: CashFlowComparativeLike): boole
 
 /**
  * Leyenda del EFE o del ECP cuando el informe declara comparativo y ese estado
- * no lo presenta: la nota determinista del informe (impracticabilidad, NIIF
- * para las PYMES 3.14 / 10.21) o, en informes anteriores a ella, la genérica.
+ * no lo presenta: la nota determinista del informe (qué falta y qué
+ * suministrar, NIIF para las PYMES 3.14) o, en informes anteriores a ella, la
+ * genérica.
  * `null` cuando no hay comparativo o el estado sí lo presenta.
  */
 export function comparativeStatementLegend(

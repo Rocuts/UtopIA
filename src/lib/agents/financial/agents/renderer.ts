@@ -446,7 +446,7 @@ export function renderCashFlowStatement(json: NiifReportJson): string {
   const periodLabel = company.fiscalPeriod;
   // Columna comparativa del EFE (auditoría 2026-09-24, pendiente #3): sólo
   // cuando el informe la trae completa — la calcula el código desde el corte
-  // anterior al comparativo. Si no, la nota determinista de impracticabilidad.
+  // anterior al comparativo. Si no, la nota determinista de comparativo no presentado.
   const comparativeLabel = company.comparativePeriod ?? '';
   const hasComparative = company.comparativePeriod !== null && cashFlowHasComparativeColumn(cf);
 

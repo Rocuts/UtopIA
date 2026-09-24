@@ -61,6 +61,32 @@ export function formatCopFromCents(cents: bigint | number, absolute = false): st
   return isNegative ? `(${formatted})` : formatted;
 }
 
+/**
+ * Pesos (`number`, como viajan `controlTotals` y los resúmenes del
+ * preprocesador) → centavos EXACTOS por el texto decimal del número
+ * (`toFixed(2)`: redondeo al centavo del valor decimal, sin pasar por un
+ * `number` de centavos, que deja de ser exacto por encima de 2^53 ≈ $90
+ * billones — niif-contrato-22). Devuelve `null` si el valor no es finito o no
+ * tiene notación decimal fija (|n| ≥ 1e21): el consumidor imprime N/D, nunca
+ * una cifra inventada.
+ */
+export function pesosNumberToCents(pesos: number): bigint | null {
+  if (typeof pesos !== 'number' || !Number.isFinite(pesos)) return null;
+  const fixed = pesos.toFixed(2);
+  if (!/^-?\d+\.\d{2}$/.test(fixed)) return null;
+  return BigInt(fixed.replace('.', ''));
+}
+
+/**
+ * Formatea pesos (`number`) con la convención de `formatCopFromCents`
+ * (paréntesis para negativos salvo `absolute`), vía `pesosNumberToCents`.
+ * Valor no representable → `'N/D'`.
+ */
+export function formatCopFromPesos(pesos: number, absolute = false): string {
+  const cents = pesosNumberToCents(pesos);
+  return cents === null ? 'N/D' : formatCopFromCents(cents, absolute);
+}
+
 /** Suma una colección de MoneyCop strings y devuelve un MoneyCop. */
 export function sumMoneyCop(values: readonly string[]): string {
   let acc = BigInt(0);

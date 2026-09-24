@@ -14,6 +14,7 @@ import {
   MixedWeightHeadline,
   NormativePill,
   PageNumberBadge,
+  TocAnchor,
 } from '../primitives';
 import { DialGauge } from '../charts/DialGauge';
 import {
@@ -37,10 +38,9 @@ import {
 
 interface Props {
   doc: EditorialReport;
-  pageNumber?: number;
 }
 
-export function DialGaugePage({ doc, pageNumber = 1 }: Props) {
+export function DialGaugePage({ doc }: Props) {
   // Cap at 6 (spec §3.8: 3×2 grid)
   const gauges = doc.dialGauges.gauges.slice(0, 6);
   const row1 = gauges.slice(0, 3);
@@ -61,6 +61,7 @@ export function DialGaugePage({ doc, pageNumber = 1 }: Props) {
         paddingBottom: PAGE_MARGIN + 48,
       }}
     >
+      <TocAnchor id="dials" />
       {/* Title */}
       <MixedWeightHeadline
         parts={[
@@ -133,7 +134,7 @@ export function DialGaugePage({ doc, pageNumber = 1 }: Props) {
       )}
 
       <GoldRule />
-      <PageNumberBadge pageNumber={pageNumber} />
+      <PageNumberBadge />
     </Page>
   );
 }

@@ -16,6 +16,7 @@ import {
   PaginationFooter,
   MarkdownToPdf,
   TopoOrnament,
+  TocAnchor,
 } from '../primitives';
 import {
   N0,
@@ -42,8 +43,8 @@ import {
 } from '../tokens';
 
 // Landscape A4
-const LW = PAGE_H; // 842 pt
-const LH = PAGE_W; // 595 pt
+const LW = PAGE_W; // 842 pt
+const LH = PAGE_H; // 595 pt
 const MARGIN = 48;
 
 interface Props {
@@ -258,8 +259,10 @@ export function RecommendationsPage({ doc }: Props) {
         position: 'relative',
       }}
     >
+      <TocAnchor id="recommendations" />
       {/* Topo ornament — bottom-right corner */}
       <View
+        fixed
         style={{
           position: 'absolute',
           bottom: 0,
@@ -271,7 +274,7 @@ export function RecommendationsPage({ doc }: Props) {
       >
         <TopoOrnament
           variant="hex"
-          opacity={1}
+          opacity={0.06}
           areaAccent="futuro"
           width={200}
           height={160}
@@ -290,8 +293,6 @@ export function RecommendationsPage({ doc }: Props) {
       </View>
 
       <PaginationFooter
-        pageNumber={0}
-        totalPages={0}
         sectionLabel="Recomendaciones"
       />
     </Page>

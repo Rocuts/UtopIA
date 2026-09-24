@@ -397,6 +397,7 @@ export function CoverPage({ doc }: Props) {
       {/* BLOQUEADO diagonal watermark over entire page */}
       {isBlocked ? (
         <View
+          fixed
           style={{
             position: 'absolute',
             top: 0,

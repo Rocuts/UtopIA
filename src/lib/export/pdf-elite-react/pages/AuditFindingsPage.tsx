@@ -28,6 +28,7 @@ import {
   PageNumberBadge,
   GoldRule,
   TopoOrnament,
+  TocAnchor,
 } from '../primitives';
 import {
   CREAM_50,
@@ -140,6 +141,7 @@ export function AuditFindingsPage({ doc }: Props) {
         position: 'relative',
       }}
     >
+      <TocAnchor id="audit" />
       <View
         style={{
           position: 'absolute',
@@ -152,7 +154,7 @@ export function AuditFindingsPage({ doc }: Props) {
       >
         <TopoOrnament
           variant="corner-tr"
-          opacity={1}
+          opacity={0.07}
           areaAccent="escudo"
           seed={404}
           width={PAGE_W * 0.28}
@@ -414,7 +416,7 @@ export function AuditFindingsPage({ doc }: Props) {
       </View>
 
       <GoldRule />
-      <PageNumberBadge pageNumber={0} />
+      <PageNumberBadge />
     </Page>
   );
 }

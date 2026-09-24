@@ -18,6 +18,7 @@ import {
   GoldRule,
   MarkdownToPdf,
   TopoOrnament,
+  TocAnchor,
 } from '../primitives';
 import {
   CREAM_50,
@@ -50,7 +51,9 @@ export function ShareholderMinutesPage({ doc }: Props) {
         position: 'relative',
       }}
     >
+      <TocAnchor id="minutes" />
       <View
+        fixed
         style={{
           position: 'absolute',
           bottom: 0,
@@ -62,7 +65,7 @@ export function ShareholderMinutesPage({ doc }: Props) {
       >
         <TopoOrnament
           variant="corner-bl"
-          opacity={1}
+          opacity={0.07}
           areaAccent="verdad"
           seed={222}
           width={PAGE_W * 0.24}
@@ -93,7 +96,7 @@ export function ShareholderMinutesPage({ doc }: Props) {
       </View>
 
       <GoldRule />
-      <PageNumberBadge pageNumber={0} />
+      <PageNumberBadge />
     </Page>
   );
 }

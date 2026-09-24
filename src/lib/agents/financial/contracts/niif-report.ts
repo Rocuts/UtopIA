@@ -196,8 +196,9 @@ export const CashFlowStatementSchema = z.object({
 // (Pass-2). Los adjunta el código desde el balance de prueba
 // (`attachComparativeStatements`, contracts/deterministic-breakdown.ts) y los
 // cruza el validador contra el mismo cálculo determinista. Sin base
-// determinista viajan en `null` con la nota de impracticabilidad que redacta
-// el código (`comparativeNote`), nunca con cifras del modelo.
+// determinista viajan en `null` con la nota de comparativo no presentado que
+// redacta el código (`comparativeNote`: qué falta y qué suministrar; no
+// declara impracticabilidad), nunca con cifras del modelo.
 // ---------------------------------------------------------------------------
 
 const CashFlowSectionReportSchema = CashFlowSectionSchema.extend({
@@ -218,7 +219,7 @@ export const CashFlowStatementReportSchema = CashFlowStatementSchema.extend({
   comparativeNote: z
     .string()
     .nullable()
-    .describe('Nota determinista de impracticabilidad del comparativo del EFE (NIIF PYMES 3.14/10.21). Null = presentado o sin comparativo.'),
+    .describe('Nota determinista del comparativo del EFE no presentado (NIIF PYMES 3.14): qué falta y qué suministrar. Null = presentado o sin comparativo.'),
 });
 
 const EquityChangesPass2Schema = z.object({
@@ -234,7 +235,7 @@ const EquityChangesSchema = EquityChangesPass2Schema.extend({
   comparativeNote: z
     .string()
     .nullable()
-    .describe('Nota determinista de impracticabilidad del ECP comparativo (NIIF PYMES 3.14/10.21). Null = presentado o sin comparativo.'),
+    .describe('Nota determinista del ECP comparativo no presentado (NIIF PYMES 3.14): qué falta y qué suministrar. Null = presentado o sin comparativo.'),
 });
 
 // ---------------------------------------------------------------------------

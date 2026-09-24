@@ -13,7 +13,8 @@
 //   E3. EFE final = PUC 11 Balance (efectivo y equivalentes)
 //   E4. ECP saldo final = Patrimonio Balance
 //   E5. Coherencia Net Income ↔ Operating Profit ↔ Gross Profit
-//   E6. ORI Income Statement coincide con ORI Equity Changes
+//   E6. ORI Income Statement coincide con ORI Equity Changes (también en el
+//       periodo comparativo cuando hay ECP comparativo)
 //   E9. Comparativo completo: cuando comparativePeriod != null TODOS los
 //       6 totales *Comparative (3 Balance + 3 P&L) son non-null y cuadran la
 //       ecuación patrimonial al centavo. Si el preprocesador suministra
@@ -183,8 +184,8 @@ export interface NiifJsonValidatorOptions {
    *   - `null`: el balance no tiene periodo comparativo; presentar un
    *     comparativo del EFE o del ECP es error.
    *   - base: lo presentado se cruza al centavo contra ella, y presentarlo
-   *     cuando la base lo declara impracticable es error (NIIF para las PYMES
-   *     3.14 / 10.21: sin corte de apertura no hay comparativo que calcular).
+   *     cuando la base no lo presenta es error (NIIF para las PYMES 3.14: sin
+   *     corte de apertura no hay comparativo que calcular).
    */
   comparativeStatements?: ComparativeStatementsBasis | null;
   /**
@@ -2167,7 +2168,7 @@ function comparativeStatementErrors(
   } else if (presence.anyTotal && !presence.allTotals) {
     errors.push(
       `E2. EFE (${etiqueta}): la columna comparativa está incompleta (subtotales o efectivo al ` +
-        `inicio/final en null). O se presenta completa o no se presenta (nota de impracticabilidad).`,
+        `inicio/final en null). O se presenta completa o no se presenta (nota de comparativo no presentado).`,
     );
   } else if (presence.allTotals && cp !== null) {
     const netChange = parseMoneyCop(cf.netChangeComparative!);
@@ -2241,7 +2242,7 @@ function comparativeStatementErrors(
       const reason = basis?.cashFlowNote ?? 'el balance de prueba no tiene periodo comparativo';
       errors.push(
         `E18. EFE (${etiqueta}): se presenta una columna comparativa sin base determinista — ${reason} ` +
-          `Un comparativo del EFE sin corte de apertura no se presenta (NIIF para las PYMES 3.14 / 10.21).`,
+          `Un comparativo del EFE sin corte de apertura no se presenta (NIIF para las PYMES 3.14).`,
       );
     } else if (detCf !== null && presence.allTotals && cp !== null) {
       const view = comparativeCashFlowView(cf);
@@ -2314,6 +2315,30 @@ function comparativeStatementErrors(
             ),
           );
         }
+        // E6 del periodo comparativo (integración I2): el ORI del ERI
+        // comparativo es la variación de la columna ORI del ECP comparativo
+        // (Δ grupo 38), igual que en el periodo actual (NIIF para las PYMES
+        // 6.3). Un ORI comparativo no presentado (null) o un P&G comparativo
+        // N/D (saldos de apertura) no se cruzan.
+        //
+        // Tampoco bajo el régimen de E6b (sin componentes ORI mapeados): E6b
+        // ya fija el ORI comparativo del ERI en $0, y las filas del ECP
+        // comparativo son deterministas (Δ grupo 38 en la columna ORI). Con un
+        // grupo 38 que se movió en el periodo comparativo ninguna cifra del
+        // ERI satisfaría a la vez E6b y este cruce: bloquearía un informe
+        // honesto sin detectar nada que E6b no detecte ya (revisión I2).
+        const oriCmp = json.incomeStatement.oriComparative;
+        const e6bRegime = !!options.presentationV3 && options.presentationV3.oriComponents.length === 0;
+        if (!pygComparativeIsNd && oriCmp !== null && !e6bRegime) {
+          const oriDelta = parseMoneyCop(closing.ori) - parseMoneyCop(opening.ori);
+          const oriPnlCmp = parseMoneyCop(oriCmp);
+          if (oriDelta !== oriPnlCmp) {
+            errors.push(
+              `E6. ECP (${etiqueta}): Δ(ORI) del ECP comparativo (${fmtCop(oriDelta)}) ≠ ORI del ERI ` +
+                `comparativo (${fmtCop(oriPnlCmp)}). Brecha: ${fmtCop(oriDelta - oriPnlCmp)}. NIIF para las PYMES 6.3.`,
+            );
+          }
+        }
         // E19 entre periodos: el saldo final del comparativo es el saldo
         // inicial del periodo, columna a columna (NIIF para las PYMES 6.3).
         const primaryOpening = json.equityChanges.rows.find((r) => r.kind === 'opening_balance');
@@ -2357,7 +2382,7 @@ function comparativeStatementErrors(
       const reason = basis?.equityNote ?? 'el balance de prueba no tiene periodo comparativo';
       errors.push(
         `E24. ECP (${etiqueta}): se presentan filas del periodo comparativo sin base determinista — ${reason} ` +
-          `(NIIF para las PYMES 3.14 / 10.21).`,
+          `(NIIF para las PYMES 3.14).`,
       );
     } else if (rows !== null && detRows !== null) {
       errors.push(...equityComparativeRowDiffs(rows, detRows, etiqueta));
