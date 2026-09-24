@@ -502,8 +502,11 @@ function resolveConfirmations(
 export function incorporarConfirmaciones(text: string, options: ParseUploadedOptions): string {
   const tieneVencimientos = Object.keys(options.vencimientos ?? {}).length > 0;
   if (!options.unidadConfirmada && !tieneVencimientos) return text;
-  const confirm = resolveConfirmations(text, options);
-  return escribirDirectivasIngesta(confirm.body, {
+  // Las directivas se contrastan contra la sección de datos, igual que al
+  // parsear: el texto con el informe antepuesto (`extractedText`) las trae
+  // después de "DATOS ORIGINALES:".
+  const confirm = resolveConfirmations(extractUploadDataSection(text).data, options);
+  return escribirDirectivasIngesta(text, {
     unidadConfirmada: confirm.unidadConfirmada,
     vencimientos: confirm.vencimientos,
   });
@@ -523,8 +526,16 @@ export function parseUploadedTrialBalanceText(
   text: string,
   options: ParseUploadedOptions = {},
 ): UploadedTrialBalanceParse {
-  const confirm = resolveConfirmations(text, options);
-  const { data, hadValidationReport } = extractUploadDataSection(confirm.body);
+  // Primero la sección de datos (conserva al frente las directivas que van
+  // antes del informe) y después las confirmaciones: así se leen también las
+  // que /api/upload deja tras "DATOS ORIGINALES:" en `extractedText`, igual
+  // que Stage 0 del orquestador, que recorta el informe antes de parsear.
+  // Antes /niif, /export y la ruta legacy las ignoraban en ese texto y
+  // bloqueaban un balance cuya unidad ya estaba confirmada.
+  const section = extractUploadDataSection(text);
+  const hadValidationReport = section.hadValidationReport;
+  const confirm = resolveConfirmations(section.data, options);
+  const data = confirm.body;
   const { blocks } = parseBlocks(data);
   const sheetOptions: ParseTrialBalanceOptions = confirm.unidadConfirmada
     ? { unidadConfirmada: confirm.unidadConfirmada }

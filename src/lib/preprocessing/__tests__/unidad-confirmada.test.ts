@@ -17,6 +17,7 @@ import { BalanceValidationError, prepareFinancialContext } from '@/lib/agents/fi
 import { composeEditorialReport } from '@/lib/export/pdf-elite-react';
 import { escribirDirectivasIngesta } from '@/lib/upload/ingest-directives';
 import {
+  incorporarConfirmaciones,
   parseUploadedTrialBalanceText,
   preprocessUploadedTrialBalanceText,
   TrialBalanceIngestError,
@@ -156,6 +157,34 @@ describe('P4 (a) — unidad confirmada por el usuario', () => {
       (e: unknown) => (e instanceof BalanceValidationError ? e.reasons : null),
     );
     expect(sinConfirmar?.some((r) => /miles de pesos/.test(r))).toBe(true);
+  });
+
+  it('el texto con el informe antepuesto (`extractedText` del upload) lee la directiva igual que `rawData`', () => {
+    // /api/upload deja la directiva DESPUÉS de "DATOS ORIGINALES:". Stage 0
+    // recortaba el informe y la leía; /niif, /export y la ruta legacy parsean
+    // el texto completo y la ignoraban: bloqueaban por la unidad ya
+    // confirmada y el mismo balance tenía dos lecturas según la superficie.
+    const rawData = escribirDirectivasIngesta(CSV_MILES, { unidadConfirmada: 'miles' });
+    const base = preprocessUploadedTrialBalanceText(rawData);
+    expect(base.kind).toBe('ok');
+    if (base.kind !== 'ok') return;
+    const extractedText = `${base.preprocessed.validationReport}\n\n---\n\nDATOS ORIGINALES:\n${rawData}`;
+
+    const read = preprocessUploadedTrialBalanceText(extractedText);
+    expect(read.kind).toBe('ok');
+    if (read.kind !== 'ok') return;
+    expect(read.preprocessed.primary.controlTotals.cents!.activo).toBe(BigInt(57_000_000_000));
+    expect(read.preprocessed.primary.validation.blocking).toBe(false);
+    expect(parseUploadedTrialBalanceText(extractedText).unidad.confirmada).toBe('miles');
+
+    // Una confirmación de la solicitud que contradice la del texto es 422
+    // también en ese formato; si coincide, se aplica una sola vez.
+    expect(() => incorporarConfirmaciones(extractedText, { unidadConfirmada: 'millones' })).toThrow(
+      TrialBalanceIngestError,
+    );
+    const conCampo = incorporarConfirmaciones(extractedText, { unidadConfirmada: 'miles' });
+    const again = parseUploadedTrialBalanceText(conCampo);
+    expect(again.rows.find((r) => r.code === '110505')!.balancesByPeriod['2025']).toBe(570000000);
   });
 
   it('una opción explícita que contradice la directiva del texto es un conflicto (422), no se elige en silencio', () => {
