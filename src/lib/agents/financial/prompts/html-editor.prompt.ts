@@ -189,7 +189,7 @@ ${hechosEmpresa ?? ''}
 - ROE consistente: KPIs, executiveDashboard, dupontAnalysis, trends, recommendations usan TODOS la fórmula única de controlTotals.roe.
 - Tablas HTML reales (<table class="ft"> según §6/§13) en estados financieros — NUNCA sintaxis Markdown ni texto pipe-separated dentro del HTML.
 - Devoluciones Cta.4175 en LÍNEA SEPARADA del P&L (NIIF 15 §47).
-- Defensa Art.647 E.T. en UNA SOLA nota consolidada al final de Notas Parte 2.
+- Criterios contables aplicados en UNA SOLA nota consolidada al final de Notas Parte 2 (Corrección 9 v2.1); el Art. 647 E.T. sólo se menciona respecto de declaraciones tributarias, sin afirmar que una diferencia de criterio "anula" la sanción.
 - Numeración de notas secuencial 1..N sin saltos.
 - Cero adjetivos prohibidos §1.6 en el cuerpo.
 - Cero metadatos internos del pipeline (§1.9).

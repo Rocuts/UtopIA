@@ -18,6 +18,7 @@ import { describe, expect, it } from 'vitest';
 import { buildNiifAnalystPass2Prompt } from '../niif-analyst.prompt';
 import { buildGovernancePrompt } from '../governance-specialist.prompt';
 import { buildStrategyDirectorPrompt } from '../strategy-director.prompt';
+import { buildHtmlEditorSystemPrompt, buildHtmlEditorUserContent } from '../html-editor.prompt';
 import { buildQualityAuditorPrompt } from '../../quality/prompt';
 import { buildTaxAuditorPrompt } from '../../audit/prompts/tax-auditor.prompt';
 import { buildTaxOptimizerPrompt } from '../../tax-planning/prompts/tax-optimizer.prompt';
@@ -78,6 +79,12 @@ describe('prompts-normativa-09 — Art. 647 E.T.', () => {
   it('Gobierno no se apoya en el Concepto DIAN 100208221-1352 como sustento', () => {
     expect(prompts.governance).not.toMatch(/invocan la doctrina[^\n]*1352/);
     expect(prompts.governance).toMatch(/hechos y cifras declarados son completos y verdaderos/);
+  });
+
+  it('el Editor HTML consolida una nota de criterios sin "Defensa Art.647" genérica', () => {
+    const html = buildHtmlEditorSystemPrompt() + buildHtmlEditorUserContent.toString();
+    expect(html).not.toMatch(/Defensa Art\.647 E\.T\. en UNA SOLA nota/);
+    expect(html).toMatch(/Criterios contables aplicados en UNA SOLA nota consolidada/);
   });
 
   it('los prompts tributarios condicionan el Art. 647 a hechos y cifras completos y verdaderos', () => {
