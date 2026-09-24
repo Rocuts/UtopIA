@@ -6,15 +6,16 @@
 // omitted when the field is undefined.
 //
 // Layout:
-//   - Hero grade letter (A+, A, B, C, D, F) in a circular badge, with overall
-//     score below it.
+//   - Sello de calidad v2.1 (veredicto de la Spec v2.1 Parte V) en una franja.
+//   - Hero grade letter (A+, A, B, C, D, F) rotulado "GRADE INTERNO": se deriva
+//     del score global v2.1 en código (auditoria-calidad-10), no del LLM.
 //   - Three metric blocks side-by-side: IFRS 18 readiness · ISO 25012 data
 //     quality (5 bars) · ISO 42001 AI governance (4 bars).
 //   - Bottom: 12 dimensions as horizontal bars showing score / framework.
 //   - GoldRule + PageNumberBadge.
 import React from 'react';
 import { Page, View, Text } from '@react-pdf/renderer';
-import type { EditorialReport } from '../types';
+import type { EditorialReport, QualitySelloSpec } from '../types';
 import {
   MixedWeightHeadline,
   NormativePill,
@@ -62,6 +63,50 @@ function gradeColor(grade: string | null): string {
   if (grade === 'B') return SAND_500;
   if (grade === 'C') return SAND_500;
   return WINE_500;
+}
+
+function selloColor(type: QualitySelloSpec['type']): string {
+  switch (type) {
+    case 'certificada': return SAGE_500;
+    case 'con_observaciones': return SAND_500;
+    case 'requiere_correccion': return WINE_500;
+    case 'no_evaluable': return CHARCOAL_900;
+  }
+}
+
+function fmtScore10(v: number | null): string {
+  return v === null ? 'N/D' : `${v.toFixed(1).replace('.', ',')}/10`;
+}
+
+/** Franja con el sello v2.1: es el veredicto; el grade es interno. */
+function SelloBanner({ sello }: { sello: QualitySelloSpec }) {
+  const color = selloColor(sello.type);
+  return (
+    <View
+      style={{
+        borderLeftWidth: 4,
+        borderLeftColor: color,
+        backgroundColor: N0,
+        borderRadius: R_SM,
+        paddingHorizontal: S3,
+        paddingVertical: S2,
+        marginBottom: S4,
+      }}
+    >
+      <Text style={{ fontFamily: FONT_MONO, fontSize: 7, color: FOREST_700, letterSpacing: 1, textTransform: 'uppercase' }}>
+        Sello de calidad v2.1
+      </Text>
+      <Text style={{ fontFamily: FONT_DISPLAY, fontWeight: 'bold', fontSize: 13, color, marginTop: 2 }}>
+        {sello.title}
+      </Text>
+      <Text style={{ fontFamily: FONT_SANS, fontSize: 8.5, color: CHARCOAL_900, marginTop: 2 }}>
+        {`Score global ${fmtScore10(sello.score10)} · ${sello.approvedCount}/12 dimensiones aprobadas (evaluadas ${sello.evaluatedCount}/12)`}
+      </Text>
+      <Text style={{ fontFamily: FONT_SANS, fontSize: 8, color: FOREST_700, marginTop: 2, lineHeight: 1.3 }}>
+        {sello.bottomLine}
+      </Text>
+    </View>
+  );
 }
 
 function scoreColor(score: number | null): string {
@@ -177,6 +222,8 @@ export function QualityMetaAuditPage({ doc }: Props) {
         <NormativePill label="IASB CF" tone="sage-on-cream" />
       </View>
 
+      {q.sello ? <SelloBanner sello={q.sello} /> : null}
+
       {/* Top row — grade hero + 3 metric blocks */}
       <View style={{ flexDirection: 'row', gap: S4, marginBottom: S5 }}>
         {/* Hero grade circle */}
@@ -212,7 +259,7 @@ export function QualityMetaAuditPage({ doc }: Props) {
               letterSpacing: 1,
             }}
           >
-            SCORE {q.overallScore === null ? 'N/D' : `${q.overallScore}/100`}
+            GRADE INTERNO · {q.overallScore === null ? 'N/D' : `${q.overallScore}/100`}
           </Text>
         </View>
 
@@ -324,10 +371,10 @@ export function QualityMetaAuditPage({ doc }: Props) {
               marginBottom: S2,
             }}
           >
-            Dimensiones de calidad evaluadas
+            Detalle interno del meta-auditor (D1–D14, escala 0–100)
           </Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: S3 }}>
-            {q.dimensions.slice(0, 12).map((d, i) => (
+            {q.dimensions.map((d, i) => (
               <View key={`dim-${i}`} style={{ width: '31%' }}>
                 <BarRow label={d.name} value={d.score} framework={d.framework} />
               </View>

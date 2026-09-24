@@ -43,6 +43,9 @@ import type {
 import type { FinancialReport } from '@/lib/agents/financial/types';
 import type { AuditReport } from '@/lib/agents/financial/audit/types';
 import type { QualityAssessment } from '@/lib/agents/financial/quality/types';
+import type { QualityReportJson } from '@/lib/agents/financial/contracts/quality-report';
+import { buildQualityV21View, type QualityV21Context } from '@/lib/agents/financial/quality/v21-mapping';
+import { deriveQualityContext, deriveQualityScore } from '@/lib/agents/financial/quality/agent';
 import type {
   ControlTotals,
   PreprocessedBalance,
@@ -264,7 +267,10 @@ export function composeEditorialReport(input: ComposeInput): EditorialReport {
   if (auditFindings) {
     out.auditFindings = auditFindings;
   }
-  const qualityScores = buildQualityScores(qualityReport ?? null);
+  const qualityScores = buildQualityScores(
+    qualityReport ?? null,
+    qualityReport ? deriveQualityContext({ report, auditReport: auditReport ?? undefined, preprocessed: preprocessed ?? undefined }) : {},
+  );
   if (qualityScores) {
     out.qualityScores = qualityScores;
   }
@@ -328,15 +334,41 @@ function buildAuditFindings(audit: AuditReport | null): AuditFindingsSpec | unde
     informativo: audit.findingCounts?.informativo ?? 0,
   };
 
+  // Cobertura (auditoria-calidad-21): con dominios fallidos el overallScore
+  // es un promedio PARCIAL; se propaga para rotularlo en la página.
+  const cov = audit.coverage;
+  const coverage =
+    cov && Number.isFinite(cov.completed)
+      ? { completed: cov.completed, total: 4 as const, partial: !!cov.partial }
+      : undefined;
+
   return {
     overallScore: roundOrNull(audit.overallScore),
-    opinionType: (audit.opinionType ?? 'abstension') as AuditOpinionKind,
+    opinionType: toOpinionKind(audit.opinionType),
     opinionText: scrubInternalMetadata(audit.opinionText ?? ''),
     auditorCards,
     topFindings,
     findingCounts,
     executiveSummary: scrubInternalMetadata(audit.executiveSummary ?? ''),
+    ...(coverage ? { coverage } : {}),
   };
+}
+
+const OPINION_KINDS: readonly AuditOpinionKind[] = [
+  'favorable',
+  'con_salvedades',
+  'desfavorable',
+  'abstension',
+  'no_emitida',
+];
+
+/**
+ * Opinión ausente o desconocida → 'no_emitida' (auditoria-calidad-04). Antes
+ * caía a 'abstension': una abstención es una opinión formal que exige
+ * evidencia (NIA 705), no el valor por defecto de un dato faltante.
+ */
+function toOpinionKind(v: unknown): AuditOpinionKind {
+  return OPINION_KINDS.includes(v as AuditOpinionKind) ? (v as AuditOpinionKind) : 'no_emitida';
 }
 
 function roundOrNull(v: unknown): number | null {
@@ -346,7 +378,49 @@ function roundOrNull(v: unknown): number | null {
 // ─── Quality scores builder ───────────────────────────────────────────────────
 // Map QualityAssessment (meta-auditor) → QualityScoresSpec.
 
-function buildQualityScores(q: QualityAssessment | null): QualityScoresSpec | undefined {
+/**
+ * QualityAssessment (legado) → forma del JSON del meta-auditor para recalcular
+ * la vista v2.1. Un campo ausente o no finito queda NaN → N/D en la vista
+ * (nunca 0); una dimensión sin score numérico se descarta.
+ */
+function qualityJsonFromAssessment(q: QualityAssessment): QualityReportJson {
+  const n = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN);
+  return {
+    overallScore: n(q.overallScore),
+    grade: 'F',
+    executiveSummary: '',
+    dimensions: (q.dimensions ?? [])
+      .filter((d) => d && typeof d.name === 'string' && Number.isFinite(d.score))
+      .map((d) => ({
+        name: d.name,
+        score: d.score,
+        framework: d.framework ?? '',
+        findings: Array.isArray(d.findings) ? d.findings : [],
+        recommendations: Array.isArray(d.recommendations) ? d.recommendations : [],
+      })),
+    dataQuality: {
+      completeness: n(q.dataQuality?.completeness),
+      accuracy: n(q.dataQuality?.accuracy),
+      consistency: n(q.dataQuality?.consistency),
+      timeliness: n(q.dataQuality?.timeliness),
+      validity: n(q.dataQuality?.validity),
+    },
+    aiGovernance: {
+      traceability: n(q.aiGovernance?.traceability),
+      explainability: n(q.aiGovernance?.explainability),
+      antiHallucination: n(q.aiGovernance?.antiHallucination),
+      humanOversight: n(q.aiGovernance?.humanOversight),
+    },
+    ifrs18Readiness: { ready: false, score: n(q.ifrs18Readiness?.score), gaps: [] },
+    priorityRecommendations: [],
+    conclusion: '',
+  };
+}
+
+function buildQualityScores(
+  q: QualityAssessment | null,
+  context: QualityV21Context,
+): QualityScoresSpec | undefined {
   if (!q) return undefined;
 
   const dimensions: QualityDimensionBar[] = (q.dimensions ?? []).map((d) => ({
@@ -355,11 +429,24 @@ function buildQualityScores(q: QualityAssessment | null): QualityScoresSpec | un
     framework: d.framework,
   }));
 
-  // Un campo ausente es N/D, no 0 ni 'F' (reportes-export-11): un 0 se lee
-  // como "calidad nula" y una 'F' como reprobado.
+  // Veredicto = sello v2.1 recalculado de las dimensiones, y score/grade
+  // internos DERIVADOS de él (auditoria-calidad-10): el grade libre del LLM
+  // ("A+ · 96" con dimensiones en 50) ya no llega a la PDF, tampoco desde un
+  // informe persistido antes de la corrección. Un dato ausente es N/D, no 0
+  // ni 'F' (reportes-export-11).
+  const view = buildQualityV21View(qualityJsonFromAssessment(q), context);
+  const derived = deriveQualityScore(view);
   return {
-    overallScore: roundOrNull(q.overallScore),
-    grade: typeof q.grade === 'string' && q.grade.trim() ? q.grade : null,
+    overallScore: derived.overallScore,
+    grade: derived.grade,
+    sello: {
+      type: view.sello.type,
+      title: view.sello.title,
+      score10: view.sello.score,
+      approvedCount: view.sello.approvedCount,
+      evaluatedCount: view.sello.evaluatedCount,
+      bottomLine: view.sello.bottomLine,
+    },
     dimensions,
     ifrs18Ready: typeof q.ifrs18Readiness?.ready === 'boolean' ? q.ifrs18Readiness.ready : null,
     ifrs18Score: roundOrNull(q.ifrs18Readiness?.score),

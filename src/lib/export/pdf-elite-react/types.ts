@@ -168,7 +168,25 @@ export interface ShareholderMinutesSpec {
 
 export type AuditFindingSeverity = 'critico' | 'alto' | 'medio' | 'bajo' | 'informativo';
 export type AuditFindingDomain = 'niif' | 'tributario' | 'legal' | 'revisoria';
-export type AuditOpinionKind = 'favorable' | 'con_salvedades' | 'desfavorable' | 'abstension';
+/**
+ * `no_emitida`: sin dictamen del Revisor Fiscal (su auditor falló o no hubo
+ * opinión). Una opinión ausente NO es una abstención (NIA 705 exige evidencia
+ * para abstenerse) — auditoria-calidad-04.
+ */
+export type AuditOpinionKind =
+  | 'favorable'
+  | 'con_salvedades'
+  | 'desfavorable'
+  | 'abstension'
+  | 'no_emitida';
+
+/** Cobertura de los 4 dominios de la auditoría especializada. */
+export interface AuditCoverageSpec {
+  completed: number;
+  total: 4;
+  /** true cuando algún auditor no completó su revisión: el score es PARCIAL. */
+  partial: boolean;
+}
 
 export interface AuditFindingRow {
   code: string;
@@ -205,6 +223,12 @@ export interface AuditFindingsSpec {
   topFindings: AuditFindingRow[];
   findingCounts: Record<AuditFindingSeverity, number>;
   executiveSummary: string;
+  /**
+   * Cobertura de dominios (auditoria-calidad-21). Con `partial` el score es un
+   * promedio de los dominios completados y se rotula "PARCIAL (n/4)"; con 0
+   * dominios completados es N/D. Ausente = informe previo sin el dato.
+   */
+  coverage?: AuditCoverageSpec;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -223,9 +247,27 @@ export interface QualityDimensionBar {
  * Renderizado por `QualityMetaAuditPage`. Si undefined, la página se omite.
  */
 /** `null` = el meta-auditor no entregó la cifra → la página imprime "N/D" (nunca 0 / 'F'). */
+/**
+ * Sello de calidad v2.1 (Spec v2.1 Parte V): veredicto que se muestra en la
+ * PDF. El `grade` A+..F es interno y se rotula como tal (auditoria-calidad-10).
+ */
+export interface QualitySelloSpec {
+  type: 'certificada' | 'con_observaciones' | 'requiere_correccion' | 'no_evaluable';
+  title: string;
+  /** Score global v2.1 (0-10, un decimal); null = N/D. */
+  score10: number | null;
+  approvedCount: number;
+  evaluatedCount: number;
+  bottomLine: string;
+}
+
 export interface QualityScoresSpec {
+  /** Score interno 0-100 derivado del score global v2.1 (no el del LLM). */
   overallScore: number | null;
+  /** Grade interno (cortes A+ ≥ 95 … F < 60) derivado de `overallScore`. */
   grade: string | null;
+  /** Sello v2.1 recalculado de las dimensiones (ausente en IR previos). */
+  sello?: QualitySelloSpec | null;
   dimensions: QualityDimensionBar[];
   ifrs18Ready: boolean | null;
   ifrs18Score: number | null;
