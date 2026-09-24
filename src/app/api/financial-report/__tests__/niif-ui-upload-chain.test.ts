@@ -264,6 +264,22 @@ describe('UI → /niif: el gate 422 se aplica igual que por envío directo', () 
     expect(captured).toHaveLength(0);
   });
 
+  it('hojas en conflicto: 422 con los motivos aunque el cliente envíe un preprocesado', async () => {
+    const balanced = await upload(BALANCED_CSV, 'balance.csv');
+    const half = BALANCED_CSV.replace(/,(\d+)$/gm, (_m, v) => `,${Math.round(Number(v) / 2)}`);
+    const rawData = `[period=Balance 2025]\n${BALANCED_CSV}\n[/period]\n\n[period=Ajustado 2025]\n${half}\n[/period]`;
+    const res = await callNiif({
+      rawData,
+      company: COMPANY,
+      language: 'es',
+      instructions: '',
+      preprocessed: balanced.preprocessed,
+    });
+    expect(res.status).toBe(422);
+    expect(JSON.stringify(res.json)).toContain('Ajustado 2025');
+    expect(captured).toHaveLength(0);
+  });
+
   it('balance tabular ilegible: 422 con motivo en vez de seguir sólo con el LLM', async () => {
     const unreadable = BALANCED_CSV.replace('codigo,nombre,nivel,saldo 2025', 'BALANCE DE PRUEBA DEMO SAS,,,');
     const res = await callNiif({ rawData: unreadable, company: COMPANY, language: 'es', instructions: '' });

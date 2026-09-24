@@ -10,7 +10,10 @@ import {
   preprocessTrialBalance,
   type PreprocessedBalance,
 } from '@/lib/preprocessing/trial-balance';
-import { parseUploadedTrialBalanceText } from '@/lib/preprocessing/raw-data';
+import {
+  parseUploadedTrialBalanceText,
+  TrialBalanceIngestError,
+} from '@/lib/preprocessing/raw-data';
 import {
   revivePreprocessedBalance,
   toJsonSafe,
@@ -200,10 +203,11 @@ export async function POST(req: Request) {
       if (parsedRaw.rows.length > 0) {
         serverPreprocessed = preprocessTrialBalance(parsedRaw.rows);
       }
-    } catch {
-      // Conflicto de ingesta: Stage 0 lo re-detecta y responde 422 con los
-      // motivos. No se sustituye por el objeto del cliente.
-      rawDataRejected = true;
+    } catch (err) {
+      // Conflicto de ingesta (hojas/periodos incompatibles): Stage 0 lo
+      // re-detecta y responde 422 con los motivos. No se sustituye por el
+      // objeto del cliente. Otros fallos caen al respaldo del cliente.
+      if (err instanceof TrialBalanceIngestError) rawDataRejected = true;
     }
     const preprocessed = rawDataRejected
       ? undefined
