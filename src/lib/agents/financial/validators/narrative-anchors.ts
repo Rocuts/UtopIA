@@ -469,9 +469,18 @@ function mentionsFutureYear(text: string, primaryYear: string | null | undefined
   return false;
 }
 
-function isForwardLooking(parts: string[], primaryYear: string | null | undefined): boolean {
-  return parts.some(
-    (p) => FORWARD_WORDS.test(p) || FUTURE_OR_CONDITIONAL.test(p) || mentionsFutureYear(p, primaryYear),
+/**
+ * ¿La cifra es una proyección? `before` es el tramo entre la mención y la
+ * cifra; `prefix`, la frase antes de la mención. El futuro/condicional sólo
+ * cuenta en `before` o en la última cláusula del prefijo: en "El acta, que
+ * será firmada, indica que la utilidad neta fue de $X" el "será" no rige la cifra.
+ */
+function isForwardLooking(before: string, prefix: string, primaryYear: string | null | undefined): boolean {
+  const lastClause = prefix.slice(Math.max(prefix.lastIndexOf(','), prefix.lastIndexOf(':')) + 1);
+  return (
+    [before, prefix].some((p) => FORWARD_WORDS.test(p) || mentionsFutureYear(p, primaryYear)) ||
+    FUTURE_OR_CONDITIONAL.test(before) ||
+    FUTURE_OR_CONDITIONAL.test(lastClause)
   );
 }
 
@@ -532,7 +541,7 @@ export function checkNarrativeUnits(
         if (prose && COMPONENT_WORDS.test(before)) continue;
         if (
           options.skipForwardLooking &&
-          isForwardLooking([before, sentencePrefix(unit.text, hit.index)], options.primaryYear)
+          isForwardLooking(before, sentencePrefix(unit.text, hit.index), options.primaryYear)
         ) {
           continue;
         }
@@ -631,7 +640,7 @@ export function checkRoeUnits(
       }
       if (
         options.skipForwardLooking &&
-        isForwardLooking([before, sentencePrefix(unit.text, m.index)], options.primaryYear)
+        isForwardLooking(before, sentencePrefix(unit.text, m.index), options.primaryYear)
       ) {
         continue;
       }

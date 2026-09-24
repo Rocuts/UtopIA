@@ -469,6 +469,7 @@ describe('revisión adversarial — prosa honesta sin falsos positivos', () => {
           'La pérdida neta del ejercicio ($20.000.000,00) se enjuga con reservas.',
           'Se decreta un dividendo de $200,00 por acción, para un total de $9.000.000,00.',
           'La utilidad neta queda en $4.000.000,00.',
+          'Los estados, que serán depositados en la Cámara de Comercio, muestran una utilidad neta de $4.000.000,00.',
         ],
       }),
       sources(),
@@ -478,6 +479,8 @@ describe('revisión adversarial — prosa honesta sin falsos positivos', () => {
     expect(all).toMatch(/punto 2 · Utilidad neta: es positiva .* la presenta como negativa/);
     expect(all).toMatch(/punto 3 · Dividendos: la narrativa imprime \$9\.000\.000,00/);
     expect(all).toMatch(/punto 4 · Utilidad neta: la narrativa imprime \$4\.000\.000,00/);
+    // Un futuro ajeno a la cifra ("serán depositados") no la vuelve proyección.
+    expect(all).toMatch(/punto 5 · Utilidad neta: la narrativa imprime \$4\.000\.000,00/);
   });
 
   it('Parte II: acciones e impactos de las recomendaciones y el condicional no se juzgan', () => {
