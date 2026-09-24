@@ -69,16 +69,38 @@ export const TOPE_258_SIN_DESGLOSE_AVISO =
 const ARTICULOS_TOPEABLES = new Set(['255', '256', '257']);
 
 /**
+ * Rango de artículos «Arts. 255-257», «Arts. 254 a 258», «Articles 255 to
+ * 257». Los dos extremos tienen tres dígitos: «Art. 258-1» o «Art. 240-1» son
+ * artículos compuestos, no rangos (revisión adversarial de NT-01: «Arts.
+ * 255-257 E.T.» se leía como un solo artículo «255-257» y el escenario
+ * evitaba el tope).
+ */
+const RANGO_ARTICULOS =
+  /\bArt(?:[íi]culos?|icles?|s)?\.?\s*(\d{3})\s*(?:[-–]|\bal?\b|\bto\b|\bhasta\b)\s*(\d{3})(?![\d-])/gi;
+
+function rangoIncluyeTopeables(texto: string): boolean {
+  for (const m of texto.matchAll(RANGO_ARTICULOS)) {
+    const desde = Number(m[1]);
+    const hasta = Number(m[2]);
+    if (hasta > desde && desde <= 257 && hasta >= 255) return true;
+  }
+  return false;
+}
+
+/**
  * `true` si el escenario invoca descuentos topeables: cita los Arts. 255, 256
- * o 257 E.T. en sus artículos aplicables o en su justificación. Citar sólo el
- * Art. 258 (el tope) o el 258-1 (fuera del tope) no cuenta.
+ * o 257 E.T. (sueltos, en enumeración o en un rango que los incluye) en sus
+ * artículos aplicables o en su justificación. Citar sólo el Art. 258 (el
+ * tope) o el 258-1 (fuera del tope) no cuenta.
  */
 export function escenarioCitaDescuentosTopeables(e: {
   articulosAplicables?: readonly string[] | null;
   justificacion?: string | null;
 }): boolean {
   const textos = [...(e.articulosAplicables ?? []), e.justificacion ?? ''];
-  return textos.some((t) => articulosCitados(t).some((n) => ARTICULOS_TOPEABLES.has(n)));
+  return textos.some(
+    (t) => articulosCitados(t).some((n) => ARTICULOS_TOPEABLES.has(n)) || rangoIncluyeTopeables(t),
+  );
 }
 
 function monto(v: string | null | undefined): bigint | null {

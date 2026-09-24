@@ -166,6 +166,35 @@ describe('NT-01 — descuentos topeables sin desglose', () => {
     expect(escenarioCitaDescuentosTopeables({ articulosAplicables: ['Art. 258 E.T.', 'Art. 258-1 E.T.', 'Art. 107 E.T.'], justificacion: 'x' })).toBe(false);
   });
 
+  it('un rango que incluye los Arts. 255-257 también cuenta (revisión adversarial)', () => {
+    // «Arts. 255-257» se leía como un único artículo «255-257» y el escenario
+    // publicaba el ahorro del modelo sin tope.
+    for (const cita of ['Arts. 255-257 E.T.', 'Arts. 255 a 257 E.T.', 'Artículos 254 al 258 E.T.', 'Articles 255 to 257 E.T.']) {
+      expect(escenarioCitaDescuentosTopeables({ articulosAplicables: [cita], justificacion: 'x' }), cita).toBe(true);
+    }
+    // Artículos compuestos y rangos ajenos no son descuentos topeables.
+    for (const cita of ['Art. 258-1 E.T.', 'Art. 240-10 E.T.', 'Arts. 107 a 115 E.T.', 'Arts. 258-259 E.T.']) {
+      expect(escenarioCitaDescuentosTopeables({ articulosAplicables: [cita], justificacion: 'x' }), cita).toBe(false);
+    }
+  });
+
+  it('agresivo con «Arts. 255-257 E.T.» sin desglose ni impuesto antes de descuentos ⇒ N/D', async () => {
+    llm['escudo-fiscal:planeacion'] = {
+      markdown: 'm', warnings: [],
+      data: {
+        escenarios: {
+          conservador: escCita('conservador', anchor.f02, null, ['Art. 107 E.T.'], 'x'),
+          base: escCita('base', null, null, ['Art. 107 E.T.'], 'x'),
+          agresivo: escCita('agresivo', '5270000000', null, ['Arts. 255-257 E.T.', 'Art. 258 E.T.'], 'Descuentos tributarios por $60.000.000.'),
+        },
+        recomendacion: 'agresivo', razonRecomendacion: 'x',
+      },
+    };
+    const r = await runPlaneacionAgent({ input });
+    expect(r.data.escenarios.agresivo).toMatchObject({ impuestoEscenario: null, ahorroEstimado: null, ahorroPct: null });
+    expect(r.warnings).toContain(`Escenario agresivo: ${TOPE_258_SIN_DESGLOSE_MOTIVO}`);
+  });
+
   it('agresivo que cita 256/257 sin desglose ni impuesto antes de descuentos ⇒ impuesto y ahorro N/D con motivo', async () => {
     // F02 = $112.700.000; tope 25% = $28.175.000. El «modelo» restó $60.000.000.
     llm['escudo-fiscal:planeacion'] = {
