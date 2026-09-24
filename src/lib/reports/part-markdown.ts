@@ -30,7 +30,10 @@ import {
   readStrategyQualifications,
 } from '@/lib/agents/financial/validators/strategy-anchors';
 import { buildConsolidatedReportMarkdown } from '@/lib/agents/financial/consolidated-markdown';
-import { consolidateSplitReport } from '@/lib/agents/financial/split-consolidation';
+import {
+  consolidateSplitReport,
+  type SplitConsolidationResult,
+} from '@/lib/agents/financial/split-consolidation';
 import { isProvisionalDraft } from './provenance-stamp';
 import {
   applyServerPartVerdicts,
@@ -364,11 +367,21 @@ export function renderGovernancePart(
  * `withServerPartsInConsolidated` / `buildServerConsolidatedReport`.
  */
 export function withServerRenderedParts(
-  report: FinancialReport,
+  input: FinancialReport,
   preprocessed: PreprocessedBalance | null | undefined,
   language: 'es' | 'en' = 'es',
 ): FinancialReport {
-  if (!report?.niifAnalysis || !report.strategicAnalysis || !report.governance) return report;
+  if (!input?.niifAnalysis || !input.strategicAnalysis || !input.governance) return input;
+  // Cada Parte conserva sólo sus claves conocidas (las mismas que
+  // `parseReportParts` admite en /consolidate): un campo extra del cuerpo de
+  // /export sin referencia —p. ej. un `governance.adjustmentsLedger` que el PDF
+  // imprimiría como tabla de ajustes— no viaja con el texto re-renderizado.
+  const report: FinancialReport = {
+    ...input,
+    niifAnalysis: knownKeys(input.niifAnalysis, NIIF_PART_KEYS),
+    strategicAnalysis: knownKeys(input.strategicAnalysis, STRATEGY_PART_KEYS),
+    governance: knownKeys(input.governance, GOVERNANCE_PART_KEYS),
+  };
   const checks = serverPartChecks(report, preprocessed, language);
   const verified = applyServerPartVerdicts(report, checks);
   const niif = tryRender('I', verified.niifAnalysis, language, () =>
@@ -420,6 +433,41 @@ export function withServerRenderedParts(
     strategicAnalysis,
     governance: governancePart,
   };
+}
+
+const NIIF_PART_KEYS = [
+  'balanceSheet',
+  'incomeStatement',
+  'cashFlowStatement',
+  'equityChangesStatement',
+  'technicalNotes',
+  'fullContent',
+  'json',
+  'reconciliation',
+] as const satisfies readonly (keyof NiifAnalysisResult)[];
+const STRATEGY_PART_KEYS = [
+  'kpiDashboard',
+  'breakEvenAnalysis',
+  'projectedCashFlow',
+  'strategicRecommendations',
+  'fullContent',
+  'json',
+  'strategyQualifications',
+  'degraded',
+] as const satisfies readonly (keyof StrategicAnalysisResult)[];
+const GOVERNANCE_PART_KEYS = [
+  'financialNotes',
+  'shareholderMinutes',
+  'fullContent',
+  'json',
+  'actaQualifications',
+  'degraded',
+] as const satisfies readonly (keyof GovernanceResult)[];
+
+function knownKeys<T extends object>(part: T, keys: readonly (keyof T)[]): T {
+  const out: Partial<T> = {};
+  for (const k of keys) if (part[k] !== undefined) out[k] = part[k];
+  return out as T;
 }
 
 function qualifiedMotivos(q: { clean?: boolean; motivos?: unknown } | null | undefined): string[] {
@@ -526,7 +574,9 @@ export function provisionalReasonOf(consolidated: unknown): string {
  * (`consolidateSplitReport`) sobre las Partes re-renderizadas. El sello
  * BORRADOR se conserva si el recibido lo traía (sólo puede añadir la
  * aclaración) y la traza de ajustes la calcula el servidor desde el ledger de
- * la petición.
+ * la petición. Devuelve también la validación post-render y la emitibilidad
+ * de ESE texto (gates V1–V15 de /consolidate): el llamador las pliega sobre
+ * las recibidas.
  */
 export function buildServerConsolidatedReport(input: {
   report: FinancialReport;
@@ -534,14 +584,16 @@ export function buildServerConsolidatedReport(input: {
   language: 'es' | 'en';
   clientConsolidated: unknown;
   adjustmentsSection?: string | null;
-}): string {
+  /** `rawData` de la petición (metadata del archivo para el gate), si la trae. */
+  rawData?: string | null;
+}): SplitConsolidationResult {
   const { report, language } = input;
   const generatedAt = new Date(typeof report.generatedAt === 'string' ? report.generatedAt : NaN);
   const draft = isProvisionalDraft({ consolidatedReport: input.clientConsolidated });
-  const { consolidatedReport } = consolidateSplitReport({
+  const result = consolidateSplitReport({
     company: report.company,
     preprocessed: input.preprocessed ?? undefined,
-    rawData: '',
+    rawData: typeof input.rawData === 'string' ? input.rawData : '',
     niifContent: report.niifAnalysis.fullContent,
     strategyContent: report.strategicAnalysis.fullContent,
     governanceContent: report.governance.fullContent,
@@ -549,5 +601,60 @@ export function buildServerConsolidatedReport(input: {
     now: Number.isNaN(generatedAt.getTime()) ? new Date() : generatedAt,
     provisional: draft ? { active: true, reason: provisionalReasonOf(input.clientConsolidated) } : null,
   });
-  return input.adjustmentsSection ? `${consolidatedReport}\n\n${input.adjustmentsSection}` : consolidatedReport;
+  return {
+    ...result,
+    consolidatedReport: input.adjustmentsSection
+      ? `${result.consolidatedReport}\n\n${input.adjustmentsSection}`
+      : result.consolidatedReport,
+  };
+}
+
+/**
+ * Bloqueantes del gate de emisión que dependen del TEXTO del informe (IFRS 18,
+ * reserva legal SAS, TTD, declaración §3.14/§10.21). Son los que cambian al
+ * sustituir el Markdown recibido por el re-render; el resto (ecuación,
+ * identidad del archivo, DV del NIT, libros no cerrados…) depende del balance
+ * y de la empresa, no del texto.
+ */
+const TEXT_GATE_CODES = new Set(['V8', 'V9', 'V10', 'V15']);
+
+/**
+ * Validación y emitibilidad de una exportación SIN referencia, plegadas con
+ * las del texto que el servidor acaba de reconstruir
+ * (`buildServerConsolidatedReport`, el mismo gate que /consolidate). Las del
+ * cliente se calcularon sobre SU texto —o simplemente se declararon—, así que:
+ *   - la validación post-render del servidor sustituye a la recibida salvo que
+ *     ésta ya sea negativa;
+ *   - un bloqueante de texto (V8/V9/V10/V15) del servidor vuelve la
+ *     emitibilidad `no-emitible`;
+ *   - una emitibilidad `emittable` no lleva bloqueantes (así la produce el
+ *     gate): los que declare el cliente no se imprimen en el anexo del PDF.
+ * Sólo endurecen. Sin preprocesado el gate no corre (sólo diría "sin balance
+ * verificado") y se conservan las recibidas, como antes.
+ */
+export function foldServerEmittability(
+  report: FinancialReport,
+  server: SplitConsolidationResult,
+  preprocessed: PreprocessedBalance | null | undefined,
+): Pick<FinancialReport, 'validation' | 'emittability'> {
+  const client = report.emittability;
+  const sanitized =
+    client?.kind === 'emittable' ? { ...client, blockers: [], suggestedAdjustments: [] } : client;
+  if (!preprocessed?.primary) {
+    return {
+      ...(report.validation ? { validation: report.validation } : {}),
+      ...(sanitized ? { emittability: sanitized } : {}),
+    };
+  }
+  const validation = report.validation?.ok === false ? report.validation : server.validation;
+  const textBlockers = server.emittability.blockers.filter((b) => TEXT_GATE_CODES.has(b.code));
+  if (textBlockers.length === 0) return { validation, ...(sanitized ? { emittability: sanitized } : {}) };
+  return {
+    validation,
+    emittability: {
+      kind: 'no-emitible',
+      blockers: [...(client?.kind === 'no-emitible' ? client.blockers : []), ...textBlockers],
+      suggestedAdjustments: client?.kind === 'no-emitible' ? client.suggestedAdjustments : [],
+    },
+  };
 }

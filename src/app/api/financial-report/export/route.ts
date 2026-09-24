@@ -41,6 +41,7 @@ import { rederivePreprocessedFromRows } from '@/lib/reports/preprocessed-integri
 import { withServerPartVerdicts } from '@/lib/reports/part-verdicts';
 import {
   buildServerConsolidatedReport,
+  foldServerEmittability,
   withServerPartsInConsolidated,
   withServerRenderedParts,
 } from '@/lib/reports/part-markdown';
@@ -138,6 +139,8 @@ type ExportSource =
       preprocessed: PreprocessedBalance | undefined;
       /** Ajustes confirmados aplicados y su detalle (traza del consolidado, I3). */
       adjustments?: { applied: Adjustment[]; affected: ReturnType<typeof applyAdjustments>['affected'] };
+      /** `rawData` efectivo (con las confirmaciones de ingesta) del que se derivó el preprocesado. */
+      rawData?: string;
     }
   | { ok: false; response: Response };
 
@@ -249,6 +252,7 @@ function resolveExportPreprocessed(body: Record<string, unknown>, label: string)
   return {
     ok: true,
     preprocessed: derived,
+    rawData: confirmed.rawData,
     ...(application ? { adjustments: { applied, affected: application.affected } } : {}),
   };
 }
@@ -286,17 +290,24 @@ function clientReportWithServerMarkdown(
   // (informe incompleto / sin cifras estructuradas).
   if (!report?.niifAnalysis || !report.strategicAnalysis || !report.governance) return report;
   const rendered = withServerRenderedParts(report, source.preprocessed, language);
+  const rebuilt = buildServerConsolidatedReport({
+    report: rendered,
+    preprocessed: source.preprocessed,
+    language,
+    clientConsolidated: report.consolidatedReport,
+    adjustmentsSection: source.adjustments
+      ? buildAdjustmentsAuditSection(source.adjustments.applied, source.adjustments.affected, language)
+      : null,
+    rawData: source.rawData,
+  });
+  // El gate de emisión (V1–V15) y la validación post-render corren sobre el
+  // texto reconstruido, como en /consolidate: una emitibilidad "limpia" que
+  // el cliente declaró para OTRO texto no levanta los bloqueantes del que se
+  // exporta (revisión I3).
   return {
     ...rendered,
-    consolidatedReport: buildServerConsolidatedReport({
-      report: rendered,
-      preprocessed: source.preprocessed,
-      language,
-      clientConsolidated: report.consolidatedReport,
-      adjustmentsSection: source.adjustments
-        ? buildAdjustmentsAuditSection(source.adjustments.applied, source.adjustments.affected, language)
-        : null,
-    }),
+    consolidatedReport: rebuilt.consolidatedReport,
+    ...foldServerEmittability(report, rebuilt, source.preprocessed),
   };
 }
 

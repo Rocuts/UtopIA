@@ -57,10 +57,14 @@ const CSV_COHERENTE = [
 /**
  * Informe coherente con `CSV_COHERENTE`, con Partes II y III estructuradas
  * (I3: el servidor re-renderiza su Markdown desde el JSON y sella la Parte sin
- * JSON válido).
+ * JSON válido) y la declaración §3.14/§10.21 en la Parte I: el balance es de
+ * un solo corte y /export sin referencia corre el gate de texto (V15) sobre
+ * el texto que exporta, como /consolidate (revisión I3).
  */
 const makeExportableReport = () =>
-  withCoherentParts(makeNiifOnlyReport(), preprocessTrialBalance(parseTrialBalanceCSV(CSV_COHERENTE)));
+  withCoherentParts(makeNiifOnlyReport(), preprocessTrialBalance(parseTrialBalanceCSV(CSV_COHERENTE)), {
+    impracticable: true,
+  });
 
 /** Lo que /upload envía como rawData para un XLSX de una hoja. */
 const XLSX_BLOCKS = `[period=Balance 2025]\n${CSV_COHERENTE.replace('saldo 2025', 'saldo')}\n[/period]`;

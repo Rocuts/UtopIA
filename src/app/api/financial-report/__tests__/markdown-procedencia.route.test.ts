@@ -619,3 +619,52 @@ describe('revisión I3 — /html por referencia aplica el mismo recálculo que /
     expect(input.strategyReport.breakEven.breakEvenPointCop).toBe(f.strategicAnalysis.json!.breakEven.breakEvenPointCop);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Revisión I3 — /export SIN referencia: el gate corre sobre el texto que exporta
+// ---------------------------------------------------------------------------
+// El consolidado se reconstruía desde el re-render, pero la validación y la
+// emitibilidad eran las que reenviaba el cliente (calculadas sobre SU texto,
+// o simplemente declaradas): unas Partes que /consolidate declara no emitibles
+// (V10: el JSON no aborda la TTD) salían 200 si el navegador añadía la TTD al
+// Markdown y declaraba `emittable`. Además, un campo extra de la Parte
+// (`governance.adjustmentsLedger`) o un bloqueante inventado en una
+// emitibilidad "emittable" llegaban al anexo del PDF.
+// ---------------------------------------------------------------------------
+describe('revisión I3 — /export sin referencia aplica el gate de texto de /consolidate', () => {
+  it('JSON sin TTD, TTD sólo en el Markdown del navegador y emitibilidad declarada limpia → 422 (V10)', async () => {
+    const g = gobierno();
+    g.financialNotes = g.financialNotes.filter((n) => n.number !== 2);
+    const f = await fases({ governance: g });
+    const c = await consolidar(f, f.context.company);
+    expect(c.report.emittability?.kind).toBe('no-emitible');
+    const forged: FinancialReport = {
+      ...c.report,
+      governance: { ...c.report.governance, fullContent: `${c.report.governance.fullContent}\n\n${TTD_NOTE_BODY}` },
+      emittability: { kind: 'emittable', blockers: [], suggestedAdjustments: [] },
+    };
+    for (const format of ['excel', 'pdf-elite'] as const) {
+      const res = await exportReport(
+        req('/api/financial-report/export', { report: forged, rawData: CSV_PERDIDA_COMPARATIVO, format, language: 'es' }),
+      );
+      expect(res.status, format).toBe(422);
+    }
+    expect(generateFinancialExcel).not.toHaveBeenCalled();
+    expect(composeEditorialReport).not.toHaveBeenCalled();
+  });
+
+  it('campos extra de una Parte y bloqueantes en una emitibilidad "emittable" no llegan al PDF', async () => {
+    const f = await fases();
+    const c = await consolidar(f, f.context.company);
+    const forged = {
+      ...c.report,
+      governance: { ...c.report.governance, adjustmentsLedger: [{ cuenta: '3605', descripcion: FAKE, ajuste: FAKE_AMOUNT }] },
+      emittability: { kind: 'emittable', blockers: [{ code: 'X', message: FAKE }], suggestedAdjustments: [FAKE] },
+    };
+    const res = await exportReport(
+      req('/api/financial-report/export', { report: forged, rawData: CSV_PERDIDA_COMPARATIVO, format: 'pdf-elite', language: 'es' }),
+    );
+    expect(res.status).toBe(200);
+    expect(containsFake(vi.mocked(composeEditorialReport).mock.calls[0][0].report)).toBe(false);
+  });
+});

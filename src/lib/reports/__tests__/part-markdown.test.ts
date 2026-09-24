@@ -145,7 +145,7 @@ describe('consolidado', () => {
       language: 'es',
       clientConsolidated: client,
       adjustmentsSection: '## Ajustes contables aplicados durante el proceso de revision',
-    });
+    }).consolidatedReport;
     expect(out).not.toContain('987.654.321');
     expect(out).toMatch(/^> ⚠️ \*\*BORRADOR — VALIDACION PENDIENTE\*\*/);
     expect(out).toContain('Razon declarada: "Cierre urgente"');
@@ -154,7 +154,7 @@ describe('consolidado', () => {
 
     const noDraft = buildServerConsolidatedReport({
       report: rendered, preprocessed: pp, language: 'es', clientConsolidated: `# X ${FAKE}`,
-    });
+    }).consolidatedReport;
     expect(noDraft.startsWith('# REPORTE FINANCIERO CONSOLIDADO')).toBe(true);
   });
 });
