@@ -506,3 +506,78 @@ describe('I3 — Parte II/III sin JSON válido y con texto: se sella', () => {
     expect(composeEditorialReport).not.toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Revisión I3 — cifras DERIVADAS de la Parte II alteradas en el JSON
+// ---------------------------------------------------------------------------
+// El render del servidor imprimía el JSON recibido tal cual: el punto de
+// equilibrio, el margen de seguridad, el mensaje de la puerta de liquidez y los
+// KPIs sin ancla —que la fase fija de forma determinista y que ningún cruce
+// verifica— podían llegar alterados al PDF y al Excel con "procedencia
+// verificada" (el render declaraba N/D un KPI cuya cifra imprimía la tabla).
+// Ahora el JSON pasa otra vez por el post-procesador de la fase
+// (`postProcessStrategyJson`), idempotente sobre el que ella publicó.
+// ---------------------------------------------------------------------------
+describe('revisión I3 — cifras derivadas de la Parte II alteradas en el JSON', () => {
+  it('punto de equilibrio, KPI sin ancla y mensaje de liquidez: ni el consolidado ni el PDF/Excel por referencia los imprimen', async () => {
+    const f = await fases();
+    const sj = structuredClone(f.strategicAnalysis.json!) as StrategyReportJson;
+    sj.breakEven.breakEvenPointCop = '98765432100';
+    sj.breakEven.marginOfSafetyPct = '98.76';
+    sj.kpis[0] = { ...sj.kpis[0], resultPrimary: '987654321', formula: 'x', diagnosis: 'Cifra del cliente.' };
+    sj.projectedCashFlow.liquidityGate.message = FAKE;
+    const c = await consolidar({ ...f, strategicAnalysis: { ...f.strategicAnalysis, json: sj } }, f.context.company);
+    const stored = (fake.rows[0].data as { report: FinancialReport }).report;
+    for (const x of [c.consolidatedReport, stored]) {
+      expect(containsFake(x)).toBe(false);
+      expect(JSON.stringify(x)).not.toContain('987654321');
+      expect(JSON.stringify(x)).not.toContain('98,76%');
+    }
+    // El JSON que acompaña a la versión es el derivado: el de la fase. El
+    // texto también, salvo la nota de verificación, que declara "no
+    // verificable" el KPI que el JSON recibido traía con cifra (el cruce se
+    // hace sobre lo recibido: sólo endurece).
+    expect(stored.strategicAnalysis.json).toEqual(f.strategicAnalysis.json);
+    const withoutNote = (p: Parts) => {
+      const md = markdownOf(p);
+      md['strategicAnalysis.fullContent'] = md['strategicAnalysis.fullContent'].replace(/\n- No verificables[^\n]*$/, '');
+      return md;
+    };
+    expect(withoutNote(stored)).toEqual(withoutNote(f));
+    expect(stored.strategicAnalysis.fullContent).toMatch(/No verificables[^\n]*KPI Rotación de inventarios/);
+
+    const pdf = await exportReport(req('/api/financial-report/export', { reportRef: c.reportRef, format: 'pdf-elite' }));
+    expect(pdf.status).toBe(200);
+    expect(containsFake(vi.mocked(composeEditorialReport).mock.calls[0][0].report)).toBe(false);
+    const excel = await exportReport(req('/api/financial-report/export', { reportRef: c.reportRef, format: 'excel' }));
+    expect(excel.status).toBe(200);
+    expect(JSON.stringify(vi.mocked(generateFinancialExcel).mock.calls[0][0].report)).not.toContain('987654321');
+  });
+
+  it('sin referencia: el JSON alterado de la Parte II tampoco imprime sus cifras derivadas', async () => {
+    const f = await fases();
+    const c = await consolidar(f, f.context.company);
+    const sj = structuredClone(c.report.strategicAnalysis.json!) as StrategyReportJson;
+    sj.breakEven.breakEvenPointCop = '98765432100';
+    const forged: FinancialReport = { ...c.report, strategicAnalysis: { ...c.report.strategicAnalysis, json: sj } };
+    const res = await exportReport(
+      req('/api/financial-report/export', {
+        report: forged, rawData: CSV_PERDIDA_COMPARATIVO, preprocessed: f.context.preprocessed, format: 'pdf-elite', language: 'es',
+      }),
+    );
+    expect(res.status).toBe(200);
+    const used = vi.mocked(composeEditorialReport).mock.calls[0][0].report;
+    expect(containsFake(used)).toBe(false);
+    expect(markdownOf(used)).toEqual(markdownOf(f));
+  });
+
+  it('paridad con punto de equilibrio no definido (costos variables ≥ ingresos): el aviso N/D no se duplica', async () => {
+    const e = estrategia();
+    e.breakEven = { ...e.breakEven, variableCostsCop: '300000000' };
+    const f = await fases({ strategy: e });
+    expect(f.strategicAnalysis.json!.breakEven.classificationNote.match(/Punto de equilibrio N\/D/g)).toHaveLength(1);
+    const c = await consolidar(f, f.context.company);
+    expect(markdownOf(c.report)).toEqual(markdownOf(f));
+    expect(c.report.strategicAnalysis.json).toEqual(f.strategicAnalysis.json);
+  });
+});

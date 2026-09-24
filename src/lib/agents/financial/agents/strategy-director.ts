@@ -104,19 +104,7 @@ export async function runStrategyDirector(
     onDegraded: (info) => onProgress?.({ type: 'stage_progress', stage: 2, detail: info.message }),
   });
 
-  const verified = reconcileStrategyReport(result.json, strategyAnchorsFrom(preprocessed));
-  applyDeterministicTrends(verified, preprocessed);
-  // KPIs sin ancla → N/D con motivo; recomputables → valor del preprocesador
-  // (pendiente #2 de la auditoría integral 2026-09-24). El JSON que viaja al
-  // visor, al Excel y al Editor Jefe HTML ya no lleva la cifra del modelo.
-  const kpiAnchors = applyKpiAnchors(
-    verified.json,
-    strategyAnchorSources(preprocessed, niifOutput.json ?? null),
-    { language },
-  );
-  verified.json = kpiAnchors.json;
-  verified.checks.kpisNeutralized = kpiAnchors.neutralized;
-  verified.checks.kpisRecomputed = kpiAnchors.recomputed;
+  const verified = postProcessStrategyJson(result.json, preprocessed, niifOutput.json ?? null, language);
   const strategic = toStrategicAnalysisResult(verified.json, verified.checks);
   if (result.meta?.degraded === true) {
     const notice = strategyDegradationNotice(language);
@@ -239,7 +227,9 @@ export function reconcileStrategyReport(
     // El PE no existe: no se conserva la cifra que emitió el LLM (valoracion-12).
     be.breakEvenPointCop = null;
     be.marginOfSafetyPct = 'ND';
-    be.classificationNote = `Punto de equilibrio N/D: ${checks.breakEvenUndefinedReason}. ${be.classificationNote}`;
+    // Idempotente: el servidor vuelve a pasar el JSON publicado por aquí (I3).
+    const ndPrefix = `Punto de equilibrio N/D: ${checks.breakEvenUndefinedReason}. `;
+    if (!be.classificationNote.startsWith(ndPrefix)) be.classificationNote = `${ndPrefix}${be.classificationNote}`;
   } else {
     const pe = divRound(cf * ing, contribution);
     be.breakEvenPointCop = pe.toString(10);
@@ -398,10 +388,10 @@ function trendChecksFor(
 // de los `StrategyChecks` del post-procesador. El navegador reenvía ese
 // Markdown a /consolidate y /export; para que un texto alterado no llegue al
 // PDF ni al Excel, el servidor lo vuelve a producir desde el JSON con estas
-// funciones (src/lib/reports/part-markdown.ts). Los checks se recalculan desde
-// el JSON ya conciliado y el preprocesado del servidor —las mismas funciones
-// que usa la fase—; la única observación que no se reproduce es la de un
-// resumen de escenario distinto de su tabla, porque `reconcileStrategyReport`
+// funciones (src/lib/reports/part-markdown.ts), pasando antes el JSON por el
+// MISMO post-procesador de la fase (`postProcessStrategyJson`) con el
+// preprocesado del servidor; la única observación que no se reproduce es la de
+// un resumen de escenario distinto de su tabla, porque `reconcileStrategyReport`
 // ya sustituyó el resumen (la cifra impresa es la de la tabla en ambos casos).
 // ---------------------------------------------------------------------------
 
@@ -414,36 +404,41 @@ export function strategyDegradationNotice(language: 'es' | 'en'): string {
 }
 
 /**
- * `StrategyChecks` del JSON ya conciliado por la fase: punto de equilibrio,
- * conciliación de escenarios, procedencia de las tendencias y KPIs N/D o
- * recalculados (`applyKpiAnchors` es idempotente: sobre el JSON publicado
- * devuelve las mismas listas). Sin preprocesado —una exportación que no lo
- * envía— se conservan los KPIs con ancla como los publicó la fase
- * (`keepWhenNoSource`, mismo criterio que el Excel): la nota no declara N/D un
- * KPI cuya cifra imprime la tabla.
+ * Post-proceso determinista de la Parte II sobre el JSON del modelo: puerta de
+ * liquidez y saldo inicial desde las anclas, punto de equilibrio y margen de
+ * seguridad recalculados, conciliación de escenarios, tendencias desde ambos
+ * cortes y KPIs sin ancla → N/D o recalculados. Es el MISMO paso para la fase
+ * (`runStrategyDirector`) y para el servidor cuando re-renderiza la Parte II
+ * desde un JSON recibido o persistido (src/lib/reports/part-markdown.ts): es
+ * idempotente sobre el JSON que publicó la fase, y sobre un JSON alterado
+ * vuelve a fijar las cifras que el código deriva (el render nunca imprime un
+ * punto de equilibrio, un saldo inicial, un mensaje de liquidez ni un KPI sin
+ * ancla que no haya calculado el sistema).
+ *
+ * `keepWhenNoSource` (sólo exportadores): sin preprocesado se conservan los
+ * KPIs con ancla y los recomputables como los publicó la fase (mismo criterio
+ * que el Excel); la fase sin preprocesado los publica N/D.
  */
-export function strategyRenderChecks(
+export function postProcessStrategyJson(
   json: StrategyReportJson,
   preprocessed: PreprocessedBalance | undefined,
   niifJson: NiifReportJson | null | undefined,
   language: 'es' | 'en' = 'es',
-): StrategyChecks {
-  const scenarioIssues: Record<string, string[]> = {};
-  for (const sc of json.projectedCashFlow.scenarios) {
-    const issues = scenarioTableIssues(sc, json.projectedCashFlow.initialCashBalanceCop);
-    if (issues.length > 0) scenarioIssues[sc.scenario] = issues;
-  }
-  const kpis = applyKpiAnchors(json, strategyAnchorSources(preprocessed, niifJson ?? null), {
+  options: { keepWhenNoSource?: boolean } = {},
+): { json: StrategyReportJson; checks: StrategyChecks } {
+  const verified = reconcileStrategyReport(json, strategyAnchorsFrom(preprocessed));
+  applyDeterministicTrends(verified, preprocessed);
+  // KPIs sin ancla → N/D con motivo; recomputables → valor del preprocesador
+  // (pendiente #2 de la auditoría integral 2026-09-24). El JSON que viaja al
+  // visor, al Excel y al Editor Jefe HTML ya no lleva la cifra del modelo.
+  const kpiAnchors = applyKpiAnchors(verified.json, strategyAnchorSources(preprocessed, niifJson ?? null), {
     language,
-    keepWhenNoSource: true,
+    ...(options.keepWhenNoSource ? { keepWhenNoSource: true } : {}),
   });
-  return {
-    breakEvenUndefinedReason: breakEvenUndefinedReason(json.breakEven),
-    scenarioIssues,
-    ...trendChecksFor(preprocessed),
-    kpisNeutralized: kpis.neutralized,
-    kpisRecomputed: kpis.recomputed,
-  };
+  verified.json = kpiAnchors.json;
+  verified.checks.kpisNeutralized = kpiAnchors.neutralized;
+  verified.checks.kpisRecomputed = kpiAnchors.recomputed;
+  return verified;
 }
 
 /** Markdown de la Parte II desde su JSON (el adaptador de la fase, sin sellos). */

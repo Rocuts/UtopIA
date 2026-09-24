@@ -14,9 +14,9 @@ import {
   type ReconciliationOutcome,
 } from '@/lib/agents/financial/agents/reconcile-anchors';
 import {
+  postProcessStrategyJson,
   renderStrategicAnalysisResult,
   strategyDegradationNotice,
-  strategyRenderChecks,
 } from '@/lib/agents/financial/agents/strategy-director';
 import {
   governanceDegradationNotice,
@@ -50,9 +50,10 @@ import {
 //     (`buildQualificationSeal`, función pura de la reconciliación), el aviso
 //     de pases degradados y los sellos de integridad de `runNiifPhase`
 //     (validador E1–E25 y EFE, recalculados aquí con las mismas funciones).
-//   - Parte II: `toStrategicAnalysisResult` (strategy-director.ts) con los
-//     `StrategyChecks` recalculados desde el JSON ya conciliado + el sello y la
-//     nota de verificación de `qualifyStrategyResult`.
+//   - Parte II: `toStrategicAnalysisResult` (strategy-director.ts) sobre el
+//     JSON pasado otra vez por el post-procesador de la fase
+//     (`postProcessStrategyJson`: cifras derivadas y KPIs sin ancla) + el sello
+//     y la nota de verificación de `qualifyStrategyResult`.
 //   - Parte III: `toGovernanceResult` (governance-specialist.ts) con la
 //     aritmética del acta + los sellos aritmético y de prosa de
 //     `runGovernancePhase`.
@@ -206,13 +207,18 @@ export function renderStrategyPart(
       fullContent: seal,
     };
   }
-  const renderChecks = strategyRenderChecks(
+  // El JSON pasa por el MISMO post-procesador de la fase (idempotente sobre el
+  // que ella publicó): punto de equilibrio, margen de seguridad, puerta de
+  // liquidez, saldo inicial, tendencias y KPIs sin ancla los vuelve a fijar el
+  // código. Un JSON alterado en esas cifras derivadas no las imprime.
+  const derived = postProcessStrategyJson(
     check.json,
     checks.sources.preprocessed ?? undefined,
     parseNiif(checks.sources.niifJson),
     language,
+    { keepWhenNoSource: true },
   );
-  const r = renderStrategicAnalysisResult(check.json, renderChecks);
+  const r = renderStrategicAnalysisResult(derived.json, derived.checks);
   let kpiDashboard = r.kpiDashboard;
   let fullContent = r.fullContent;
   // Orden de la fase: aviso de degradación (runStrategyDirector), sello y nota
@@ -238,6 +244,9 @@ export function renderStrategyPart(
     projectedCashFlow: r.projectedCashFlow,
     strategicRecommendations: r.strategicRecommendations,
     fullContent,
+    // El JSON que acompaña al texto es el derivado (el Editor Jefe HTML y el
+    // Excel lo leen de la versión persistida).
+    json: derived.json,
   };
 }
 
