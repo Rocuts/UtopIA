@@ -27,6 +27,7 @@ import { validateNormativeResponse } from '../../normative/validators/normative.
 import { normalizeCitation } from '../../normative/validators/citation.validator';
 import { buildFiscalAgentHeader, type FiscalAgentHeaderOptions } from '../prompts/fiscal-agent.prompt';
 import { ART_36_3_DEROGADO_MOTIVO } from '../../lib/deterministic-survival';
+import { summarizeFiscalChecks, validateFiscalResponse } from '../validators';
 
 /** Citas que Capa 2 bloquea por no estar en el catálogo (NO_VERIFICADO implícito). */
 function noVerificadas(texto: string): string[] {
@@ -198,5 +199,49 @@ describe('fuentes del corpus de las entradas nuevas (src/data/tax_docs)', () => 
     expect(l2277).toMatch(/Unidad de Planeación Minero-Energética/);
     expect(corpus('ley_1607_2012.md')).toMatch(/código 241 de la Resolución 139 de 2012/);
     expect(corpus('decreto_1625_2016.md')).toMatch(/CIIU Rev\. 4 A\.C, adoptada mediante la Resolución 000114 de 2020/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Re-auditoría 2026-09-24 (NT-03): la Capa 2 bloqueaba como NO_VERIFICADO la
+// resolución de la UVT que el propio encabezado manda usar; el encabezado la
+// escribía «000238 del 15-dic-2025», forma que el extractor no ve.
+// ---------------------------------------------------------------------------
+describe('NT-03 — resoluciones de la UVT catalogadas con fuente del corpus', () => {
+  const HONESTA =
+    'UVT 2026 = $52.374 (Resolución DIAN 000238 de 2025). UVT 2025 = $49.799 (Resolución DIAN 000193 de 2024).';
+
+  it('una salida honesta que las cita en forma canónica valida (y no bloquea el Agente Fiscal)', () => {
+    expect(veredicto(HONESTA, 'Resolución DIAN 000238 de 2025')).toBe('valida');
+    expect(veredicto(HONESTA, 'Resolución DIAN 000193 de 2024')).toBe('valida');
+    const checks = validateFiscalResponse(
+      { modulos: [], modulo2: null, modulo3: null, modulo5: null, modulo6: null, modulo7: null, rawText: HONESTA },
+      { catalogue: MOTOR_NORMATIVO_CATALOG },
+    );
+    expect(summarizeFiscalChecks(checks).veredicto).not.toBe('bloqueo');
+  });
+
+  it.each(USE_CASES.map((u) => [u ?? 'sin caso', u] as const))(
+    'encabezado (%s): cita la resolución en forma que la Capa 2 extrae y valida',
+    (_n, useCase) => {
+      const h = buildFiscalAgentHeader({ language: 'es', useCase });
+      expect(h).toContain('Resolución DIAN 000238 de 2025');
+      expect(veredicto(h, 'Resolución DIAN 000238 de 2025')).toBe('valida');
+      expect(veredicto(h, 'Resolución DIAN 000193 de 2024')).toBe('valida');
+      // Una salida que copia la fecha («del dd-mmm-aaaa») normalizada a «de aaaa» también valida.
+      const normalizada = h.replace(/\bdel\s+\d{1,2}-[a-z]{3}-(\d{4})\b/gi, 'de $1');
+      expect(noVerificadas(normalizada)).toEqual([]);
+    },
+  );
+
+  it('fuentes del corpus: resolucion_dian_238_2025_uvt_2026.md y concordancias del Art. 868', () => {
+    const r238 = readFileSync(join(process.cwd(), 'src/data/tax_docs/resolucion_dian_238_2025_uvt_2026.md'), 'utf8');
+    expect(r238).toMatch(/\| Número \| Resolución DIAN 000238 de 2025 \|/);
+    expect(r238).toMatch(/\| Fecha de expedición \| 15 de diciembre de 2025 \|/);
+    expect(r238).toMatch(/UVT 2026 = \$52\.374 COP/);
+    expect(r238).toMatch(/\*\*UVT 2025\*\*: \$49\.799/);
+    const et = readFileSync(join(process.cwd(), 'src/data/tax_docs/estatuto_tributario_completo.md'), 'utf8');
+    expect(et).toMatch(/Para el año 2026 : Resolución DIAN 238 de 2025/);
+    expect(et).toMatch(/Para el año 2025 : Resolución DIAN 193 de 2024/);
   });
 });

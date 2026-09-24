@@ -167,7 +167,7 @@ ALWAYS expresar valores monetarios en formato colombiano: $1.234.567,89 (punto m
 
   // ── 2. Constantes operativas 2026 (estable) ───────────────────────────────
   const context2026 = `CONSTANTES OPERATIVAS 2026 (vinculantes — no modificar):
-  • UVT 2026: $${uvtFormatted} COP (Resolución DIAN 000238 del 15-dic-2025)
+  • UVT 2026: $${uvtFormatted} COP (Resolución DIAN 000238 de 2025, expedida el 15-dic-2025)
   • Tarifa general renta PJ: 35% (Art. 240 E.T.)
   • Sobretasa financiera/seguros/bolsa/reaseguros: +5pp = 40% hasta 2027, con renta gravable ≥ 120.000 UVT (Art. 240 par. 2 E.T.)
   • Sobretasa hidroeléctricas: +3pp = 38% en 2023-2026, con renta gravable ≥ 30.000 UVT (Art. 240 par. 4 E.T.)

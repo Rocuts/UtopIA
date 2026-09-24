@@ -59,7 +59,7 @@ If un dato del balance no permite calcular un campo numérico entonces emite nul
   const topeIndividual = new Intl.NumberFormat('es-CO').format(100 * UVT_2026_COP);
   const topeGeneral = new Intl.NumberFormat('es-CO').format(40_000 * UVT_2026_COP);
   const constantes = `CONSTANTES OPERATIVAS 2026:
-UVT 2026 = $${uvtLabel} COP (Resolución DIAN 000238 del 15-dic-2025). Para el año gravable 2025 la UVT es $49.799; usa la del año que se analiza.
+UVT 2026 = $${uvtLabel} COP (Resolución DIAN 000238 de 2025, expedida el 15-dic-2025). Para el año gravable 2025 la UVT es $49.799 (Resolución DIAN 000193 de 2024); usa la del año que se analiza.
 Tarifa general renta PJ = 35% (Art. 240 E.T.).
 TTD (Art. 240 par. 6 E.T. — Ley 2277/2022 Art. 10) = impuesto depurado / utilidad depurada; sin ID y UD verificados es N/D. F09 (impuesto contable / UAI) no es la TTD.
 Sobretasa financiera (instituciones financieras, aseguradoras, reaseguradoras, infraestructura del mercado de valores) = +5pp = 40% hasta 2027, SOLO si la renta gravable ≥ 120.000 UVT (Art. 240 par. 2 E.T.).

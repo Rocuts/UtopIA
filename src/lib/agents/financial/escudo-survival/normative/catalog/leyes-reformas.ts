@@ -306,4 +306,36 @@ export const LEYES_REFORMAS: readonly LawReformEntry[] = [
     sentenciaCorte: null,
     urlOficial: null,
   },
+  // ─── RESOLUCIONES DE LA UVT (re-auditoría 2026-09-24, NT-03) ─────────────
+  // El encabezado de cada módulo del Agente Fiscal y el Motor Normativo fijan
+  // la UVT 2026 con la Resolución DIAN 000238 de 2025; sin entrada, la Capa 2
+  // bloqueaba como NO_VERIFICADO la salida honesta que la citaba en su forma
+  // canónica. Fuentes: resolucion_dian_238_2025_uvt_2026.md (número, fechas de
+  // expedición y publicación, UVT 2026 $52.374 y UVT 2025 $49.799) y las
+  // concordancias del Art. 868 en estatuto_tributario_completo.md («Para el año
+  // 2026 : Resolución DIAN 238 de 2025» / «Para el año 2025 : Resolución DIAN
+  // 193 de 2024»).
+  {
+    id: 'RESOLUCION_DIAN_238_2025',
+    cita: 'Resolución DIAN 000238 de 2025',
+    titulo: 'Valor de la UVT aplicable para el año 2026',
+    resumen:
+      'Resolución del 15-dic-2025 (publicada el 18-dic-2025) que fija la UVT del año gravable 2026 en $52.374 (Art. 868 E.T.), frente a $49.799 del año 2025. Rige desde el 1-ene-2026 para los hechos del año gravable 2026.',
+    articulosClave: ['Art. 868 E.T.'],
+    estado: 'VIGENTE_2026',
+    sentenciaCorte: null,
+    urlOficial: null,
+  },
+  {
+    id: 'RESOLUCION_DIAN_193_2024',
+    cita: 'Resolución DIAN 000193 de 2024',
+    titulo: 'Valor de la UVT aplicable para el año 2025',
+    resumen:
+      'Resolución que fija la UVT del año gravable 2025 ($49.799), según las concordancias del Art. 868 E.T. Úsela sólo para cifras del año gravable 2025 (los balances de cierre 2025 que se analizan en 2026); para 2026 rige la Resolución DIAN 000238 de 2025.',
+    articulosClave: ['Art. 868 E.T.'],
+    // Vigente para su año gravable: citarla al analizar el año 2025 es correcto.
+    estado: 'VIGENTE_2026',
+    sentenciaCorte: null,
+    urlOficial: null,
+  },
 ] as const;
