@@ -48,10 +48,8 @@ import {
   reconcileActaArithmetic,
   describeActaQualifications,
 } from './contracts/base';
-import {
-  buildActaExpectedArithmetic,
-  normalizeTipoSocietario as normalizeTipoSocietarioActa,
-} from './prompts/governance-specialist.prompt';
+import { buildActaExpectedArithmetic } from './prompts/governance-specialist.prompt';
+import { normalizeTipoSocietarioParaGate } from './split-consolidation';
 import { buildPeriodAnchors, moneyCopToken } from './contracts/anchors';
 import {
   fillComparativeBreakdownFromSnapshot,
@@ -2851,19 +2849,14 @@ function getExtractedMetadataFromPreprocessed(
 }
 
 /**
- * Tipo societario para el gate. SAS / S.A. / Ltda. se normalizan con la MISMA
- * función que usa el acta (`normalizeTipoSocietario` del prompt de Gobierno:
- * tolera "S. A. S.", "Sociedad Anónima", "Limitada"), para que gate y acta no
- * lean tipos distintos (prompts-normativa-08). Se conservan aquí la E.U. y el
- * vacío → `undefined` (tri-estado del gate: no se asume SAS).
+ * Tipo societario para el gate: la misma función que el consolidado partido
+ * (`normalizeTipoSocietarioParaGate`, que delega en el normalizador del acta),
+ * para que ningún camino lea un tipo distinto (prompts-normativa-08).
  */
 function normalizeTipoSocietario(
   raw: string | undefined,
 ): AuditCompanyContext['tipoSocietario'] {
-  if (!raw || !raw.trim()) return undefined;
-  const compact = raw.toUpperCase().replace(/[.\s]/g, '');
-  if (compact === 'EU' || compact === 'EMPRESAUNIPERSONAL') return 'EU';
-  return normalizeTipoSocietarioActa(raw);
+  return normalizeTipoSocietarioParaGate(raw);
 }
 
 function getEstatutosFlag(

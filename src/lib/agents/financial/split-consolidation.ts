@@ -26,6 +26,7 @@ import {
   type PreprocessedBalance,
 } from '@/lib/preprocessing/trial-balance';
 import { buildConsolidatedReportMarkdown } from './consolidated-markdown';
+import { normalizeTipoSocietario as normalizeTipoSocietarioActa } from './prompts/governance-specialist.prompt';
 import type {
   CompanyInfo,
   FinancialReport,
@@ -55,14 +56,22 @@ export interface SplitConsolidationResult {
   emittability: ReportEmittabilityState;
 }
 
-function normalizeTipoSocietario(raw: string | undefined): AuditCompanyContext['tipoSocietario'] {
-  if (!raw) return undefined;
-  const upper = raw.toUpperCase().trim().replace(/\.$/, '');
-  if (upper === 'SAS' || upper === 'S.A.S') return 'SAS';
-  if (upper === 'SA' || upper === 'S.A') return 'SA';
-  if (upper === 'LTDA') return 'LTDA';
-  if (upper === 'EU' || upper === 'E.U') return 'EU';
-  return 'OTRO';
+/**
+ * Tipo societario para el gate `auditReportEmittable`. SAS / S.A. / Ltda. se
+ * normalizan con la MISMA función que usa el acta (`normalizeTipoSocietario`
+ * del prompt de Gobierno: tolera "S. A. S.", "Sociedad por Acciones
+ * Simplificada", "Limitada"), para que gate y acta no lean tipos distintos
+ * (prompts-normativa-08). Se conservan aquí la E.U. y el vacío → `undefined`
+ * (tri-estado del gate: no se asume SAS). Fuente única para el consolidado
+ * partido y el orquestador legacy.
+ */
+export function normalizeTipoSocietarioParaGate(
+  raw: string | null | undefined,
+): AuditCompanyContext['tipoSocietario'] {
+  if (!raw || !raw.trim()) return undefined;
+  const compact = raw.toUpperCase().replace(/[.\s]/g, '');
+  if (compact === 'EU' || compact === 'EMPRESAUNIPERSONAL') return 'EU';
+  return normalizeTipoSocietarioActa(raw);
 }
 
 function estatutosFlag(company: CompanyInfo): boolean | undefined {
@@ -130,7 +139,7 @@ export function consolidateSplitReport(input: SplitConsolidationInput): SplitCon
       nitFromFile: extractedMeta?.nitFromFile ?? null,
       nit: company.nit ?? null,
       niifGroup: company.niifGroup ?? 2,
-      tipoSocietario: normalizeTipoSocietario(company.entityType),
+      tipoSocietario: normalizeTipoSocietarioParaGate(company.entityType),
       estatutosRequierenReservaLegal: estatutosFlag(company),
     },
     {
@@ -138,6 +147,9 @@ export function consolidateSplitReport(input: SplitConsolidationInput): SplitCon
       actividadInferida: preprocessed.actividadInferida,
       reclasificacionesNoCompensacion: preprocessed.reclasificacionesNoCompensacion,
     },
+    // V3 sobre el EFE DETERMINISTA de los dos cortes, igual que el orquestador
+    // legacy (recalculo-11). Sin comparativo V3 no aplica (NIC 7 ¶1).
+    { comparativeSnapshot: comparative },
   );
 
   return {
