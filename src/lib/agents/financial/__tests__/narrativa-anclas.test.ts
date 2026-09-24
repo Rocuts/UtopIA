@@ -403,3 +403,99 @@ describe('sin falsos positivos: informe coherente y corrida real', () => {
     expect(s.motivos).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Revisión adversarial P3: prosa honesta que no debe sellar la Parte II/III
+// ---------------------------------------------------------------------------
+// Un sello bloquea la exportación y el HTML, así que un falso positivo deja un
+// informe honesto sin entregable. Estas redacciones son habituales en notas,
+// actas y recomendaciones y no afirman nada contra las anclas: saldos de otras
+// cuentas (dividendos por pagar), montos por acción, incisos entre paréntesis,
+// componentes de un total y propuestas o impactos futuros. Las manipulaciones
+// equivalentes siguen sellando.
+// ---------------------------------------------------------------------------
+
+describe('revisión adversarial — prosa honesta sin falsos positivos', () => {
+  const sources = () => narrativeSourcesFromPreprocessed(pp, null, { acta });
+
+  it('notas y acta: dividendos por pagar, por acción, incisos y componentes no se acusan', () => {
+    const r = checkGovernanceNarrative(
+      govJson({
+        notes: [
+          { number: 7, title: 'Cuentas por pagar', body: 'Incluyen dividendos por pagar de $3.000.000,00 y retenciones.' },
+          { number: 12, title: 'Ingresos', body: 'Los ingresos por dividendos de $1.000.000,00 provienen de inversiones.' },
+          { number: 13, title: 'Efectivo', body: 'El efectivo al cierre incluye $2.000.000,00 restringidos.' },
+        ],
+        developments: [
+          'La reserva legal se calcula como el 10 % de la utilidad neta del ejercicio ($20.000.000,00).',
+          `Se decreta un dividendo de $200,00 por acción, para un total de ${cop(acta.distribuibleCop)}.`,
+          'La utilidad neta por acción fue de $500,00.',
+        ],
+      }),
+      sources(),
+    );
+    expect(r.motivos).toEqual([]);
+  });
+
+  it('los dividendos pagados que presenta el EFE son ancla de una nota', () => {
+    const base = makeCoherentNiifReport();
+    const niif = {
+      ...base,
+      cashFlow: {
+        ...base.cashFlow,
+        sections: base.cashFlow.sections.map((s) =>
+          s.section === 'financing'
+            ? { ...s, lines: [{ ...s.lines[0], account: null, label: 'Dividendos pagados', amountPrimary: '-30000' }] }
+            : s,
+        ),
+      },
+    };
+    // Sin aritmética del acta (el informe coherente no trae preprocesado).
+    const note = (body: string) => {
+      const j = govJson({ notes: [{ number: 14, title: 'Patrimonio', body }] });
+      j.shareholderMinutes.capitalizationProposal.applies = false;
+      return j;
+    };
+    expect(checkGovernanceNarrative(note('Durante el año se pagaron dividendos de $300,00.'), { niif }).motivos).toEqual([]);
+    expect(checkGovernanceNarrative(note('Durante el año se pagaron dividendos de $900,00.'), { niif }).motivos.join(' '))
+      .toMatch(/Dividendos: la narrativa imprime \$900,00/);
+  });
+
+  it('las mismas frases con otra cifra siguen sellando (inciso, por acción y presente)', () => {
+    const r = checkGovernanceNarrative(
+      govJson({
+        developments: [
+          'La utilidad neta del ejercicio ($4.000.000,00) se destina a reservas.',
+          'La pérdida neta del ejercicio ($20.000.000,00) se enjuga con reservas.',
+          'Se decreta un dividendo de $200,00 por acción, para un total de $9.000.000,00.',
+          'La utilidad neta queda en $4.000.000,00.',
+        ],
+      }),
+      sources(),
+    );
+    const all = r.motivos.join('\n');
+    expect(all).toMatch(/punto 1 · Utilidad neta: la narrativa imprime \(\$4\.000\.000,00\)/);
+    expect(all).toMatch(/punto 2 · Utilidad neta: es positiva .* la presenta como negativa/);
+    expect(all).toMatch(/punto 3 · Dividendos: la narrativa imprime \$9\.000\.000,00/);
+    expect(all).toMatch(/punto 4 · Utilidad neta: la narrativa imprime \$4\.000\.000,00/);
+  });
+
+  it('Parte II: acciones e impactos de las recomendaciones y el condicional no se juzgan', () => {
+    const j = strategy({
+      executive:
+        'El total de activos se concentra en el efectivo, con $50.000.000,00. ' +
+        'De mantenerse la tendencia, la utilidad neta subiría a $30.000.000,00.',
+      impact: 'Elevar la utilidad neta a $30 M y el EBITDA en $12 M.',
+    });
+    j.recommendations[0].action = 'Llevar el ROE a 25 % y el efectivo al cierre de caja a $80 M.';
+    const r = reconcileStrategyAnchors(j, strategyAnchorSources(pp, null));
+    expect(r.deviations).toEqual([]);
+  });
+
+  it('Parte II: una cifra falsa del periodo en el diagnóstico sigue sellando', () => {
+    const j = strategy({ diagnosis: 'La utilidad neta del ejercicio se elevó a $200.000.000,00.' });
+    j.recommendations[0].action = 'Llevar el ROE a 25 %.';
+    const r = reconcileStrategyAnchors(j, strategyAnchorSources(pp, null));
+    expect(r.deviations.join('\n')).toMatch(/Recomendación 1 · Utilidad neta: la narrativa imprime \$200\.000\.000,00/);
+  });
+});

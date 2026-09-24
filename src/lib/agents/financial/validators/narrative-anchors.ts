@@ -78,6 +78,12 @@ export interface NarrativeUnit {
   where?: string;
   /** Primera celda cuando la unidad es una fila de tabla. */
   firstCell?: string | null;
+  /**
+   * La unidad es una propuesta o un impacto esperado (acción e impacto de una
+   * recomendación): con `skipForwardLooking` no se juzga, igual que una
+   * proyección ("Llevar el ROE a 25 %", "elevar el EBITDA en $12 M").
+   */
+  forwardLooking?: boolean;
 }
 
 export interface NarrativeFinding {
@@ -111,6 +117,15 @@ export interface NarrativeCheckOptions {
   skipForwardLooking?: boolean;
   /** Año del periodo que se firma (para descartar años futuros). */
   primaryYear?: string | null;
+  /**
+   * Prosa redactada por el modelo (Partes II y III), no una fila de tabla: un
+   * monto entre paréntesis justo después del rótulo ("la utilidad neta
+   * ($20.000.000,00)") es un inciso y no se lee como signo negativo (la
+   * magnitud se sigue cruzando), y una cifra presentada como componente
+   * ("incluye", "compuesto por", "se concentra en", "cubre") no es el saldo
+   * del concepto.
+   */
+  lenientProse?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -204,8 +219,9 @@ export function buildNarrativeConcepts(sources: NarrativeAnchorSources): Narrati
       key: 'utilidadNeta',
       label: 'Utilidad neta',
       // "utilidad neta a disposición / distribuible / tras la reserva" es un
-      // saldo del acta, no el resultado del ejercicio.
-      re: /\b(?:utilidad|ganancia|p[eé]rdida|resultado)\s+net[ao]\b(?:\s+del\s+(?:ejercicio|per[ií]odo|a[nñ]o))?(?!\s+(?:distribuible|disponible|a\s+disposici[oó]n|despu[eé]s|tras|restante|por\s+distribuir|a\s+distribuir|l[ií]quida))/gi,
+      // saldo del acta, no el resultado del ejercicio; "por acción" (NIC 33)
+      // y "antes de impuestos" tampoco son el resultado neto.
+      re: /\b(?:utilidad|ganancia|p[eé]rdida|resultado)\s+net[ao]\b(?:\s+del\s+(?:ejercicio|per[ií]odo|a[nñ]o))?(?!\s+(?:distribuible|disponible|a\s+disposici[oó]n|despu[eé]s|tras|restante|por\s+distribuir|a\s+distribuir|l[ií]quida|por\s+(?:acci[oó]n|cuota)|antes\s+de))/gi,
       values: vals(
         centsToPesos(is?.netIncomePrimary),
         centsToPesos(is?.netIncomeComparative),
@@ -328,11 +344,18 @@ function actaConcepts(sources: NarrativeAnchorSources): NarrativeConcept[] {
     re: RegExp,
     values: number[],
   ): NarrativeConcept => ({ key, label, re, values, nd: a === null && values.length === 0, ndMotivo: ND_ACTA });
+  // Dividendos pagados que presenta el EFE (financiación): una nota que los cita
+  // con su monto es honesta aunque se hayan decretado en otro ejercicio.
+  const efeDividends = (niif?.cashFlow?.sections ?? []).flatMap((s) =>
+    (s.lines ?? []).filter((l) => /dividend/i.test(l.label)).map((l) => pesos(l.amountPrimary)),
+  );
   return [
     concept(
       'dividendos',
       'Dividendos',
-      /\bdividendos?\b|\butilidades?\s+(?:a\s+distribuir|distribuibles?|por\s+distribuir)\b|\bsaldo\s+distribuible\b|\bm[ií]nimo\s+(?:legal\s+)?a\s+repartir\b/gi,
+      // "Dividendos por pagar / por cobrar / recibidos" e "ingresos por
+      // dividendos" son saldos del balance o ingresos, no la distribución del acta.
+      /(?<!ingresos\s+por\s+)\bdividendos?\b(?!\s+(?:por\s+(?:pagar|cobrar)|recibidos?))|\butilidades?\s+(?:a\s+distribuir|distribuibles?|por\s+distribuir)\b|\bsaldo\s+distribuible\b|\bm[ií]nimo\s+(?:legal\s+)?a\s+repartir\b/gi,
       vals(
         pesos(a?.distribuibleCop),
         pesos(a?.saldoDistribuibleCop),
@@ -341,6 +364,7 @@ function actaConcepts(sources: NarrativeAnchorSources): NarrativeConcept[] {
         // La capitalización es un dividendo pagado en acciones.
         pesos(a?.capitalizationAmountCop),
         ...rows.filter((r) => r.kind === 'dividend_distribution').map((r) => pesos(r.total)),
+        ...efeDividends,
       ),
     ),
     concept(
@@ -389,6 +413,19 @@ const VARIATION_WORDS =
 /** Proyecciones, metas, referencias sectoriales y cifras que no son el saldo del periodo. */
 const FORWARD_WORDS =
   /proyect|estim|esperad|previst|presupuest|escenario|objetivo|\bmetas?\b|potencial|\balcanzar(?:[aá]n?|[ií]a)?\b|\blograr(?:[aá]n?|[ií]a)?\b|llegar[ií]a|podr[ií]a|ser[ií]a|anualizad|mensual|trimestral|sector|benchmark|promedio|pro\s*forma|a\s+partir\s+de/i;
+/**
+ * Futuro y condicional de los verbos con que se redacta un impacto
+ * ("elevaría", "subirá", "quedaría", "tendrá"): la cifra es hipotética. Sólo
+ * formas inequívocas (infinitivo + "ía"/"á"); el presente ("queda", "genera")
+ * sí se juzga.
+ */
+const FUTURE_OR_CONDITIONAL =
+  /(?<![\p{L}])(?:aumentar|elevar|subir|incrementar|mejorar|reducir|disminuir|bajar|pasar|quedar|ubicar|situar|generar|liberar|cerrar|ascender|llevar|crecer|representar|ser|estar|tendr|habr|podr|deber|saldr|valdr)(?:[ií]an?|[áÁ]n?)(?![\p{L}])/iu;
+/** Cifra presentada como parte del concepto, no como su saldo. */
+const COMPONENT_WORDS = /incluy|compuest|conformad|concentr|\bcubr|de\s+los\s+cuales|de\s+las\s+cuales/i;
+/** Monto por unidad ("$200,00 por acción", "$15 / cuota"): no es el total del concepto. */
+const PER_UNIT_AFTER =
+  /^[(\s−-]*\$?\s*\(?\s*[-−]?\s*[\d.,]+\s*\)?\s*(?:MM|M|millones|mil\s+millones)?\s*(?:por|\/|cada)\s*(?:acci[oó]n|cuota|parte\s+de\s+inter[eé]s|participaci[oó]n)/i;
 const POSITIVE_WORDS = /positiv|super[aá]vit|excedente|ganancia/i;
 const NEGATIVE_WORDS = /negativ|p[eé]rdida|d[eé]ficit/i;
 export const ROE_LABEL = /\bROE\b|rentabilidad\s+(?:del|sobre\s+el)\s+patrimonio/i;
@@ -428,7 +465,9 @@ function mentionsFutureYear(text: string, primaryYear: string | null | undefined
 }
 
 function isForwardLooking(parts: string[], primaryYear: string | null | undefined): boolean {
-  return parts.some((p) => FORWARD_WORDS.test(p) || mentionsFutureYear(p, primaryYear));
+  return parts.some(
+    (p) => FORWARD_WORDS.test(p) || FUTURE_OR_CONDITIONAL.test(p) || mentionsFutureYear(p, primaryYear),
+  );
 }
 
 function subjectOf(options: NarrativeCheckOptions): string {
@@ -458,6 +497,8 @@ export function checkNarrativeUnits(
   };
 
   for (const unit of units) {
+    if (options.skipForwardLooking && unit.forwardLooking) continue;
+    const prose = options.lenientProse === true && !unit.firstCell;
     for (const concept of concepts) {
       const stops = [...concepts.filter((c) => c !== concept).map((c) => c.re), ROE_LABEL, ...WINDOW_STOPS];
       const matches: Array<{ index: number; text: string }> = [];
@@ -471,12 +512,14 @@ export function checkNarrativeUnits(
         const win = windowAfter(unit.text, hit.index + hit.text.length, stops);
         const token = extractCopTokens(win).find((t) => {
           if (t.percent) return false;
+          if (PER_UNIT_AFTER.test(win.slice(t.index))) return false;
           if (!options.requireCurrency) return true;
           return t.abbreviated || /^[(\s−-]*\$/.test(win.slice(t.index));
         });
         if (!token) continue;
         const before = win.slice(0, token.index);
         if (VARIATION_WORDS.test(before)) continue;
+        if (prose && COMPONENT_WORDS.test(before)) continue;
         if (
           options.skipForwardLooking &&
           isForwardLooking([before, sentencePrefix(unit.text, hit.index)], options.primaryYear)
@@ -513,12 +556,17 @@ export function checkNarrativeUnits(
         }
         if (match === 0) continue;
         // Signo: el rótulo ("pérdida" / "utilidad") o el calificativo
-        // ("positivo" / "negativo") contra el signo del ancla.
+        // ("positivo" / "negativo") contra el signo del ancla. En prosa, un
+        // "($X)" sin signo menos es un inciso: no dice nada del signo.
+        const rest = win.slice(token.index);
+        const asideParen = prose && token.value < 0 && /^\(/.test(rest) && !/^\(\s*\$?\s*[-−]/.test(rest);
+        const shownValue = asideParen ? Math.abs(token.value) : token.value;
         const labelPolarity = concept.polarity?.(hit.text) ?? null;
         const negWord = NEGATIVE_WORDS.test(before);
         const posWord = POSITIVE_WORDS.test(before);
-        const presentedNegative = token.value < 0 || labelPolarity === 'neg' || negWord;
-        const presentedPositive = token.value >= 0 && !negWord && (labelPolarity === 'pos' || posWord);
+        const presentedNegative = (!asideParen && shownValue < 0) || labelPolarity === 'neg' || negWord;
+        const presentedPositive =
+          !asideParen && shownValue >= 0 && !negWord && (labelPolarity === 'pos' || posWord);
         if (match < 0 && presentedPositive) {
           push(
             unit.where,
@@ -560,6 +608,7 @@ export function checkRoeUnits(
   const seen = new Set<string>();
   let checked = 0;
   for (const unit of units) {
+    if (options.skipForwardLooking && unit.forwardLooking) continue;
     const re = new RegExp(ROE_LABEL.source, 'gi');
     let m: RegExpExecArray | null;
     while ((m = re.exec(unit.text)) !== null) {
@@ -631,9 +680,10 @@ export function findForeignCutoffYears(units: NarrativeUnit[], primaryYear: stri
 // Unidades de texto de Gobierno y Estrategia
 // ---------------------------------------------------------------------------
 
-function unit(text: string | null | undefined, where: string): NarrativeUnit[] {
+function unit(text: string | null | undefined, where: string, forwardLooking = false): NarrativeUnit[] {
   if (typeof text !== 'string' || text.trim().length === 0) return [];
-  return [{ text: text.replace(/\u00a0/g, ' ').replace(/\$\s+/g, '$').replace(/\s+/g, ' ').trim(), where }];
+  const clean = text.replace(/\u00a0/g, ' ').replace(/\$\s+/g, '$').replace(/\s+/g, ' ').trim();
+  return [forwardLooking ? { text: clean, where, forwardLooking } : { text: clean, where }];
 }
 
 /** Prosa de la Parte III que llega al entregable (notas, acta, checklist, avisos). */
@@ -690,7 +740,8 @@ export function strategyNarrativeUnits(json: StrategyReportJson, language: 'es' 
   out.push(...unit(json.projectedCashFlow?.solvencyNarrative, en ? 'Solvency' : 'Solvencia'));
   (json.recommendations ?? []).forEach((r, i) => {
     const where = `${en ? 'Recommendation' : 'Recomendación'} ${i + 1}`;
-    out.push(...unit(r.diagnosis, where), ...unit(r.action, where), ...unit(r.expectedImpact, where));
+    // La acción y el impacto esperado describen el futuro por construcción.
+    out.push(...unit(r.diagnosis, where), ...unit(r.action, where, true), ...unit(r.expectedImpact, where, true));
   });
   (json.preparerNotes ?? []).forEach((p, i) => {
     out.push(...unit(p.body, `${en ? 'Preparer note' : 'Nota del preparador'} ${i + 1}`));
@@ -722,6 +773,7 @@ function runNarrativeCheck(
     subject: { es: 'la narrativa', en: 'the narrative' },
     requireCurrency: true,
     skipForwardLooking: true,
+    lenientProse: true,
     primaryYear,
   };
   const concepts = buildNarrativeConcepts(sources);
