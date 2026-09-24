@@ -109,7 +109,7 @@ async function queryValor(
 // % of pyme_entries confirmed vs total (across all periods for the workspace).
 // MVP simplification: we don't filter by periodId since pyme_entries don't have
 // a direct period_id FK — they belong to a book and use entry_date.
-async function queryVerdad(
+export async function queryDocumentsVerifiedPct(
   db: DbInstance,
   workspaceId: string,
 ): Promise<number | null> {
@@ -182,7 +182,7 @@ export async function queryPillarKpisRaw(
     await Promise.all([
       queryResiliencia(db, workspaceId, periodId),
       queryValor(db, workspaceId, periodId),
-      queryVerdad(db, workspaceId),
+      queryDocumentsVerifiedPct(db, workspaceId),
       queryFuturo(db, workspaceId, periodId),
     ]);
 
