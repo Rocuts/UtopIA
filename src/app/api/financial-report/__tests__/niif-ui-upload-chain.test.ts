@@ -293,3 +293,44 @@ describe('UI → /niif: el gate 422 se aplica igual que por envío directo', () 
     expect(captured).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// ingesta-09 (cross-dep W3-A): /api/upload y /niif llamaban
+// preprocessTrialBalance(rows) sin `openingPeriods`, así que una columna
+// "saldo inicial" se trataba como un cierre 2024 con P&G comparativo, a
+// diferencia de /api/financial-report, /export y el Stage 0.
+// ---------------------------------------------------------------------------
+describe('UI → /niif: columna de saldo inicial = saldos de apertura', () => {
+  // Apertura: A 170 = P 50 + K 120 (sin P&G). Cierre: A 220 = P 60 + K 160 con
+  // 3605 = 40 = 150 − 80 − 10 − 20.
+  const OPENING_CSV = [
+    'codigo,nombre,nivel,transaccional,saldo inicial 2025,saldo final 2025',
+    '110505,Caja,Auxiliar,1,50000000,80000000',
+    '130505,Clientes,Auxiliar,1,40000000,60000000',
+    '143505,Mercancias,Auxiliar,1,30000000,30000000',
+    '152405,Equipo de oficina,Auxiliar,1,50000000,50000000',
+    '220505,Proveedores,Auxiliar,1,30000000,40000000',
+    '230505,Cxp,Auxiliar,1,20000000,20000000',
+    '311505,Capital,Auxiliar,1,100000000,100000000',
+    '360505,Utilidad del ejercicio,Auxiliar,1,0,40000000',
+    '370505,Utilidades acumuladas,Auxiliar,1,20000000,20000000',
+    '410505,Ventas,Auxiliar,1,0,150000000',
+    '510505,Sueldos,Auxiliar,1,0,80000000',
+    '530505,Intereses,Auxiliar,1,0,10000000',
+    '613505,CMV,Auxiliar,1,0,20000000',
+  ].join('\n');
+
+  it('/api/upload marca el comparativo como saldos de apertura', async () => {
+    const up = await upload(OPENING_CSV, 'balance.csv');
+    expect(up.isTrialBalance).toBe(true);
+    const pp = up.preprocessed as { comparative?: { period?: string; saldosDeApertura?: boolean } };
+    expect(pp.comparative?.period).toBe('2024');
+    expect(pp.comparative?.saldosDeApertura).toBe(true);
+  });
+
+  it('/niif re-deriva el preprocesado con el mismo marcado: el bloque vinculante no trata la apertura como P&G', async () => {
+    const up = await upload(OPENING_CSV, 'balance.csv');
+    await callNiif(clientNiifBody(up));
+    expect(pass1Prompt()).toContain('NO es P&G comparativo');
+  });
+});
