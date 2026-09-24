@@ -50,7 +50,8 @@ import {
 } from './contracts/base';
 import { buildActaExpectedArithmetic } from './prompts/governance-specialist.prompt';
 import { normalizeTipoSocietarioParaGate } from './split-consolidation';
-import { buildPeriodAnchors, moneyCopToken } from './contracts/anchors';
+import { ANCHOR_LABELS, buildPeriodAnchors, moneyCopToken } from './contracts/anchors';
+import { mesesDelPeriodo, periodosDeIgualDuracion } from '@/lib/preprocessing/periodo-meses';
 import {
   fillComparativeBreakdownFromSnapshot,
   buildQualificationSeal,
@@ -766,14 +767,38 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
     lines.push(anchorSubLine('Pasivo No Corriente', totals.pasivoNoCorriente));
   }
   lines.push(anchorLine('Total Patrimonio', totals.patrimonio, cts?.patrimonio));
-  // Wave 2.F4 — Parte 1.3 spec v2.0: emitir Ingresos BRUTO y NETO de
-  // devoluciones 4175 con etiquetas inequívocas para que el LLM NUNCA confunda
-  // qué cifra usar en el P&L. NIIF 15 §47 obliga presentación neta.
-  lines.push(anchorLine('Total Ingresos (bruto Clase 4)', totals.ingresos, cts?.ingresos, pygTag));
+  // Ingresos por bloque (W5-2, recalculo-final-01). `totals.ingresos` es la Σ
+  // FIRMADA de la clase 4 (4175 incluida con el signo del ERP): el mismo
+  // balance daba 550 M o 450 M según la convención de signos cuando el bruto
+  // real era 500 M, así que NO se publica. Se publican los ingresos
+  // operacionales netos (41 − 4175) y los otros ingresos no operacionales
+  // (grupo 42 y demás) por separado — decisión del coordinador 2026-09: el 42
+  // va debajo de la utilidad operacional — y el total neto de devoluciones
+  // (NIIF 15 §47 obliga presentación neta).
   const totalsForRev = totals as ControlTotalsInput & {
     ingresosNetos?: number;
     totalDevoluciones?: number;
+    ingresosOperacionalesNetos?: number;
+    otrosIngresosNoOperacionales?: number;
   };
+  const opCents = (cts as { ingresosOperacionalesNetos?: bigint } | undefined)?.ingresosOperacionalesNetos;
+  const netosCents = (cts as { ingresosNetos?: bigint } | undefined)?.ingresosNetos;
+  lines.push(
+    anchorLine(
+      ANCHOR_LABELS.ingresosOperacionales,
+      totalsForRev.ingresosOperacionalesNetos,
+      opCents,
+      pygTag,
+    ),
+  );
+  lines.push(
+    anchorLine(
+      ANCHOR_LABELS.otrosIngresos,
+      totalsForRev.otrosIngresosNoOperacionales,
+      typeof opCents === 'bigint' && typeof netosCents === 'bigint' ? netosCents - opCents : undefined,
+      ` [debajo de la utilidad operacional]${pygTag}`,
+    ),
+  );
   if (
     typeof totalsForRev.ingresosNetos === 'number' &&
     Number.isFinite(totalsForRev.ingresosNetos)
@@ -845,9 +870,12 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
   );
 
   // ITEM 2 ORDEN DE CIERRE — Impuesto Renta Neto a Pagar (Curator R16).
-  // Cuando hay anticipo material en PUC 135515 vs bruto en PUC 2404, exponemos
-  // el neto al LLM para que lo presente en el Balance debajo de "Impuestos
-  // Corrientes" (Pasivo). NIC 12 §71 + NIIF for SMEs §29.29 + Art. 850 E.T.
+  // Cuando hay créditos de renta materiales (retenciones y anticipos de renta
+  // 1355/1805, regla única de `@/lib/accounting/renta-credit`) vs bruto en PUC
+  // 2404, exponemos el neto al LLM para que lo presente en el Balance debajo
+  // de "Impuestos Corrientes" (Pasivo). NIC 12 §71 + NIIF for SMEs §29.29 +
+  // Art. 850 E.T. El campo conserva su nombre histórico `anticipoActivo135515`
+  // pero ya es la suma de TODOS los créditos de renta, no sólo la 135515.
   const totalsExtTax = totals as ControlTotalsInput & {
     impuestoRentaNeto?: {
       brutoPasivo2404: number;
@@ -864,7 +892,7 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
       `- Bruto PUC 2404 (Impuesto de Renta por Pagar): ${fmtCop(irn.brutoPasivo2404)} COP.`,
     );
     lines.push(
-      `- (−) Anticipo PUC 135515 (Anticipo Renta — saldo en Activo): ${fmtCop(irn.anticipoActivo135515)} COP.`,
+      `- (−) Retenciones y anticipos de renta (1355/1805, regla única): ${fmtCop(irn.anticipoActivo135515)} COP.`,
     );
     lines.push(
       `- = NETO A PAGAR a la DIAN: ${fmtCop(irn.netoAPagar)} COP. ` +
@@ -1425,10 +1453,26 @@ function buildBindingTotalsBlock(preprocessed: unknown): string {
     const cT = deriveControlTotalsFromSnapshot(comparative);
     // ingesta-09: sin P&G del comparativo (saldos de apertura) no hay
     // variación de resultados; los saldos del ESF sí son comparables.
-    const pygYoY = (label: string, current: number | undefined, base: number | undefined) =>
-      comparative.saldosDeApertura === true
-        ? `- ${label}: ND (el comparativo ${comparative.period} es de saldos de apertura: sin P&G del periodo)`
-        : `- ${label}: ${absDelta(current, base)} (${pctYoY(current, base)})`;
+    // W5-2: un flujo sólo se compara entre periodos de IGUAL duración
+    // (`periodosDeIgualDuracion`, fuente única NM-01): un acumulado a junio
+    // frente a un año completo no es una variación.
+    const igualDuracion = periodosDeIgualDuracion(primary.period, comparative.period);
+    const duracion = (period: string) => {
+      const meses = mesesDelPeriodo(period);
+      return meses === null ? `${period} = duración no derivable` : `${period} = ${meses} meses`;
+    };
+    const pygYoY = (label: string, current: number | undefined, base: number | undefined) => {
+      if (comparative.saldosDeApertura === true) {
+        return `- ${label}: ND (el comparativo ${comparative.period} es de saldos de apertura: sin P&G del periodo)`;
+      }
+      if (!igualDuracion) {
+        return (
+          `- ${label}: N/D (periodos de distinta duración: ${duracion(primary.period)} vs ` +
+          `${duracion(comparative.period)}; la variación de resultados sólo compara periodos de igual duración)`
+        );
+      }
+      return `- ${label}: ${absDelta(current, base)} (${pctYoY(current, base)})`;
+    };
     if (pT && cT) {
       lines.push('');
       lines.push(`=== Variacion YoY (${primary.period} vs ${comparative.period}) ===`);
@@ -1441,7 +1485,10 @@ function buildBindingTotalsBlock(preprocessed: unknown): string {
       lines.push(
         `- Patrimonio: ${absDelta(pT.patrimonio, cT.patrimonio)} (${pctYoY(pT.patrimonio, cT.patrimonio)})`,
       );
-      lines.push(pygYoY('Ingresos', pT.ingresos, cT.ingresos));
+      // Ingresos NETOS de devoluciones 4175 (base de la utilidad neta), nunca
+      // la Σ firmada de la clase 4 (recalculo-final-01).
+      const netos = (t: ControlTotalsInput) => (t as { ingresosNetos?: number }).ingresosNetos;
+      lines.push(pygYoY('Ingresos netos (neto de devoluciones 4175)', netos(pT), netos(cT)));
       lines.push(pygYoY('Gastos', pT.gastos, cT.gastos));
       lines.push(pygYoY('Utilidad Neta', pT.utilidadNeta, cT.utilidadNeta));
     }

@@ -5,7 +5,7 @@
 // usa para construir el bloque "TOTALES VINCULANTES" que el LLM consume)
 // emite las nuevas líneas Wave 2.F4:
 //   - "Tipo de período"
-//   - "Total Ingresos (bruto Clase 4)"
+//   - "Ingresos operacionales netos" + "Otros ingresos no operacionales" (W5-2; antes "Total Ingresos (bruto Clase 4)")
 //   - "Total Ingresos Netos (neto de devoluciones 4175)"
 //   - Sección "## KPIs PRE-CALCULADOS" con los 13 ratios.
 // ---------------------------------------------------------------------------
@@ -67,11 +67,17 @@ describe('Wave 2.F4 — bindingTotals: nuevas líneas Wave 2.F4', () => {
     expect(text).toContain('indeterminado');
   });
 
-  it('Emite "Total Ingresos (bruto Clase 4)" + "Total Ingresos Netos (neto de devoluciones 4175)"', () => {
+  // W5-2 (recalculo-final-01): la línea «Total Ingresos (bruto Clase 4)»
+  // publicaba la Σ firmada de la clase 4, que cambia con la convención de
+  // signos del ERP; se reemplaza por ingresos operacionales netos y otros
+  // ingresos (42) por separado.
+  it('Emite ingresos operacionales netos + otros ingresos (42) + "Total Ingresos Netos (neto de devoluciones 4175)"', () => {
     const pre = buildPreprocessed();
     const lines = renderSnapshotLines(pre.primary);
     const text = lines.join('\n');
-    expect(text).toContain('Total Ingresos (bruto Clase 4)');
+    expect(text).not.toContain('Total Ingresos (bruto Clase 4)');
+    expect(text).toContain('Ingresos operacionales netos (grupo 41 − devoluciones 4175)');
+    expect(text).toContain('Otros ingresos no operacionales (grupo 42');
     expect(text).toContain('Total Ingresos Netos (neto de devoluciones 4175)');
     expect(text).toContain('NIIF 15 §47');
   });
