@@ -112,7 +112,7 @@ export function parseCopAmount(input: string): number | null {
 // abreviados ("$150 M", "$1,2 B") para que el llamador decida.
 // ---------------------------------------------------------------------------
 
-interface CopToken {
+export interface CopToken {
   /** Valor en pesos (con signo). Para abreviados, ya multiplicado por la escala. */
   value: number;
   /** El token va seguido de '%': no es un monto. */
@@ -122,6 +122,12 @@ interface CopToken {
   /** Tolerancia de redondeo del abreviado, en pesos (0 si es cifra completa). */
   roundingTolerance: number;
   index: number;
+  /** Longitud del texto reconocido (signo, paréntesis y sufijo incluidos). */
+  length: number;
+  /** Lleva "$" (delante o dentro del paréntesis contable). */
+  dollar: boolean;
+  /** Los dígitos tal como se imprimieron ("4.000.000,00"). */
+  digits: string;
 }
 
 const COP_TOKEN_SOURCE =
@@ -134,20 +140,28 @@ const COP_TOKEN_SOURCE =
   String.raw`(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:,\d{1,2})?)` + // 6: número es-CO
   String.raw`(?!\d|[.,]\d)` +
   String.raw`(\s*\))?` + // 7: paréntesis que cierra
-  String.raw`(\s*%|\s*(?:MM|M|B|mil\s+millones|millones|billones|mil(?:es)?)(?![\p{L}\d]))?`; // 8: sufijo
+  String.raw`(\s*%|\s*(?:MM|M|B|mil\s+millones|mil\s+MM?|millones|billones|mil(?:es)?)(?![\p{L}\d]))?`; // 8: sufijo
 
 // "B" se sigue leyendo como miles de millones (10^9) sólo por compatibilidad
 // con textos ya generados o redactados por el LLM: el dashboard de la Parte II
 // imprime hoy siempre millones ("$2.000 M", `formatCopAsMillions`,
 // pipeline-flujo-20) y la spec v10.1 prohíbe "B". "billones" es la escala
-// colombiana (10^12).
+// colombiana (10^12). "mil M" / "mil MM" es la forma de `formatBigCop` en los
+// pilares y las gráficas ("$2,4 mil M" = 2.400 millones; re-auditoría 2,
+// narrativa-07): antes el sufijo "mil" casaba primero y se leía como miles.
 const ABBREVIATION_SCALE: Array<[RegExp, number]> = [
   [/^mil\s+millones$/, 1e9],
+  [/^mil\s+MM?$/, 1e9],
   [/^(?:MM|M|millones)$/, 1e6],
   [/^B$/, 1e9],
   [/^billones$/, 1e12],
   [/^mil(?:es)?$/, 1e3],
 ];
+
+/** Escalas en palabra que marcan un monto aunque no lleve "$" ("900 millones de pesos"). */
+const SCALE_WORD_RE = /^(?:millones|mil\s+millones|billones|MM|mil\s+MM?)$/;
+/** "2 millones de acciones": la escala cuenta otra cosa, no pesos ("900 millones de COP" sí es monto). */
+const NOT_PESOS_AFTER = /^\s+de\s+(?!pesos\b|COP\b)\p{L}/u;
 
 /** Tokeniza los montos COP de un texto (ver el comentario del bloque). */
 export function extractCopTokens(text: string): CopToken[] {
@@ -157,8 +171,14 @@ export function extractCopTokens(text: string): CopToken[] {
   while ((m = re.exec(text)) !== null) {
     const [, openParen, signBefore, dollar, openParenAfter, signAfter, digits, closeParen, suffixRaw] = m;
     const grouped = /\./.test(digits);
-    // Un número pelado sin "$" ni miles ("11" de PUC 11, "2025") no es monto.
-    if (!dollar && !grouped) continue;
+    const suffix = (suffixRaw ?? '').trim();
+    // Un número pelado sin "$" ni miles ("11" de PUC 11, "2025") no es monto;
+    // con escala en palabra sí ("900 millones de pesos", "COP 4 millones";
+    // re-auditoría 2, narrativa-11), salvo que la escala cuente otra cosa
+    // ("2 millones de acciones").
+    const scaleWord = SCALE_WORD_RE.test(suffix);
+    if (!dollar && !grouped && !scaleWord) continue;
+    if (!dollar && scaleWord && NOT_PESOS_AFTER.test(text.slice(m.index + m[0].length))) continue;
     const parsed = parseCOPStrict(digits);
     if (parsed === null) continue;
     const magnitude = Number(parsed);
@@ -167,7 +187,6 @@ export function extractCopTokens(text: string): CopToken[] {
       Boolean(signBefore) ||
       Boolean(signAfter) ||
       (Boolean(openParen || openParenAfter) && Boolean(closeParen));
-    const suffix = (suffixRaw ?? '').trim();
     const percent = suffix === '%';
     let scale = 1;
     if (suffix && !percent) {
@@ -181,6 +200,9 @@ export function extractCopTokens(text: string): CopToken[] {
       abbreviated,
       roundingTolerance: abbreviated ? (scale / 10 ** decimals) / 2 : 0,
       index: m.index,
+      length: m[0].length,
+      dollar: Boolean(dollar),
+      digits,
     });
   }
   return out;
@@ -221,9 +243,52 @@ function textAfterLabel(line: string, pattern: RegExp): string | null {
   return clean.slice(m.index + m[0].length);
 }
 
-/** Subtotales y rótulos compuestos que NO son el total buscado. */
+/**
+ * Subtotales y rótulos compuestos que NO son el total buscado ("Total activos
+ * fijos", "Total pasivos laborales": re-auditoría 2, narrativa-02).
+ */
 const NOT_THE_TOTAL_RE =
-  /^\s*[:|]?\s*(?:no\s+corriente|corriente|\+|y\s+(?:el\s+)?patrimonio|\/|sobre\b|promedio\b)/i;
+  /^\s*[:|]?\s*(?:no\s+corriente|corriente|\+|y\s+(?:el\s+)?patrimonio|\/|sobre\b|promedio\b|(?:fijos?|financieros?|intangibles?|laborales?|diferidos?|biol[oó]gicos?|contingentes?|tributarios?|fiscales?|por\s+impuestos?)\b)/i;
+
+/**
+ * Tablas del Estado de Cambios en el Patrimonio: matriz de movimientos por
+ * columna patrimonial ("| Movimiento | Capital | … | Result. Ejercicio | … |
+ * TOTAL |", renderer.ts). La primera cifra de sus filas es la columna Capital,
+ * no el resultado: "| Utilidad del ejercicio 2024 | $0,00 | … |" se leía como
+ * "Utilidad Neta reportada $0,00" y la advertencia salía en todo informe
+ * honesto (re-auditoría 2, e2e-niif2-07). El ECP se cruza campo a campo en el
+ * validador del JSON NIIF (E4/E7/E21); aquí sus filas no son menciones.
+ */
+function isEquityChangesHeader(cells: string[]): boolean {
+  const norm = cells.map((c) => c.replace(/\*+/g, '').trim().toLowerCase());
+  return (
+    norm.length >= 6 &&
+    norm.some((c) => /^capital\b/.test(c)) &&
+    norm.some((c) => /^result/.test(c) || /^reserva/.test(c))
+  );
+}
+
+/** El Markdown con las filas de las tablas del ECP en blanco (mismo número de líneas). */
+function blankEquityChangesTables(markdown: string): string {
+  const lines = markdown.split(/\r?\n/);
+  let inEquityTable = false;
+  let inTable = false;
+  return lines
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('|')) {
+        inTable = false;
+        inEquityTable = false;
+        return line;
+      }
+      if (!inTable) {
+        inTable = true;
+        inEquityTable = isEquityChangesHeader(trimmed.split('|').slice(1, -1));
+      }
+      return inEquityTable ? '' : line;
+    })
+    .join('\n');
+}
 
 /**
  * Formatea un monto a COP legible (para mensajes de error/warning).
@@ -380,6 +445,9 @@ export function validateConsolidatedReport(
   // positivos cruzados con cifras del periodo actual.
   // -----------------------------------------------------------------------
   const TOLERANCE = 0.01; // 1%
+  // Las filas del ECP no citan totales (e2e-niif2-07): se excluyen antes de
+  // filtrar por periodo, porque el filtro pierde el encabezado de la tabla.
+  const sanityMarkdown = blankEquityChangesTables(consolidatedMarkdown);
   const checkSpecs = (totals: ControlTotalsInput) => [
     {
       label: 'Total Activo',
@@ -419,10 +487,10 @@ export function validateConsolidatedReport(
 
       // Para el comparativo, restringimos a lineas que citen el identificador
       // del periodo (ej. la columna "2024" en una tabla de dos columnas).
-      const lines = consolidatedMarkdown.split(/\r?\n/);
+      const lines = sanityMarkdown.split(/\r?\n/);
       const filteredText = restrictToPeriod
         ? lines.filter((l) => l.includes(restrictToPeriod)).join('\n')
-        : consolidatedMarkdown;
+        : sanityMarkdown;
 
       const mentions = extractTotalsMentions(
         filteredText,
