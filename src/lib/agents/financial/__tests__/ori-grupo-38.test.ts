@@ -242,6 +242,19 @@ describe('ruta real — runNiifPhase con el LLM simulado', () => {
     expect(p2).not.toContain('oriPrimary = "0"');
     expect(p2).toMatch(/other_comprehensive_income/);
   });
+
+  it('revisión I4: la doctrina PresentationV3 que reciben los dos pases no fija el ORI del modo simple en $0,00', () => {
+    // El modelo recibía a la vez el ancla Δ38 (bloque de la cascada) y la
+    // plantilla `| OTRO RESULTADO INTEGRAL (ORI) | $0,00 | $0,00 |` con la
+    // tabla de activación "ORI en una sola linea ($0)": si seguía la
+    // doctrina, E6/E6b sellaban el informe honesto de una entidad cuyo grupo
+    // 38 se movió (el falso positivo que cierra la enmienda 12).
+    const pp = preprocesarTresCortes(csvTresCortesConValorizaciones([0, 3_000_000, 8_000_000]));
+    const p1 = buildNiifAnalystPass1Prompt(COMPANY, 'es', 'COMPARATIVO_COMPLETO', pp);
+    expect(p1).not.toContain('| OTRO RESULTADO INTEGRAL (ORI) | $0,00 | $0,00 |');
+    expect(p1).not.toMatch(/ORI en una sola linea \(\$0\)/);
+    expect(p1).toMatch(/MODO SIMPLE[\s\S]{0,400}CASCADA VINCULANTE DEL P&G/);
+  });
 });
 
 /** Quita el corte 2023 de un CSV de tres cortes (misma regla que `csvDosCortes`). */
