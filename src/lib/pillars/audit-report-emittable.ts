@@ -13,7 +13,7 @@
 //     `controlTotals.cents`).
 //   - Cada blocker se reporta como string corta legible al socio-director.
 //   - El informe (`report`) se inspecciona con regex simples para detectar
-//     menciones a IFRS 18, reserva legal SAS, TMT 15%, y placeholders
+//     menciones a IFRS 18, reserva legal SAS, la TTD (Art. 240 par. 6) y placeholders
 //     prohibidos ("Triple SSS", "213.092.082-1").
 //
 // El gate se inyecta en `src/lib/agents/financial/orchestrator.ts` justo
@@ -104,7 +104,7 @@ export interface AuditReportEmittableOptions {
    * para bloquear de entrada los balances que nunca van a producir un informe
    * emitible.
    *
-   * Sin esta opción el pre-vuelo dispararía V10 siempre (la TMT la calcula el
+   * Sin esta opción el pre-vuelo dispararía V10 siempre (la TTD la declara el
    * Strategy Director, que aún no ha corrido) y V15 en todo balance de un solo
    * periodo (la declaración de impracticabilidad la redacta el Analista NIIF),
    * y el gate perdería toda credibilidad justo donde más falta hace. Quien usa
@@ -376,16 +376,21 @@ export function auditReportEmittable(
   }
 
   // -------------------------------------------------------------------------
-  // V10 — TMT 15% calculada en el informe del Strategy Director.
-  // Sólo aplica al régimen ordinario (no SIMPLE / no Zona Franca).
+  // V10 — el informe aborda la Tasa de Tributación Depurada (Art. 240 par. 6).
+  // Regla del corpus (estatuto_tributario_completo.md, par. 6 Art. 240):
+  // TTD = ID / UD; si es < 15 % se liquida IA = UD × 15 % − ID. Sin ID/UD
+  // verificados la TTD es N/D con motivo: la UAI contable no es base fiscal
+  // (re-auditoría 2026-09, NM-13 — el mensaje anterior pedía «TMT 15 % sobre
+  // utilidad contable depurada — tomar el mayor»).
   // -------------------------------------------------------------------------
   if (!options.skipReportTextChecks && !reportIncluyeTMTCalculada(reportText)) {
     blockers.push({
       code: 'V10',
       message:
-        'V10: TMT (Tasa Mínima de Tributación, 15%, parágrafo 6 Art. 240 E.T.) NO calculada ' +
-        'en el informe. Debe calcularse SIEMPRE: tarifa general 35% sobre renta líquida fiscal ' +
-        'vs. TMT 15% sobre utilidad contable depurada — tomar el mayor.',
+        'V10: el informe no aborda la Tasa de Tributación Depurada (TTD, parágrafo 6 Art. 240 E.T.). ' +
+        'TTD = ID / UD (impuesto depurado / utilidad depurada); si resulta inferior al 15% se ' +
+        'liquida un impuesto a adicionar IA = UD × 15% − ID. Sin ID y UD verificados la TTD se ' +
+        'declara N/D con motivo: la utilidad contable (UAI) no es base fiscal ni sustituye la UD.',
     });
   }
 
@@ -496,16 +501,23 @@ export function reportConstituyeReservaLegal(reportText: string): boolean {
   return RESERVA_LEGAL_REGEX.test(reportText);
 }
 
+/**
+ * ¿El informe aborda la Tasa de Tributación Depurada (Art. 240 par. 6 E.T.)?
+ * Heurística de mención: acepta la terminología canónica del repo («Tasa de
+ * Tributación Depurada», «TTD», «Art. 240 par. 6» en cualquier orden) y la
+ * histórica («TMT», «tasa mínima», «tributación mínima»). No valida la cifra:
+ * sin ID/UD verificados lo correcto es declararla N/D.
+ */
 export function reportIncluyeTMTCalculada(reportText: string): boolean {
   if (!reportText) return false;
-  // Heurística: el informe debe mencionar "TMT" o "Tasa Mínima" o "tasa mínima"
-  // o "15%" en contexto de tributación o "parágrafo 6". Aceptamos cualquier
-  // de estas variantes.
   const indicators = [
+    /\bTTD\b/,
+    /tributaci[oó]n\s+depurada/i,
     /\bTMT\b/i,
     /tasa\s+m[ií]nima/i,
-    /par[aá]grafo\s+6\s+(del\s+)?art(\.|[ií]culo)\s+240/i,
     /tributaci[oó]n\s+m[ií]nima/i,
+    /par[aá]grafo\s+6\s+(del\s+)?art(\.|[ií]culo)\s+240/i,
+    /art(\.|[ií]culo)\s*240,?\s+par(\.|[aá]grafo)\s*6\b/i,
   ];
   return indicators.some((re) => re.test(reportText));
 }
