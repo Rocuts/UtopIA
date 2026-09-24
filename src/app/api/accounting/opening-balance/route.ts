@@ -277,6 +277,8 @@ function mapErrorToResponse(err: unknown): Response {
       case OPENING_ERR.EMPTY_INPUT:
         return jsonError(400, err.code, err.message, err.details);
       case OPENING_ERR.PUC_MISMATCH:
+      case OPENING_ERR.UNMAPPED_ACCOUNTS:
+      case OPENING_ERR.UNBALANCED:
       case OPENING_ERR.NO_BALANCING_ACCOUNT:
         return jsonError(422, err.code, err.message, err.details);
       case OPENING_ERR.PERIOD_NOT_OPEN:

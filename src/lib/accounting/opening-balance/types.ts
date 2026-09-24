@@ -11,9 +11,14 @@
 //   - Una linea por cada cuenta auxiliar con saldo.
 //   - Saldos deudores (Activo, Gasto) -> debit.
 //   - Saldos acreedores (Pasivo, Patrimonio, Ingreso) -> credit.
-//   - La diferencia (si la hay) se absorbe con la cuenta especial
-//     `3705 — Resultados de ejercicios anteriores`, que es la
-//     contrapartida tradicional para "saldos de apertura" en PUC.
+//   - El balance importado DEBE cuadrar. Sólo una diferencia de redondeo
+//     (≤ ROUNDING_TOLERANCE_COP) se lleva a 370505 (Utilidades acumuladas);
+//     un descuadre mayor BLOQUEA la importación (auditoría ingesta-27 /
+//     contab-nomina-17: antes toda la diferencia —incluidas cuentas omitidas
+//     como una PPE de $400M— se "cuadraba" contra patrimonio y se posteaba).
+//   - Cualquier línea con saldo cuya cuenta no exista o no sea postable
+//     BLOQUEA la importación (422 con la lista); antes se omitía con un
+//     warning mientras no superara el 30 % de los códigos.
 //
 // Notas:
 //   - Montos viajan como NUMERIC strings (no `number`) para no perder
@@ -108,8 +113,10 @@ export interface ImportResult {
  *   - PARSE_FAILED                -> 400
  *   - INVALID_INPUT               -> 400
  *   - PUC_MISMATCH                -> 422 (mas del threshold de cuentas no encontradas)
+ *   - UNMAPPED_ACCOUNTS           -> 422 (lineas con saldo sin cuenta postable)
+ *   - UNBALANCED                  -> 422 (descuadre mayor a la tolerancia de redondeo)
  *   - PERIOD_NOT_OPEN             -> 409 (re-emitido desde DoubleEntryError)
- *   - NO_BALANCING_ACCOUNT        -> 422 (no existe 3705 ni alternativa)
+ *   - NO_BALANCING_ACCOUNT        -> 422 (no existe 370505/3705 postable)
  *   - EMPTY_INPUT                 -> 400
  *   - DOWNSTREAM (re-wrap)        -> 500
  */
@@ -134,6 +141,8 @@ export const OPENING_ERR = {
   INVALID_INPUT: 'INVALID_INPUT',
   EMPTY_INPUT: 'EMPTY_INPUT',
   PUC_MISMATCH: 'PUC_MISMATCH',
+  UNMAPPED_ACCOUNTS: 'UNMAPPED_ACCOUNTS',
+  UNBALANCED: 'UNBALANCED',
   NO_BALANCING_ACCOUNT: 'NO_BALANCING_ACCOUNT',
   PERIOD_NOT_OPEN: 'PERIOD_NOT_OPEN',
   DOWNSTREAM: 'DOWNSTREAM',
@@ -147,12 +156,14 @@ export type OpeningBalanceErrorCode =
 // ---------------------------------------------------------------------------
 
 /**
- * Cuenta PUC tradicional para absorber el cuadre del asiento de apertura.
- * Si la suma de debitos != suma de creditos, se agrega una linea por la
- * diferencia con esta cuenta. Decreto 2650/1993 — "Resultados de
- * ejercicios anteriores".
+ * Cuenta para la diferencia de REDONDEO del asiento de apertura (≤
+ * ROUNDING_TOLERANCE_COP). 370505 "Utilidades acumuladas" es la subcuenta
+ * postable del PUC sembrado; 3705 (nivel 3) no es postable (contab-nomina-17).
+ * Si el workspace tiene un PUC propio donde 3705 sí es postable, se usa como
+ * alternativa.
  */
-export const OPENING_BALANCING_ACCOUNT_CODE = '3705';
+export const OPENING_BALANCING_ACCOUNT_CODE = '370505';
+export const OPENING_BALANCING_FALLBACK_CODES = ['3705'] as const;
 
 /**
  * Si mas de este porcentaje de codigos PUC del archivo NO existe en el
@@ -162,7 +173,7 @@ export const OPENING_BALANCING_ACCOUNT_CODE = '3705';
 export const PUC_MISMATCH_THRESHOLD = 0.3;
 
 /**
- * Tolerancia (en pesos absolutos, NUMERIC) que se considera redondeo
- * "absorbible" sin emitir warning. Por encima emitimos warning explicito.
+ * Tolerancia (en pesos absolutos, NUMERIC) de redondeo que puede llevarse a
+ * la cuenta balanceadora. Por encima, el descuadre bloquea la importación.
  */
 export const ROUNDING_TOLERANCE_COP = '1';
