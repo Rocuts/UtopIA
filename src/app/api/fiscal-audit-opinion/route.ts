@@ -7,6 +7,8 @@ import type { AuditReport } from '@/lib/agents/financial/audit/types';
 import type { FiscalOpinionProgressEvent } from '@/lib/agents/financial/fiscal-opinion/types';
 import { createSafeSse } from '@/lib/api/sse-safe';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
+import { revivePreprocessedBalance } from '@/lib/preprocessing/json-safe';
+import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 
 // ---------------------------------------------------------------------------
 // POST /api/fiscal-audit-opinion
@@ -68,8 +70,21 @@ export async function POST(req: Request) {
       }
     }
 
+    // `preprocessed` (round-trip JSON de /niif) alimenta cifras deterministas
+    // del dictamen (umbral SAGRILAFT, reclasificaciones, comparativos). Se
+    // revive y valida; si no es plausible se rechaza en vez de castear a ciegas.
+    const rawPreprocessed = (body as { preprocessed?: unknown }).preprocessed;
+    let preprocessed: PreprocessedBalance | undefined;
+    if (rawPreprocessed !== undefined && rawPreprocessed !== null) {
+      const revived = revivePreprocessedBalance(rawPreprocessed);
+      if (!revived) {
+        return NextResponse.json({ error: 'Invalid preprocessed format.' }, { status: 400 });
+      }
+      preprocessed = revived;
+    }
+
     if (stream) {
-      return handleStreaming(typedReport, typedAuditReport, language, instructions);
+      return handleStreaming(typedReport, typedAuditReport, language, instructions, preprocessed);
     }
 
     const fiscalOpinion = await orchestrateFiscalOpinion({
@@ -77,6 +92,7 @@ export async function POST(req: Request) {
       auditReport: typedAuditReport,
       language,
       instructions,
+      preprocessed,
     });
 
     return NextResponse.json(fiscalOpinion);
@@ -101,6 +117,7 @@ function handleStreaming(
   auditReport: AuditReport | undefined,
   language: 'es' | 'en',
   instructions: string | undefined,
+  preprocessed: PreprocessedBalance | undefined,
 ) {
   const readableStream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -108,7 +125,7 @@ function handleStreaming(
 
       try {
         const fiscalOpinion = await orchestrateFiscalOpinion(
-          { report, auditReport, language, instructions },
+          { report, auditReport, language, instructions, preprocessed },
           {
             onProgress: (event: FiscalOpinionProgressEvent) => {
               sse.send('progress', event);

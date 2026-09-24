@@ -96,21 +96,48 @@ export async function runOpinionDrafter(
     ...MODELS_CONFIG.opinionDrafter,
   });
 
-  return toLegacyShape(json, v14State, reclasState);
+  return toLegacyShape(json, v14State, reclasState, { goingConcern, misstatement: misstatementReview });
 }
 
 // ---------------------------------------------------------------------------
 // Adapter local — JSON-strict -> FiscalOpinionDictamen legacy
 // ---------------------------------------------------------------------------
 
-function toLegacyShape(
+/**
+ * Evidencia determinista de los evaluadores que la opinión no puede
+ * contradecir (tributario-modulos-11):
+ *   - incorrecciones generalizadas (NIA 705 par. 8) → adversa;
+ *   - incorrecciones materiales en conjunto (NIA 450 / 705 par. 7) → al menos
+ *     con salvedades;
+ *   - base contable de empresa en funcionamiento inadecuada (NIA 570 par. 21)
+ *     → adversa.
+ */
+export function enforceDrafterCoherence(
+  raw: FiscalOpinionDraftJson['opinionType'],
+  evidence: { goingConcern?: GoingConcernResult; misstatement?: MisstatementResult },
+): FiscalOpinionDraftJson['opinionType'] {
+  let opinion = raw;
+  const m = evidence.misstatement;
+  if (m?.assessment === 'pervasive' && (opinion === 'limpia' || opinion === 'con_salvedades')) {
+    opinion = 'adversa';
+  } else if ((m?.materialInAggregate === true || m?.assessment === 'material') && opinion === 'limpia') {
+    opinion = 'con_salvedades';
+  }
+  if (evidence.goingConcern?.conclusion === 'base_inadecuada' && (opinion === 'limpia' || opinion === 'con_salvedades')) {
+    opinion = 'adversa';
+  }
+  return opinion;
+}
+
+export function toLegacyShape(
   json: FiscalOpinionDraftJson,
   v14State: { detected: boolean; pervasive: boolean },
   reclasState: { hasAny: boolean; notaLabel: string },
+  evidence: { goingConcern?: GoingConcernResult; misstatement?: MisstatementResult } = {},
 ): FiscalOpinionDictamen {
   // Override post-LLM: si V14 disparo y el LLM emitio "limpia", forzamos
   // modificada (NIA 705 §7 con_salvedades; o adversa si pervasive).
-  let opinionType = json.opinionType;
+  let opinionType = enforceDrafterCoherence(json.opinionType, evidence);
   if (v14State.detected && opinionType === 'limpia') {
     opinionType = v14State.pervasive ? 'adversa' : 'con_salvedades';
   }
@@ -140,6 +167,8 @@ function toLegacyShape(
     emphasisParagraphs,
     otherMatterParagraphs: [...json.otherMatterParagraphs],
     managementLetter: json.managementLetter,
+    goingConcernSection: json.goingConcernSection,
+    blockedReason: null,
     fullContent,
   };
 }
@@ -159,6 +188,10 @@ function renderOpinionMarkdown(json: FiscalOpinionDraftJson): string {
     '## DICTAMEN',
     '',
     json.dictamenText,
+    '',
+    '## INCERTIDUMBRE MATERIAL RELACIONADA CON EMPRESA EN FUNCIONAMIENTO',
+    '',
+    json.goingConcernSection || '(No aplica)',
     '',
     '## ASUNTOS CLAVE DE AUDITORIA',
     '',
@@ -279,8 +312,10 @@ function buildEvaluatorSummary(
     .map((item) => `- [${item.code}] ${item.requirement} — ${item.normReference}: ${item.observation}`)
     .join('\n');
 
-  const fmt = (n: number) =>
-    (n < 0 ? '-' : '') + '$' + Math.abs(n).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmt = (n: number | null) =>
+    n === null
+      ? 'N/D'
+      : (n < 0 ? '-' : '') + '$' + Math.abs(n).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return `# EVALUADOR 1: EMPRESA EN MARCHA (NIA 570)
 - **Evaluacion:** ${goingConcern.assessment}
@@ -301,7 +336,7 @@ ${goingConcern.analysis}
 - **Incorrecciones identificadas:** ${misstatement.misstatements.length}
 ${misstatementList || '(Ninguna)'}
 - **Total incorrecciones no corregidas:** ${fmt(misstatement.totalUncorrected)}
-- **Material en conjunto:** ${misstatement.materialInAggregate ? 'SI' : 'NO'}
+- **Material en conjunto:** ${misstatement.materialInAggregate === null ? 'N/D' : misstatement.materialInAggregate ? 'SI' : 'NO'}
 - **Evaluacion:** ${misstatement.assessment}
 
 **Analisis completo:**
@@ -310,7 +345,7 @@ ${misstatement.analysis}
 ---
 
 # EVALUADOR 3: CUMPLIMIENTO ESTATUTARIO (Art. 207 C.Co.)
-- **Score de cumplimiento:** ${compliance.complianceScore}/100
+- **Score de cumplimiento:** ${compliance.complianceScore === null ? 'N/D (no evaluado)' : `${compliance.complianceScore}/100`}
 
 **Matriz Estatutaria (10 funciones Art. 207 C.Co.):**
 ${statutoryMatrix || '(No evaluada)'}

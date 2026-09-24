@@ -41,7 +41,7 @@ export const GoingConcernIndicatorSchema = z.object({
   description: z.string().min(1).describe('Descripcion del indicador detectado'),
   severity: GoingConcernIndicatorSeveritySchema,
   normReference: NormaRef.describe(
-    'Norma exacta. Ej: "NIA 570 par. 10", "Art. 457 C.Co.", "Ley 1116/2006 art. 9"',
+    'Norma exacta. Ej: "NIA 570 par. 16", "Art. 4 Ley 2069/2020", "Decreto 1074/2015 Art. 2.2.1.18.2", "Ley 1116/2006 art. 9"',
   ),
 });
 
@@ -205,7 +205,11 @@ export const FiscalOpinionDraftSchema = z.object({
     ),
   keyAuditMatters: z
     .array(KeyAuditMatterSchema)
-    .describe('Asuntos clave NIA 701 — mínimo 1, máximo 3'),
+    .describe('Asuntos clave NIA 701 — vacío salvo entidad emisora de valores (RNVE) o comunicación voluntaria; máximo 3'),
+  goingConcernSection: z
+    .string()
+    .nullable()
+    .describe('Sección separada "Incertidumbre material relacionada con empresa en funcionamiento" (NIA 570 revisada par. 22) cuando hay incertidumbre material adecuadamente revelada; null si no aplica'),
   emphasisParagraphs: z
     .array(z.string().min(1))
     .describe('Párrafos de énfasis NIA 706 par. 6-7; vacío si no aplica'),
