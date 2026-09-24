@@ -5,6 +5,7 @@ import { orchestrateTaxReconciliation } from '@/lib/agents/financial/tax-reconci
 import type { TaxReconciliationProgressEvent } from '@/lib/agents/financial/tax-reconciliation/types';
 import { createSafeSse } from '@/lib/api/sse-safe';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
+import { formato2516Threshold } from '@/lib/agents/financial/tax-reconciliation/lib/deterministic';
 
 // ---------------------------------------------------------------------------
 // POST /api/tax-reconciliation
@@ -43,6 +44,17 @@ export async function POST(req: Request) {
       if (inferred) {
         (company as { comparativePeriod?: string }).comparativePeriod = inferred;
       }
+    }
+
+    // El umbral del Formato 2516 (45.000 UVT) se mide con la UVT del año
+    // gravable objeto de conciliación: sin año o sin UVT registrada ⇒ 422.
+    try {
+      formato2516Threshold(company.fiscalPeriod);
+    } catch (err) {
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : 'Año gravable no soportado.' },
+        { status: 422 },
+      );
     }
 
     // Check for streaming request
