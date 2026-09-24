@@ -64,7 +64,15 @@ ${input.instructions ?? '(sin instrucciones adicionales)'}
   });
 
   // Saldo, viabilidad, plazos y norma: siempre los del análisis determinista.
+  // Los documentos base (requisitos de la solicitud) también: el modelo sólo
+  // los amplía; si los parafrasea u omite, el validador M6.L3.1 bloqueaba una
+  // lista que el código ya conoce (revisión de la fase 2, pendiente #8).
   const warnings = [...json.warnings];
+  const vistos = new Set(analysis.documentosBase.map((d) => d.trim().toLowerCase()));
+  const documentosRequeridos = [
+    ...analysis.documentosBase,
+    ...json.data.documentosRequeridos.filter((d) => !vistos.has(d.trim().toLowerCase())),
+  ].slice(0, 20); // tope del esquema; los documentos base van primero
   if (analysis.viabilidad === 'no_determinable') warnings.push(REFUND_NO_DETERMINABLE_MOTIVO);
   return {
     ...json,
@@ -75,6 +83,7 @@ ${input.instructions ?? '(sin instrucciones adicionales)'}
       plazoDian: analysis.plazoDian,
       plazoConGarantia: analysis.plazoConGarantia,
       normaRef: analysis.normaRef,
+      documentosRequeridos,
       pasosProcedimentales:
         analysis.viabilidad === 'no_determinable' || analysis.viabilidad === 'no_aplica'
           ? analysis.pasosBase

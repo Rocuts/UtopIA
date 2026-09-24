@@ -47,7 +47,8 @@ function f01EsCero(f01Cents: string): boolean | null {
  */
 export function scoresCitadosEnProsa(texto: string): number[] {
   const out: number[] = [];
-  const re = /(?<![\d.,])(\d{1,3}(?:[.,]\d+)?)\s*(?:\/|de)\s*100\b(?!\s*%)/gi;
+  // «100» cierra el número: «30.000 de 100.000 UVT» no es un score.
+  const re = /(?<![\d.,])(\d{1,3}(?:[.,]\d+)?)\s*(?:\/|de)\s*100\b(?![.,]\d)(?!\s*%)/gi;
   for (const m of texto.matchAll(re)) {
     const n = Number(m[1].replace(',', '.'));
     if (Number.isFinite(n)) out.push(n);
@@ -183,7 +184,7 @@ export function validateRiskScoreL3(m3: Modulo3RiskScore): ValidationCheck[] {
 
   if (m3.publicable && m3.score > umbral) {
     const recomendado = [m3.narrativa, ...m3.recomendaciones].some((t) =>
-      /modo\s+supervivencia/i.test(t),
+      /modo\s+supervivencia|survival\s+mode/i.test(t),
     );
     const ok = m3.modoSupervivenciaActivo === true || recomendado;
     checks.push({

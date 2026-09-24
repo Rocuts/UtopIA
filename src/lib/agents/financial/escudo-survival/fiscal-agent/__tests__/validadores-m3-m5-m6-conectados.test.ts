@@ -139,7 +139,7 @@ describe('Agente Fiscal — M3/M6 conectados (modo devolucion)', () => {
     expect(r.validation.veredicto).toBe('bloqueo');
   });
 
-  it('M6: con saldo declarado exige citas 850/854/855 y requisitos completos', async () => {
+  it('M6: con saldo declarado exige citas 850/854/855; los requisitos los fija el análisis determinista', async () => {
     llm['escudo-fiscal:devoluciones'] = devolJson('Solicitar la devolución del saldo declarado.', ['Carta']);
     const r = await orchestrateFiscalAgent({
       rawData: '', preprocessed: p, fiscalAnchor: anchor, company, mode: 'devolucion',
@@ -147,7 +147,11 @@ describe('Agente Fiscal — M3/M6 conectados (modo devolucion)', () => {
     });
     expect(r.devoluciones?.data.saldoAFavor).toBe('2500000000');
     expect(failed(r, 'M6.L2.2_citas_850_854_855')).toBeDefined();
-    expect(failed(r, 'M6.L3.1_requisitos_completos')).toBeDefined();
+    // Revisión de la fase 2: una lista incompleta del modelo ya no llega al
+    // cliente — el agente publica los documentos base del refund-analyzer y
+    // añade los del modelo; M6.L3.1 verifica esa lista publicada.
+    expect(r.devoluciones?.data.documentosRequeridos).toContain('Carta');
+    expect(failed(r, 'M6.L3.1_requisitos_completos')).toBeUndefined();
   });
 });
 

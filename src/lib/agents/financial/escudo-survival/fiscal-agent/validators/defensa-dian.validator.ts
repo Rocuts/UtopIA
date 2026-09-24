@@ -18,8 +18,8 @@
 //        L2.1b la carta cita la norma del plazo (aviso)
 //        L2.2 si invoca diferencia de criterio → cita el parágrafo del Art. 647
 //        L2.3 NO cita el Concepto 100208221-1352 (no verificable)
-//        L2.4 si menciona una reducción → cita una norma de reducción
-//             disponible para ese tipo de actuación
+//        L2.4 si menciona una reducción de sanción → cita una norma de
+//             reducción disponible para ese tipo de actuación
 //
 //   L3 — Defensa tributaria
 //        L3.1 cierre «borrador para revisión del contador/abogado»
@@ -47,13 +47,17 @@ import { articulosCitados, citaArticulo, citaConcepto1352, citaParagrafo647 } fr
 // ("3. Soporte documental") o rótulo plano ("Petición:").
 // ---------------------------------------------------------------------------
 
+// Rótulos en español y en inglés (con language = 'en' el modelo traduce los
+// encabezados del esqueleto).
 const PATRON_SECCION: Record<DianLetterSectionId, string> = {
-  antecedentes: 'antecedentes',
-  posicion_juridica: 'posici[óo]n\\s+jur[íi]dica',
-  soporte_documental: 'soportes?\\s+documental(?:es)?',
-  defensa_647: '(?:defensa[^\\n]{0,60}647|defensa[^\\n]{0,40}diferencia\\s+de\\s+criterio)',
-  peticion: 'petici[óo]n(?:es)?',
-  firmas: 'firmas?',
+  antecedentes: '(?:antecedentes|background)',
+  posicion_juridica: '(?:posici[óo]n\\s+jur[íi]dica|legal\\s+position)',
+  soporte_documental:
+    '(?:soportes?\\s+documental(?:es)?|supporting\\s+documents?|documentary\\s+(?:support|evidence))',
+  defensa_647:
+    '(?:defensa[^\\n]{0,60}647|defensa[^\\n]{0,40}diferencia\\s+de\\s+criterio|defen[cs]e[^\\n]{0,60}647|defen[cs]e[^\\n]{0,40}difference\\s+(?:of|in)\\s+(?:criteria|interpretation))',
+  peticion: '(?:petici[óo]n(?:es)?|petition|request(?:s|ed\\s+relief)?\\b)',
+  firmas: '(?:firmas?\\b|signatures?\\b)',
 };
 
 function indiceSeccion(texto: string, id: DianLetterSectionId): number {
@@ -67,11 +71,32 @@ function indiceSeccion(texto: string, id: DianLetterSectionId): number {
 
 function declaraBorrador(texto: string): boolean {
   const t = texto.toLowerCase();
-  const tieneBorrador = /\bborrador\b/.test(t);
-  const tieneRevision = /\brevisi[óo]n\b/.test(t);
+  const tieneBorrador = /\bborrador\b|\bdraft\b/.test(t);
+  const tieneRevision = /\brevisi[óo]n\b|\breview\b/.test(t);
   const tieneProfesional =
-    /\bcontador(?:\s+p[úu]blico)?\b/.test(t) || /\babogado\b/.test(t) || /\brevisor\s+fiscal\b/.test(t);
+    /\bcontador(?:\s+p[úu]blico)?\b/.test(t) ||
+    /\babogado\b/.test(t) ||
+    /\brevisor\s+fiscal\b/.test(t) ||
+    /\baccountant\b|\btax\s+(?:attorney|lawyer)\b|\bstatutory\s+auditor\b/.test(t);
   return tieneBorrador && tieneRevision && tieneProfesional;
+}
+
+/**
+ * True si la carta menciona o solicita una reducción DE SANCIÓN (lo que L2.4
+ * exige soportar): la oración habla de reducir y además de sanción, cuarta
+ * parte, mitad, gradualidad, de solicitar / acogerse / aplicar la reducción o
+ * cita una norma de reducción. «La reducción de los ingresos obedece a…» es
+ * un hecho del caso, no una reducción de sanción (revisión de la fase 2,
+ * pendiente #8).
+ */
+const RE_REDUCCION = /\breduc(?:ci[óo]n(?:es)?|ida|ido|ir|e|en)\b|\breduction\b|\breduced\b/i;
+const RE_CONTEXTO_SANCION =
+  /\bsanci[óo]n(?:es)?\b|\bpenalt(?:y|ies)\b|\bcuarta\s+parte\b|\ba\s+la\s+mitad\b|\bgradualidad\b|\bproporcionalidad\b|\bsolicit|\bacog|\baplic(?:ar|a|ación|acion)\b|\brequest|\bArt(?:[íi]culos?|s)?\.?\s*(?:640|644|709|713|716)\b/i;
+
+function mencionaReduccionDeSancion(texto: string): boolean {
+  return texto
+    .split(/(?<=[.;!?])\s+|\n+/)
+    .some((o) => RE_REDUCCION.test(o) && RE_CONTEXTO_SANCION.test(o));
 }
 
 const invocaDiferenciaCriterio = (m5: Modulo5DefensaDian) =>
@@ -187,7 +212,7 @@ export function validateDefensaDianL2(m5: Modulo5DefensaDian): ValidationCheck[]
     });
   }
 
-  if (/\breducci[óo]n(?:es)?\b/i.test(texto)) {
+  if (mencionaReduccionDeSancion(texto)) {
     const disponibles = [...new Set(reduccionesDisponibles(m5.tipoRequerimiento).flatMap(articulosCitados))];
     const ok = disponibles.some((a) => citaArticulo(texto, a));
     checks.push({

@@ -13,8 +13,9 @@
 //        L1.2 viabilidad coherente con el saldo declarado
 //
 //   L2 — Prosa y citas
-//        L2.1 la prosa no presenta |F04| como saldo a favor: cada mención del
-//             monto va rotulada como estimación / referencia contable
+//        L2.1 la prosa no presenta |F04| como saldo a favor: una oración que
+//             cita el monto como saldo a favor / devolución lo rotula como
+//             estimación / referencia contable (es y en)
 //        L2.2 con saldo declarado: cita Arts. 850, 854 y 855 (no el rango
 //             854-860)
 //        L2.3 sin saldo devolvible: ningún paso de solicitud de devolución
@@ -41,7 +42,7 @@ interface RequisitoSpec {
 const REQUISITOS: readonly RequisitoSpec[] = [
   {
     nombre: 'Solicitud por MUISCA',
-    patrones: [/\bMUISCA\b/i, /\bservicio\s+inform[áa]tico\s+electr[óo]nico\b/i, /\bformulario\s+010\b/i],
+    patrones: [/\bMUISCA\b/i, /\bservicio\s+inform[áa]tico\s+electr[óo]nico\b/i, /\b(?:formulario|formato)\s+010\b/i],
   },
   {
     nombre: 'Certificación de contador público o revisor fiscal',
@@ -54,7 +55,7 @@ const REQUISITOS: readonly RequisitoSpec[] = [
   {
     nombre: 'Relación de retenedores con NIT',
     patrones: [
-      /\brelaci[óo]n\s+(?:de\s+)?(?:retenedores|terceros|retenciones)\b/i,
+      /\brelaci[óo]n\s+(?:de\s+)?(?:los\s+)?(?:agentes\s+)?(?:retenedores|terceros|retenciones)\b/i,
       /\b(?:listado|relaci[óo]n)\s+(?:de\s+)?NIT\b/i,
       /\bdiscriminaci[óo]n\s+(?:de\s+)?retenedores\b/i,
     ],
@@ -64,6 +65,8 @@ const REQUISITOS: readonly RequisitoSpec[] = [
     patrones: [
       /\bcopia\s+(?:de\s+)?(?:las?\s+)?declaraci[óo]n(?:es)?\b/i,
       /\bdeclaraci[óo]n(?:es)?\s+(?:de\s+renta\s+|tributaria(?:s)?\s+)?presentada(?:s)?\b/i,
+      /\bdeclaraci[óo]n\s+de\s+renta\b/i,
+      /\bformulario\s+110\b/i,
     ],
   },
 ];
@@ -134,8 +137,16 @@ export function validateDevolucionesL1(m6: Modulo6Devoluciones): ValidationCheck
 // CAPA 2 — Prosa y citas
 // ---------------------------------------------------------------------------
 
+// Rótulo de estimación / referencia contable (es y en: el prompt en inglés
+// conserva el formato es-CO de los montos).
 const ROTULO_ESTIMACION =
-  /estimaci[óo]n|referencia|no\s+(?:es|constituye|equivale|determinable|liquidad)|no\s+es\s+(?:un\s+)?saldo/i;
+  /estimaci[óo]n|referencia|no\s+(?:es|constituye|equivale|determinable|liquidad)|no\s+es\s+(?:un\s+)?saldo|\bestimat(?:e|ed|ion)\b|\breference\b|\bnot\s+(?:a|an|the)?\s*(?:refundable|determinable|declared|settled|liquidated)\b|\bcannot\s+be\s+(?:determined|refunded)\b/i;
+
+// La oración presenta el monto como saldo a favor / devolución (es y en). Sin
+// esta señal una mención neutra («Su valor es $X.») no es la violación: lo que
+// el Art. 670 E.T. castiga es solicitar como saldo a favor lo no liquidado.
+const PRESENTA_COMO_SALDO =
+  /\bsaldos?\s+a\s+favor\b|\ba\s+favor\b|devoluci[óo]n|\bdevolver|\bdevuelv|reembols|\bcompensa(?:ci[óo]n|r)\b|\brecuper|\bsolicit(?:ar|e|ud)\b|\brefund|\bcredit\s+balance\b|\boverpa(?:id|yment)\b|\bin\s+(?:the\s+taxpayer'?s\s+)?favou?r\b/i;
 
 /** Oraciones (o líneas) del texto que mencionan el monto indicado. */
 function oracionesConMonto(texto: string, cents: bigint): string[] {
@@ -154,7 +165,9 @@ export function validateDevolucionesL2(m6: Modulo6Devoluciones): ValidationCheck
   // |F04| la cifra es legítima (viene de la declaración).
   if (f04 !== null && f04 < ZERO && declarado !== -f04) {
     const abs = -f04;
-    const sinRotulo = oracionesConMonto(texto, abs).filter((o) => !ROTULO_ESTIMACION.test(o));
+    const sinRotulo = oracionesConMonto(texto, abs).filter(
+      (o) => PRESENTA_COMO_SALDO.test(o) && !ROTULO_ESTIMACION.test(o),
+    );
     const ok = sinRotulo.length === 0;
     checks.push({
       name: 'M6.L2.1_f04_no_presentado_como_saldo_a_favor',
