@@ -3215,6 +3215,10 @@ export function PipelineWorkspace() {
         // pipeline-flujo-10: /html cruza el JSON NIIF contra las anclas del
         // mismo balance que usó /niif antes de pagar el Editor Jefe.
         preprocessed: cachedPreprocessed,
+        // e2e-niif-16: /html bloquea con los veredictos del acta y de la Parte II
+        // (clean === false), igual que Excel/PDF.
+        actaQualifications: backendReport.governance?.actaQualifications ?? null,
+        strategyQualifications: backendReport.strategicAnalysis?.strategyQualifications ?? null,
         ...(excludedFactIds.length ? { excludedFactIds } : {}),
       };
 

@@ -5,7 +5,7 @@ import { composeEditorialReport } from '../compose';
 import { makeExportableReport } from '@/lib/agents/financial/__fixtures__/coherent-niif-report';
 import type { AuditReport } from '@/lib/agents/financial/audit/types';
 import type { QualityAssessment } from '@/lib/agents/financial/quality/types';
-import { NARRATIVE_DISCLAIMER } from '../../statement-presentation';
+import { NARRATIVE_DISCLAIMER, NARRATIVE_DISCLAIMER_EN } from '../../statement-presentation';
 
 function report() {
   const r = makeExportableReport();
@@ -82,5 +82,23 @@ describe('reportes-export-11 — dictamen y sello sólo con procedencia de servi
     expect(doc.qualityScores?.overallScore).toBeNull();
     expect(doc.qualityScores?.ifrs18Score).toBeNull();
     expect(doc.qualityScores?.dataQuality.completeness).toBeNull();
+  });
+});
+
+// Integración de la re-auditoría 2026-09-24: un informe en inglés imprimía el
+// aviso de narrativa no auditada en español (cross-dep de W4-A/W4-B).
+describe('aviso de narrativa en el idioma del entregable', () => {
+  it('language=en: notas, notas técnicas, recomendaciones, acta y pies de los estados en inglés', () => {
+    const r = report();
+    r.niifAnalysis.json!.balanceSheet.notes = [{ ref: null, norma: null, body: 'Cash is $77.777.777,00.' }];
+    const doc = composeEditorialReport({ report: r, preprocessed: null, pillars: null, language: 'en' });
+    expect(doc.notes.blocks[0].bodyMarkdown).toContain(NARRATIVE_DISCLAIMER_EN);
+    const tech = doc.notes.blocks.find((b) => b.heading === 'Technical notes to the financial statements')!;
+    expect(tech.bodyMarkdown).toContain(NARRATIVE_DISCLAIMER_EN);
+    expect(doc.recommendations.items[0].bodyMarkdown).toContain(NARRATIVE_DISCLAIMER_EN);
+    expect(doc.shareholderMinutes?.bodyMarkdown).toContain(NARRATIVE_DISCLAIMER_EN);
+    expect(doc.statements.balance.footnotes?.[0]).toBe(NARRATIVE_DISCLAIMER_EN);
+    const all = JSON.stringify(doc);
+    expect(all).not.toContain(NARRATIVE_DISCLAIMER);
   });
 });

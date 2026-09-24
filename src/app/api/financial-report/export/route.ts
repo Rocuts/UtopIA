@@ -224,7 +224,8 @@ export async function POST(req: Request) {
       const { preprocessed } = source;
       const blocked = rejectInvalidExport(report, preprocessed);
       if (blocked) return blocked;
-      const buffer = await generateFinancialExcel({ report, preprocessed });
+      const excelLanguage: 'es' | 'en' = body.language === 'en' ? 'en' : 'es';
+      const buffer = await generateFinancialExcel({ report, preprocessed, language: excelLanguage });
       return createExcelResponse(buffer, report.company.name);
     }
 
@@ -295,7 +296,7 @@ export async function POST(req: Request) {
     const blocked = rejectInvalidExport(report, preprocessed);
     if (blocked) return blocked;
 
-    const buffer = await generateFinancialExcel({ report, preprocessed });
+    const buffer = await generateFinancialExcel({ report, preprocessed, language });
     return createExcelResponse(buffer, effectiveCompany.name);
   } catch (error) {
     console.error('[financial-report/export] Error:', error instanceof Error ? error.message : error);

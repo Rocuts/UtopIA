@@ -66,7 +66,7 @@ import {
   type StatementTableContext,
 } from './compose-statements-from-json';
 import { formatCopFromCents } from '@/lib/agents/financial/contracts/money';
-import { NARRATIVE_DISCLAIMER, resolvePeriodoTipos } from '../statement-presentation';
+import { narrativeDisclaimer, resolvePeriodoTipos } from '../statement-presentation';
 import { revenueBreakdown, type RevenueBreakdown } from '../revenue';
 
 // ─── v2.2 — Scrubber de metadatos internos (correcciones #6, #11, #12) ───────
@@ -181,8 +181,8 @@ const UNVERIFIED_ASSURANCE_NOTE =
   'versión persistida en el servidor.';
 
 /** Aviso en cursiva al inicio de un bloque de narrativa redactada por el LLM. */
-function withNarrativeDisclaimer(md: string): string {
-  return md.trim() ? `*${NARRATIVE_DISCLAIMER}*\n\n${md}` : md;
+function withNarrativeDisclaimer(md: string, language: 'es' | 'en' = 'es'): string {
+  return md.trim() ? `*${narrativeDisclaimer(language)}*\n\n${md}` : md;
 }
 
 export function composeEditorialReport(input: ComposeInput): EditorialReport {
@@ -216,12 +216,12 @@ export function composeEditorialReport(input: ComposeInput): EditorialReport {
   const waterfall = { items: buildWaterfall(totals, revenue) };
   const dialGauges = { gauges: buildDialGauges(totals) };
   const pillarsSpec = buildPillarsSpec(pillars ?? null);
-  const statements = buildStatements(report, preprocessed);
-  const breakEven = buildBreakEven(report);
-  const projectedCashFlow = buildProjectedCashFlow(report);
-  const notes = { blocks: buildNotes(report) };
-  const recommendations = { items: buildRecommendations(report) };
-  const shareholderMinutes = buildShareholderMinutes(report);
+  const statements = buildStatements(report, preprocessed, language);
+  const breakEven = buildBreakEven(report, language);
+  const projectedCashFlow = buildProjectedCashFlow(report, language);
+  const notes = { blocks: buildNotes(report, language) };
+  const recommendations = { items: buildRecommendations(report, language) };
+  const shareholderMinutes = buildShareholderMinutes(report, language);
   const appendix = buildAppendix(report, preprocessed, totals, emittable);
   if (assuranceOmitted) {
     appendix.validationWarnings = [...(appendix.validationWarnings ?? []), UNVERIFIED_ASSURANCE_NOTE];
@@ -1220,6 +1220,7 @@ function formatPillarValue(kpi: PillarKpi): string {
 function buildStatements(
   report: FinancialReport,
   preprocessed: PreprocessedBalance | null | undefined,
+  language: 'es' | 'en' = 'es',
 ) {
   // Fase 3.1 — prefer JSON-strict del NIIF Analyst cuando esté disponible.
   // Parser Markdown queda como fallback para reportes legacy ingestados antes
@@ -1228,10 +1229,10 @@ function buildStatements(
   if (json) {
     const ctx = statementContext(json.company.fiscalPeriod, json.company.comparativePeriod, preprocessed);
     return {
-      balance: labelLlmStatementNotes(niifJsonToBalanceTable(json, ctx), json.balanceSheet?.notes),
-      income: labelLlmStatementNotes(niifJsonToIncomeTable(json, ctx), json.incomeStatement?.notes),
+      balance: labelLlmStatementNotes(niifJsonToBalanceTable(json, ctx), json.balanceSheet?.notes, language),
+      income: labelLlmStatementNotes(niifJsonToIncomeTable(json, ctx), json.incomeStatement?.notes, language),
       cashFlow: niifJsonToCashFlowTable(json, ctx),
-      equity: labelLlmStatementNotes(niifJsonToEquityTable(json, ctx), json.equityChanges?.notes),
+      equity: labelLlmStatementNotes(niifJsonToEquityTable(json, ctx), json.equityChanges?.notes, language),
     };
   }
   return {
@@ -1252,10 +1253,11 @@ function buildStatements(
 function labelLlmStatementNotes<T extends { footnotes?: string[] }>(
   table: T,
   notes: ReadonlyArray<{ body: string }> | null | undefined,
+  language: 'es' | 'en' = 'es',
 ): T {
   const hasLlmNotes = (notes ?? []).some((n) => typeof n?.body === 'string' && n.body.trim().length > 0);
   if (!hasLlmNotes || !table) return table;
-  return { ...table, footnotes: [NARRATIVE_DISCLAIMER, ...(table.footnotes ?? [])] };
+  return { ...table, footnotes: [narrativeDisclaimer(language), ...(table.footnotes ?? [])] };
 }
 
 /**
@@ -1288,7 +1290,7 @@ function statementContext(
 
 // ─── Notes ────────────────────────────────────────────────────────────────────
 
-function buildNotes(report: FinancialReport) {
+function buildNotes(report: FinancialReport, language: 'es' | 'en' = 'es') {
   const md = report.governance?.financialNotes ?? '';
   const sections = parseHeadingSections(md, 2);
   // Fallback to level 3 if level 2 yielded nothing (defensive).
@@ -1299,7 +1301,7 @@ function buildNotes(report: FinancialReport) {
       heading: scrubInternalMetadata(s.heading),
       // Notas en prosa del LLM: el aviso de narrativa no auditada va al inicio
       // de la sección (reportes-export-11).
-      bodyMarkdown: i === 0 ? withNarrativeDisclaimer(body) : body,
+      bodyMarkdown: i === 0 ? withNarrativeDisclaimer(body, language) : body,
       citations: extractCitations(body),
     };
   });
@@ -1313,9 +1315,12 @@ function buildNotes(report: FinancialReport) {
   if (technical.length > 0) {
     const body = technical.map((n) => `- ${n}`).join('\n');
     blocks.push({
-      heading: 'Notas técnicas de los estados financieros',
+      heading:
+        language === 'en'
+          ? 'Technical notes to the financial statements'
+          : 'Notas técnicas de los estados financieros',
       // Prosa del Pass-3 del LLM: sus cifras no se anclan (e2e-niif-10).
-      bodyMarkdown: withNarrativeDisclaimer(body),
+      bodyMarkdown: withNarrativeDisclaimer(body, language),
       citations: extractCitations(body),
     });
   }
@@ -1327,46 +1332,46 @@ function buildNotes(report: FinancialReport) {
 // strategicAnalysis.breakEvenAnalysis). Retorna undefined si el campo está
 // vacío para que la página se omita.
 
-function buildBreakEven(report: FinancialReport) {
+function buildBreakEven(report: FinancialReport, language: 'es' | 'en' = 'es') {
   const raw = (report.strategicAnalysis?.breakEvenAnalysis ?? '').trim();
   if (!raw) return undefined;
   const md = scrubInternalMetadata(raw);
-  return { bodyMarkdown: withNarrativeDisclaimer(md), citations: extractCitations(md) };
+  return { bodyMarkdown: withNarrativeDisclaimer(md, language), citations: extractCitations(md) };
 }
 
 // ─── Projected Cash Flow ──────────────────────────────────────────────────────
 // Proyección de flujo de caja 12 meses — markdown del Director de Estrategia
 // (FinancialReport.strategicAnalysis.projectedCashFlow). Undefined si vacío.
 
-function buildProjectedCashFlow(report: FinancialReport) {
+function buildProjectedCashFlow(report: FinancialReport, language: 'es' | 'en' = 'es') {
   const raw = (report.strategicAnalysis?.projectedCashFlow ?? '').trim();
   if (!raw) return undefined;
   const md = scrubInternalMetadata(raw);
-  return { bodyMarkdown: withNarrativeDisclaimer(md), citations: extractCitations(md) };
+  return { bodyMarkdown: withNarrativeDisclaimer(md, language), citations: extractCitations(md) };
 }
 
 // ─── Shareholder Minutes ──────────────────────────────────────────────────────
 // Acta de asamblea (Art. 187 Ley 222/1995) — markdown del Especialista de
 // Gobierno (FinancialReport.governance.shareholderMinutes). Undefined si vacío.
 
-function buildShareholderMinutes(report: FinancialReport) {
+function buildShareholderMinutes(report: FinancialReport, language: 'es' | 'en' = 'es') {
   const raw = (report.governance?.shareholderMinutes ?? '').trim();
   if (!raw) return undefined;
   const md = scrubInternalMetadata(raw);
-  return { bodyMarkdown: withNarrativeDisclaimer(md), citations: extractCitations(md) };
+  return { bodyMarkdown: withNarrativeDisclaimer(md, language), citations: extractCitations(md) };
 }
 
 // ─── Recommendations ──────────────────────────────────────────────────────────
 
 const ROTATION: AreaKey[] = ['futuro', 'valor', 'escudo', 'verdad'];
 
-function buildRecommendations(report: FinancialReport): RecommendationItem[] {
+function buildRecommendations(report: FinancialReport, language: 'es' | 'en' = 'es'): RecommendationItem[] {
   const md = report.strategicAnalysis?.strategicRecommendations ?? '';
   const items = parseNumberedList(md);
   return items.map((it, idx) => ({
     title: scrubInternalMetadata(it.title),
     bodyMarkdown:
-      idx === 0 ? withNarrativeDisclaimer(scrubInternalMetadata(it.body)) : scrubInternalMetadata(it.body),
+      idx === 0 ? withNarrativeDisclaimer(scrubInternalMetadata(it.body), language) : scrubInternalMetadata(it.body),
     areaAccent: ROTATION[idx % ROTATION.length],
   }));
 }
