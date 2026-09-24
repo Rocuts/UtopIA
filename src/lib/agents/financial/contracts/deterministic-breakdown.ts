@@ -2005,13 +2005,6 @@ export function buildDeterministicEquityChanges(
 }
 
 /**
- * Base determinista de los comparativos del EFE y del ECP a partir del
- * preprocesado. `null` cuando el informe no tiene periodo comparativo (un solo
- * corte, o comparativo impracticable según el preprocesador — el mismo
- * criterio con que el orquestador fija `company.comparativePeriod`).
- * `language` fija el idioma de las notas de comparativo no presentado.
- */
-/**
  * Corte comparativo del informe y su apertura: el corte anterior al
  * comparativo en `periods`, con el motivo por el que no sirve de apertura
  * (`gap`, `null` si sirve). `null` cuando el informe no tiene periodo
@@ -2038,6 +2031,13 @@ function comparativeOpeningOf(source: ComparativeStatementsSource | null | undef
   return { comparative, opening, cy, priorYear, gap: comparativeOpeningGap(comparative, opening, cy, priorYear) };
 }
 
+/**
+ * Base determinista de los comparativos del EFE y del ECP a partir del
+ * preprocesado. `null` cuando el informe no tiene periodo comparativo (un solo
+ * corte, o comparativo impracticable según el preprocesador — el mismo
+ * criterio con que el orquestador fija `company.comparativePeriod`).
+ * `language` fija el idioma de las notas de comparativo no presentado.
+ */
 export function buildComparativeStatementsBasis(
   source: ComparativeStatementsSource | null | undefined,
   language: ComparativeNoteLanguage = 'es',
