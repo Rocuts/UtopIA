@@ -97,15 +97,17 @@ describe('buildQualityV21View — structural invariants', () => {
 // ---------------------------------------------------------------------------
 
 describe('buildQualityV21View — score conversion', () => {
-  it('rounds internal 0..100 score to 0..10 integer per dim', () => {
+  // auditoria-calidad-08: antes se redondeaba al entero (85 → 9, 75 → 8 →
+  // "aprobado"). La escala de Parte V es por porcentaje: se conserva un decimal.
+  it('converts internal 0..100 score to 0..10 with one decimal (no integer rounding)', () => {
     const v = buildQualityV21View(makeJson({ defaultScore: 85 }));
-    expect(v.dimensions.every((d) => d.scoreInt0to10 === 9)).toBe(true); // round(85/10)=9 (banker)... actually 9
+    expect(v.dimensions.every((d) => d.score10 === 8.5)).toBe(true);
   });
 
   it('globalScore is arithmetic average of 12 dim scores with one decimal', () => {
     // All dims score 80 -> 80/10 = 8 -> global = 8.0
     const v = buildQualityV21View(makeJson({ defaultScore: 80 }));
-    expect(v.globalScoreInt0to10).toBe(8);
+    expect(v.globalScore10).toBe(8);
     // Note: stored as number; .toFixed(1) gives "8.0" but the number itself is 8.
   });
 
@@ -116,8 +118,8 @@ describe('buildQualityV21View — score conversion', () => {
     for (let i = 1; i <= 14; i++) overrideD[i] = i % 2 === 0 ? 100 : 0;
     const v = buildQualityV21View(makeJson({ defaultScore: 50, overrideD }));
     // Don't assert exact number — just verify shape:
-    expect(v.globalScoreInt0to10).toBeGreaterThanOrEqual(0);
-    expect(v.globalScoreInt0to10).toBeLessThanOrEqual(10);
+    expect(v.globalScore10).toBeGreaterThanOrEqual(0);
+    expect(v.globalScore10).toBeLessThanOrEqual(10);
   });
 });
 
@@ -191,75 +193,75 @@ describe('buildQualityV21View — mapping table from spec', () => {
   it('Dim 1 (Accuracy) comes from D2', () => {
     const v = buildQualityV21View(makeJson({ defaultScore: 50, overrideD: { 2: 100 } }));
     const dim1 = v.dimensions.find((d) => d.num === 1)!;
-    expect(dim1.scoreInt0to10).toBe(10);
+    expect(dim1.score10).toBe(10);
   });
 
   it('Dim 2 (Completeness) comes from D1', () => {
     const v = buildQualityV21View(makeJson({ defaultScore: 50, overrideD: { 1: 100 } }));
     const dim2 = v.dimensions.find((d) => d.num === 2)!;
-    expect(dim2.scoreInt0to10).toBe(10);
+    expect(dim2.score10).toBe(10);
   });
 
   it('Dim 3 (Consistency) comes from D3', () => {
     const v = buildQualityV21View(makeJson({ defaultScore: 50, overrideD: { 3: 100 } }));
     const dim3 = v.dimensions.find((d) => d.num === 3)!;
-    expect(dim3.scoreInt0to10).toBe(10);
+    expect(dim3.score10).toBe(10);
   });
 
   it('Dim 4 (Currentness) comes from D14', () => {
     const v = buildQualityV21View(makeJson({ defaultScore: 50, overrideD: { 14: 100 } }));
     const dim4 = v.dimensions.find((d) => d.num === 4)!;
-    expect(dim4.scoreInt0to10).toBe(10);
+    expect(dim4.score10).toBe(10);
   });
 
   it('Dim 5 (Traceability IA) comes from D8', () => {
     const v = buildQualityV21View(makeJson({ defaultScore: 50, overrideD: { 8: 100 } }));
     const dim5 = v.dimensions.find((d) => d.num === 5)!;
-    expect(dim5.scoreInt0to10).toBe(10);
+    expect(dim5.score10).toBe(10);
   });
 
   it('Dim 6 (Transparency) is weighted composite D9*0.9 + D6*0.1', () => {
     // D9=100, D6=0 -> 100*0.9 + 0*0.1 = 90 -> 9/10
     const v = buildQualityV21View(makeJson({ defaultScore: 50, overrideD: { 9: 100, 6: 0 } }));
     const dim6 = v.dimensions.find((d) => d.num === 6)!;
-    expect(dim6.scoreInt0to10).toBe(9);
+    expect(dim6.score10).toBe(9);
   });
 
   it('Dim 7 (Bias) comes from D9', () => {
     const v = buildQualityV21View(makeJson({ defaultScore: 50, overrideD: { 9: 100 } }));
     const dim7 = v.dimensions.find((d) => d.num === 7)!;
-    expect(dim7.scoreInt0to10).toBe(10);
+    expect(dim7.score10).toBe(10);
   });
 
   it('Dim 8 (Human Oversight) comes from D10', () => {
     const v = buildQualityV21View(makeJson({ defaultScore: 50, overrideD: { 10: 100 } }));
     const dim8 = v.dimensions.find((d) => d.num === 8)!;
-    expect(dim8.scoreInt0to10).toBe(10);
+    expect(dim8.score10).toBe(10);
   });
 
   it('Dim 9 (Relevance) comes from D6', () => {
     const v = buildQualityV21View(makeJson({ defaultScore: 50, overrideD: { 6: 100 } }));
     const dim9 = v.dimensions.find((d) => d.num === 9)!;
-    expect(dim9.scoreInt0to10).toBe(10);
+    expect(dim9.score10).toBe(10);
   });
 
   it('Dim 10 (Faithful Representation) comes from D4', () => {
     const v = buildQualityV21View(makeJson({ defaultScore: 50, overrideD: { 4: 100 } }));
     const dim10 = v.dimensions.find((d) => d.num === 10)!;
-    expect(dim10.scoreInt0to10).toBe(10);
+    expect(dim10.score10).toBe(10);
   });
 
   it('Dim 11 (Understandability) comes from D11', () => {
     const v = buildQualityV21View(makeJson({ defaultScore: 50, overrideD: { 11: 100 } }));
     const dim11 = v.dimensions.find((d) => d.num === 11)!;
-    expect(dim11.scoreInt0to10).toBe(10);
+    expect(dim11.score10).toBe(10);
   });
 
   it('Dim 12 (Comparability) is average of D14 and D12', () => {
     // D14=100, D12=0 -> avg=50 -> 5/10
     const v = buildQualityV21View(makeJson({ defaultScore: 50, overrideD: { 14: 100, 12: 0 } }));
     const dim12 = v.dimensions.find((d) => d.num === 12)!;
-    expect(dim12.scoreInt0to10).toBe(5);
+    expect(dim12.score10).toBe(5);
   });
 });
 
@@ -273,19 +275,21 @@ describe('buildQualityV21View — fallback when D-dims are missing', () => {
       makeJson({ defaultScore: 50, rawScore: 100, omitDims: [2] }),
     );
     const dim1 = v.dimensions.find((d) => d.num === 1)!;
-    expect(dim1.scoreInt0to10).toBe(10);
+    expect(dim1.score10).toBe(10);
     // The fallback note should be present:
     expect(dim1.points.some((p) => /Mapeo fallback/i.test(p))).toBe(true);
   });
 
-  it('defaults to 70 with "data incompleta" point when neither D-dim nor raw fallback are present', () => {
+  // auditoria-calidad-09: antes una métrica raw en 0 se trataba como "sin
+  // dato" y la dimensión recibía 7/10 por defecto. Un 0 real es un valor.
+  it('respects a real 0 raw metric instead of defaulting to 7/10', () => {
     // omit D2 and zero out dataQuality.accuracy
     const json = makeJson({ defaultScore: 50, omitDims: [2] });
     json.dataQuality.accuracy = 0;
     const v = buildQualityV21View(json);
     const dim1 = v.dimensions.find((d) => d.num === 1)!;
-    expect(dim1.scoreInt0to10).toBe(7);
-    expect(dim1.points.some((p) => /Dato incompleto|data incompleta/i.test(p))).toBe(true);
+    expect(dim1.score10).toBe(0);
+    expect(dim1.points.some((p) => /Mapeo fallback/i.test(p))).toBe(true);
   });
 
   it('Dim 6 transparency falls back to D9 only when D6 is missing', () => {
@@ -293,7 +297,7 @@ describe('buildQualityV21View — fallback when D-dims are missing', () => {
       makeJson({ defaultScore: 50, overrideD: { 9: 100 }, omitDims: [6] }),
     );
     const dim6 = v.dimensions.find((d) => d.num === 6)!;
-    expect(dim6.scoreInt0to10).toBe(10); // only D9, used as-is
+    expect(dim6.score10).toBe(10); // only D9, used as-is
     expect(dim6.points.some((p) => /D6 ausente/i.test(p))).toBe(true);
   });
 });

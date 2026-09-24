@@ -120,7 +120,7 @@ export const QualityReportSchema = z.object({
     .describe('Resumen ejecutivo de 3-4 parrafos sobre la calidad del reporte'),
   dimensions: z
     .array(QualityDimensionSchema)
-    .describe('14 dimensiones (D1..D14) con score y findings/recommendations'),
+    .describe('Dimensiones evaluables (D1..D14) con score y findings/recommendations; una dimension sin base (p. ej. D14 sin comparativo) se omite y el sistema la marca N/D'),
   dataQuality: DataQualityMetricsSchema,
   aiGovernance: AIGovernanceMetricsSchema,
   ifrs18Readiness: IFRS18ReadinessSchema,
