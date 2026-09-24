@@ -73,8 +73,18 @@ import {
   isProvisionalDraft,
   provenanceHeaders,
   stampHtmlProvenance,
+  withDraftReasons,
   type ArtifactProvenance,
 } from '@/lib/reports/provenance-stamp';
+
+/**
+ * Procedencia del HTML generado (procedencia-R2-06): un HTML que el Editor
+ * Jefe declaró no emitible sale estampado BORRADOR por `runHtmlEditor`; el
+ * sello de procedencia lo aclara en vez de decir "verificada" a secas.
+ */
+function generatedProvenance(provenance: ArtifactProvenance, generated: HtmlEditorOutput): ArtifactProvenance {
+  return generated.emittable === false ? withDraftReasons(provenance, [{ kind: 'not-emittable' }]) : provenance;
+}
 
 export const runtime = 'nodejs';
 export const maxDuration = 800;
@@ -345,9 +355,10 @@ export async function POST(req: Request) {
         runHtmlEditor(editorInput, undefined, undefined, hechosEmpresa),
       );
       logIfNotEmittable(generated);
+      const stamp = generatedProvenance(provenance, generated);
       const result = {
         ...generated,
-        html: stampHtmlProvenance(generated.html, provenance, parsed.data.language),
+        html: stampHtmlProvenance(generated.html, stamp, parsed.data.language),
       };
       return NextResponse.json(result, {
         // El payload sigue viajando con 200 aunque no sea emitible: el HTML ya
@@ -357,7 +368,7 @@ export async function POST(req: Request) {
         // cabecera son la señal máquina-legible para gatear la descarga.
         headers: {
           'X-Report-Emittable': result.emittable ? 'true' : 'false',
-          ...provenanceHeaders(provenance),
+          ...provenanceHeaders(stamp),
         },
       });
     }
@@ -383,9 +394,11 @@ export async function POST(req: Request) {
 
           const generated = await runHtmlEditor(editorInput, onProgress, req.signal, hechosEmpresa);
           logIfNotEmittable(generated);
+          // Las cabeceras del stream ya salieron: el BORRADOR del HTML no
+          // emitible viaja en el sello impreso y en su <meta> (draft=true).
           const result = {
             ...generated,
-            html: stampHtmlProvenance(generated.html, provenance, language),
+            html: stampHtmlProvenance(generated.html, generatedProvenance(provenance, generated), language),
           };
 
           send('html_phase', result);

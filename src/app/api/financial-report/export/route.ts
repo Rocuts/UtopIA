@@ -46,7 +46,9 @@ import { applyRequestConfirmations } from '@/lib/reports/ingest-confirmations';
 import {
   appendPdfProvenance,
   isProvisionalDraft,
+  pdfDraftReasons,
   provenanceHeaders,
+  withDraftReasons,
   withExcelProvenance,
   type ArtifactProvenance,
 } from '@/lib/reports/provenance-stamp';
@@ -325,7 +327,6 @@ async function exportPersisted(
   const stamp: ArtifactProvenance = isProvisionalDraft(report)
     ? { kind: 'verified', provenance, draft: true }
     : { kind: 'verified', provenance };
-  const headers = provenanceHeaders(stamp);
 
   if (format === 'pdf-elite') {
     let pillars = null;
@@ -348,9 +349,9 @@ async function exportPersisted(
       qualityReport: (body.qualityReport as QualityAssessment | null | undefined) ?? null,
       outputOptions: (body.outputOptions as OutputOptionsToggle | null | undefined) ?? null,
     });
-    appendPdfProvenance(doc, stamp, language);
+    const pdfStamp = stampPdf(doc, stamp, language);
     const stream = await renderEditorialReportToStream(doc);
-    return pdfResponse(stream, report.company.name, headers);
+    return pdfResponse(stream, report.company.name, provenanceHeaders(pdfStamp));
   }
 
   const buffer = await generateFinancialExcel({
@@ -358,7 +359,23 @@ async function exportPersisted(
     preprocessed,
     language,
   });
-  return createExcelResponse(buffer, report.company.name, headers);
+  return createExcelResponse(buffer, report.company.name, provenanceHeaders(stamp));
+}
+
+/**
+ * Sella el PDF compuesto (procedencia-R2-06): si el composer le puso marca de
+ * agua (BORRADOR por comparativos impracticables, INCOMPLETO, BLOQUEADO), el
+ * sello y las cabeceras dicen BORRADOR con el motivo, como con el override.
+ * Devuelve la procedencia efectiva para las cabeceras.
+ */
+function stampPdf(
+  doc: ReturnType<typeof composeEditorialReport>,
+  stamp: ArtifactProvenance,
+  language: 'es' | 'en',
+): ArtifactProvenance {
+  const effective = withDraftReasons(stamp, pdfDraftReasons(doc));
+  appendPdfProvenance(doc, effective, language);
+  return effective;
 }
 
 export async function POST(req: Request) {
@@ -578,8 +595,7 @@ async function handlePdfElite(body: unknown): Promise<Response> {
       qualityReport: b.qualityReport ?? null,
       outputOptions: b.outputOptions ?? null,
     });
-    const stamp = unverified(report);
-    appendPdfProvenance(doc, stamp, language);
+    const stamp = stampPdf(doc, unverified(report), language);
     const stream = await renderEditorialReportToStream(doc);
     return pdfResponse(stream, report.company.name, provenanceHeaders(stamp));
   }
@@ -669,8 +685,7 @@ async function handlePdfElite(body: unknown): Promise<Response> {
       language,
       emittable: { ok: false, blockers: blockerReasons },
     });
-    const stamp = unverified(stub);
-    appendPdfProvenance(doc, stamp, language);
+    const stamp = stampPdf(doc, unverified(stub), language);
     const stream = await renderEditorialReportToStream(doc);
     return pdfResponse(stream, company.name, provenanceHeaders(stamp));
   }
@@ -697,8 +712,7 @@ async function handlePdfElite(body: unknown): Promise<Response> {
     pillars,
     language,
   });
-  const stamp = unverified(report);
-  appendPdfProvenance(doc, stamp, language);
+  const stamp = stampPdf(doc, unverified(report), language);
 
   const stream = await renderEditorialReportToStream(doc);
   return pdfResponse(stream, company.name, provenanceHeaders(stamp));

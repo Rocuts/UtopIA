@@ -22,16 +22,32 @@ import { FINANCIAL_REPORT_CONTRACT_VERSION } from './financial-report-version';
 // ---------------------------------------------------------------------------
 
 /**
- * `draft`: el informe salió con el override del Doctor de Datos ("Continuar
- * de todas formas", pipeline-flujo-21) y su consolidado lleva el encabezado
- * BORRADOR. El sello lo aclara: "procedencia verificada" certifica la versión
- * persistida y su balance, no que el documento sea definitivo.
+ * Por qué un artefacto sale marcado BORRADOR (procedencia-R2-06). El sello
+ * nunca dice "verificado" sin aclararlo, sea cual sea la marca:
+ *   - `override`: el usuario eligió "Continuar de todas formas" en el Doctor de
+ *     Datos (pipeline-flujo-21) y el consolidado lleva el encabezado BORRADOR;
+ *   - `not-emittable`: el HTML del Editor Jefe no superó su verificación
+ *     numérica automática (`emittable: false`) y viene estampado BORRADOR;
+ *   - `watermark`: el PDF lleva la marca de agua del composer (BORRADOR por
+ *     comparativos impracticables, INCOMPLETO o BLOQUEADO) con su subtítulo.
+ */
+export type DraftReason =
+  | { kind: 'override' }
+  | { kind: 'not-emittable' }
+  | { kind: 'watermark'; mark: string; subtitle?: string };
+
+/**
+ * `draft`: el artefacto sale marcado BORRADOR (ver `DraftReason`; sin
+ * `draftReasons`, el del override). El sello lo aclara: "procedencia
+ * verificada" certifica la versión persistida y su balance, no que el
+ * documento sea definitivo.
  */
 export type ArtifactProvenance =
   | {
       kind: 'verified';
       provenance: ReportProvenance;
       draft?: boolean;
+      draftReasons?: DraftReason[];
       /**
        * Contrato de reglas con que el servidor RE-RENDERIZÓ la versión al
        * producir el artefacto (I5-5). /export y /html por referencia recalculan
@@ -41,7 +57,7 @@ export type ArtifactProvenance =
        */
       renderedWith?: string;
     }
-  | { kind: 'unverified'; draft?: boolean };
+  | { kind: 'unverified'; draft?: boolean; draftReasons?: DraftReason[] };
 
 /** Contrato del re-render de una procedencia verificada. */
 function renderedContract(p: Extract<ArtifactProvenance, { kind: 'verified' }>): string {
@@ -66,10 +82,55 @@ function fill(template: string, values: Record<string, string>): string {
   return template.replace(/\{(\w+)\}/g, (m, k: string) => (k in values ? values[k] : m));
 }
 
+function sameReason(a: DraftReason, b: DraftReason): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === 'watermark' && b.kind === 'watermark') return a.mark === b.mark && a.subtitle === b.subtitle;
+  return true;
+}
+
+/** Procedencia marcada BORRADOR con los motivos dados (sin duplicar; conserva los previos). */
+export function withDraftReasons<T extends ArtifactProvenance>(p: T, reasons: readonly DraftReason[]): T {
+  if (reasons.length === 0) return p;
+  const previous: DraftReason[] = p.draft === true ? (p.draftReasons ?? [{ kind: 'override' }]) : [];
+  const merged = [...previous];
+  for (const r of reasons) if (!merged.some((m) => sameReason(m, r))) merged.push(r);
+  return { ...p, draft: true, draftReasons: merged };
+}
+
+/**
+ * Motivos BORRADOR de un PDF compuesto: la marca de agua que el composer
+ * estampó en la portada (`meta.watermark`). Un BORRADOR sin subtítulo es el
+ * del override (consolidado o preprocesado provisional).
+ */
+export function pdfDraftReasons(doc: { meta?: { watermark?: string; watermarkSubtitle?: string } }): DraftReason[] {
+  const mark = doc.meta?.watermark;
+  if (!mark) return [];
+  const subtitle = doc.meta?.watermarkSubtitle;
+  if (mark === 'BORRADOR' && !subtitle) return [{ kind: 'override' }];
+  return [{ kind: 'watermark', mark, ...(subtitle ? { subtitle } : {}) }];
+}
+
+const WATERMARK_EN: Record<string, string> = { BORRADOR: 'DRAFT', INCOMPLETO: 'INCOMPLETE', BLOQUEADO: 'BLOCKED' };
+
+function draftReasonLine(r: DraftReason, language: Lang): string {
+  const t = dict[language].reportProvenance;
+  if (r.kind === 'override') return t.draftLine;
+  if (r.kind === 'not-emittable') return t.draftNotEmittableLine;
+  // La marca del composer es un literal en español (`WatermarkKind`); el
+  // subtítulo ya viene en el idioma del entregable.
+  const mark = language === 'en' ? (WATERMARK_EN[r.mark] ?? r.mark) : r.mark;
+  return fill(t.draftWatermarkLine, { mark: r.subtitle ? `${mark} (${r.subtitle})` : mark });
+}
+
 /** Título + cuerpo + detalle de la procedencia, en el idioma del entregable. */
 export function provenanceLines(p: ArtifactProvenance, language: Lang): string[] {
   const t = dict[language].reportProvenance;
-  const draft = p.draft === true ? [t.draftLine] : [];
+  const draft =
+    p.draft === true
+      ? (p.draftReasons && p.draftReasons.length > 0 ? p.draftReasons : [{ kind: 'override' } as DraftReason]).map(
+          (r) => draftReasonLine(r, language),
+        )
+      : [];
   if (p.kind === 'unverified') {
     return [p.draft ? t.unverifiedDraftTitle : t.unverifiedTitle, t.unverifiedBody, ...draft];
   }

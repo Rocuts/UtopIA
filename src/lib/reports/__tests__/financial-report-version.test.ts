@@ -337,3 +337,24 @@ describe('sello "procedencia no verificada"', () => {
     }
   });
 });
+
+describe('R2-06 — motivos BORRADOR del sello', () => {
+  it('HTML no emitible y marca de agua del PDF: título BORRADOR, motivo y cabecera (es/en)', async () => {
+    const { withDraftReasons, pdfDraftReasons } = await import('../provenance-stamp');
+    const notEmittable = withDraftReasons(VERIFIED, [{ kind: 'not-emittable' }]);
+    expect(provenanceLines(notEmittable, 'es')[0]).toBe('PROCEDENCIA VERIFICADA — BORRADOR (VALIDACIÓN PENDIENTE)');
+    expect(provenanceLines(notEmittable, 'es').join('\n')).toMatch(/no superó la verificación numérica automática/);
+    expect(provenanceLines(notEmittable, 'es').join('\n')).not.toMatch(/Continuar de todas formas/);
+    expect(provenanceHeaders(notEmittable)['X-Report-Draft']).toBe('true');
+
+    const wm = pdfDraftReasons({ meta: { watermark: 'BORRADOR', watermarkSubtitle: 'COMPARATIVES IMPRACTICABLE' } });
+    const en = provenanceLines(withDraftReasons(VERIFIED, wm), 'en').join('\n');
+    expect(en).toContain('VERIFIED PROVENANCE — DRAFT');
+    expect(en).toContain('Document marked DRAFT (COMPARATIVES IMPRACTICABLE)');
+    // Un BORRADOR sin subtítulo es el del override: no se duplica.
+    const override = withDraftReasons({ ...VERIFIED, draft: true }, pdfDraftReasons({ meta: { watermark: 'BORRADOR' } }));
+    expect(override.draftReasons).toEqual([{ kind: 'override' }]);
+    expect(pdfDraftReasons({ meta: {} })).toEqual([]);
+    expect(withDraftReasons(VERIFIED, [])).toBe(VERIFIED);
+  });
+});

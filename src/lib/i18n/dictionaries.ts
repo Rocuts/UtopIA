@@ -1796,6 +1796,10 @@ export const dict = {
       unverifiedDraftTitle: 'PROCEDENCIA NO VERIFICADA — BORRADOR (VALIDACIÓN PENDIENTE)',
       draftLine:
         'Versión marcada BORRADOR por decisión del usuario ("Continuar de todas formas"): no es un documento definitivo y no debe firmarse en este estado.',
+      draftNotEmittableLine:
+        'Documento marcado BORRADOR: el HTML no superó la verificación numérica automática contra el informe (ver el aviso BORRADOR). No es un documento definitivo y no debe firmarse en este estado.',
+      draftWatermarkLine:
+        'Documento con la marca {mark}: no es un documento definitivo y no debe firmarse en este estado.',
       uiUnverified:
         'Procedencia no verificada: este informe no tiene una versión persistida en el servidor; las descargas lo indicarán.',
       uiVerified: 'Versión persistida {reportId}',
@@ -3556,6 +3560,10 @@ export const dict = {
       unverifiedDraftTitle: 'UNVERIFIED PROVENANCE — DRAFT (VALIDATION PENDING)',
       draftLine:
         'Version marked DRAFT by the user ("Continue anyway"): it is not a final document and must not be signed in this state.',
+      draftNotEmittableLine:
+        'Document marked DRAFT: the HTML did not pass the automatic numeric verification against the report (see the DRAFT notice). It is not a final document and must not be signed in this state.',
+      draftWatermarkLine:
+        'Document marked {mark}: it is not a final document and must not be signed in this state.',
       uiUnverified:
         'Unverified provenance: this report has no persisted version on the server; downloads will say so.',
       uiVerified: 'Persisted version {reportId}',

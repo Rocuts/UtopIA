@@ -7,6 +7,9 @@
 // composer REAL del PDF (sólo se sustituye el render a bytes):
 //   - e2e-niif2-02: una desviación que /niif ya corrigió en el JSON
 //     (`overwritten: true`, informe limpio) no sella la versión persistida.
+//   - procedencia-R2-06: todo artefacto marcado BORRADOR (HTML no emitible,
+//     PDF con marca de agua) lleva la variante BORRADOR del sello y
+//     X-Report-Draft.
 //   - procedencia-R2-03 + e2e-niif2-06: /html sin referencia aplica el mismo
 //     gate que /export sin referencia (V1–V15, identidad II/III, prosa de la
 //     Parte I, post-proceso de la Parte II) antes de pagar el Editor Jefe.
@@ -47,6 +50,7 @@ import { POST as consolidate } from '../consolidate/route';
 import { POST as exportReport } from '../export/route';
 import { POST as html } from '../html/route';
 import { generateFinancialExcel } from '@/lib/export/excel-export';
+import { composeEditorialReport } from '@/lib/export/pdf-elite-react';
 import { runHtmlEditor } from '@/lib/agents/financial/agents/html-editor';
 import type { FinancialReport } from '@/lib/agents/financial/types';
 import type { GovernanceReportJson } from '@/lib/agents/financial/contracts/governance-report';
@@ -303,5 +307,63 @@ describe('R2-03 / e2e-niif2-06 — /html sin referencia con el gate de /export s
     expect(h.status).toBe(200);
     const input = vi.mocked(runHtmlEditor).mock.calls[0][0] as unknown as { strategyReport: StrategyReportJson };
     expect(input.strategyReport.breakEven?.breakEvenPointCop).toBe(exported.breakEven?.breakEvenPointCop);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// procedencia-R2-06 — el sello aclara BORRADOR en todo artefacto marcado así
+// ---------------------------------------------------------------------------
+
+describe('R2-06 — variante BORRADOR del sello y X-Report-Draft', () => {
+  it('HTML por referencia NO emitible (checklist del Editor Jefe): sello BORRADOR, X-Report-Draft y draft=true', async () => {
+    const out = await consolidateWith(makeProvenanceParts());
+    vi.mocked(runHtmlEditor).mockResolvedValue({
+      html:
+        '<html><head></head><body><div class="utopia-borrador"><strong>BORRADOR</strong> — este documento no superó la verificación numérica automática</div>' +
+        '<main>Total activos $99.999.999,00</main></body></html>',
+      metadata: {},
+      checklistFailures: [{ rule: '§1.1', detail: 'Total activo distinto', severity: 'block' }],
+      emittable: false,
+    } as never);
+    const res = await html(req('/api/financial-report/html', { reportRef: out.reportRef, language: 'es' }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('X-Report-Provenance')).toBe('verified');
+    expect(res.headers.get('X-Report-Emittable')).toBe('false');
+    expect(res.headers.get('X-Report-Draft')).toBe('true');
+    const body = (await res.json()) as { html: string };
+    expect(body.html).toContain('PROCEDENCIA VERIFICADA — BORRADOR');
+    expect(body.html).not.toContain('<strong>PROCEDENCIA VERIFICADA</strong>');
+    expect(body.html).toMatch(/utopia-report-provenance" content="status=verified;[^"]*draft=true"/);
+    expect(body.html).toMatch(/no superó la verificación numérica automática/);
+  });
+
+  it('HTML emitible por referencia: sin BORRADOR (control)', async () => {
+    const out = await consolidateWith(makeProvenanceParts());
+    const res = await html(req('/api/financial-report/html', { reportRef: out.reportRef, language: 'es' }));
+    expect(res.headers.get('X-Report-Draft')).toBeNull();
+    const body = (await res.json()) as { html: string };
+    expect(body.html).toContain('<strong>PROCEDENCIA VERIFICADA</strong>');
+  });
+
+  it('PDF por referencia con marca de agua BORRADOR (comparativos impracticables): sello y cabeceras lo aclaran (es/en)', async () => {
+    const out = await consolidateWith(makeProvenanceParts());
+    for (const language of ['es', 'en'] as const) {
+      vi.mocked(composeEditorialReport).mockClear();
+      const pdf = await exportReport(
+        req('/api/financial-report/export', { reportRef: out.reportRef, format: 'pdf-elite', language }),
+      );
+      expect(pdf.status).toBe(200);
+      expect(pdf.headers.get('X-Report-Provenance')).toBe('verified');
+      expect(pdf.headers.get('X-Report-Draft')).toBe('true');
+      const doc = vi.mocked(composeEditorialReport).mock.results[0].value as {
+        meta: { watermark?: string };
+        appendix: { validationWarnings?: string[] };
+      };
+      expect(doc.meta.watermark).toBe('BORRADOR');
+      const title = language === 'es' ? 'PROCEDENCIA VERIFICADA — BORRADOR' : 'VERIFIED PROVENANCE — DRAFT';
+      const stamp = (doc.appendix.validationWarnings ?? []).find((w) => w.startsWith(title.split(' — ')[0]))!;
+      expect(stamp.startsWith(title)).toBe(true);
+      expect(stamp).toMatch(language === 'es' ? /COMPARATIVOS IMPRACTICABLES/ : /COMPARATIVES IMPRACTICABLE/);
+    }
   });
 });
