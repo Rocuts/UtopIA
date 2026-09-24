@@ -24,6 +24,7 @@ import type {
 import {
   computeTpRangeCheck,
   enforceComparableAnalysis,
+  tpMotivoRango,
   type TpRangeCheck,
 } from '../lib/deterministic';
 
@@ -65,7 +66,7 @@ export async function runComparableAnalyst(
   // Rango intercuartil, «dentro del rango» y conclusión: recalculados en código
   // desde selectedComparables (DUR 1625/2016 art. 1.2.2.2.5). El LLM no decide.
   const check = computeTpRangeCheck(json);
-  return toComparableAnalysisResult(enforceComparableAnalysis(json, check), check, language);
+  return toComparableAnalysisResult(enforceComparableAnalysis(json, check, language), check, language);
 }
 
 // ---------------------------------------------------------------------------
@@ -151,7 +152,7 @@ function renderInterquartileRange(
     `_${lang === 'en' ? 'Computed in code from' : 'Calculado en código desde'} ${s?.n ?? 0} ${lang === 'en' ? 'comparables (DUR 1625/2016 art. 1.2.2.2.5)' : 'comparables (DUR 1625/2016 art. 1.2.2.2.5)'}._`,
     `**${lang === 'en' ? 'Observed PLI' : 'PLI observado'}:** ${pli}`,
     `**${lang === 'en' ? 'Within Q1-Q3?' : '¿Dentro de Q1-Q3?'}** ${within}`,
-    check.reason ? `\n> **${lang === 'en' ? 'ILLUSTRATIVE SCENARIO' : 'ESCENARIO ILUSTRATIVO'}:** ${check.reason}` : '',
+    check.reason ? `\n> **${lang === 'en' ? 'ILLUSTRATIVE SCENARIO' : 'ESCENARIO ILUSTRATIVO'}:** ${tpMotivoRango(check, lang)}` : '',
   ]
     .filter(Boolean)
     .join('\n');
@@ -192,7 +193,7 @@ function renderArmLengthConclusion(
   return [
     `**${lang === 'en' ? 'Arm\'s length compliance' : 'Cumplimiento plena competencia'}:** ${status}`,
     `**${lang === 'en' ? 'Required adjustment to median' : 'Ajuste requerido a la mediana'}:** ${adjPct} — ${adjCop}`,
-    check.reason ? `**${lang === 'en' ? 'Reason' : 'Motivo'}:** ${check.reason}` : '',
+    check.reason ? `**${lang === 'en' ? 'Reason' : 'Motivo'}:** ${tpMotivoRango(check, lang)}` : '',
     c.taxImpactNote ? `**${lang === 'en' ? 'Tax impact' : 'Impacto fiscal'}:** ${c.taxImpactNote}` : '',
     '',
     c.rationale,

@@ -164,8 +164,15 @@ export interface TpRangeCheck {
   simulatedCount: number;
   /** false ⇒ escenario ilustrativo: no se emite «CUMPLE» ni filas 1125 definitivas. */
   conclusive: boolean;
-  /** Motivo en español cuando `conclusive === false`. */
+  /** Motivo en español cuando `conclusive === false` (lo lee también el prompt del Agente 3). */
   reason: string | null;
+  /** El mismo motivo en inglés (informe con `language: 'en'`). */
+  reasonEn: string | null;
+}
+
+/** Motivo del escenario ilustrativo en el idioma del informe; `null` si es concluyente. */
+export function tpMotivoRango(check: TpRangeCheck, language: 'es' | 'en'): string | null {
+  return language === 'en' ? check.reasonEn : check.reason;
 }
 
 export function computeTpRangeCheck(json: ComparableAnalysisReportJson): TpRangeCheck {
@@ -180,10 +187,18 @@ export function computeTpRangeCheck(json: ComparableAnalysisReportJson): TpRange
     requiredAdjustmentPercent = isWithinRange ? 0 : Math.round((stats.median - observed) * 100) / 100;
   }
   const motivos: string[] = [];
-  if (!stats) motivos.push('no hay comparables seleccionados');
-  if (observed === null) motivos.push('el PLI observado de la parte analizada no está determinado');
+  const motivosEn: string[] = [];
+  if (!stats) {
+    motivos.push('no hay comparables seleccionados');
+    motivosEn.push('no comparables were selected');
+  }
+  if (observed === null) {
+    motivos.push('el PLI observado de la parte analizada no está determinado');
+    motivosEn.push('the observed PLI of the tested party is not determined');
+  }
   if (simulatedCount > 0) {
     motivos.push(`${simulatedCount} de ${comparables.length} comparables son simulados (sin base de datos verificable)`);
+    motivosEn.push(`${simulatedCount} of ${comparables.length} comparables are simulated (no verifiable database)`);
   }
   return {
     stats,
@@ -193,6 +208,7 @@ export function computeTpRangeCheck(json: ComparableAnalysisReportJson): TpRange
     simulatedCount,
     conclusive: motivos.length === 0,
     reason: motivos.length === 0 ? null : `Escenario ilustrativo, no concluyente: ${motivos.join('; ')}.`,
+    reasonEn: motivosEn.length === 0 ? null : `Illustrative scenario, not conclusive: ${motivosEn.join('; ')}.`,
   };
 }
 
@@ -206,16 +222,36 @@ export function computeTpRangeCheck(json: ComparableAnalysisReportJson): TpRange
 export const TP_AJUSTE_COP_SIN_BASE_MOTIVO =
   'Ajuste en COP no determinable: el análisis no trae la base del PLI en COP por operación (denominador del indicador), por lo que (mediana − PLI observado) × base no se calcula en código. El ajuste porcentual a la mediana es el calculado; su valor en pesos requiere la base verificada.';
 
+/** El mismo motivo para un informe en inglés. */
+export const TP_AJUSTE_COP_SIN_BASE_MOTIVO_EN =
+  'COP adjustment not determinable: the analysis does not include the PLI base in COP per transaction (the denominator of the indicator), so (median − observed PLI) × base is not computed in code. The percentage adjustment to the median is the computed one; its peso amount requires the verified base.';
+
+/** Motivo del ajuste en COP N/D en el idioma del informe. */
+export function tpAjusteCopSinBaseMotivo(language: 'es' | 'en'): string {
+  return language === 'en' ? TP_AJUSTE_COP_SIN_BASE_MOTIVO_EN : TP_AJUSTE_COP_SIN_BASE_MOTIVO;
+}
+
 /** Ajuste en COP determinista: "0" dentro del rango; `null` en otro caso. */
 export function tpAjusteCopDeterminista(check: TpRangeCheck): string | null {
   return check.isWithinRange === true ? '0' : null;
 }
 
-/** Nota del modelo con montos en pesos ⇒ se sustituye por el motivo cuando el ajuste es N/D. */
-export function notaSinMontosDelModelo(nota: string | null, ajusteCop: string | null): string | null {
+/** Montos en pesos escritos por el modelo (es/en): `$…`, `COP …`, "millones", "million". */
+const MONTO_EN_NOTA = /\$\s?\d|\bCOP\s?\d|\d\s?(?:millones|mil\s+millones|million|billion)\b/i;
+
+/**
+ * Nota del modelo con montos en pesos ⇒ se sustituye por el motivo (en el
+ * idioma del informe) cuando el ajuste es N/D.
+ */
+export function notaSinMontosDelModelo(
+  nota: string | null,
+  ajusteCop: string | null,
+  language: 'es' | 'en' = 'es',
+): string | null {
   if (ajusteCop !== null) return nota;
-  if (nota === null) return TP_AJUSTE_COP_SIN_BASE_MOTIVO;
-  return /\$\s?\d|\bCOP\s?\d|\d\s?(?:millones|mil\s+millones)\b/i.test(nota) ? TP_AJUSTE_COP_SIN_BASE_MOTIVO : nota;
+  const motivo = tpAjusteCopSinBaseMotivo(language);
+  if (nota === null) return motivo;
+  return MONTO_EN_NOTA.test(nota) ? motivo : nota;
 }
 
 /**
@@ -226,6 +262,7 @@ export function notaSinMontosDelModelo(nota: string | null, ajusteCop: string | 
 export function enforceComparableAnalysis(
   json: ComparableAnalysisReportJson,
   check: TpRangeCheck,
+  language: 'es' | 'en' = 'es',
 ): ComparableAnalysisReportJson {
   const s = check.stats;
   const complies = check.conclusive && check.isWithinRange === true;
@@ -246,7 +283,7 @@ export function enforceComparableAnalysis(
       complies,
       requiredAdjustmentPercent: check.requiredAdjustmentPercent,
       requiredAdjustmentCop: ajusteCop,
-      taxImpactNote: notaSinMontosDelModelo(json.armLengthConclusion.taxImpactNote, ajusteCop),
+      taxImpactNote: notaSinMontosDelModelo(json.armLengthConclusion.taxImpactNote, ajusteCop, language),
     },
   };
 }
