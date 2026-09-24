@@ -29,7 +29,11 @@ import { useDocumentExtraction } from './useDocumentExtraction';
 import type { FieldConfidence } from './useDocumentExtraction';
 import { IntakePreview } from './IntakePreview';
 import { HechosEmpresaConfirm } from './HechosEmpresaConfirm';
-import { collectMissingRequired, resolveNiifRawData } from './niifIntakeValidation';
+import {
+  collectMissingRequired,
+  resolveExtractedFiscalPeriod,
+  resolveNiifRawData,
+} from './niifIntakeValidation';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -386,6 +390,9 @@ export function NiifReportIntake() {
   // fires if the user is still on step 0 when OCR finishes — otherwise we'd
   // pull them back from a step they're already editing.
   const stepAtUploadRef = useRef(0);
+  // true cuando el usuario eligió el periodo fiscal a mano en esta sesión del
+  // intake: su elección gana sobre el periodo extraído del balance.
+  const fiscalPeriodEditedRef = useRef(false);
   useEffect(() => {
     if (extractionState.status === 'idle') {
       hasAutoAdvancedRef.current = false;
@@ -428,10 +435,14 @@ export function NiifReportIntake() {
         return {
           ...prev,
           company: updatedCompany,
-          fiscalPeriod:
-            extracted.fiscalPeriod && !prev.fiscalPeriod?.trim()
-              ? extracted.fiscalPeriod
-              : prev.fiscalPeriod,
+          // pipeline-flujo-17: el periodo del balance sustituye al valor por
+          // defecto (año actual − 1) salvo edición explícita del usuario; el
+          // servidor sella el informe si el intake y el balance difieren.
+          fiscalPeriod: resolveExtractedFiscalPeriod({
+            current: prev.fiscalPeriod,
+            extracted: extracted.fiscalPeriod,
+            userEdited: fiscalPeriodEditedRef.current,
+          }),
           niifGroup: extracted.niifGroup && !prev.niifGroup ? extracted.niifGroup : prev.niifGroup,
           rawData: extracted.rawText || prev.rawData,
         };
@@ -539,7 +550,14 @@ export function NiifReportIntake() {
 
   // Generate year options
   const currentYear = new Date().getFullYear();
-  const years = Array.from({ length: 6 }, (_, i) => currentYear - i);
+  const baseYears = Array.from({ length: 6 }, (_, i) => currentYear - i);
+  // El periodo extraído del balance puede quedar fuera de la ventana de 6
+  // años: se añade como opción para que el select no lo muestre vacío.
+  const selectedYear = Number(values.fiscalPeriod);
+  const years =
+    /^\d{4}$/.test(values.fiscalPeriod ?? '') && !baseYears.includes(selectedYear)
+      ? [...baseYears, selectedYear].sort((a, b) => b - a)
+      : baseYears;
 
   // Helper: border class based on confidence + required-state.
   // Required fields with no value always render in danger color so the user
@@ -1003,7 +1021,10 @@ export function NiifReportIntake() {
             <select
               id="niif-fiscal-period"
               value={values.fiscalPeriod}
-              onChange={(e) => updateField('fiscalPeriod', e.target.value)}
+              onChange={(e) => {
+                fiscalPeriodEditedRef.current = true;
+                updateField('fiscalPeriod', e.target.value);
+              }}
               aria-invalid={!values.fiscalPeriod}
               aria-describedby={
                 !values.fiscalPeriod && missingRequired.length > 0
