@@ -1731,6 +1731,30 @@ export const dict = {
         'Debe cargar un archivo o pegar su balance de prueba para generar el reporte.',
       rawDataFromFile: 'Datos contables tomados del archivo cargado.',
     },
+    /**
+     * Procedencia servidor de informes (fase 2, P1). Textos que imprimen los
+     * artefactos (Excel, PDF, HTML) y avisos de la UI del pipeline NIIF.
+     * Marcadores `{...}` se sustituyen en `src/lib/reports/provenance-stamp.ts`.
+     */
+    reportProvenance: {
+      verifiedTitle: 'PROCEDENCIA VERIFICADA',
+      verifiedBody:
+        'Generado desde la versión persistida y autorizada del informe para esta empresa. Las cifras enviadas con la solicitud no sustituyen a las persistidas.',
+      unverifiedTitle: 'PROCEDENCIA NO VERIFICADA',
+      unverifiedBody:
+        'Generado sin una versión persistida del informe en el servidor. Las cifras se validaron contra el balance de esta solicitud, pero no se puede demostrar que correspondan a una versión autorizada de la empresa.',
+      versionLine: 'Versión del informe: {reportId} (persistida el {createdAt})',
+      reportHashLine: 'Huella SHA-256 del informe: {hash}',
+      sourceHashLine: 'Huella SHA-256 del balance preprocesado: {hash}',
+      sourceMissingLine: 'Balance preprocesado: no disponible en la versión persistida',
+      rawDataHashLine: 'Huella SHA-256 del balance recibido: {hash}',
+      contractLine: 'Reglas aplicadas: contrato {contract} · preprocesador {preprocessor}',
+      uiUnverified:
+        'Procedencia no verificada: este informe no tiene una versión persistida en el servidor; las descargas lo indicarán.',
+      uiVerified: 'Versión persistida {reportId}',
+      htmlMissingSource:
+        'No se puede generar el HTML: esta sesión ya no tiene el balance preprocesado de la corrida (se pierde al recargar la página) y el informe no tiene una versión persistida en el servidor. Vuelva a generar el informe para habilitar el HTML.',
+    },
   },
   en: {
     slogan: 'As simple as 1+1',
@@ -3424,6 +3448,25 @@ export const dict = {
       rawDataMissing:
         'You must upload a file or paste your trial balance to generate the report.',
       rawDataFromFile: 'Accounting data taken from the uploaded file.',
+    },
+    reportProvenance: {
+      verifiedTitle: 'VERIFIED PROVENANCE',
+      verifiedBody:
+        'Generated from the persisted, authorized version of this company report. Figures sent with the request do not replace the persisted ones.',
+      unverifiedTitle: 'UNVERIFIED PROVENANCE',
+      unverifiedBody:
+        'Generated without a persisted version of the report on the server. Figures were validated against the trial balance in this request, but they cannot be shown to match an authorized version for the company.',
+      versionLine: 'Report version: {reportId} (persisted {createdAt})',
+      reportHashLine: 'Report SHA-256 fingerprint: {hash}',
+      sourceHashLine: 'Preprocessed trial balance SHA-256 fingerprint: {hash}',
+      sourceMissingLine: 'Preprocessed trial balance: not available in the persisted version',
+      rawDataHashLine: 'Received trial balance SHA-256 fingerprint: {hash}',
+      contractLine: 'Rules applied: contract {contract} · preprocessor {preprocessor}',
+      uiUnverified:
+        'Unverified provenance: this report has no persisted version on the server; downloads will say so.',
+      uiVerified: 'Persisted version {reportId}',
+      htmlMissingSource:
+        'The HTML cannot be generated: this session no longer holds the run\'s preprocessed trial balance (it is lost on page reload) and the report has no persisted version on the server. Regenerate the report to enable the HTML.',
     },
   },
 };

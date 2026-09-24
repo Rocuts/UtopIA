@@ -140,4 +140,107 @@ export function revivePreprocessedBalance(input: unknown): PreprocessedBalance |
   return pp as unknown as PreprocessedBalance;
 }
 
+// ---------------------------------------------------------------------------
+// Cruce del preprocesado del cliente contra el re-derivado por el servidor
+// ---------------------------------------------------------------------------
+// niif-preproceso-33: `revivePreprocessedBalance` sólo valida la FORMA; un
+// preprocesado manipulado con centavos coherentes entre sí pasaba como ancla
+// vinculante. Quien lo recibe lo RE-DERIVA (desde el `rawData` de la petición
+// o desde las filas crudas que trae el propio preprocesado, con los mismos
+// ajustes confirmados) y usa el re-derivado; esta función dice si el declarado
+// difería en los totales de control, para rechazarlo (422) en vez de aceptar
+// en silencio un objeto que no corresponde a sus fuentes.
+//
+// Tras el viaje JSON `primary` y `comparative` son copias INDEPENDIENTES de
+// entradas de `periods` (y son las que leen casi todos los consumidores), así
+// que se comparan por separado.
+// ---------------------------------------------------------------------------
+
+function centsOf(snapshot: PeriodSnapshot | null | undefined): Record<string, bigint> {
+  const cents = (snapshot?.controlTotals as { cents?: Record<string, unknown> } | undefined)?.cents;
+  const out: Record<string, bigint> = {};
+  if (!cents || typeof cents !== 'object') return out;
+  for (const [k, v] of Object.entries(cents)) {
+    const big = toBigIntOrUndefined(v);
+    if (big !== undefined) out[k] = big;
+  }
+  return out;
+}
+
+function numbersOf(snapshot: PeriodSnapshot | null | undefined): Record<string, number> {
+  const ct = snapshot?.controlTotals as Record<string, unknown> | undefined;
+  const out: Record<string, number> = {};
+  if (!ct || typeof ct !== 'object') return out;
+  for (const [k, v] of Object.entries(ct)) {
+    if (typeof v === 'number' && Number.isFinite(v)) out[k] = v;
+  }
+  return out;
+}
+
+function snapshotMismatches(
+  label: string,
+  claimed: PeriodSnapshot | null | undefined,
+  derived: PeriodSnapshot | null | undefined,
+): string[] {
+  const out: string[] = [];
+  const want = centsOf(derived);
+  const got = centsOf(claimed);
+  for (const key of Array.from(new Set([...Object.keys(want), ...Object.keys(got)])).sort()) {
+    if (got[key] === want[key]) continue;
+    const show = (v: bigint | undefined) => (v === undefined ? 'sin centavos' : v.toString());
+    out.push(`${label} · ${key}: enviado ${show(got[key])}, recalculado ${show(want[key])} (centavos)`);
+  }
+  // Los consumidores también leen los totales en `number` (activo, pasivo…):
+  // la misma derivación los reproduce exactos, así que se exigen iguales.
+  const wantNum = numbersOf(derived);
+  const claimedCt = (claimed?.controlTotals ?? {}) as Record<string, unknown>;
+  for (const key of Object.keys(wantNum).sort()) {
+    if (claimedCt[key] === wantNum[key]) continue;
+    out.push(`${label} · ${key}: enviado ${String(claimedCt[key])}, recalculado ${wantNum[key]}`);
+  }
+  return out;
+}
+
+/**
+ * Diferencias entre los totales de control de un preprocesado declarado (el
+ * que envía el cliente) y el re-derivado por el servidor. Vacío = coinciden al
+ * centavo en todos los periodos y en las copias `primary` / `comparative`.
+ */
+export function preprocessedAnchorMismatches(
+  claimed: PreprocessedBalance,
+  derived: PreprocessedBalance,
+): string[] {
+  const out: string[] = [];
+  const claimedPeriods = claimed.periods.map((p) => p.period);
+  const derivedPeriods = derived.periods.map((p) => p.period);
+  if (claimedPeriods.join('\u0000') !== derivedPeriods.join('\u0000')) {
+    out.push(
+      `periodos: enviado [${claimedPeriods.join(', ')}], recalculado [${derivedPeriods.join(', ')}]`,
+    );
+  }
+  if (claimed.primary?.period !== derived.primary?.period) {
+    out.push(`periodo primario: enviado ${claimed.primary?.period}, recalculado ${derived.primary?.period}`);
+  }
+  const claimedComparative = claimed.comparative?.period ?? null;
+  const derivedComparative = derived.comparative?.period ?? null;
+  if (claimedComparative !== derivedComparative) {
+    out.push(
+      `periodo comparativo: enviado ${claimedComparative ?? 'ninguno'}, recalculado ${derivedComparative ?? 'ninguno'}`,
+    );
+  }
+  for (const snap of derived.periods) {
+    const other = claimed.periods.find((p) => p.period === snap.period);
+    if (other) out.push(...snapshotMismatches(snap.period, other, snap));
+  }
+  if (claimed.primary?.period === derived.primary?.period) {
+    out.push(...snapshotMismatches(`primario ${derived.primary.period}`, claimed.primary, derived.primary));
+  }
+  if (derived.comparative && claimedComparative === derivedComparative) {
+    out.push(
+      ...snapshotMismatches(`comparativo ${derived.comparative.period}`, claimed.comparative, derived.comparative),
+    );
+  }
+  return Array.from(new Set(out));
+}
+
 export type { PreprocessedBalance, PeriodSnapshot };
