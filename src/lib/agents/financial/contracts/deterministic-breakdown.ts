@@ -470,7 +470,8 @@ export interface DeterministicCashFlow {
    * balance tiene un solo grupo de inversión (12, 15, 16, 18); `null` si tiene
    * varios (o ninguno), y entonces el descuento va en un renglón propio de
    * inversión (clave `38`) con rótulo explícito. El campo es `null` sin grupo
-   * 38 o si Δ38 = Δ19. Se revela en methodNote.
+   * 38, sin ORI en el periodo (Δ38 = 0) o si Δ38 = Δ19. Se revela en
+   * methodNote.
    */
   oriRevaluation: { cents: bigint; group: string | null } | null;
 }
@@ -488,7 +489,8 @@ export interface DeterministicCashFlow {
  *     38). El 19 y el 38 se anulan entre sí; lo que el 19 no explica del 38
  *     es revaluación registrada en el activo y se descuenta de su variación
  *     en inversión (`oriRevaluation`, re-auditoría 2 recalculo-final2-03).
- *     Sólo un 19 sin grupo 38 queda en el renglón conciliatorio de operación.
+ *     Sólo un 19 que se mueve sin el 38 queda en el renglón conciliatorio de
+ *     operación.
  *     La revalorización del patrimonio (34) y los dividendos en acciones (35)
  *     viajan con el bloque patrimonial (`isEquityBlockGroup`).
  *
@@ -848,9 +850,11 @@ export function buildDeterministicCashFlow(
   // la variación del activo de inversión que la registra. Un balance de saldos
   // no distingue un traslado del superávit a resultados acumulados
   // (realización): rige la misma lectura que el ORI (Δ38) del ERI y del ECP.
-  const oriRevaluationCents = flowByKey.has('38')
-    ? flowByKey.get('38')!.cents + (flowByKey.get('19')?.cents ?? ZERO)
-    : ZERO;
+  // Sin ORI en el periodo (Δ38 = 0) no hay revaluación que descontar: un 19
+  // que se mueve sin el 38 no es ORI y sigue en el renglón no monetario, como
+  // en un balance sin grupo 38 (revisión F-contrato).
+  const oriFlow = flowByKey.get('38')?.cents ?? ZERO;
+  const oriRevaluationCents = oriFlow !== ZERO ? oriFlow + (flowByKey.get('19')?.cents ?? ZERO) : ZERO;
   const investingAssetGroups = [...flowByKey.entries()]
     .filter(([key, v]) => v.section === 'investing' && /^1\d$/.test(key))
     .map(([key]) => key);
@@ -889,8 +893,8 @@ export function buildDeterministicCashFlow(
     // NIC 7 ¶43: las transacciones no monetarias se excluyen del EFE y se
     // revelan. Se dejan visibles en UN renglón conciliatorio en vez de
     // repartirse como flujos falsos de inversión o financiación. Tras
-    // descontar la revaluación del ORI sólo llega aquí un 19 que se movió en
-    // un balance sin grupo 38.
+    // descontar la revaluación del ORI sólo llega aquí un 19 que se movió sin
+    // el 38 (balance sin grupo 38 o con el 38 sin variación).
     operatingRows.push({
       account: '19/38',
       label: 'Partidas no monetarias netas (valorizaciones)',

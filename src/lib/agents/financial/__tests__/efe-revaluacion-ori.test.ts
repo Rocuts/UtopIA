@@ -106,6 +106,29 @@ describe('EFE — sin regresión con valorizaciones 19 ↔ 38', () => {
   });
 });
 
+describe('EFE — sin ORI en el periodo (Δ38 = 0) no hay revaluación que descontar', () => {
+  // Revisión F-contrato: el 38 (una revaluación de años anteriores, 5M) no se
+  // mueve y el 19 sube 1M por año contra otro pasivo (28). Δ38 − Δ19 = −1M no
+  // es ORI del periodo: antes de esta regla salía como "revaluación" y una
+  // adquisición de PPE en inversión, con operación inflada en 1M.
+  it('el 19 que se mueve sin el 38 queda en el renglón no monetario y el EFE es el del balance base', () => {
+    const csv = csvTresCortes()
+      .replace('159205,', '190505,Valorizaciones,Auxiliar,1,1000000,2000000,3000000\n152410,Revaluacion equipo,Auxiliar,1,5000000,5000000,5000000\n159205,')
+      .replace('220505,', '280505,Otros pasivos,Auxiliar,1,1000000,2000000,3000000\n220505,')
+      .replace('370505,', '381005,Superavit ORI,Auxiliar,1,5000000,5000000,5000000\n370505,');
+    const pp = preprocesarTresCortes(csv);
+    const efe = buildDeterministicCashFlow(pp.primary, pp.comparative!)!;
+    const cmp = buildComparativeStatementsBasis(pp)!.cashFlow!;
+    expect(efe.reconciled && cmp.reconciled).toBe(true);
+    expect(efe.oriRevaluation).toBeNull();
+    expect(cmp.oriRevaluation).toBeNull();
+    expect(netos(efe)).toEqual(netos(efeT0));
+    expect(netos(cmp)).toEqual(netos(cmpT0));
+    expect(cuentas(efe, 'investing')).toEqual(cuentas(efeT0, 'investing'));
+    expect(cuentas(efe, 'operating')).toContainEqual(['19/38', M(-1)]);
+  });
+});
+
 describe('EFE — revaluación con varios grupos de inversión', () => {
   // Inversiones (12) sin movimiento en los tres cortes, compensadas en capital.
   const conInversiones = (csv: string) =>
