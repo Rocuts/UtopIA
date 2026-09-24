@@ -83,24 +83,27 @@ const TEMPLATES: TemplateDict = {
   // ESCUDO — Resiliencia y Protección
   // ════════════════════════════════════════════════════════════════════════
   escudo: {
+    // IW4 (ratios-kpis-10): antes proyectaba un "impuesto de renta" = UN ×
+    // 35 %; la utilidad contable no es base fiscal. La alerta crítica del
+    // Escudo es de liquidez medida (días de autonomía < 30).
     critico: {
       es: {
-        subjectTpl: '🛡️ Alerta del Escudo: Reserva fiscal detectada.',
+        subjectTpl: '🛡️ Alerta del Escudo: autonomía de caja crítica.',
         hallazgoTpl:
-          'Tu utilidad acumulada proyecta un impuesto de renta de aprox. {{impuesto_proyectado}}, pero tu provisión actual es de {{provision_actual}}.',
+          '{{empresario_nombre}}, el efectivo disponible cubre sólo {{dias_autonomia}} días de los egresos del periodo.',
         impactoTpl:
-          'Podrías enfrentar una salida de caja inesperada en el próximo vencimiento tributario que reduciría tu autonomía financiera en un {{pct_reduccion}}%.',
+          'Con menos de 30 días de autonomía, cualquier retraso en cobros o un vencimiento de obligaciones puede dejar la operación sin caja.',
         accionLabelTpl: 'Ajustar presupuesto de caja',
-        accionHrefTpl: '/workspace/escudo/planeacion-tributaria',
+        accionHrefTpl: '/workspace/escudo',
       },
       en: {
-        subjectTpl: '🛡️ Shield Alert: Tax reserve gap detected.',
+        subjectTpl: '🛡️ Shield Alert: critical cash runway.',
         hallazgoTpl:
-          'Your accumulated earnings project an income tax of approx. {{impuesto_proyectado}}, but the current provision is {{provision_actual}}.',
+          '{{empresario_nombre}}, available cash covers only {{dias_autonomia}} days of the period outflows.',
         impactoTpl:
-          'You could face an unexpected cash outflow at the next tax due date, reducing your financial autonomy by {{pct_reduccion}}%.',
+          'With fewer than 30 days of runway, any delay in collections or an obligation due date can leave operations without cash.',
         accionLabelTpl: 'Adjust cash budget',
-        accionHrefTpl: '/workspace/escudo/planeacion-tributaria',
+        accionHrefTpl: '/workspace/escudo',
       },
     },
     advertencia: {

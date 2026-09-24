@@ -21,9 +21,11 @@ export interface SentinelMetrics {
   equationGapPct: number;
   /** Días de autonomía (calculado por el pilar Escudo). */
   diasAutonomia: number | null;
-  /** Cobertura fiscal (impuestos / utilidad×35%). */
+  /** Cobertura fiscal del pilar Escudo: N/D (null) sin base fiscal verificada
+   *  (ratios-kpis-10). Ningún disparador la usa. */
   coberturaFiscal: number | null;
-  /** Margen bruto del periodo (ingresos - costos) / ingresos. */
+  /** Margen bruto sobre ingresos operacionales netos (41 − 4175)
+   *  — shared-metrics.margenBruto. null sin grupo 41. */
   margenBruto: number | null;
   /** Inventario / costo diario. */
   diasInventario: number | null;

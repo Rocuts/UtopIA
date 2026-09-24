@@ -57,12 +57,31 @@ describe('T2 — Shield / Liquidity', () => {
     expect(out.fired).toBe(true);
     expect(out.insight?.pillar).toBe('escudo');
   });
-  it('dispara cuando caja < utilidad×35%', () => {
+  // IW4 (ratios-kpis-10): "caja < utilidad × 35 %" no es un disparador — la
+  // utilidad contable no es base fiscal. Antes esta combinación disparaba y el
+  // correo afirmaba un "impuesto de renta proyectado" de $350M.
+  it('no dispara por caja < utilidad×35% si la autonomía es suficiente', () => {
     const out = runT2(
       { ...baseMetrics, efectivo: 5_000_000, utilidadNeta: 1_000_000_000, impuestos: 1_000_000 },
       ctx,
     );
+    expect(out.fired).toBe(false);
+  });
+  it('autonomía < 30 días ⇒ crítico de liquidez, sin cifras fiscales heurísticas', () => {
+    const out = runT2({ ...baseMetrics, diasAutonomia: 12.4, utilidadNeta: 1_000_000_000 }, ctx);
     expect(out.fired).toBe(true);
+    expect(out.insight?.severity).toBe('critico');
+    expect(out.insight?.hallazgo).toContain('12 días');
+    const text = `${out.insight?.subject} ${out.insight?.hallazgo} ${out.insight?.impacto}`;
+    expect(text).not.toMatch(/impuesto de renta|350\.000\.000|\{\{/);
+  });
+  it('autonomía entre 30 y 45 días ⇒ advertencia', () => {
+    const out = runT2({ ...baseMetrics, diasAutonomia: 40 }, ctx);
+    expect(out.fired).toBe(true);
+    expect(out.insight?.severity).toBe('advertencia');
+  });
+  it('autonomía N/D no dispara', () => {
+    expect(runT2({ ...baseMetrics, diasAutonomia: null }, ctx).fired).toBe(false);
   });
 });
 
