@@ -12,6 +12,22 @@ import type { CompanyInfo } from '../../types';
 import { buildAntiHallucinationGuardrail } from '../../prompts/anti-hallucination';
 import { buildColombia2026Context } from '../../prompts/colombia-2026-context';
 
+/**
+ * Sujetos excluidos de la Tasa de Tributación Depurada según el texto literal
+ * del parágrafo 6 del Art. 240 E.T. (Ley 2277/2022 art. 10 —
+ * src/data/tax_docs/ley_2277_2022.md). RTE y SIMPLE no figuran: no tributan
+ * por el Art. 240, así que no son sujetos del parágrafo (tributario-modulos-23).
+ */
+export const EXCEPCIONES_TTD_PAR6 = [
+  'personas jurídicas extranjeras sin residencia en el país',
+  'sociedades ZESE durante el periodo con tarifa del 0%',
+  'sociedades con el incentivo ZOMAC',
+  'sociedades de los parágrafos 5 y 7 del Art. 240 (hoteles/ecoturismo y editoriales) no obligadas al informe país por país (Art. 260-5)',
+  'sociedades del parágrafo 1 del Art. 240',
+  'utilidad depurada (UD) ≤ 0',
+  'contribuyentes del Art. 32 E.T. (contratos de concesión)',
+] as const;
+
 export function buildTaxOptimizerPrompt(
   company: CompanyInfo,
   language: 'es' | 'en',
@@ -40,7 +56,7 @@ Diagnosticar la estructura tributaria actual de la empresa, identificar oportuni
 
 <success_criteria>
 - Impuesto básico ordinario = renta líquida gravable estimada × 35% (Art. 240 E.T.); el sistema lo recalcula en código desde taxableIncomeCents.
-- Tasa de Tributación Depurada (parág. 6 Art. 240 E.T., Ley 2277/2022): TTD = impuesto depurado (ID) / utilidad depurada (UD); impuesto adicional = UD × 15% − ID si TTD < 15%. La utilidad contable × 15% NO es la TTD. Sin ID y UD verificados en los datos, tributacionMinima15Cents, impuestoACargoCents y tmtAplicable son null (N/D) y se declara el motivo en preparerNotes. If la entidad parece caer en una excepción del parág. 6 (RTE Art. 19, SIMPLE Arts. 903-916, ZESE, ZOMAC en periodo de beneficio, hoteles parág. 5) then cítala en tmtExemptionReason como posible excepción a verificar.
+- Tasa de Tributación Depurada (parág. 6 Art. 240 E.T., Ley 2277/2022): TTD = impuesto depurado (ID) / utilidad depurada (UD); impuesto adicional = UD × 15% − ID si TTD < 15%. La utilidad contable × 15% NO es la TTD. Sin ID y UD verificados en los datos, tributacionMinima15Cents, impuestoACargoCents y tmtAplicable son null (N/D) y se declara el motivo en preparerNotes. If la entidad parece caer en una exclusión del parág. 6 (${EXCEPCIONES_TTD_PAR6.join('; ')}) then cítala en tmtExemptionReason como posible exclusión a verificar. If tributa en el RTE (Art. 19) o en el SIMPLE (Arts. 903-916) then la TTD no le aplica porque no es contribuyente del Art. 240 (no es una excepción del parág. 6).
 - Citas normativas EXCLUSIVAMENTE de normas vigentes 2026. Megainversiones (Arts. 235-3/235-4), Economía Naranja (Art. 235-2 Num. 1) y Renta Exenta Campo (Art. 235-2 Num. 2) están DEROGADAS por Ley 2277/2022 — solo invocables como derecho adquirido con calificación pre-derogatoria documentada.
 - Tarifas y umbrales vigentes 2026: Art. 240 = 35%; SIMPLE 1,2%-14,5% por grupo (Arts. 903-916 — servicios profesionales/consultoría 5,9%-14,5%, estructura Ley 2155/2021 revivida por Sentencia C-540/2023); Zona Franca dual 20% (renta exportadora con plan internacionalización) / 35% (renta no exportadora) (Art. 240-1 mod. Ley 2277/2022); Art. 256 I+D+i = 30%; Art. 255 ambiental = 25%; Art. 257 donaciones ESAL = 25%; Art. 258-1 IVA bienes de capital = 100%; Art. 242 dividendos = integración a cédula general + retención 15% sobre exceso 1.090 UVT; Art. 245 no residentes = 20%.
 - Toda conversión UVT→COP usa la UVT del año gravable analizado (2026 = $52.374; 2025 = $49.799) y declara cuál usa.

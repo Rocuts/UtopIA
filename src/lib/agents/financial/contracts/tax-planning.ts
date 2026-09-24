@@ -59,7 +59,7 @@ export const DualCalculationSchema = z.object({
   tmtExemptionReason: z
     .string()
     .nullable()
-    .describe('Base legal de la excepción cuando tmtAplicable=false (Art. 19 RTE, Arts. 903-916 SIMPLE, Ley 1955/2019 Art. 268 ZESE, etc.)'),
+    .describe('Exclusión del parágrafo 6 del Art. 240 E.T. cuando tmtAplicable=false (PJ extranjera sin residencia, ZESE con tarifa 0%, ZOMAC, parágrafos 1, 5 y 7, UD ≤ 0, Art. 32); RTE y SIMPLE no son sujetos del Art. 240'),
 });
 
 export type DualCalculationJson = z.infer<typeof DualCalculationSchema>;
