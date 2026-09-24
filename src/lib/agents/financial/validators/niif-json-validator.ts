@@ -2109,10 +2109,13 @@ function cashFlowComparativePresented(cf: NiifReportJson['cashFlow']): {
     cf.cashClosingComparative,
     ...cf.sections.map((s) => s.netFlowComparative),
   ];
+  // `undefined` (informe serializado antes del contrato, sin pasar por
+  // `NiifReportSchema`) cuenta como no presentado, igual que `null`.
+  const shown = (v: string | null | undefined) => v !== null && v !== undefined;
   return {
-    anyTotal: totals.some((v) => v !== null),
-    allTotals: totals.every((v) => v !== null),
-    anyCell: cf.sections.some((s) => s.lines.some((l) => l.amountComparative !== null)),
+    anyTotal: totals.some(shown),
+    allTotals: totals.every(shown),
+    anyCell: cf.sections.some((s) => s.lines.some((l) => shown(l.amountComparative))),
   };
 }
 
@@ -2122,7 +2125,7 @@ function comparativeCashFlowView(cf: NiifReportJson['cashFlow']): CashFlowStatem
     sections: cf.sections.map((s) => ({
       section: s.section,
       lines: s.lines
-        .filter((l) => l.amountComparative !== null)
+        .filter((l) => (l.amountComparative ?? null) !== null)
         .map((l) => ({ label: l.label, amountPrimary: l.amountComparative as string })),
       netFlow: s.netFlowComparative ?? '0',
     })),
@@ -2191,7 +2194,7 @@ function comparativeStatementErrors(
     }
     const missing = cf.sections.reduce(
       (acc, s) =>
-        acc + s.lines.filter((l) => l.amountComparative === null && parseMoneyCop(l.amountPrimary) !== ZERO).length,
+        acc + s.lines.filter((l) => (l.amountComparative ?? null) === null && parseMoneyCop(l.amountPrimary) !== ZERO).length,
       0,
     );
     if (missing > 0) {
@@ -2203,7 +2206,7 @@ function comparativeStatementErrors(
       // Σ renglones comparativos == subtotal comparativo de cada actividad.
       for (const s of cf.sections) {
         const sum = s.lines.reduce(
-          (acc, l) => (l.amountComparative === null ? acc : acc + parseMoneyCop(l.amountComparative)),
+          (acc, l) => ((l.amountComparative ?? null) === null ? acc : acc + parseMoneyCop(l.amountComparative!)),
           ZERO,
         );
         const netFlow = parseMoneyCop(s.netFlowComparative!);
@@ -2255,7 +2258,7 @@ function comparativeStatementErrors(
   }
 
   // -- ECP del periodo comparativo ---------------------------------------------
-  const rows = json.equityChanges.comparativeRows;
+  const rows = json.equityChanges.comparativeRows ?? null;
   if (rows !== null) {
     if (cp === null) {
       errors.push(

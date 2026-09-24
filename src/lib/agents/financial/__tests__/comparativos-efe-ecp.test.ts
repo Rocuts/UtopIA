@@ -342,4 +342,20 @@ describe('contrato — el comparativo del EFE/ECP no lo emite el modelo', () => 
     // Un informe con el contrato vigente pasa intacto.
     expect(NiifReportSchema.parse(json)).toEqual(json);
   });
+
+  it('el validador trata como no presentado un comparativo ausente aunque el JSON no pase por el schema', () => {
+    const pp = preprocesarTresCortes();
+    const legacy = JSON.parse(JSON.stringify(attachComparativeStatements(informeTresCortes(pp), null, null)));
+    delete legacy.cashFlow.netChangeComparative;
+    delete legacy.cashFlow.cashOpeningComparative;
+    delete legacy.cashFlow.cashClosingComparative;
+    for (const s of legacy.cashFlow.sections) {
+      delete s.netFlowComparative;
+      for (const l of s.lines) delete l.amountComparative;
+    }
+    delete legacy.equityChanges.comparativeRows;
+    const r = validar(legacy as NiifReportJson, pp);
+    expect(r.errors).toEqual([]);
+    expect(r.warnings.some((w) => w.startsWith('E18c.'))).toBe(true);
+  });
 });
