@@ -130,3 +130,28 @@ describe('POST /api/accounting/periods — rangos', () => {
     expect(state.inserted).toHaveLength(0);
   });
 });
+
+// Re-auditoría 2026-09-24 (ICU-05): un rango explícito fuera del (año, mes)
+// declarado se aceptaba: «2026-03» fechado en enero de 2027 bloqueaba después
+// el enero real (409) y sus asientos iban al cierre de 2026.
+describe('POST /api/accounting/periods — rango dentro del (año, mes) declarado (ICU-05)', () => {
+  it('rechaza «2026-03» con fechas de enero de 2027 y el enero real se crea', async () => {
+    const res = await post({ year: 2026, month: 3, startsAt: '2027-01-01T00:00:00.000Z', endsAt: '2027-01-31T23:59:59.999Z' });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('invalid_period_range');
+    expect(state.inserted).toHaveLength(0);
+    const enero = await post({ year: 2027, month: 1 });
+    expect(enero.status).toBe(201);
+  });
+
+  it('rechaza diciembre que invade enero siguiente', async () => {
+    const res = await post({ year: 2026, month: 12, startsAt: '2026-12-01T00:00:00.000Z', endsAt: '2027-01-15T23:59:59.999Z' });
+    expect(res.status).toBe(400);
+    expect(state.inserted).toHaveLength(0);
+  });
+
+  it('un subrango del mes declarado es válido', async () => {
+    const res = await post({ year: 2026, month: 3, startsAt: '2026-03-10T00:00:00.000Z', endsAt: '2026-03-31T23:59:59.999Z' });
+    expect(res.status).toBe(201);
+  });
+});

@@ -4,7 +4,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  declaredPeriodBounds,
   findOverlappingPeriod,
+  isRangeWithinDeclaredPeriod,
   pickPeriodForDate,
   yearEndAdjustmentsInstant,
   type PeriodRange,
@@ -108,5 +110,20 @@ describe('createPeriodAction — rangos disjuntos', () => {
     const r = await createPeriodAction({ year: 2026, month: 2 });
     expect(r.ok).toBe(true);
     expect(inserted.calls).toBe(1);
+  });
+});
+
+// Re-auditoría 2026-09-24 (ICU-05).
+describe('isRangeWithinDeclaredPeriod', () => {
+  it('acepta el mes completo y subrangos; rechaza fechas de otro mes o año', () => {
+    const b = declaredPeriodBounds(2026, 3);
+    expect(isRangeWithinDeclaredPeriod(2026, 3, b.startsAt, b.endsAt)).toBe(true);
+    expect(isRangeWithinDeclaredPeriod(2026, 3, new Date('2026-03-10T00:00:00Z'), b.endsAt)).toBe(true);
+    expect(isRangeWithinDeclaredPeriod(2026, 3, new Date('2027-01-01T00:00:00Z'), new Date('2027-01-31T23:59:59.999Z'))).toBe(false);
+    expect(isRangeWithinDeclaredPeriod(2026, 3, new Date('2026-02-28T00:00:00Z'), b.endsAt)).toBe(false);
+    expect(isRangeWithinDeclaredPeriod(2026, 12, new Date('2026-12-01T00:00:00Z'), new Date('2027-01-15T00:00:00Z'))).toBe(false);
+    const t = new Date(Date.UTC(2026, 11, 31, 23, 59, 59, 999));
+    expect(isRangeWithinDeclaredPeriod(2026, 13, t, t)).toBe(true);
+    expect(isRangeWithinDeclaredPeriod(2026, 13, new Date('2026-12-01T00:00:00Z'), t)).toBe(false);
   });
 });
