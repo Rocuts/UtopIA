@@ -23,7 +23,9 @@ import {
   governanceDegradationNotice,
   renderGovernanceResult,
 } from '@/lib/agents/financial/agents/governance-specialist';
-import { sellarConSalvedades } from '@/lib/agents/financial/orchestrator';
+import { buildAdjustmentsAuditSection, sellarConSalvedades } from '@/lib/agents/financial/orchestrator';
+import type { applyAdjustments } from '@/lib/agents/repair/adjustments';
+import type { Adjustment } from '@/lib/agents/repair/types';
 import { sealGovernanceNarrative } from '@/lib/agents/financial/validators/narrative-anchors';
 import {
   buildStrategyQualificationSeal,
@@ -557,6 +559,55 @@ export function withServerRenderedPersisted(
     ...rendered,
     consolidatedReport: consolidated ?? gate.consolidatedReport,
     ...foldServerEmittability(rendered, gate, preprocessed),
+  };
+}
+
+/** Fuentes re-derivadas en el servidor para reconstruir el texto de un informe recibido. */
+export interface ServerReportTextSource {
+  preprocessed: PreprocessedBalance | null | undefined;
+  /** Ajustes confirmados aplicados y su detalle (traza de ajustes del consolidado). */
+  adjustments?: { applied: Adjustment[]; affected: ReturnType<typeof applyAdjustments>['affected'] } | null;
+  /** `rawData` efectivo de la petición (metadata del archivo para el gate), si lo trae. */
+  rawData?: string | null;
+}
+
+/**
+ * Informe RECIBIDO de un cliente (sin versión persistida) con el texto que
+ * produce el servidor: Partes I–III re-renderizadas desde su JSON
+ * (`withServerRenderedParts`) y consolidado reconstruido entero con la misma
+ * función que /consolidate (`buildServerConsolidatedReport`, con la traza de
+ * ajustes del ledger de la petición); su validación y emitibilidad se pliegan
+ * sobre las recibidas (sólo endurecen). Lo usan /export sin referencia y las
+ * Partes IV/V (/api/financial-audit, /api/financial-quality,
+ * /api/fiscal-audit-opinion), cuyos LLM leen `consolidatedReport` (I5-1).
+ * `null` si el informe no trae las tres Partes: su texto no puede producirse
+ * en el servidor.
+ */
+export function withServerRenderedClientReport(
+  report: FinancialReport,
+  source: ServerReportTextSource,
+  language: 'es' | 'en',
+): FinancialReport | null {
+  if (!report?.niifAnalysis || !report.strategicAnalysis || !report.governance) return null;
+  const rendered = withServerRenderedParts(report, source.preprocessed, language);
+  const rebuilt = buildServerConsolidatedReport({
+    report: rendered,
+    preprocessed: source.preprocessed,
+    language,
+    clientConsolidated: report.consolidatedReport,
+    adjustmentsSection: source.adjustments
+      ? buildAdjustmentsAuditSection(source.adjustments.applied, source.adjustments.affected, language)
+      : null,
+    rawData: source.rawData,
+  });
+  // El gate de emisión (V1–V15) y la validación post-render corren sobre el
+  // texto reconstruido, como en /consolidate: una emitibilidad "limpia" que
+  // el cliente declaró para OTRO texto no levanta los bloqueantes del que se
+  // usa (revisión I3).
+  return {
+    ...rendered,
+    consolidatedReport: rebuilt.consolidatedReport,
+    ...foldServerEmittability(report, rebuilt, source.preprocessed),
   };
 }
 

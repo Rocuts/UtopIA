@@ -15,7 +15,6 @@ import {
 import {
   orchestrateFinancialReport,
   BalanceValidationError,
-  buildAdjustmentsAuditSection,
 } from '@/lib/agents/financial/orchestrator';
 import { applyAdjustments } from '@/lib/agents/repair/adjustments';
 import type { Adjustment, AdjustmentLedger } from '@/lib/agents/repair/types';
@@ -40,9 +39,7 @@ import {
 import { rederivePreprocessedFromRows } from '@/lib/reports/preprocessed-integrity';
 import { withServerPartVerdicts } from '@/lib/reports/part-verdicts';
 import {
-  buildServerConsolidatedReport,
-  foldServerEmittability,
-  withServerRenderedParts,
+  withServerRenderedClientReport,
   withServerRenderedPersisted,
 } from '@/lib/reports/part-markdown';
 import { applyRequestConfirmations } from '@/lib/reports/ingest-confirmations';
@@ -280,27 +277,7 @@ function clientReportWithServerMarkdown(
 ): FinancialReport {
   // Sin las tres Partes no hay nada que re-renderizar: el gate lo rechaza
   // (informe incompleto / sin cifras estructuradas).
-  if (!report?.niifAnalysis || !report.strategicAnalysis || !report.governance) return report;
-  const rendered = withServerRenderedParts(report, source.preprocessed, language);
-  const rebuilt = buildServerConsolidatedReport({
-    report: rendered,
-    preprocessed: source.preprocessed,
-    language,
-    clientConsolidated: report.consolidatedReport,
-    adjustmentsSection: source.adjustments
-      ? buildAdjustmentsAuditSection(source.adjustments.applied, source.adjustments.affected, language)
-      : null,
-    rawData: source.rawData,
-  });
-  // El gate de emisión (V1–V15) y la validación post-render corren sobre el
-  // texto reconstruido, como en /consolidate: una emitibilidad "limpia" que
-  // el cliente declaró para OTRO texto no levanta los bloqueantes del que se
-  // exporta (revisión I3).
-  return {
-    ...rendered,
-    consolidatedReport: rebuilt.consolidatedReport,
-    ...foldServerEmittability(report, rebuilt, source.preprocessed),
-  };
+  return withServerRenderedClientReport(report, source, language) ?? report;
 }
 
 /**
