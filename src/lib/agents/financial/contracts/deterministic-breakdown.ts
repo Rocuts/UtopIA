@@ -468,8 +468,9 @@ export interface DeterministicCashFlow {
    * (NIC 7 ¶43 / Sección 7): no entra a operación y se descuenta de la
    * variación del activo de inversión que la registra — `group` cuando el
    * balance tiene un solo grupo de inversión (12, 15, 16, 18); `null` si tiene
-   * varios, y entonces el descuento va en un renglón propio de inversión
-   * (clave `38`). `null` sin grupo 38 o si Δ38 = Δ19. Se revela en methodNote.
+   * varios (o ninguno), y entonces el descuento va en un renglón propio de
+   * inversión (clave `38`) con rótulo explícito. El campo es `null` sin grupo
+   * 38 o si Δ38 = Δ19. Se revela en methodNote.
    */
   oriRevaluation: { cents: bigint; group: string | null } | null;
 }
@@ -564,8 +565,8 @@ const CASHFLOW_ROW_LABELS: Record<string, string> = {
 
 /**
  * Renglón de inversión que descuenta la revaluación reconocida en el ORI
- * cuando el balance tiene varios grupos de inversión y no se puede atribuir a
- * uno (ver `DeterministicCashFlow.oriRevaluation`).
+ * cuando el balance tiene varios grupos de inversión (o ninguno) y no se puede
+ * atribuir a uno (ver `DeterministicCashFlow.oriRevaluation`).
  */
 const ORI_REVALUATION_ROW_LABEL =
   'Revaluación de activos reconocida en el ORI (partida no monetaria, NIC 7 ¶43): se descuenta de la ' +
