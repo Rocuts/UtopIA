@@ -37,12 +37,20 @@
 // ---------------------------------------------------------------------------
 
 import {
+  leerDirectivasIngesta,
+  type UnidadMonetaria,
+  type Vencimiento,
+} from '@/lib/upload/ingest-directives';
+import {
+  aplicarVencimientosDeclarados,
   detectYearFromString,
   parseTrialBalanceCSVWithMeta,
   preprocessTrialBalance,
+  type CorteDeclarado,
   type ParseTrialBalanceOptions,
   type PreprocessedBalance,
   type RawAccountRow,
+  type UnidadDeclaradaDetectada,
 } from './trial-balance';
 
 /** Encabezado con el que empieza el informe de validación del preprocesador. */
@@ -81,7 +89,12 @@ export interface UploadDataSection {
  */
 export function extractUploadDataSection(text: string): UploadDataSection {
   const source = text ?? '';
-  const trimmedStart = source.replace(/^﻿/, '').trimStart();
+  // Las directivas de ingesta confirmadas por el usuario (P4) van antes que el
+  // informe y se conservan delante de los datos: quien re-deriva el balance
+  // desde `data` (Stage 0 del orquestador) debe leer la misma confirmación.
+  const directivas = leerDirectivasIngesta(source);
+  const body = directivas.tieneDirectivas ? directivas.resto : source;
+  const trimmedStart = body.replace(/^﻿/, '').trimStart();
   if (!trimmedStart.startsWith(VALIDATION_REPORT_HEADING)) {
     return { data: source, hadValidationReport: false };
   }
@@ -91,7 +104,7 @@ export function extractUploadDataSection(text: string): UploadDataSection {
     return { data: '', hadValidationReport: true };
   }
   return {
-    data: trimmedStart.slice(match.index + match[0].length),
+    data: directivas.prefijo + trimmedStart.slice(match.index + match[0].length),
     hadValidationReport: true,
   };
 }
@@ -199,9 +212,20 @@ export function headerHasExplicitPeriodBalanceColumn(csv: string): boolean {
 // Parseo
 // ---------------------------------------------------------------------------
 
+/** Confirmaciones del usuario que llegan fuera del texto (body de la solicitud). */
+export interface ParseUploadedOptions {
+  /**
+   * Unidad confirmada por un campo de la solicitud (`unitMultiplier` de /niif,
+   * `unit` del API v1). Si el texto también trae la directiva, deben coincidir.
+   */
+  unidadConfirmada?: UnidadMonetaria;
+  /** Excepciones de vencimiento por código (se suman a las de la directiva). */
+  vencimientos?: Readonly<Record<string, Vencimiento>>;
+}
+
 export interface UploadedTrialBalanceParse {
   rows: RawAccountRow[];
-  /** Texto de datos efectivamente leído (sin informe antepuesto). */
+  /** Texto de datos efectivamente leído (sin informe antepuesto ni directivas). */
   dataText: string;
   hadValidationReport: boolean;
   /** Número de bloques `[period=…]` encontrados (0 = CSV plano). */
@@ -216,6 +240,14 @@ export interface UploadedTrialBalanceParse {
    * columna de cierre también aporta no se incluye.
    */
   openingPeriods: string[];
+  /**
+   * P4-a: unidad que declara el archivo (`null` si ninguna) y la confirmada
+   * por el usuario (`null` sin confirmación). Declarada sin confirmar ⇒ las
+   * filas llevan el motivo bloqueante de recalculo-final-03.
+   */
+  unidad: { declarada: UnidadDeclaradaDetectada | null; confirmada: UnidadMonetaria | null };
+  /** P4-b: excepciones de vencimiento aplicadas (`null` sin excepciones). */
+  vencimientos: Record<string, Vencimiento> | null;
 }
 
 interface ParsedBlock {
@@ -227,20 +259,39 @@ interface ParsedBlock {
   /** Periodos de columnas de apertura / de cierre de la hoja (ingesta-09). */
   openingPeriods: Set<string>;
   closingPeriods: Set<string>;
+  unidadDeclarada: UnidadDeclaradaDetectada | null;
+  /** Fecha de corte declarada en el título de la hoja (P4-c). */
+  corte: CorteDeclarado | null;
 }
 
-/** Filas y periodos de apertura/cierre de un CSV (una hoja o el archivo plano). */
+/** Filas, periodos de apertura/cierre, unidad y corte de un CSV (una hoja o el archivo plano). */
 function parseSheetCsv(
   csv: string,
   options: ParseTrialBalanceOptions = {},
-): { rows: RawAccountRow[]; openingPeriods: Set<string>; closingPeriods: Set<string> } {
+): Omit<ParsedBlock, 'label' | 'sheet' | 'forced'> {
   const parsed = parseTrialBalanceCSVWithMeta(csv, options);
   const openingPeriods = new Set<string>();
   const closingPeriods = new Set<string>();
   for (const col of parsed.balanceColumns) {
     (col.kind === 'opening' ? openingPeriods : closingPeriods).add(col.period);
   }
-  return { rows: parsed.rows, openingPeriods, closingPeriods };
+  return {
+    rows: parsed.rows,
+    openingPeriods,
+    closingPeriods,
+    unidadDeclarada: parsed.unidadDeclarada,
+    corte: parsed.corteDeclarado,
+  };
+}
+
+/**
+ * Mes del corte de una hoja: el del nombre ("Junio 2025") o, si el nombre sólo
+ * trae el año, el de la fecha de corte de su título ("a junio 30 de 2025").
+ */
+function monthOf(block: ParsedBlock): number | null {
+  if (block.sheet.month !== null) return block.sheet.month;
+  if (block.corte && block.forced && block.corte.year === block.forced) return block.corte.month;
+  return null;
 }
 
 /** Periodos sólo de apertura: los de cierre de cualquier hoja prevalecen. */
@@ -250,13 +301,28 @@ function openingOnly(sheets: Array<{ openingPeriods: Set<string>; closingPeriods
   return [...opening].filter((p) => !closing.has(p)).sort();
 }
 
-/** Re-rotula el periodo forzado `year` de una hoja como `label` (filas y columnas). */
+/**
+ * Re-rotula el periodo forzado `year` de una hoja como `label`: saldos,
+ * problemas de lectura y notas de ingesta de las filas, y columnas. Un problema
+ * de lectura que conservara el año ya no coincidiría con el periodo del
+ * snapshot y se perdería en silencio.
+ */
 function relabelBlock(block: ParsedBlock, year: string, label: string): void {
   block.forced = label;
+  const swap = <T extends { period: string | null }>(items: T[] | undefined): T[] | undefined =>
+    items?.map((i) => (i.period === year ? { ...i, period: label } : i));
   block.rows = block.rows.map((r) => {
-    if (!(year in r.balancesByPeriod)) return r;
-    const { [year]: value, ...rest } = r.balancesByPeriod;
-    return { ...r, balancesByPeriod: { ...rest, [label]: value } };
+    const touchesIssues = (r.parseIssues ?? []).some((i) => i.period === year);
+    const touchesNotes = (r.notasIngesta ?? []).some((n) => n.period === year);
+    if (!(year in r.balancesByPeriod) && !touchesIssues && !touchesNotes) return r;
+    const balancesByPeriod: Record<string, number> = {};
+    for (const [k, v] of Object.entries(r.balancesByPeriod)) balancesByPeriod[k === year ? label : k] = v;
+    return {
+      ...r,
+      balancesByPeriod,
+      ...(r.parseIssues ? { parseIssues: swap(r.parseIssues) } : {}),
+      ...(r.notasIngesta ? { notasIngesta: swap(r.notasIngesta) } : {}),
+    };
   });
   for (const set of [block.openingPeriods, block.closingPeriods]) {
     if (set.delete(year)) set.add(label);
@@ -288,7 +354,28 @@ function duplicateCodeWarnings(rows: RawAccountRow[], where: string): string[] {
   ];
 }
 
-/** Agrega filas repetidas del mismo código sumando sus saldos por periodo. */
+/** Une listas de problemas o notas sin duplicar (periodo + mensaje). */
+function mergeTagged<T extends { period: string | null; message: string }>(
+  a: T[] | undefined,
+  b: T[] | undefined,
+): T[] | undefined {
+  if (!b || b.length === 0) return a;
+  const out = [...(a ?? [])];
+  const seen = new Set(out.map((i) => `${i.period}\u0000${i.message}`));
+  for (const item of b) {
+    const key = `${item.period}\u0000${item.message}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(item);
+    }
+  }
+  return out;
+}
+
+/**
+ * Agrega filas repetidas del mismo código sumando sus saldos por periodo. Los
+ * problemas de lectura y las notas de las filas repetidas se conservan.
+ */
 function aggregateByCode(rows: RawAccountRow[]): RawAccountRow[] {
   const byCode = new Map<string, RawAccountRow>();
   const ordered: RawAccountRow[] = [];
@@ -304,6 +391,10 @@ function aggregateByCode(rows: RawAccountRow[]): RawAccountRow[] {
       existing.balancesByPeriod[period] =
         period in existing.balancesByPeriod ? existing.balancesByPeriod[period] + value : value;
     }
+    const issues = mergeTagged(existing.parseIssues, row.parseIssues);
+    if (issues) existing.parseIssues = issues;
+    const notas = mergeTagged(existing.notasIngesta, row.notasIngesta);
+    if (notas) existing.notasIngesta = notas;
   }
   return ordered;
 }
@@ -319,27 +410,101 @@ function parseBlocks(dataText: string): { blocks: Array<{ label: string; csv: st
 }
 
 /**
+ * Confirmaciones efectivas: directivas del texto + campos de la solicitud. Una
+ * directiva mal formada o una contradicción entre ambas fuentes es un motivo
+ * de ingesta (422), nunca se elige una en silencio.
+ */
+function resolveConfirmations(
+  text: string,
+  options: ParseUploadedOptions,
+): { body: string; unidadConfirmada: UnidadMonetaria | null; vencimientos: Record<string, Vencimiento> | null } {
+  const lectura = leerDirectivasIngesta(text ?? '');
+  const errores = [...lectura.errores];
+  let unidadConfirmada = lectura.unidadConfirmada;
+  if (options.unidadConfirmada) {
+    if (unidadConfirmada && unidadConfirmada !== options.unidadConfirmada) {
+      errores.push(
+        `La unidad confirmada en el balance (${unidadConfirmada}) y la de la solicitud ` +
+          `(${options.unidadConfirmada}) no coinciden; confirme una sola.`,
+      );
+    } else {
+      unidadConfirmada = options.unidadConfirmada;
+    }
+  }
+  const vencimientos: Record<string, Vencimiento> = { ...(lectura.vencimientos ?? {}) };
+  for (const [codigo, plazo] of Object.entries(options.vencimientos ?? {})) {
+    if (codigo in vencimientos && vencimientos[codigo] !== plazo) {
+      errores.push(`La cuenta ${codigo} tiene vencimientos distintos en el balance y en la solicitud.`);
+      continue;
+    }
+    vencimientos[codigo] = plazo;
+  }
+  if (errores.length > 0) throw new TrialBalanceIngestError(errores);
+  return {
+    body: lectura.tieneDirectivas ? lectura.resto : text ?? '',
+    unidadConfirmada,
+    vencimientos: Object.keys(vencimientos).length > 0 ? vencimientos : null,
+  };
+}
+
+/**
  * Convierte el texto de un balance (CSV o bloques por hoja, con o sin el
- * informe de /api/upload antepuesto) en filas crudas.
+ * informe de /api/upload antepuesto, con o sin directivas de ingesta) en filas
+ * crudas.
  *
  * Lanza `TrialBalanceIngestError` cuando varias hojas aportan cifras
- * incompatibles para la misma cuenta y periodo, o cuando los periodos de las
- * hojas no se pueden ordenar cronológicamente.
+ * incompatibles para la misma cuenta y periodo, cuando los periodos de las
+ * hojas no se pueden ordenar cronológicamente, o cuando las confirmaciones del
+ * usuario (unidad, vencimientos) son inválidas o contradictorias.
  */
-export function parseUploadedTrialBalanceText(text: string): UploadedTrialBalanceParse {
-  const { data, hadValidationReport } = extractUploadDataSection(text);
+export function parseUploadedTrialBalanceText(
+  text: string,
+  options: ParseUploadedOptions = {},
+): UploadedTrialBalanceParse {
+  const confirm = resolveConfirmations(text, options);
+  const { data, hadValidationReport } = extractUploadDataSection(confirm.body);
   const { blocks } = parseBlocks(data);
+  const sheetOptions: ParseTrialBalanceOptions = confirm.unidadConfirmada
+    ? { unidadConfirmada: confirm.unidadConfirmada }
+    : {};
 
-  if (blocks.length === 0) {
-    const sheet = parseSheetCsv(data);
+  /** Resultado común: excepciones de vencimiento y unidad del archivo. */
+  const finish = (
+    rows: RawAccountRow[],
+    sheets: Array<Pick<ParsedBlock, 'unidadDeclarada'> & { label?: string }>,
+    rest: Pick<UploadedTrialBalanceParse, 'blockCount' | 'warnings' | 'openingPeriods'>,
+  ): UploadedTrialBalanceParse => {
+    const declaradas = sheets.filter((s) => s.unidadDeclarada !== null);
+    const unidades = new Set(declaradas.map((s) => s.unidadDeclarada!.unidad));
+    if (confirm.unidadConfirmada && unidades.size > 1) {
+      // Una sola confirmación no puede valer para hojas en miles y en millones.
+      throw new TrialBalanceIngestError([
+        `Las hojas declaran unidades distintas (${[...unidades].join(' y ')}); cargue cada ` +
+          'periodo con la misma unidad antes de confirmarla.',
+      ]);
+    }
+    const venc = aplicarVencimientosDeclarados(rows, confirm.vencimientos);
+    if (venc.errores.length > 0) throw new TrialBalanceIngestError(venc.errores);
     return {
-      rows: sheet.rows,
+      rows: venc.rows,
       dataText: data,
       hadValidationReport,
+      ...rest,
+      unidad: {
+        declarada: declaradas[0]?.unidadDeclarada ?? null,
+        confirmada: confirm.unidadConfirmada,
+      },
+      vencimientos: confirm.vencimientos,
+    };
+  };
+
+  if (blocks.length === 0) {
+    const sheet = parseSheetCsv(data, sheetOptions);
+    return finish(sheet.rows, [sheet], {
       blockCount: 0,
       warnings: duplicateCodeWarnings(sheet.rows, 'Balance'),
       openingPeriods: openingOnly([sheet]),
-    };
+    });
   }
 
   // ── Pasada 1: periodo de cada hoja y filas ─────────────────────────────
@@ -348,39 +513,32 @@ export function parseUploadedTrialBalanceText(text: string): UploadedTrialBalanc
     const sheet = detectSheetPeriod(b.label);
     const headerDecides = headerHasExplicitPeriodBalanceColumn(b.csv);
     const forced = !headerDecides && sheet.year ? sheet.year : null;
-    const read = forced ? parseSheetCsv(b.csv, { forcePeriod: forced }) : parseSheetCsv(b.csv);
+    const read = forced
+      ? parseSheetCsv(b.csv, { ...sheetOptions, forcePeriod: forced })
+      : parseSheetCsv(b.csv, sheetOptions);
     // Hojas sin filas contables (notas, portada) no participan.
     if (read.rows.length > 0) parsed.push({ label: b.label, sheet, forced, ...read });
   }
 
   const warnings: string[] = [];
   if (parsed.length === 0) {
-    return {
-      rows: [],
-      dataText: data,
-      hadValidationReport,
-      blockCount: blocks.length,
-      warnings,
-      openingPeriods: [],
-    };
+    return finish([], [], { blockCount: blocks.length, warnings, openingPeriods: [] });
   }
 
   if (parsed.length === 1) {
     // Una sola hoja contable: mismas filas y semántica que un CSV, salvo el
-    // mes de un corte parcial ("Junio 2025" → 2025-06, ratios-kpis-18).
+    // mes de un corte parcial ("Junio 2025" o un título "a junio 30 de 2025"
+    // en una hoja "Balance 2025" → 2025-06, ratios-kpis-18 / P4-c).
     const only = parsed[0];
-    const month = only.sheet.month;
+    const month = monthOf(only);
     if (only.forced && /^20\d{2}$/.test(only.forced) && month !== null && month !== 12) {
       relabelBlock(only, only.forced, `${only.forced}-${String(month).padStart(2, '0')}`);
     }
-    return {
-      rows: only.rows,
-      dataText: data,
-      hadValidationReport,
+    return finish(only.rows, [only], {
       blockCount: blocks.length,
       warnings: duplicateCodeWarnings(only.rows, `Hoja "${only.label}"`),
       openingPeriods: openingOnly([only]),
-    };
+    });
   }
 
   // ── Pasada 2: hojas del mismo año con meses distintos → YYYY-MM ─────────
@@ -393,12 +551,12 @@ export function parseUploadedTrialBalanceText(text: string): UploadedTrialBalanc
   }
   for (const [year, group] of byYear) {
     if (group.length < 2) continue;
-    const months = group.map((g) => g.sheet.month);
+    const months = group.map((g) => monthOf(g));
     const allHaveMonth = months.every((m) => m !== null);
     const distinct = new Set(months).size === months.length;
     if (!allHaveMonth || !distinct) continue; // se resuelve como conflicto abajo
     for (const g of group) {
-      relabelBlock(g, year, `${year}-${String(g.sheet.month).padStart(2, '0')}`);
+      relabelBlock(g, year, `${year}-${String(monthOf(g)).padStart(2, '0')}`);
     }
   }
 
@@ -407,13 +565,15 @@ export function parseUploadedTrialBalanceText(text: string): UploadedTrialBalanc
   // sólo con el año, su P&G de MM meses se trata como anual (ratios-kpis-18).
   // En ese caso todas las hojas con mes pasan a `YYYY-MM`; las que no traen
   // mes conservan el año.
-  const hasPartialSheet = parsed.some(
-    (p) => p.forced && /^20\d{2}$/.test(p.forced) && p.sheet.month !== null && p.sheet.month !== 12,
-  );
+  const hasPartialSheet = parsed.some((p) => {
+    const m = monthOf(p);
+    return p.forced && /^20\d{2}$/.test(p.forced) && m !== null && m !== 12;
+  });
   if (hasPartialSheet) {
     for (const p of parsed) {
-      if (!p.forced || !/^20\d{2}$/.test(p.forced) || p.sheet.month === null) continue;
-      relabelBlock(p, p.forced, `${p.forced}-${String(p.sheet.month).padStart(2, '0')}`);
+      const m = monthOf(p);
+      if (!p.forced || !/^20\d{2}$/.test(p.forced) || m === null) continue;
+      relabelBlock(p, p.forced, `${p.forced}-${String(m).padStart(2, '0')}`);
     }
   }
 
@@ -464,6 +624,13 @@ export function parseUploadedTrialBalanceText(text: string): UploadedTrialBalanc
         continue;
       }
       if (!existing.name && row.name) existing.name = row.name;
+      // Los problemas de lectura y las notas de la otra hoja no se pierden al
+      // fusionar el código (antes sólo se fusionaban los saldos: un motivo
+      // bloqueante de la segunda hoja desaparecía si sus códigos ya existían).
+      const issues = mergeTagged(existing.parseIssues, row.parseIssues);
+      if (issues) existing.parseIssues = issues;
+      const notas = mergeTagged(existing.notasIngesta, row.notasIngesta);
+      if (notas) existing.notasIngesta = notas;
       for (const [period, value] of Object.entries(row.balancesByPeriod)) {
         const key = `${row.code}\u0000${period}`;
         if (!(period in existing.balancesByPeriod)) {
@@ -503,14 +670,11 @@ export function parseUploadedTrialBalanceText(text: string): UploadedTrialBalanc
     warnings.push(`Las hojas ${pair} repiten las mismas cifras para el mismo periodo; se usan una sola vez.`);
   }
 
-  return {
-    rows: ordered,
-    dataText: data,
-    hadValidationReport,
+  return finish(ordered, parsed, {
     blockCount: blocks.length,
     warnings,
     openingPeriods: openingOnly(parsed),
-  };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -579,10 +743,13 @@ export type UploadedTrialBalancePreprocess =
  * ruta legacy, que antes parseaban el texto con `parseTrialBalanceCSV` y
  * obtenían 0 filas para un XLSX (ingesta-01, pipeline-flujo-06/07).
  */
-export function preprocessUploadedTrialBalanceText(text: string): UploadedTrialBalancePreprocess {
+export function preprocessUploadedTrialBalanceText(
+  text: string,
+  options: ParseUploadedOptions = {},
+): UploadedTrialBalancePreprocess {
   let parsed: UploadedTrialBalanceParse;
   try {
-    parsed = parseUploadedTrialBalanceText(text);
+    parsed = parseUploadedTrialBalanceText(text, options);
   } catch (err) {
     if (err instanceof TrialBalanceIngestError) return { kind: 'rejected', reasons: err.reasons };
     throw err;
