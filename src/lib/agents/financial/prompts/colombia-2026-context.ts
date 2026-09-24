@@ -34,7 +34,7 @@
 //    "Legislación Anterior" en estatuto_tributario_completo.md; la Ley 2277
 //    de 2022 (art. 10) conserva el 35% sin la referencia al año
 //    (prompts-normativa-25). El resumen et_articulo_240_renta_juridica.md
-//    del corpus todavía atribuye el 35% a la Ley 2277 "desde 2023".
+//    del corpus quedó alineado con esa fuente (I4-escudo 4).
 //  - Cadena de modificatorios del DUR 2420/2015 confirmada contra MinCIT
 //    (normatividad vigente) + Diario Oficial: 2496/2015, 2483/2018,
 //    2270/2019, 938/2021, 1670/2021, 1611/2022, 1271/2024 (NIIF 17) y

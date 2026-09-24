@@ -65,9 +65,11 @@ La verificación de la TTD exige además calcular ID y UD con las depuraciones d
 
 ## Modificaciones recientes
 
-- **Ley 2277 de 2022, art. 10**: tarifa general 35 % desde 2023 y parágrafo 6 (TTD).
+- **Ley 2277 de 2022, art. 10**: reescribió el Art. 240, conserva la tarifa general del 35 % y añadió el parágrafo 6 (TTD, desde el año gravable 2023).
 - **Ley 2277 de 2022, art. 11**: Art. 240-1 (zona franca: 20 % proporcional a exportaciones).
-- **Ley 1819 de 2016**: tarifa anterior del 33 % (2018-2022); Art. 237 (régimen ZOMAC).
+- **Ley 2155 de 2021, art. 7**: tarifa general del 35 % a partir del año gravable 2022 (`ley_2155_2021.md`: «será del treinta y cinco por ciento (35%), a partir del año gravable 2022»).
+- **Ley 2010 de 2019, art. 92**: 32 % para el año gravable 2020, 31 % para 2021 y 30 % a partir de 2022; el 30 % previsto desde 2022 fue sustituido por el 35 % de la Ley 2155 (`ley_2010_2019.md`).
+- **Ley 1819 de 2016, art. 100**: tarifa general del 33 % (`ley_1819_2016.md`); Art. 237 (régimen ZOMAC).
 - **Sentencia C-219 de 2024**: parágrafo 6 declarado exequible por el cargo analizado.
 
 ## Referencias
