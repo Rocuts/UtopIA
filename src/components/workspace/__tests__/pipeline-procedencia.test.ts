@@ -9,9 +9,15 @@
 //     la UI lo explica (mensaje i18n).
 import { describe, expect, it } from 'vitest';
 
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import {
+  auditDownloadNotice,
+  buildAuditRequestBody,
   buildConsolidationRequestBody,
   buildExportRequestBody,
+  buildQualityRequestBody,
+  exportAuditFields,
   persistPreprocessedForResume,
   recallAdjustmentLedgerForResume,
   pairCachedSource,
@@ -22,6 +28,8 @@ import { attachServerVersion, detachServerVersion, type ReportProvenance } from 
 import { makeExportableReport } from '@/lib/agents/financial/__fixtures__/coherent-niif-report';
 import { dict } from '@/lib/i18n/dictionaries';
 import type { CompanyInfo } from '@/lib/agents/financial/types';
+import type { AuditReport } from '@/lib/agents/financial/audit/types';
+import type { QualityAssessment } from '@/lib/agents/financial/quality/types';
 
 const PROVENANCE: ReportProvenance = {
   reportId: '0b9c7d1e-2f3a-4b5c-8d6e-7f8091a2b3c4',
@@ -184,5 +192,82 @@ describe('ledger del Doctor de Datos tras una recarga', () => {
     });
     expect(body.preprocessed).toEqual(pp);
     expect(body.adjustmentLedger).toEqual(LEDGER);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Partes IV y V por referencia
+// ---------------------------------------------------------------------------
+// Con versión persistida la auditoría y la meta-auditoría se piden con la
+// referencia de la versión (el servidor las corre sobre ella y las guarda), y
+// /export recibe sólo referencias de resultados persistidos y completos.
+
+const AUDIT_REF = { resultId: '5c1d7e2f-3a4b-4c5d-8e6f-708192a3b4c5', resultHash: 'c'.repeat(64) };
+const QUALITY_REF = { resultId: '6d2e8f3a-4b5c-4d6e-8f70-8192a3b4c5d6', resultHash: 'd'.repeat(64) };
+const audit = (extra: Partial<AuditReport> = {}) => ({ overallScore: 90, ...extra }) as unknown as AuditReport;
+const quality = (extra: Partial<QualityAssessment> = {}) => ({ grade: 'B', ...extra }) as unknown as QualityAssessment;
+
+describe('Partes IV/V: cuerpos por referencia', () => {
+  const persisted = () => attachServerVersion(makeExportableReport(), PROVENANCE);
+
+  it('la auditoría y la meta-auditoría viajan sólo con referencias', () => {
+    expect(buildAuditRequestBody({ report: persisted(), preprocessed: { periods: [] }, adjustmentLedger: LEDGER, language: 'es' }))
+      .toEqual({ reportRef: REF, language: 'es' });
+    expect(buildQualityRequestBody({
+      report: persisted(), auditReport: audit({ auditRef: AUDIT_REF }), language: 'en', preprocessed: { periods: [] },
+    })).toEqual({ reportRef: REF, language: 'en', auditRef: AUDIT_REF });
+    // Una Parte IV sin referencia (no guardada) no se nombra.
+    expect(buildQualityRequestBody({ report: persisted(), auditReport: audit(), language: 'es', preprocessed: null }))
+      .toEqual({ reportRef: REF, language: 'es' });
+  });
+
+  it('sin versión persistida conservan el camino anterior (contenido, procedencia no verificada)', () => {
+    const report = makeExportableReport();
+    expect(buildAuditRequestBody({ report, preprocessed: null, language: 'es' })).toEqual({ report, language: 'es' });
+    const a = audit();
+    expect(exportAuditFields({ report, auditReport: a, qualityReport: null })).toEqual({ auditReport: a, qualityReport: null });
+  });
+
+  it('la descarga sólo nombra resultados persistidos y completos', () => {
+    const report = persisted();
+    expect(exportAuditFields({
+      report,
+      auditReport: audit({ auditRef: AUDIT_REF, auditComplete: true }),
+      qualityReport: quality({ qualityRef: QUALITY_REF, qualityComplete: true }),
+    })).toEqual({ auditRef: AUDIT_REF, qualityRef: QUALITY_REF });
+    // Parcial o no guardado: fuera del archivo, sin contenido en el cuerpo.
+    expect(exportAuditFields({
+      report,
+      auditReport: audit({ auditRef: AUDIT_REF, auditComplete: false }),
+      qualityReport: quality({ qualityComplete: true }),
+    })).toEqual({});
+  });
+
+  it('el aviso junto a las descargas dice qué entra en el archivo y qué no', () => {
+    const report = persisted();
+    const notice = auditDownloadNotice({
+      report,
+      auditReport: audit({ auditRef: AUDIT_REF, auditComplete: true }),
+      qualityReport: quality({ qualityRef: QUALITY_REF, qualityComplete: false }),
+      language: 'es',
+    });
+    const copy = dict.es.reportProvenance;
+    expect(notice.included).toBe(copy.uiAuditIncluded.replace('{parts}', copy.uiAuditPartIv));
+    expect(notice.excluded).toBe(copy.uiAuditExcluded.replace('{parts}', copy.uiAuditPartV));
+    // Sin versión persistida el aviso de procedencia no verificada ya lo cubre.
+    expect(auditDownloadNotice({ report: makeExportableReport(), auditReport: audit(), qualityReport: null, language: 'es' }))
+      .toEqual({ included: null, excluded: null });
+  });
+});
+
+describe('un informe nuevo no hereda la auditoría del anterior', () => {
+  const SRC = readFileSync(fileURLToPath(new URL('../PipelineWorkspace.tsx', import.meta.url)), 'utf8');
+  it('limpia la auditoría y la meta-auditoría en toda corrida nueva, no sólo en un re-run', () => {
+    // Antes sólo con `isRerun`: tras recargar, el primer informe de la sesión
+    // conservaba la auditoría restaurada del anterior y salía en su descarga.
+    expect(SRC).toMatch(
+      /if \(start === 'niif'\) \{\s*\n\s*setAuditReport\(null\);\s*\n\s*auditReportRef\.current = null;\s*\n\s*setQualityReport\(null\);\s*\n\s*\}/,
+    );
+    expect(SRC).not.toMatch(/if \(isRerun\) \{\s*\n\s*setAuditReport\(null\);/);
   });
 });

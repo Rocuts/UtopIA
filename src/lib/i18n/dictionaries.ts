@@ -1844,6 +1844,19 @@ export const dict = {
       uiVerified: 'Versión persistida {reportId}',
       htmlMissingSource:
         'No se puede generar el HTML: esta sesión ya no tiene el balance preprocesado de la corrida (se pierde al recargar la página) y el informe no tiene una versión persistida en el servidor. Vuelva a generar el informe para habilitar el HTML.',
+      auditResultLine:
+        'Parte IV (dictámenes generados por IA): resultado persistido {resultId} ({createdAt}), producido sobre esta misma versión del informe · huella SHA-256 {hash}. El sello acredita su procedencia, no su contenido.',
+      qualityResultLine:
+        'Parte V (meta-auditoría generada por IA): resultado persistido {resultId} ({createdAt}), producido sobre esta misma versión del informe y sobre la Parte IV {auditId} · huella SHA-256 {hash}. El sello acredita su procedencia, no su contenido.',
+      qualityResultStandaloneLine:
+        'Parte V (meta-auditoría generada por IA): resultado persistido {resultId} ({createdAt}), producido sobre esta misma versión del informe sin una Parte IV · huella SHA-256 {hash}. El sello acredita su procedencia, no su contenido.',
+      auditContentDroppedLine:
+        'Los dictámenes o la meta-auditoría enviados con la solicitud no se incluyen: este documento sólo publica resultados de las Partes IV y V persistidos y producidos sobre esta versión del informe.',
+      uiAuditIncluded: 'La descarga incluye {parts}, persistidos y producidos sobre esta versión del informe.',
+      uiAuditPartIv: 'los dictámenes (Parte IV)',
+      uiAuditPartV: 'la meta-auditoría (Parte V)',
+      uiAuditExcluded:
+        'Resultados que se ven en pantalla pero no entran en la descarga ({parts}): no quedaron guardados como resultado completo de esta versión. Vuelva a ejecutarlos para incluirlos.',
     },
   },
   en: {
@@ -3646,6 +3659,19 @@ export const dict = {
       uiVerified: 'Persisted version {reportId}',
       htmlMissingSource:
         'The HTML cannot be generated: this session no longer holds the run\'s preprocessed trial balance (it is lost on page reload) and the report has no persisted version on the server. Regenerate the report to enable the HTML.',
+      auditResultLine:
+        'Part IV (AI-generated opinions): persisted result {resultId} ({createdAt}), produced on this same report version · SHA-256 fingerprint {hash}. The seal attests to its provenance, not its content.',
+      qualityResultLine:
+        'Part V (AI-generated meta-audit): persisted result {resultId} ({createdAt}), produced on this same report version and on Part IV {auditId} · SHA-256 fingerprint {hash}. The seal attests to its provenance, not its content.',
+      qualityResultStandaloneLine:
+        'Part V (AI-generated meta-audit): persisted result {resultId} ({createdAt}), produced on this same report version without a Part IV · SHA-256 fingerprint {hash}. The seal attests to its provenance, not its content.',
+      auditContentDroppedLine:
+        'Opinions or meta-audit sent with the request are not included: this document only publishes Part IV and V results persisted and produced on this report version.',
+      uiAuditIncluded: 'The download includes {parts}, persisted and produced on this report version.',
+      uiAuditPartIv: 'the opinions (Part IV)',
+      uiAuditPartV: 'the meta-audit (Part V)',
+      uiAuditExcluded:
+        'Results shown on screen but not part of the download ({parts}): they were not saved as a complete result for this version. Run them again to include them.',
     },
   },
 };

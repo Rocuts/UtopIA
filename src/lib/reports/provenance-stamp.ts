@@ -1,6 +1,7 @@
 import type { FinancialReport } from '@/lib/agents/financial/types';
 import { dict } from '@/lib/i18n/dictionaries';
 import type { ReportProvenance } from './report-ref';
+import type { AuditResultProvenance } from './audit-result-version';
 import { FINANCIAL_REPORT_CONTRACT_VERSION } from './financial-report-version';
 import { adjustmentTrailRows, appliedAdjustmentsCount, type AdjustmentsTrail } from './adjustment-ledger';
 
@@ -68,6 +69,17 @@ export type ArtifactProvenance =
        * es el contrato con que se PERSISTIÓ.
        */
       renderedWith?: string;
+      /**
+       * Resultados persistidos de las Partes IV y V incluidos en el artefacto,
+       * cada uno atado a esta versión. El sello acredita su procedencia, no su
+       * contenido (lo generaron agentes de IA).
+       */
+      auditResults?: { audit: AuditResultProvenance | null; quality: AuditResultProvenance | null };
+      /**
+       * La solicitud traía dictámenes o meta-auditoría en el cuerpo que el
+       * artefacto no publica: sólo se incluyen resultados persistidos.
+       */
+      auditContentDropped?: boolean;
     }
   | {
       kind: 'unverified';
@@ -183,7 +195,27 @@ export function provenanceLines(p: ArtifactProvenance, language: Lang): string[]
       rendered: renderedContract(p),
       preprocessor: v.preprocessorVersion,
     }),
+    ...auditResultLines(p, language),
   ];
+}
+
+/** Líneas de las Partes IV/V persistidas incluidas (o del contenido del cuerpo descartado). */
+function auditResultLines(p: Extract<ArtifactProvenance, { kind: 'verified' }>, language: Lang): string[] {
+  const t = dict[language].reportProvenance;
+  const out: string[] = [];
+  const audit = p.auditResults?.audit;
+  const quality = p.auditResults?.quality;
+  if (audit) out.push(fill(t.auditResultLine, { resultId: audit.resultId, createdAt: audit.createdAt, hash: audit.resultHash }));
+  if (quality) {
+    out.push(fill(quality.auditRef ? t.qualityResultLine : t.qualityResultStandaloneLine, {
+      resultId: quality.resultId,
+      createdAt: quality.createdAt,
+      hash: quality.resultHash,
+      auditId: quality.auditRef?.resultId ?? '',
+    }));
+  }
+  if (p.auditContentDropped === true) out.push(t.auditContentDroppedLine);
+  return out;
 }
 
 /** Encabezados máquina-legibles (complemento, no sustituto, del sello impreso). */
@@ -199,6 +231,13 @@ export function provenanceHeaders(p: ArtifactProvenance): Record<string, string>
     'X-Report-Hash': p.provenance.reportHash,
     'X-Report-Contract': p.provenance.contractVersion,
     'X-Report-Rendered-Contract': renderedContract(p),
+    ...(p.auditResults?.audit
+      ? { 'X-Audit-Result-Id': p.auditResults.audit.resultId, 'X-Audit-Result-Hash': p.auditResults.audit.resultHash }
+      : {}),
+    ...(p.auditResults?.quality
+      ? { 'X-Quality-Result-Id': p.auditResults.quality.resultId, 'X-Quality-Result-Hash': p.auditResults.quality.resultHash }
+      : {}),
+    ...(p.auditContentDropped === true ? { 'X-Report-Audit-Content-Dropped': 'true' } : {}),
     ...draft,
   };
 }

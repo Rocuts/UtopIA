@@ -18,6 +18,15 @@ export interface QualityDimension {
 
 /** Quality assessment result */
 export interface QualityAssessment {
+  /** Referencia del resultado persistido (Parte V por referencia); ausente si no se guardó. */
+  qualityRef?: { resultId: string; resultHash: string };
+  /**
+   * `false` si la meta-auditoría es parcial o leyó una Parte IV parcial: se
+   * muestra, pero no entra en una descarga.
+   */
+  qualityComplete?: boolean;
+  /** Si el servidor guardó el resultado y, si no, por qué. */
+  persistence?: { status: 'persisted' | 'not_persisted'; reason?: string };
   /**
    * Score global 0-100 DERIVADO por el sistema, no el que emite el LLM
    * (auditoria-calidad-10): score global del sello v2.1 (promedio simple de

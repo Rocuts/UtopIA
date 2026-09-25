@@ -21,6 +21,8 @@
 
 import ExcelJS from 'exceljs';
 import type { FinancialReport } from '@/lib/agents/financial/types';
+import type { AuditReport, FindingSeverity } from '@/lib/agents/financial/audit/types';
+import type { QualityAssessment } from '@/lib/agents/financial/quality/types';
 import { formatCopFromPesos, parseMoneyCop } from '@/lib/agents/financial/contracts/money';
 import type { NiifReportJson } from '@/lib/agents/financial/contracts/niif-report';
 import { StrategyReportSchema } from '@/lib/agents/financial/contracts/strategy-report';
@@ -332,6 +334,14 @@ export interface ExcelExportOptions {
   report: FinancialReport;
   preprocessed?: PreprocessedBalance;
   language?: 'es' | 'en';
+  /**
+   * Parte IV persistida y atada a esta versión. /export la carga por
+   * referencia tras probar que se produjo sobre la versión exportada; el libro
+   * nunca recibe dictámenes enviados por el cliente.
+   */
+  auditReport?: AuditReport | null;
+  /** Parte V persistida y atada a esta versión. */
+  qualityReport?: QualityAssessment | null;
 }
 
 /**
@@ -339,7 +349,7 @@ export interface ExcelExportOptions {
  * Returns an ExcelJS Buffer ready for download.
  */
 export async function generateFinancialExcel(options: ExcelExportOptions): Promise<Buffer> {
-  const { report, preprocessed } = options;
+  const { report, preprocessed, auditReport, qualityReport } = options;
   const language = options.language ?? 'es';
   const wb = new ExcelJS.Workbook();
 
@@ -376,6 +386,11 @@ export async function generateFinancialExcel(options: ExcelExportOptions): Promi
   if (layout && hasPulidoDiamanteData(layout)) {
     addPulidoDiamanteSheet(wb, layout);
   }
+
+  // Sin resultado persistido atado a la versión no hay hoja: una hoja omitida
+  // significa "sin dictamen de registro", nunca "dictamen sin hallazgos".
+  if (auditReport) addAuditSheet(wb, report, auditReport);
+  if (qualityReport) addQualitySheet(wb, report, qualityReport);
 
   const buffer = await wb.xlsx.writeBuffer();
   return Buffer.from(buffer);
@@ -2299,4 +2314,191 @@ function addPulidoDiamanteSheet(wb: ExcelJS.Workbook, layout: PeriodLayout): voi
   ws.getColumn(4).width = 16;
   ws.getColumn(5).width = 35;
   ws.getColumn(6).width = 55;
+}
+
+// ---------------------------------------------------------------------------
+// Auditoría especializada y meta-auditoría de calidad
+// ---------------------------------------------------------------------------
+// Ambas hojas imprimen un resultado persistido que /export ya probó producido
+// sobre la versión exportada. Los puntajes se copian tal como salieron del
+// agente: este módulo no los recalcula ni los completa.
+
+// Excel rechaza abrir un libro con una celda de más de 32.767 caracteres. El
+// texto de un hallazgo lo escribe un agente y el contrato no lo acota, así que
+// un resultado degenerado produciría un archivo que el usuario no puede abrir y
+// sin ningún aviso. Se recorta declarando el recorte: el detalle íntegro vive en
+// la versión guardada.
+const EXCEL_MAX_CELL = 32_767;
+const TRUNCATION_MARK = ' […texto recortado para Excel; consulte la versión guardada]';
+
+function cell(text: string | undefined | null): string {
+  if (!text) return '';
+  if (text.length <= EXCEL_MAX_CELL) return text;
+  return text.slice(0, EXCEL_MAX_CELL - TRUNCATION_MARK.length) + TRUNCATION_MARK;
+}
+
+const SEVERITY_LABEL: Record<FindingSeverity, string> = {
+  critico: 'Crítico', alto: 'Alto', medio: 'Medio', bajo: 'Bajo', informativo: 'Informativo',
+};
+
+const AUDIT_DOMAIN_LABEL: Record<string, string> = {
+  niif: 'NIIF', tributario: 'Tributario', legal: 'Legal', revisoria: 'Revisoría Fiscal',
+};
+
+const AUDIT_OPINION_LABEL: Record<string, string> = {
+  favorable: 'Favorable (sin salvedades)',
+  con_salvedades: 'Con salvedades',
+  desfavorable: 'Desfavorable',
+  abstension: 'Abstención de opinión',
+};
+
+function addAuditSheet(wb: ExcelJS.Workbook, report: FinancialReport, audit: AuditReport): void {
+  const ws = wb.addWorksheet('Auditoria', { properties: { tabColor: { argb: COLORS.gold } } });
+  ws.columns = [{ width: 16 }, { width: 14 }, { width: 46 }, { width: 30 }, { width: 60 }, { width: 60 }];
+  addSheetHeader(ws, 'AUDITORÍA ESPECIALIZADA', report);
+
+  let row = 6;
+  const title = (text: string) => {
+    const r = ws.getRow(row++);
+    r.getCell(1).value = text;
+    r.getCell(1).font = { name: FONT_MAIN, bold: true, size: 11 };
+  };
+  const head = (cells: string[]) => {
+    const r = ws.getRow(row++);
+    cells.forEach((c, i) => {
+      r.getCell(i + 1).value = c;
+      r.getCell(i + 1).font = { name: FONT_MAIN, bold: true, size: 9 };
+      r.getCell(i + 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.mediumGray } };
+    });
+  };
+
+  title('Opinión formal');
+  for (const [label, value] of [
+    ['Tipo de opinión', AUDIT_OPINION_LABEL[audit.opinionType] ?? audit.opinionType],
+    ['Puntaje global de cumplimiento', `${audit.overallScore}`],
+    ['Generada', audit.generatedAt],
+  ] as const) {
+    const r = ws.getRow(row++);
+    r.getCell(1).value = label;
+    r.getCell(1).font = { name: FONT_MAIN, bold: true, size: 9 };
+    r.getCell(3).value = value;
+    r.getCell(3).font = { name: FONT_MAIN, size: 9 };
+  }
+  row++;
+
+  title('Auditores');
+  head(['Dominio', 'Cumplimiento', 'Auditor', 'Hallazgos', 'Resumen', '']);
+  for (const result of audit.auditorResults ?? []) {
+    const r = ws.getRow(row++);
+    r.getCell(1).value = AUDIT_DOMAIN_LABEL[result.domain] ?? result.domain;
+    // A failed auditor is stated, not scored: its domain was not covered.
+    r.getCell(2).value = result.failed ? 'No disponible' : result.complianceScore;
+    r.getCell(3).value = cell(result.auditorName);
+    r.getCell(4).value = result.failed ? 'Auditor no completó' : (result.findings?.length ?? 0);
+    r.getCell(5).value = cell(result.summary);
+    r.font = { name: FONT_MAIN, size: 9 };
+    r.getCell(5).alignment = { wrapText: true, vertical: 'top' };
+  }
+  row += 2;
+
+  title('Hallazgos consolidados');
+  head(['Código', 'Severidad', 'Título', 'Norma', 'Descripción', 'Recomendación']);
+  for (const finding of audit.consolidatedFindings ?? []) {
+    const r = ws.getRow(row++);
+    r.getCell(1).value = cell(finding.code);
+    r.getCell(2).value = SEVERITY_LABEL[finding.severity] ?? cell(finding.severity);
+    r.getCell(3).value = cell(finding.title);
+    r.getCell(4).value = cell(finding.normReference);
+    r.getCell(5).value = cell(finding.description);
+    r.getCell(6).value = cell(finding.recommendation);
+    r.font = { name: FONT_MAIN, size: 9 };
+    if (finding.severity === 'critico' || finding.severity === 'alto') {
+      r.getCell(2).font = { name: FONT_MAIN, size: 9, bold: true, color: { argb: COLORS.red } };
+    }
+    for (const col of [3, 5, 6]) r.getCell(col).alignment = { wrapText: true, vertical: 'top' };
+  }
+
+  ws.views = [{ state: 'frozen', ySplit: 5 }];
+  ws.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+}
+
+function addQualitySheet(wb: ExcelJS.Workbook, report: FinancialReport, quality: QualityAssessment): void {
+  const ws = wb.addWorksheet('Meta-auditoria', { properties: { tabColor: { argb: COLORS.gold } } });
+  ws.columns = [{ width: 36 }, { width: 14 }, { width: 30 }, { width: 60 }, { width: 60 }];
+  addSheetHeader(ws, 'META-AUDITORÍA DE CALIDAD', report);
+
+  let row = 6;
+  const line = (label: string, value: string | number) => {
+    const r = ws.getRow(row++);
+    r.getCell(1).value = label;
+    r.getCell(1).font = { name: FONT_MAIN, bold: true, size: 9 };
+    r.getCell(2).value = value;
+    r.getCell(2).font = { name: FONT_MAIN, size: 9 };
+  };
+  const title = (text: string) => {
+    const r = ws.getRow(row++);
+    r.getCell(1).value = text;
+    r.getCell(1).font = { name: FONT_MAIN, bold: true, size: 11 };
+  };
+
+  line('Puntaje global', quality.overallScore);
+  line('Sello de calidad', quality.grade);
+  line('Generada', quality.generatedAt);
+  row++;
+
+  title('Dimensiones');
+  const head = ws.getRow(row++);
+  ['Dimensión', 'Puntaje', 'Marco de referencia', 'Hallazgos', 'Recomendaciones'].forEach((c, i) => {
+    head.getCell(i + 1).value = c;
+    head.getCell(i + 1).font = { name: FONT_MAIN, bold: true, size: 9 };
+    head.getCell(i + 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.mediumGray } };
+  });
+  for (const dimension of quality.dimensions ?? []) {
+    const r = ws.getRow(row++);
+    r.getCell(1).value = cell(dimension.name);
+    r.getCell(2).value = dimension.score;
+    r.getCell(3).value = cell(dimension.framework);
+    r.getCell(4).value = cell((dimension.findings ?? []).join('\n'));
+    r.getCell(5).value = cell((dimension.recommendations ?? []).join('\n'));
+    r.font = { name: FONT_MAIN, size: 9 };
+    for (const col of [4, 5]) r.getCell(col).alignment = { wrapText: true, vertical: 'top' };
+  }
+  row += 2;
+
+  // Una fila guardada se verifica por checksum, no por forma: un bloque ausente
+  // se omite en vez de romper la descarga del informe entero.
+  if (quality.ifrs18Readiness) {
+    title('IFRS 18');
+    line('Preparado', quality.ifrs18Readiness.ready ? 'Sí' : 'No');
+    line('Puntaje', quality.ifrs18Readiness.score);
+    for (const gap of quality.ifrs18Readiness.gaps ?? []) {
+      const r = ws.getRow(row++);
+      r.getCell(1).value = 'Brecha';
+      r.getCell(2).value = cell(gap);
+      r.font = { name: FONT_MAIN, size: 9 };
+      r.getCell(2).alignment = { wrapText: true, vertical: 'top' };
+    }
+    row++;
+  }
+
+  if (quality.dataQuality) {
+    title('Calidad del dato (ISO 25012)');
+    for (const [label, value] of [
+      ['Completitud', quality.dataQuality.completeness], ['Exactitud', quality.dataQuality.accuracy],
+      ['Consistencia', quality.dataQuality.consistency], ['Oportunidad', quality.dataQuality.timeliness],
+      ['Validez', quality.dataQuality.validity],
+    ] as const) line(label, value);
+    row++;
+  }
+
+  if (quality.aiGovernance) {
+    title('Gobernanza de IA (ISO 42001)');
+    for (const [label, value] of [
+      ['Trazabilidad', quality.aiGovernance.traceability], ['Explicabilidad', quality.aiGovernance.explainability],
+      ['Anti-alucinación', quality.aiGovernance.antiHallucination], ['Supervisión humana', quality.aiGovernance.humanOversight],
+    ] as const) line(label, value);
+  }
+
+  ws.views = [{ state: 'frozen', ySplit: 5 }];
+  ws.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
 }

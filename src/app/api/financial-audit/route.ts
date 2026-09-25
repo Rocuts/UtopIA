@@ -10,6 +10,12 @@ import type { FinancialReport } from '@/lib/agents/financial/types';
 import type { AuditIntegrity, AuditProgressEvent } from '@/lib/agents/financial/audit/types';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
 import { createSafeSse } from '@/lib/api/sse-safe';
+import { resolvePersistedReport } from '@/lib/reports/persisted-report-request';
+import { resolveReportWorkspaceId } from '@/lib/reports/financial-report-store';
+import { withServerRenderedPersisted } from '@/lib/reports/part-markdown';
+import { buildAuditResultVersion } from '@/lib/reports/audit-result-version';
+import { persistAuditResult } from '@/lib/reports/audit-result-store';
+import type { AuditReport } from '@/lib/agents/financial/audit/types';
 
 // ---------------------------------------------------------------------------
 // POST /api/financial-audit
@@ -28,6 +34,15 @@ import { createSafeSse } from '@/lib/api/sse-safe';
 // informe completo con sus banderas de reconciliación / emitibilidad. Esas
 // señales se leen ANTES de que el esquema de validación las descarte y sólo
 // pueden degradar la opinión (nunca producir una favorable).
+//
+// Procedencia servidor (Parte IV): con `reportRef` (la referencia que devuelve
+// /consolidate) los auditores examinan la versión persistida del workspace de
+// la sesión —con su balance re-derivado—, y el resultado se guarda atado a
+// ESA versión ANTES de responder. La respuesta añade `auditRef`, la referencia
+// con la que /export lo incluye; un resultado parcial (`auditComplete: false`)
+// o no persistido se muestra pero no se exporta. El informe y las cifras del
+// cuerpo se ignoran. Sin referencia se conserva el camino anterior y el
+// resultado no queda persistido.
 // ---------------------------------------------------------------------------
 
 export const maxDuration = 300;
@@ -38,6 +53,11 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
+
+    const persisted = await resolvePersistedReport(body);
+    if (persisted.kind === 'error') return persisted.response;
+    if (persisted.kind === 'ok') return await auditPersisted(req, body, persisted);
+
     const parsed = financialAuditRequestSchema.safeParse(body);
 
     if (!parsed.success) {
@@ -99,12 +119,16 @@ export async function POST(req: Request) {
   }
 }
 
+/** Guarda el resultado y devuelve lo que la respuesta añade (`auditRef`, …). */
+type PersistAudit = (audit: AuditReport) => Promise<Record<string, unknown>>;
+
 function handleStreaming(
   report: FinancialReport,
   language: 'es' | 'en',
   auditFocus: string | undefined,
   preprocessed: PreprocessedBalance | undefined,
   integrity: AuditIntegrity,
+  persist?: PersistAudit,
 ) {
   const readableStream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -123,7 +147,9 @@ function handleStreaming(
             integrity,
           },
         );
-        sse.send('result', auditReport);
+        // El resultado se anuncia después de guardarlo: quien recibe `result`
+        // con `auditRef` tiene una referencia que /export puede resolver.
+        sse.send('result', persist ? { ...auditReport, ...await persist(auditReport) } : auditReport);
       } catch (error) {
         console.error(
           '[financial-audit] Pipeline error:',
@@ -149,4 +175,50 @@ function handleStreaming(
       Connection: 'keep-alive',
     },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Parte IV sobre la versión persistida
+// ---------------------------------------------------------------------------
+
+type PersistedResolution = Extract<Awaited<ReturnType<typeof resolvePersistedReport>>, { kind: 'ok' }>;
+
+async function auditPersisted(
+  req: Request,
+  body: unknown,
+  persisted: PersistedResolution,
+): Promise<Response> {
+  const raw = (body && typeof body === 'object' ? body : {}) as { language?: unknown; auditFocus?: unknown };
+  const language: 'es' | 'en' = raw.language === 'en' || raw.language === 'es' ? raw.language : persisted.language;
+  if (raw.auditFocus !== undefined && (typeof raw.auditFocus !== 'string' || raw.auditFocus.length > 2_000)) {
+    return NextResponse.json({ error: 'Invalid request format.', details: ['auditFocus'] }, { status: 400 });
+  }
+  const auditFocus = raw.auditFocus as string | undefined;
+  const { preprocessed, provenance } = persisted;
+  // Lo mismo que /export imprimiría de esta versión: Partes I–III
+  // re-renderizadas por el servidor desde su JSON, con su balance.
+  const report = withServerRenderedPersisted(persisted.report, preprocessed, language);
+  const integrity = deriveReportIntegrity(report, preprocessed);
+  const workspaceId = await resolveReportWorkspaceId();
+
+  const persist: PersistAudit = async (audit) => {
+    const version = buildAuditResultVersion({
+      part: 'iv',
+      reportRef: { reportId: provenance.reportId, reportHash: provenance.reportHash },
+      auditRef: null,
+      language,
+      result: audit,
+    });
+    const outcome = await persistAuditResult({ workspaceId, version, companyName: report.company?.name });
+    return outcome.status === 'persisted'
+      ? { auditRef: outcome.ref, auditComplete: outcome.complete, persistence: { status: 'persisted' } }
+      : { auditComplete: version.complete, persistence: { status: 'not_persisted', reason: outcome.reason } };
+  };
+
+  const stream =
+    req.headers.get('X-Stream') === 'true' || new URL(req.url).searchParams.get('stream') === '1';
+  if (stream) return handleStreaming(report, language, auditFocus, preprocessed, integrity, persist);
+
+  const auditReport = await orchestrateAudit({ report, language, auditFocus }, { preprocessed, integrity });
+  return NextResponse.json({ ...auditReport, ...await persist(auditReport) });
 }

@@ -779,6 +779,13 @@ export function buildQualityRequestBody(args: {
    */
   adjustmentLedger?: AdjustmentLedger | null;
 }): Record<string, unknown> {
+  // Procedencia servidor (Parte V): con versión persistida viajan sólo
+  // referencias; el servidor evalúa esa versión y la Parte IV persistida.
+  const ref = readReportRef(args.report);
+  if (ref) {
+    const auditRef = args.auditReport?.auditRef;
+    return { reportRef: ref, language: args.language, ...(auditRef ? { auditRef } : {}) };
+  }
   return {
     report: args.report,
     auditReport: args.auditReport,
@@ -786,6 +793,76 @@ export function buildQualityRequestBody(args: {
     ...(args.preprocessed !== null && args.preprocessed !== undefined
       ? { preprocessed: args.preprocessed, ...htmlLedgerField(args.adjustmentLedger) }
       : {}),
+  };
+}
+
+/**
+ * Cuerpo de /api/financial-audit. Con versión persistida sólo viaja la
+ * referencia: el servidor audita ESA versión y guarda el resultado atado a
+ * ella (Parte IV). Sin ella, el informe y su preprocesado como antes.
+ */
+export function buildAuditRequestBody(args: {
+  report: BackendFinancialReport;
+  preprocessed: unknown;
+  adjustmentLedger?: AdjustmentLedger | null;
+  language: 'es' | 'en';
+}): Record<string, unknown> {
+  const ref = readReportRef(args.report);
+  if (ref) return { reportRef: ref, language: args.language };
+  return {
+    report: args.report,
+    language: args.language,
+    ...(args.preprocessed !== null && args.preprocessed !== undefined
+      ? { preprocessed: args.preprocessed, ...htmlLedgerField(args.adjustmentLedger) }
+      : {}),
+  };
+}
+
+/**
+ * Campos de las Partes IV/V para /export. Con versión persistida sólo viajan
+ * las referencias de resultados persistidos y COMPLETOS: uno parcial o no
+ * guardado queda fuera del archivo en vez de hacer fracasar la descarga (el
+ * servidor vuelve a comprobarlas contra la versión). Sin versión persistida,
+ * el contenido como antes (camino no verificado).
+ */
+export function exportAuditFields(args: {
+  report: BackendFinancialReport;
+  auditReport: BackendAuditReport | null | undefined;
+  qualityReport: BackendQualityAssessment | null | undefined;
+}): Record<string, unknown> {
+  if (!readReportRef(args.report)) {
+    return { auditReport: args.auditReport ?? null, qualityReport: args.qualityReport ?? null };
+  }
+  const audit = args.auditReport?.auditComplete === true ? args.auditReport.auditRef : undefined;
+  const quality = args.qualityReport?.qualityComplete === true ? args.qualityReport.qualityRef : undefined;
+  return { ...(audit ? { auditRef: audit } : {}), ...(quality ? { qualityRef: quality } : {}) };
+}
+
+/**
+ * Aviso junto a las descargas de una versión persistida: qué Partes IV/V
+ * entran en el archivo y cuáles se ven en pantalla sin entrar.
+ */
+export function auditDownloadNotice(args: {
+  report: BackendFinancialReport | null | undefined;
+  auditReport: BackendAuditReport | null | undefined;
+  qualityReport: BackendQualityAssessment | null | undefined;
+  language: 'es' | 'en';
+}): { included: string | null; excluded: string | null } {
+  if (!args.report || !readReportRef(args.report)) return { included: null, excluded: null };
+  const copy = dict[args.language].reportProvenance;
+  const fields = exportAuditFields({ report: args.report, auditReport: args.auditReport, qualityReport: args.qualityReport });
+  const included = [
+    ...('auditRef' in fields ? [copy.uiAuditPartIv] : []),
+    ...('qualityRef' in fields ? [copy.uiAuditPartV] : []),
+  ];
+  const excluded = [
+    ...(args.auditReport && !('auditRef' in fields) ? [copy.uiAuditPartIv] : []),
+    ...(args.qualityReport && !('qualityRef' in fields) ? [copy.uiAuditPartV] : []),
+  ];
+  const join = (parts: string[]) => parts.join(args.language === 'es' ? ' y ' : ' and ');
+  return {
+    included: included.length ? copy.uiAuditIncluded.replace('{parts}', join(included)) : null,
+    excluded: excluded.length ? copy.uiAuditExcluded.replace('{parts}', join(excluded)) : null,
   };
 }
 
@@ -1446,13 +1523,7 @@ export async function runAuditInBackground(args: {
     res = await fetchSSEWithRetry('/api/financial-audit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Stream': 'true' },
-      body: JSON.stringify({
-        report: args.report,
-        language: args.language,
-        ...(args.preprocessed !== null && args.preprocessed !== undefined
-          ? { preprocessed: args.preprocessed, ...htmlLedgerField(args.adjustmentLedger) }
-          : {}),
-      }),
+      body: JSON.stringify(buildAuditRequestBody(args)),
       signal: args.signal,
     });
   } catch (err) {
@@ -1914,8 +1985,12 @@ function ReportViewer({
             preprocessed,
             adjustmentLedger,
             // e2e-niif2-05: el idioma viaja como en el PDF (sin él el
-            // servidor usa el de la versión persistida).
-            presentation: { language },
+            // servidor usa el de la versión persistida). Con versión
+            // persistida, el libro incluye las Partes IV/V por referencia.
+            presentation: {
+              language,
+              ...(readReportRef(report) ? exportAuditFields({ report, auditReport, qualityReport }) : {}),
+            },
           }),
         ),
       });
@@ -1948,7 +2023,7 @@ function ReportViewer({
     } finally {
       setIsExportingExcel(false);
     }
-  }, [report, rawData, preprocessed, adjustmentLedger, isExportingExcel, language, downloadsBlocked]);
+  }, [report, rawData, preprocessed, adjustmentLedger, isExportingExcel, language, downloadsBlocked, auditReport, qualityReport]);
 
   // ─── Exportar PDF ────────────────────────────────────────────────────────
   // POST /api/financial-report/export con { report, rawData, company,
@@ -1983,10 +2058,10 @@ function ReportViewer({
             presentation: {
               company,
               language,
-              // Fase 2/3 — solo se envían si el usuario los activó. El endpoint
-              // tolera null/undefined (las páginas se omiten en el render).
-              auditReport: auditReport ?? null,
-              qualityReport: qualityReport ?? null,
+              // Fase 2/3 — con versión persistida, sólo referencias de
+              // resultados persistidos y completos; sin ella, el contenido
+              // (procedencia no verificada). Sin resultado, la página se omite.
+              ...exportAuditFields({ report, auditReport, qualityReport }),
               // Toggle de los 10 entregables del intake. Si undefined el PDF
               // incluye todo (default). Si presente, EditorialReportDoc gatea
               // cada página según el flag correspondiente.
@@ -2348,6 +2423,23 @@ function ReportViewer({
               {notice}
             </p>
           ) : null;
+        })()}
+        {(() => {
+          const notice = auditDownloadNotice({ report, auditReport, qualityReport, language });
+          return (
+            <>
+              {notice.included && (
+                <p className="mx-6 mt-1 text-xs text-n-700" data-audit-download="included">
+                  {notice.included}
+                </p>
+              )}
+              {notice.excluded && (
+                <p className="mx-6 mt-1 text-xs text-n-800" data-audit-download="excluded">
+                  {notice.excluded}
+                </p>
+              )}
+            </>
+          );
         })()}
 
         {exportError && (
@@ -2718,10 +2810,18 @@ export function PipelineWorkspace() {
     // el "Score 95/100" estancado hasta que la nueva corrida terminaba 3 min
     // después. Aquí limpiamos TODO el estado audit + quality al inicio del
     // re-run para que la UI refleje el progreso correctamente.
-    if (isRerun) {
+    // Un informe nuevo nunca hereda la auditoría de otro. Esto sólo ocurría en
+    // un re-run, así que tras recargar la página el primer informe de la sesión
+    // conservaba la auditoría restaurada de `lastCompletedReport`: si la nueva
+    // corrida no pedía auditoría, el resultado viejo quedaba emparejado con el
+    // informe nuevo y salía en su descarga. En una reanudación (`start !==
+    // 'niif'`) el resultado sí pertenece a esta corrida y se conserva.
+    if (start === 'niif') {
       setAuditReport(null);
       auditReportRef.current = null;
       setQualityReport(null);
+    }
+    if (isRerun) {
       setPipelineState((prev) => ({
         ...prev,
         mode: 'running',
