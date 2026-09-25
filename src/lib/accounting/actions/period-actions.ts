@@ -32,6 +32,13 @@ import { z } from 'zod';
 import { getDb } from '@/lib/db/client';
 import { accountingPeriods, type AccountingPeriodRow } from '@/lib/db/schema';
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
+import {
+  findOverlappingPeriod,
+  isCanonicalYearEndRange,
+  isRangeWithinDeclaredPeriod,
+  yearEndAdjustmentsInstant,
+  YEAR_END_ADJUSTMENTS_MONTH,
+} from '@/lib/accounting/periods/ranges';
 import { denyIfNoSession } from './_auth-gate';
 
 // ---------------------------------------------------------------------------
@@ -141,8 +148,8 @@ function computeBoundaries(
   year: number,
   month: number,
 ): { startsAt: Date; endsAt: Date } {
-  if (month === 13) {
-    const ts = new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999));
+  if (month === YEAR_END_ADJUSTMENTS_MONTH) {
+    const ts = yearEndAdjustmentsInstant(year);
     return { startsAt: ts, endsAt: ts };
   }
   const startsAt = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
@@ -182,6 +189,55 @@ export async function createPeriodAction(
 
     const startsAt = explicitStart ?? computed.startsAt;
     const endsAt = explicitEnd ?? computed.endsAt;
+
+    // contab-nomina-26: rangos disjuntos. El período 13 sólo vive en el
+    // instante canónico de fin de año; los meses 1–12 no se solapan.
+    if (
+      parsed.data.month === YEAR_END_ADJUSTMENTS_MONTH &&
+      !isCanonicalYearEndRange(parsed.data.year, startsAt, endsAt)
+    ) {
+      return {
+        ok: false,
+        code: 'INVALID_INPUT',
+        message:
+          'El periodo 13 (ajustes de cierre) no admite fechas explicitas: vive en el 31 de diciembre 23:59:59.',
+      };
+    }
+    if (startsAt.getTime() > endsAt.getTime()) {
+      return { ok: false, code: 'INVALID_INPUT', message: 'startsAt debe ser <= endsAt.' };
+    }
+    const existing = await db
+      .select({
+        id: accountingPeriods.id,
+        year: accountingPeriods.year,
+        month: accountingPeriods.month,
+        startsAt: accountingPeriods.startsAt,
+        endsAt: accountingPeriods.endsAt,
+      })
+      .from(accountingPeriods)
+      .where(eq(accountingPeriods.workspaceId, ws.id));
+    const overlap = findOverlappingPeriod(
+      { year: parsed.data.year, month: parsed.data.month, startsAt, endsAt },
+      existing,
+    );
+    if (overlap) {
+      return {
+        ok: false,
+        code: 'PERIOD_OVERLAP',
+        message:
+          `El rango se solapa con el periodo ${overlap.year}-${String(overlap.month).padStart(2, '0')} ` +
+          'del workspace. Los periodos contables deben ser disjuntos.',
+      };
+    }
+    // ICU-05 (re-auditoría 2026-09-24): igual que POST /api/accounting/periods,
+    // el rango explícito debe caer dentro del (año, mes) declarado.
+    if (!isRangeWithinDeclaredPeriod(parsed.data.year, parsed.data.month, startsAt, endsAt)) {
+      return {
+        ok: false,
+        code: 'INVALID_INPUT',
+        message: `El rango debe caer dentro del periodo ${parsed.data.year}-${String(parsed.data.month).padStart(2, '0')}.`,
+      };
+    }
 
     const [created] = await db
       .insert(accountingPeriods)

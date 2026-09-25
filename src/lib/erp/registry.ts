@@ -3,6 +3,7 @@
 
 import type { ERPProvider, ERPProviderInfo } from './types';
 import type { BaseERPConnector } from './connector';
+import { sharedERPSessionStore } from './session-store';
 
 // ─── Provider Metadata ────────────────────────────────────────────────────────
 
@@ -142,83 +143,66 @@ export const ERP_PROVIDERS: Record<ERPProvider, ERPProviderInfo> = {
 };
 
 // ─── Connector Factory ────────────────────────────────────────────────────────
-
-const connectorCache = new Map<ERPProvider, BaseERPConnector>();
+// Una instancia NUEVA por llamada: ningún campo de instancia (limitadores,
+// contadores, estado de sesión) se comparte entre empresas. Los tokens que sí
+// conviene reutilizar viven en `sharedERPSessionStore`, indexados por
+// proveedor + huella de las credenciales de cada conexión.
 
 export async function getConnector(provider: ERPProvider): Promise<BaseERPConnector> {
-  if (connectorCache.has(provider)) {
-    return connectorCache.get(provider)!;
-  }
-
-  let connector: BaseERPConnector;
+  const sessions = sharedERPSessionStore;
 
   switch (provider) {
     case 'alegra': {
       const { AlegraConnector } = await import('./providers/alegra');
-      connector = new AlegraConnector();
-      break;
+      return new AlegraConnector(sessions);
     }
     case 'siigo': {
       const { SiigoConnector } = await import('./providers/siigo');
-      connector = new SiigoConnector();
-      break;
+      return new SiigoConnector(sessions);
     }
     case 'helisa': {
       const { HelisaConnector } = await import('./providers/helisa');
-      connector = new HelisaConnector();
-      break;
+      return new HelisaConnector(sessions);
     }
     case 'world_office': {
       const { WorldOfficeConnector } = await import('./providers/world-office');
-      connector = new WorldOfficeConnector();
-      break;
+      return new WorldOfficeConnector(sessions);
     }
     case 'contapyme': {
       const { ContaPymeConnector } = await import('./providers/contapyme');
-      connector = new ContaPymeConnector();
-      break;
+      return new ContaPymeConnector(sessions);
     }
     case 'sap_b1': {
       const { SAPConnector } = await import('./providers/sap');
-      connector = new SAPConnector();
-      break;
+      return new SAPConnector(sessions);
     }
     case 'sap_s4hana': {
       const { SAPS4HANAConnector } = await import('./providers/sap-s4hana');
-      connector = new SAPS4HANAConnector();
-      break;
+      return new SAPS4HANAConnector(sessions);
     }
     case 'oracle_fusion': {
       const { OracleFusionConnector } = await import('./providers/oracle-fusion');
-      connector = new OracleFusionConnector();
-      break;
+      return new OracleFusionConnector(sessions);
     }
     case 'dynamics_365': {
       const { DynamicsConnector } = await import('./providers/dynamics');
-      connector = new DynamicsConnector();
-      break;
+      return new DynamicsConnector(sessions);
     }
     case 'quickbooks': {
       const { QuickBooksConnector } = await import('./providers/quickbooks');
-      connector = new QuickBooksConnector();
-      break;
+      return new QuickBooksConnector(sessions);
     }
     case 'xero': {
       const { XeroConnector } = await import('./providers/xero');
-      connector = new XeroConnector();
-      break;
+      return new XeroConnector(sessions);
     }
     case 'odoo': {
       const { OdooConnector } = await import('./providers/odoo');
-      connector = new OdooConnector();
-      break;
+      return new OdooConnector(sessions);
     }
     default:
       throw new Error(`Unknown ERP provider: ${provider}`);
   }
-
-  connectorCache.set(provider, connector);
-  return connector;
 }
 
 /** List all providers grouped by country */

@@ -8,11 +8,13 @@
 import React from 'react';
 import { Page, View, Text } from '@react-pdf/renderer';
 import type { EditorialReport } from '../types';
+import { statementCitations } from '../../statement-presentation';
 import {
   GoldRule,
   MixedWeightHeadline,
   NormativePill,
   PageNumberBadge,
+  TocAnchor,
 } from '../primitives';
 import { DialGauge } from '../charts/DialGauge';
 import {
@@ -36,10 +38,9 @@ import {
 
 interface Props {
   doc: EditorialReport;
-  pageNumber?: number;
 }
 
-export function DialGaugePage({ doc, pageNumber = 1 }: Props) {
+export function DialGaugePage({ doc }: Props) {
   // Cap at 6 (spec §3.8: 3×2 grid)
   const gauges = doc.dialGauges.gauges.slice(0, 6);
   const row1 = gauges.slice(0, 3);
@@ -60,6 +61,7 @@ export function DialGaugePage({ doc, pageNumber = 1 }: Props) {
         paddingBottom: PAGE_MARGIN + 48,
       }}
     >
+      <TocAnchor id="dials" collect={doc.tocCollector} />
       {/* Title */}
       <MixedWeightHeadline
         parts={[
@@ -73,9 +75,14 @@ export function DialGaugePage({ doc, pageNumber = 1 }: Props) {
 
       {/* Normative pills */}
       <View style={{ flexDirection: 'row', gap: 6, marginTop: S3, marginBottom: S5 }}>
-        <NormativePill label="NIIF 7" tone="sage-on-cream" />
-        <NormativePill label="NIIF 9" tone="sage-on-cream" />
-        <NormativePill label="IAS 1.135" tone="sage-on-cream" />
+        {/* Razones calculadas sobre el ESF y el ERI (reportes-export-16):
+            NIIF 7/9 regulan instrumentos financieros, no estos indicadores. */}
+        {[
+          ...statementCitations('balance', doc.meta.niifGroup),
+          ...statementCitations('income', doc.meta.niifGroup),
+        ].map((label) => (
+          <NormativePill key={label} label={label} tone="sage-on-cream" />
+        ))}
       </View>
 
       {/* Row 1 */}
@@ -127,7 +134,7 @@ export function DialGaugePage({ doc, pageNumber = 1 }: Props) {
       )}
 
       <GoldRule />
-      <PageNumberBadge pageNumber={pageNumber} />
+      <PageNumberBadge />
     </Page>
   );
 }

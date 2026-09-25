@@ -18,6 +18,7 @@ import type {
   PUCClass,
   ValidatedAccount,
 } from '@/lib/preprocessing/trial-balance';
+import { componerActivosImpuestoSnapshot } from '../fiscal-anchor/credito-renta';
 
 export interface SurvivalAnchorTotals {
   /** Periodo etiquetado (ej. "2025") usado para timestamps. */
@@ -26,6 +27,12 @@ export interface SurvivalAnchorTotals {
   activo: number;
   pasivo: number;
   patrimonio: number;
+  /**
+   * Ingresos NETOS de devoluciones 4175 (`controlTotals.cents.ingresosNetos`),
+   * base de la utilidad neta del preprocesador. Nunca la Σ firmada de la
+   * clase 4 (`cents.ingresos`), que cambia con la convención de signos del
+   * ERP (re-auditoría 2026-09, recalculo-final-01).
+   */
   ingresos: number;
   gastos: number;
   utilidadNeta: number;
@@ -33,19 +40,31 @@ export interface SurvivalAnchorTotals {
   utilidadAntesImpuestos: number;
   /** Impuesto causado del periodo (clase 54 si esta presente). */
   impuestoCausado: number;
-  /** Costos de venta + costos de produccion (clases 6 + 7). Para Art. 771-5 §1. */
+  /**
+   * Costos y deducciones totales del periodo = gastos (clases 5+6+7, ya
+   * incluidas en controlTotals.gastos) − impuesto de renta causado (54).
+   * Antes se sumaban otra vez las clases 6 y 7 (auditoría 2026-09,
+   * tributario-modulos-07).
+   */
   costosTotales: number;
   // Cuentas clave para los 5 agentes ----------------------------------------
-  /** Saldo cuenta 1105 (Caja). Aproxima pagos en efectivo. */
+  /** Saldo cuenta 1105 (Caja) al cierre. Es un STOCK: no mide los pagos en efectivo del año. */
   saldoCuenta1105: number;
   /** Saldo cuenta 1355 (Anticipos de impuestos y contribuciones). */
   saldoCuenta1355: number;
   /** Subcuentas postables de 1355 con monto > 0. */
   subcuentas1355: Array<{ code: string; name: string; balance: number }>;
+  /** Crédito imputable a renta (lista blanca 135505/135515; 135595/1805 con nombre de renta), COP. */
+  creditoRenta: number;
   /** Saldo cuenta 3305 (Reserva legal). Opcional. */
   saldoCuenta3305: number;
-  /** Saldo cuenta 3115 (Capital suscrito y pagado). Opcional. */
-  saldoCuenta3115: number;
+  /**
+   * Capital social = grupo 31 completo (3105 capital suscrito y pagado en S.A.
+   * y S.A.S., 3115 aportes sociales en la Ltda., …). Base del tope del 50 % de
+   * la reserva legal (Art. 452 C.Co.). Antes sólo se leía la 3115 rotulada
+   * como capital suscrito (re-auditoría 2026-09, NM-08).
+   */
+  capitalGrupo31: number;
   /** Subcuentas postables de la clase 22 (Cuentas por pagar) con monto > 0. */
   cuentasPorPagarClase22: Array<{ code: string; name: string; balance: number }>;
 }
@@ -82,13 +101,6 @@ function findAccountBalance(classes: PUCClass[], code: string): number {
   return sumPostablesUnderPrefix(classes, code).total;
 }
 
-/** Suma TODOS los postables de una clase PUC (1 al 7). */
-function sumClassPostables(classes: PUCClass[], classCode: number): number {
-  const cls = classes.find((c) => c.code === classCode);
-  if (!cls) return 0;
-  return cls.accounts.filter((a) => a.isLeaf).reduce((s, a) => s + (a.balance || 0), 0);
-}
-
 /** Lista subcuentas postables con saldo > 0 bajo un prefijo. */
 function listPostablesUnderPrefix(
   classes: PUCClass[],
@@ -115,7 +127,13 @@ export function extractSurvivalAnchors(
   const classes = snap.classes || [];
 
   const ct = snap.controlTotals;
-  const ingresos = ct?.ingresos ?? snap.summary?.totalRevenue ?? 0;
+  // Ingresos netos de devoluciones 4175 desde los centavos exactos del
+  // preprocesador (recalculo-final-01): `ct.ingresos` es la Σ firmada de la
+  // clase 4 y publicaba 104 M o 96 M para el mismo balance según el ERP.
+  const ingresos =
+    ct?.cents?.ingresosNetos !== undefined
+      ? Number(ct.cents.ingresosNetos) / 100
+      : (ct?.ingresosNetos ?? snap.summary?.totalRevenue ?? 0);
   const gastos = ct?.gastos ?? snap.summary?.totalExpenses ?? 0;
   const utilidadNeta = ct?.utilidadNeta ?? snap.summary?.netIncome ?? ingresos - gastos;
   const impuestoCausado = ct?.cents ? Number(ct.cents.impuestoCausado) / 100 : 0;
@@ -123,15 +141,15 @@ export function extractSurvivalAnchors(
     ? Number(ct.cents.utilidadAntesImpuestos) / 100
     : utilidadNeta + impuestoCausado;
 
-  const costosVenta = sumClassPostables(classes, 6);
-  const costosProd = sumClassPostables(classes, 7);
-  const costosTotales = gastos + costosVenta + costosProd;
+  // controlTotals.gastos ya incluye las clases 5, 6 y 7 (y el grupo 54).
+  const costosTotales = gastos - impuestoCausado;
+  const creditoRenta = Number(componerActivosImpuestoSnapshot(snap).creditoRentaCents) / 100;
 
   const saldoCuenta1105 = findAccountBalance(classes, '1105');
   const saldoCuenta1355 = findAccountBalance(classes, '1355');
   const subcuentas1355 = listPostablesUnderPrefix(classes, '1355');
   const saldoCuenta3305 = findAccountBalance(classes, '3305');
-  const saldoCuenta3115 = findAccountBalance(classes, '3115');
+  const capitalGrupo31 = sumPostablesUnderPrefix(classes, '31').total;
   const cuentasPorPagarClase22 = listPostablesUnderPrefix(classes, '22').slice(0, 10);
 
   return {
@@ -148,8 +166,9 @@ export function extractSurvivalAnchors(
     saldoCuenta1105,
     saldoCuenta1355,
     subcuentas1355,
+    creditoRenta,
     saldoCuenta3305,
-    saldoCuenta3115,
+    capitalGrupo31,
     cuentasPorPagarClase22,
   };
 }
@@ -189,19 +208,20 @@ export function buildAnchorBlock(anchors: SurvivalAnchorTotals): string {
 - Activo total: ${fmtCOP(anchors.activo)}
 - Pasivo total: ${fmtCOP(anchors.pasivo)}
 - Patrimonio: ${fmtCOP(anchors.patrimonio)}
-- Ingresos: ${fmtCOP(anchors.ingresos)}
-- Gastos (clase 5): ${fmtCOP(anchors.gastos)}
-- Costos totales (clases 5+6+7): ${fmtCOP(anchors.costosTotales)}
+- Ingresos netos (neto de devoluciones 4175): ${fmtCOP(anchors.ingresos)}
+- Gastos y costos (clases 5, 6 y 7): ${fmtCOP(anchors.gastos)}
+- Costos y deducciones totales (clases 5+6+7 sin impuesto de renta 54): ${fmtCOP(anchors.costosTotales)}
 - Utilidad neta: ${fmtCOP(anchors.utilidadNeta)}
 - Utilidad antes de impuestos (UAI): ${fmtCOP(anchors.utilidadAntesImpuestos)}
 - Impuesto causado del periodo (clase 54): ${fmtCOP(anchors.impuestoCausado)}
 
 ### CUENTAS CLAVE
-- 1105 Caja: ${fmtCOP(anchors.saldoCuenta1105)}
+- 1105 Caja (saldo al cierre; NO es el total de pagos en efectivo del año): ${fmtCOP(anchors.saldoCuenta1105)}
 - 1355 Anticipos de Impuestos y Contribuciones: ${fmtCOP(anchors.saldoCuenta1355)}
 ${sub1355}
+- Crédito imputable a renta (135505 + 135515; 135595/1805 sólo con nombre de renta): ${fmtCOP(anchors.creditoRenta)}
 - 3305 Reserva legal: ${fmtCOP(anchors.saldoCuenta3305)}
-- 3115 Capital suscrito y pagado: ${fmtCOP(anchors.saldoCuenta3115)}
+- Capital social (grupo 31: 3105 capital suscrito y pagado, 3115 aportes sociales…): ${fmtCOP(anchors.capitalGrupo31)}
 
 ### CUENTAS POR PAGAR (clase 22, top 10 por monto)
 ${cxp22}

@@ -76,8 +76,8 @@ Sociedad SAS declaró renta líquida de **$500M** (impuesto $175M al 35%). DIAN 
 
 ## Defensas posibles
 
-- **Diferencia de criterios** (Art. 647-1): si la inexactitud surgió de una interpretación razonable, no se aplica sanción del Art. 647 (solo intereses).
-- **Buena fe**: la jurisprudencia (CE 21962/2017) ha reconocido la "diferencia de criterio" como eximente.
+- **Interpretación razonable / diferencia de criterios** (Art. 647 par. 2): no se configura inexactitud cuando el menor valor a pagar o el mayor saldo a favor se deriva de una interpretación razonable del derecho aplicable, siempre que los hechos y cifras denunciados sean completos y verdaderos. El mayor impuesto y sus intereses sí se pagan. Ver `et_articulo_647_par2_interpretacion_razonable.md`.
+- **Art. 647-1 E.T.**: regula el rechazo o disminución de pérdidas fiscales (se trata como menor saldo a favor para las sanciones); no es una defensa.
 - **Caso fortuito o fuerza mayor**: justificable solo bajo prueba estricta.
 - **Errores no sancionables**: errores meramente aritméticos sin incidencia material, errores de transcripción evidentes.
 
@@ -85,12 +85,11 @@ Sociedad SAS declaró renta líquida de **$500M** (impuesto $175M al 35%). DIAN 
 
 - **Ley 2277/2022**: reforzamiento de sanciones por estructuras agresivas (relación con Art. 869).
 - **Ley 1819/2016 Art. 287**: refundió el régimen sancionatorio (anteriormente sanción del 160%).
-- **CE 22408/2018**: criterios de diferencia de criterios.
 
 ## Referencias
 
 - Norma: **ET Art. 647** (modificado Ley 1819/2016)
 - URL canónica: https://estatuto.co/?e=706
 - Concepto Unificado DIAN 100208192 de 2024 sobre régimen sancionatorio
-- Doctrina: CE Sala Cuarta 22408/2018 (diferencia de criterios)
+- Interpretación razonable: Art. 647 par. 2 E.T. (texto compilado en `estatuto_tributario_completo.md`)
 - Fecha consulta: 2026-05-02

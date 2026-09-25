@@ -13,7 +13,10 @@
 //   E3. EFE final = PUC 11 Balance (efectivo y equivalentes)
 //   E4. ECP saldo final = Patrimonio Balance
 //   E5. Coherencia Net Income ↔ Operating Profit ↔ Gross Profit
-//   E6. ORI Income Statement coincide con ORI Equity Changes
+//   E6. ORI Income Statement coincide con ORI Equity Changes (también en el
+//       periodo comparativo cuando hay ECP comparativo)
+//  E6b. ORI del ERI == Δ grupo PUC 38 del balance de prueba en cada periodo
+//       (enmienda 12, spec v2.1); sin corte de apertura, $0 o N/D
 //   E9. Comparativo completo: cuando comparativePeriod != null TODOS los
 //       6 totales *Comparative (3 Balance + 3 P&L) son non-null y cuadran la
 //       ecuación patrimonial al centavo. Si el preprocesador suministra
@@ -32,6 +35,12 @@
 //       ajustes son partidas no monetarias y cambios en WC, no transferencias
 //       contables internas). Defensa Art. 647 E.T.: la salida ficticia
 //       distorsiona el flujo informado a la DIAN sin sustento documental.
+//  E21. Cada renglón con código PUC del ESF y del ERI == Σ de las hojas del
+//       balance de prueba que su código agrupa, renglón a renglón (un grupo
+//       por renglón; un código repetido sólo en las porciones corriente / no
+//       corriente de un grupo partido por plazo; re-auditoría 2 e2e-niif2-01)
+//  E27. Subtotales corriente / no corriente del ESF == controlTotals
+//       (activo/pasivo corriente y no corriente, ambos periodos; integración I4)
 //
 // El validator legacy `validateConsolidatedReport` queda en uso para reglas
 // que tocan estructura Markdown (placeholders, secciones PARTE I/II/III) que
@@ -41,10 +50,33 @@
 // orchestrator pueda sumar errores/warnings sin discriminar el origen.
 // ---------------------------------------------------------------------------
 
-import { sumStatementDetail } from '../contracts/statement-lines';
+import {
+  sumStatementDetail,
+  sumStatementDetailByPeriod,
+  findUnsupportedSubtotals,
+  signedLineAmount,
+  type StatementPeriod,
+  type StatementLineWithColumns,
+} from '../contracts/statement-lines';
+import {
+  crossCheckCashFlowAgainstDeterministic,
+  crossCheckCashFlowLinesAgainstDeterministic,
+  formatCashFlowCrossCheckViolations,
+  formatCashFlowLineViolations,
+  type CashFlowStatementLike,
+  type ComparativeStatementsBasis,
+  type BalanceTerm,
+  type DeterministicCashFlow,
+  type LedgerLeaf,
+} from '../contracts/deterministic-breakdown';
 import { moneyCopEquals, parseMoneyCop, serializeMoneyCop } from '../contracts/money';
 import type { NiifReportJson, EquityChangeRowJson } from '../contracts/niif-report';
 import type { ReportValidationResult } from '../types';
+import {
+  balanceTermOfLabel,
+  incomeCascadeKindOfLabel,
+  type IncomeCascadeKind,
+} from '@/lib/export/statement-presentation';
 
 const ZERO = BigInt(0);
 
@@ -130,6 +162,48 @@ export interface NiifJsonValidatorOptions {
     impuestoCausado?: string;
   };
   presentationV3?: import('@/lib/agents/financial/prompts/presentation-v3').PresentationV3Data;
+  /**
+   * E18 — EFE determinista (`buildDeterministicCashFlow(primary, comparative)`).
+   * Cuando existe, el EFE emitido se cruza contra él: subtotal por actividad,
+   * efectivo inicial, variación neta y efectivo final, tolerancia $0; y una
+   * línea de dividendos sin sustento en el balance es error (niif-contrato-02).
+   */
+  deterministicCashFlow?: DeterministicCashFlow | null;
+  /**
+   * E21/E24 — hojas del balance de prueba de cada periodo (auditoría
+   * 2026-09-24, e2e-niif-02/05/06/08). Con ellas cada renglón con código PUC
+   * del ESF y del ERI, en ambas columnas, se ancla a la suma de las hojas que
+   * su código agrupa, y cada columna del ECP al grupo patrimonial del balance.
+   */
+  ledgers?: {
+    primary: readonly LedgerLeaf[];
+    comparative: readonly LedgerLeaf[] | null;
+  };
+  /**
+   * El comparativo proviene de una columna de saldo inicial/anterior
+   * (`PeriodSnapshot.saldosDeApertura`, ingesta-09): su ESF es el de apertura
+   * y NO hay P&G del periodo anterior. E9 no exige ni cruza los totales del
+   * P&G comparativo (son N/D), y las reglas del ERI no evalúan esa columna.
+   */
+  comparativeIsOpening?: boolean;
+  /**
+   * Comparativos del EFE y del ECP (auditoría integral 2026-09-24, pendiente
+   * #3): base determinista del periodo comparativo
+   * (`buildComparativeStatementsBasis`).
+   *   - `undefined`: sin anclas; sólo la coherencia interna de lo presentado.
+   *   - `null`: el balance no tiene periodo comparativo; presentar un
+   *     comparativo del EFE o del ECP es error.
+   *   - base: lo presentado se cruza al centavo contra ella, y presentarlo
+   *     cuando la base no lo presenta es error (NIIF para las PYMES 3.14: sin
+   *     corte de apertura no hay comparativo que calcular).
+   */
+  comparativeStatements?: ComparativeStatementsBasis | null;
+  /**
+   * E26 (auditoría 2026-09, niif-contrato-23): banderas del Curator desde el
+   * snapshot (`deterministicCuratorFlags`). `curatorFlags` del informe debe
+   * coincidir: el modelo las copiaba sin contraste y Pass-2/3 las citaban.
+   */
+  curatorFlags?: NiifReportJson['curatorFlags'];
 }
 
 /**
@@ -244,6 +318,20 @@ export function validateNiifReportJson(
     }
   }
 
+  // -- E18. EFE emitido == EFE determinista (auditoría niif-contrato-02) -----
+  // E2/E3 son coherencia interna y cierre contra el PUC 11; no ven una
+  // reclasificación entre actividades, un efectivo inicial inventado
+  // compensado en otra sección ni un dividendo fabricado compensado en
+  // operación. El EFE determinista es la identidad del Balance: se exige al
+  // centavo por actividad y en los tres totales.
+  if (options.deterministicCashFlow) {
+    for (const msg of formatCashFlowCrossCheckViolations(
+      crossCheckCashFlowAgainstDeterministic(cf, options.deterministicCashFlow),
+    )) {
+      errors.push(`E18. ${msg}`);
+    }
+  }
+
   // -- E4. ECP saldo final == Patrimonio Balance -----------------------------
   const closing = findEquityClosingRow(json);
   if (!closing) {
@@ -295,7 +383,7 @@ export function validateNiifReportJson(
         `E5. EBIT incorrectamente igualado a Utilidad Neta — el Grupo 53 debe deducirse DESPUÉS del EBIT. ` +
           `operatingProfitPrimary (${fmtCop(op)}) ≈ netIncomePrimary (${fmtCop(net)}); ` +
           `diferencia ${fmtCop(opMinusNet)} < tolerancia ${fmtCop(EQUALITY_TOL)} con netIncome material. ` +
-          `Revisar cascada: EBIT = grossProfit − Grupo 51 − Grupo 52; UAI = EBIT − Grupo 53; netIncome = UAI − impuesto.`,
+          `Revisar cascada: EBIT = grossProfit − Grupo 51 − Grupo 52; UAI = EBIT + otros ingresos (Grupo 42) − Grupo 53; netIncome = UAI − impuesto.`,
       );
     }
   }
@@ -318,6 +406,10 @@ export function validateNiifReportJson(
   }
 
   // -- E6. ORI cruzado P&G ↔ ECP --------------------------------------------
+  // Auditoría 2026-09 (niif-contrato-12): era warning, así que un ORI
+  // inventado llegaba al "Resultado integral total" con el informe limpio. La
+  // variación de la columna ORI del ECP y el ORI del P&G son la misma cifra
+  // (NIIF PYMES 6.3): la diferencia es error.
   const oriPnl = parseMoneyCop(json.incomeStatement.oriPrimary);
   if (closing) {
     const openingRow = json.equityChanges.rows.find((r) => r.kind === 'opening_balance');
@@ -325,8 +417,99 @@ export function validateNiifReportJson(
       const oriDelta = parseMoneyCop(closing.ori) - parseMoneyCop(openingRow.ori);
       if (oriDelta !== oriPnl) {
         const gap = oriDelta - oriPnl;
-        warnings.push(
+        errors.push(
           `E6. Δ(ORI) en ECP (${fmtCop(oriDelta)}) ≠ ORI del P&G (${fmtCop(oriPnl)}). Brecha: ${fmtCop(gap)}.`,
+        );
+      }
+    }
+  }
+  // E6b. El ORI del ERI contra su ancla determinista (enmienda 12, spec v2.1;
+  // integración I4). El ORI del periodo es la variación del grupo PUC 38
+  // entre el corte de apertura y el de cierre: la misma cifra que la columna
+  // ORI del ECP mueve (E24 fija esa columna al saldo del grupo 38 en cada
+  // corte y E6 su variación al ORI del ERI). Hasta esta enmienda E6b exigía
+  // ORI $0 sin componentes mapeados, y con un grupo 38 que se movió en el año
+  // ninguna cifra del ERI satisfacía E6 y E6b a la vez. Sin corte de apertura
+  // rige lo anterior (auditoría niif-contrato-12 / prompts-normativa-11): $0
+  // en el periodo actual; en el comparativo, N/D si el grupo 38 tiene saldo.
+  errors.push(...oriAnchorErrors(json, options, oriPnl));
+
+  // -- E19. Saldo inicial del ECP == patrimonio comparativo del ESF ----------
+  // Auditoría 2026-09 (niif-contrato-11a): el saldo inicial nunca se cruzaba
+  // con el patrimonio del periodo anterior; una fila de "convergencia" podía
+  // compensar un saldo inicial inventado. NIIF PYMES 6.3(c).
+  {
+    const openingRow = json.equityChanges.rows.find((r) => r.kind === 'opening_balance');
+    if (openingRow && bs.totalEquityComparative !== null) {
+      const opening = parseMoneyCop(openingRow.total);
+      const expected = parseMoneyCop(bs.totalEquityComparative);
+      if (opening !== expected) {
+        errors.push(
+          `E19. ECP saldo inicial (${fmtCop(opening)}) ≠ Total Patrimonio del periodo comparativo ` +
+            `(${fmtCop(expected)}). Brecha: ${fmtCop(opening - expected)}. El saldo inicial es el ` +
+            `patrimonio de cierre del periodo anterior (NIIF PYMES 6.3).`,
+        );
+      }
+    }
+  }
+
+  // -- E20. Columnas del cierre del ECP == renglones de patrimonio del ESF ----
+  // Auditoría 2026-09 (niif-contrato-11b). Sólo se contrastan los componentes
+  // de mapeo inequívoco (31 capital, 32 prima, 33 reservas, 36 resultado del
+  // ejercicio, 37 acumulados, 38 ORI/valorizaciones) y sólo cuando TODOS los
+  // renglones de patrimonio con monto traen código PUC reconocible.
+  if (closing) {
+    const byGroup = new Map<string, bigint>();
+    let mappable = true;
+    let detailCount = 0;
+    for (const line of bs.equity) {
+      if (line.account === null || line.account.trim() === '') continue;
+      const code = line.account.replace(/\D/g, '');
+      const group = code.slice(0, 2);
+      if (!['31', '32', '33', '34', '35', '36', '37', '38'].includes(group)) {
+        mappable = false;
+        break;
+      }
+      const amount = parseMoneyCop(line.amountPrimary);
+      byGroup.set(group, (byGroup.get(group) ?? ZERO) + amount);
+      detailCount++;
+    }
+    // 34/35 no tienen columna propia en el ECP: si traen saldo, no se compara.
+    const hasUnmappedEquity = (byGroup.get('34') ?? ZERO) !== ZERO || (byGroup.get('35') ?? ZERO) !== ZERO;
+    // El ESF debe desagregar los grupos que el ECP usa: si el ECP muestra
+    // reservas pero el ESF no tiene renglón 33, la presentación del ESF es
+    // agregada y la comparación por columna no es posible (E15/E4 ya atan el
+    // total).
+    const columnGroups: Array<[string, string[]]> = [
+      ['31', [closing.capitalSocial]],
+      ['32', [closing.primaColocacion]],
+      ['33', [closing.reservaLegal, closing.otrasReservas]],
+      ['36', [closing.resultadoEjercicio]],
+      ['37', [closing.resultadosAcumulados]],
+      ['38', [closing.ori]],
+    ];
+    const esfCoversEcp = columnGroups.every(
+      ([group, cells]) => byGroup.has(group) || cells.every((c) => parseMoneyCop(c) === ZERO),
+    );
+    if (mappable && detailCount > 0 && !hasUnmappedEquity && esfCoversEcp) {
+      const g = (k: string) => byGroup.get(k) ?? ZERO;
+      const checks: Array<[string, bigint, bigint]> = [
+        ['Capital social (31)', parseMoneyCop(closing.capitalSocial), g('31')],
+        ['Superávit / prima (32)', parseMoneyCop(closing.primaColocacion), g('32')],
+        [
+          'Reservas (33)',
+          parseMoneyCop(closing.reservaLegal) + parseMoneyCop(closing.otrasReservas),
+          g('33'),
+        ],
+        ['Resultado del ejercicio (36)', parseMoneyCop(closing.resultadoEjercicio), g('36')],
+        ['Resultados acumulados (37)', parseMoneyCop(closing.resultadosAcumulados), g('37')],
+        ['ORI / superávit por valorizaciones (38)', parseMoneyCop(closing.ori), g('38')],
+      ];
+      for (const [nombre, ecp, esf] of checks) {
+        if (ecp === esf) continue;
+        errors.push(
+          `E20. ECP saldo final — ${nombre}: ${fmtCop(ecp)} ≠ renglones del Estado de Situación ` +
+            `Financiera ${fmtCop(esf)}. Brecha: ${fmtCop(ecp - esf)}.`,
         );
       }
     }
@@ -334,24 +517,24 @@ export function validateNiifReportJson(
 
   // -- E7. Utilidad Neta del periodo registrada en el ECP (v2.5) ------------
   //
-  // Antes (v2.0) se comparaba el delta `closing.resultadoEjercicio −
-  // opening.resultadoEjercicio` contra netIncomePrimary. Esa heurística
-  // fallaba cuando el opening_balance arrastraba el resultado del periodo
-  // anterior (PUC 3605 no cerrado vía asiento Dr.3605/Cr.3705 al cierre
-  // prior — práctica común en SAS colombianas donde 3605 se "sobreescribe"
-  // anualmente).
-  //
-  // v2.5 introduce el modo matricial estricto cuando existe fila
-  // `profit_for_period`:
+  // Modo matricial estricto cuando existe fila `profit_for_period`:
   //   E7a — profit_for_period.resultadoEjercicio == netIncomePrimary.
   //   E7b — Si opening_balance.resultadoEjercicio es material y ≠ 0,
   //         DEBE existir una fila prior_period_result_cancellation con
-  //         resultadoEjercicio = -opening.resultadoEjercicio.
+  //         resultadoEjercicio = -opening.resultadoEjercicio. Esa fila es el
+  //         traslado interno Dr 3605 / Cr 37: su total es $0 (auditoría
+  //         niif-contrato-11d — antes el contrato la hacía reducir el
+  //         patrimonio sin contrapartida, que es una distribución disfrazada).
   //   E7c — Cuadre matricial: opening + Σ(movement rows) == closing,
-  //         columna a columna, tolerancia $1.000 COP.
+  //         columna a columna.
   //
-  // Modo legacy (sin profit_for_period): delta opening→closing como
-  // proxy, válido SOLO cuando opening.resultadoEjercicio no es material.
+  // Modo legacy (sin profit_for_period): el resultado del periodo es implícito
+  // (netIncome en la columna resultadoEjercicio y en el total) y el cuadre por
+  // columna se exige igual (auditoría niif-contrato-11c).
+  //
+  // Tolerancia $0 en todo (auditoría niif-contrato-10): las cifras viajan en
+  // centavos exactos; la holgura anterior (0,5% + $100 en E7a, $1.000 por
+  // columna en E7c) sólo servía para que una fila compensatoria la usara.
   {
     const openingRow = json.equityChanges.rows.find((r) => r.kind === 'opening_balance');
     const profitRow = json.equityChanges.rows.find((r) => r.kind === 'profit_for_period');
@@ -363,80 +546,80 @@ export function validateNiifReportJson(
       errors.push('E7. ECP debe incluir opening_balance y closing_balance.');
     } else {
       const netIncome = parseMoneyCop(json.incomeStatement.netIncomePrimary);
-      const absNetIncome = netIncome < ZERO ? -netIncome : netIncome;
-      // Tolerancia: 0.5% del netIncome (mín $10.000 cents = $100 COP para casos cercanos a cero)
-      const tolerance = absNetIncome / BigInt(200) + BigInt(10000);
       const openingResult = parseMoneyCop(openingRow.resultadoEjercicio);
       const absOpeningResult = openingResult < ZERO ? -openingResult : openingResult;
       const MATERIALITY = BigInt(100_000_000); // $1.000.000 COP en centavos
+      const cols = [
+        'capitalSocial',
+        'primaColocacion',
+        'reservaLegal',
+        'otrasReservas',
+        'resultadosAcumulados',
+        'resultadoEjercicio',
+        'ori',
+        'total',
+      ] as const;
+      const matrixCheck = (label: string, implied: Partial<Record<(typeof cols)[number], bigint>>) => {
+        for (const col of cols) {
+          const computed =
+            json.equityChanges.rows.reduce<bigint>((acc, row) => {
+              if (row.kind === 'closing_balance') return acc;
+              return acc + parseMoneyCop(row[col]);
+            }, ZERO) + (implied[col] ?? ZERO);
+          const closingVal = parseMoneyCop(closing[col]);
+          if (computed === closingVal) continue;
+          errors.push(
+            `${label}. ECP columna "${col}" no cuadra: Σ filas (${fmtCop(computed)}) ≠ ` +
+              `closing_balance (${fmtCop(closingVal)}); brecha ${fmtCop(computed - closingVal)}. ` +
+              `Cuadre matricial: opening + Σ(movements) == closing, tolerancia $0.`,
+          );
+        }
+      };
 
       if (profitRow) {
         // -- Modo v2.5 -----------------------------------------------------
-        // E7a — profit_for_period autoritativo.
         const profitInEcp = parseMoneyCop(profitRow.resultadoEjercicio);
-        const diff = profitInEcp > netIncome ? profitInEcp - netIncome : netIncome - profitInEcp;
-        if (diff > tolerance) {
+        if (profitInEcp !== netIncome) {
           errors.push(
             `E7a. ECP fila profit_for_period.resultadoEjercicio (${fmtCop(profitInEcp)}) ≠ ` +
-              `Utilidad Neta P&L (${fmtCop(netIncome)}); diferencia ${fmtCop(diff)} ` +
-              `excede tolerancia ${fmtCop(tolerance)}. Parte 8.1 CHECK 2 spec v2.5.`,
+              `Utilidad Neta P&L (${fmtCop(netIncome)}); diferencia ` +
+              `${fmtCop(profitInEcp - netIncome)}. Tolerancia $0 (NIIF PYMES 6.3).`,
           );
         }
 
-        // E7b — Cancelación obligatoria si opening arrastra resultado prior material.
+        // E7b — Traslado obligatorio si opening arrastra resultado prior material.
         if (absOpeningResult > MATERIALITY) {
           if (!cancellationRow) {
             errors.push(
               `E7b. ECP: opening_balance.resultadoEjercicio material (${fmtCop(openingResult)}) ` +
-                `exige fila kind="prior_period_result_cancellation" que cancele ese saldo. ` +
-                `Cierre contable PUC 3605 no trasladado a PUC 37 al cierre prior (v2.5).`,
+                `exige fila kind="prior_period_result_cancellation" que traslade ese saldo ` +
+                `a resultados acumulados (Dr 3605 / Cr 37).`,
             );
           } else {
             const cancellation = parseMoneyCop(cancellationRow.resultadoEjercicio);
-            const expected = -openingResult;
-            const cancelDiff =
-              cancellation > expected ? cancellation - expected : expected - cancellation;
-            if (cancelDiff > BigInt(10000)) {
+            if (cancellation !== -openingResult) {
               errors.push(
                 `E7b. ECP fila prior_period_result_cancellation.resultadoEjercicio ` +
                   `(${fmtCop(cancellation)}) ≠ -opening_balance.resultadoEjercicio ` +
-                  `(${fmtCop(expected)}); diferencia ${fmtCop(cancelDiff)} excede $100 COP. v2.5.`,
+                  `(${fmtCop(-openingResult)}); diferencia ${fmtCop(cancellation + openingResult)}. ` +
+                  `Tolerancia $0.`,
               );
             }
           }
         }
+        if (cancellationRow && parseMoneyCop(cancellationRow.total) !== ZERO) {
+          errors.push(
+            `E7b. ECP fila prior_period_result_cancellation con total ` +
+              `${fmtCop(parseMoneyCop(cancellationRow.total))}: el traslado del resultado anterior ` +
+              `es interno del patrimonio (Dr 3605 / Cr 37) y su total es $0. Una disminución del ` +
+              `patrimonio es una distribución (fila dividend_distribution, con soporte).`,
+          );
+        }
 
         // E7c — Cuadre matricial columna a columna.
-        const cols = [
-          'capitalSocial',
-          'primaColocacion',
-          'reservaLegal',
-          'otrasReservas',
-          'resultadosAcumulados',
-          'resultadoEjercicio',
-          'ori',
-          'total',
-        ] as const;
-        const TOL = BigInt(100_000); // $1.000 COP en centavos
-        for (const col of cols) {
-          const computed = json.equityChanges.rows.reduce<bigint>((acc, row) => {
-            if (row.kind === 'closing_balance') return acc;
-            return acc + parseMoneyCop(row[col]);
-          }, ZERO);
-          const closingVal = parseMoneyCop(closing[col]);
-          const diff = computed > closingVal ? computed - closingVal : closingVal - computed;
-          if (diff > TOL) {
-            errors.push(
-              `E7c. ECP columna "${col}" no cuadra: Σ filas (${fmtCop(computed)}) ≠ ` +
-                `closing_balance (${fmtCop(closingVal)}); brecha ${fmtCop(diff)}. ` +
-                `v2.5 cuadre matricial: opening + Σ(movements) == closing.`,
-            );
-          }
-        }
+        matrixCheck('E7c', {});
       } else {
-        // -- Modo legacy: delta opening→closing ----------------------------
-        // SOLO válido cuando opening.resultadoEjercicio no es material. Si es
-        // material y no hay profit_for_period, el reporte viola v2.5.
+        // -- Modo legacy: resultado implícito -------------------------------
         if (absOpeningResult > MATERIALITY) {
           errors.push(
             `E7. ECP: opening_balance.resultadoEjercicio material (${fmtCop(openingResult)}) ` +
@@ -447,14 +630,14 @@ export function validateNiifReportJson(
         } else {
           const closingResult = parseMoneyCop(closing.resultadoEjercicio);
           const delta = closingResult - openingResult;
-          const diff = delta > netIncome ? delta - netIncome : netIncome - delta;
-          if (diff > tolerance) {
+          if (delta !== netIncome) {
             errors.push(
               `E7. Variación resultadoEjercicio ECP (${fmtCop(delta)}) ≠ ` +
-                `Utilidad Neta P&L (${fmtCop(netIncome)}); diferencia ${fmtCop(diff)} ` +
-                `excede tolerancia ${fmtCop(tolerance)}. Parte 8.1 CHECK 2.`,
+                `Utilidad Neta P&L (${fmtCop(netIncome)}); diferencia ${fmtCop(delta - netIncome)}. ` +
+                `Tolerancia $0.`,
             );
           }
+          matrixCheck('E7c', { resultadoEjercicio: netIncome, total: netIncome });
         }
       }
     }
@@ -502,15 +685,22 @@ export function validateNiifReportJson(
   // Si el preprocesador suministra `bindingComparativeTotalsCents`, los
   // totales emitidos por el LLM se cruzan al centavo contra esa fuente.
   // Tolerancia $0 — el LLM NO debe re-derivar valores ya pre-calculados.
+  // Comparativo de saldos de apertura (ingesta-09, cross-dep de W3-A): el ESF
+  // del comparativo es el de apertura y su P&G es N/D. Exigir o cruzar sus
+  // totales de resultados obligaba al modelo a copiar cifras "sólo por
+  // contrato" que ninguna superficie puede presentar como P&G comparativo.
+  const pygComparativeIsNd = options.comparativeIsOpening === true;
   if (json.company.comparativePeriod !== null) {
     const is = json.incomeStatement;
     const missing: string[] = [];
     if (bs.totalAssetsComparative === null) missing.push('totalAssetsComparative');
     if (bs.totalLiabilitiesComparative === null) missing.push('totalLiabilitiesComparative');
     if (bs.totalEquityComparative === null) missing.push('totalEquityComparative');
-    if (is.grossProfitComparative === null) missing.push('grossProfitComparative');
-    if (is.operatingProfitComparative === null) missing.push('operatingProfitComparative');
-    if (is.netIncomeComparative === null) missing.push('netIncomeComparative');
+    if (!pygComparativeIsNd) {
+      if (is.grossProfitComparative === null) missing.push('grossProfitComparative');
+      if (is.operatingProfitComparative === null) missing.push('operatingProfitComparative');
+      if (is.netIncomeComparative === null) missing.push('netIncomeComparative');
+    }
 
     if (missing.length > 0) {
       errors.push(
@@ -541,9 +731,11 @@ export function validateNiifReportJson(
       crossCheck('TotalAssets', bs.totalAssetsComparative, bct.totalAssets);
       crossCheck('TotalLiabilities', bs.totalLiabilitiesComparative, bct.totalLiabilities);
       crossCheck('TotalEquity', bs.totalEquityComparative, bct.totalEquity);
-      crossCheck('GrossProfit', is.grossProfitComparative, bct.grossProfit);
-      crossCheck('OperatingProfit', is.operatingProfitComparative, bct.operatingProfit);
-      crossCheck('NetIncome', is.netIncomeComparative, bct.netIncome);
+      if (!pygComparativeIsNd) {
+        crossCheck('GrossProfit', is.grossProfitComparative, bct.grossProfit);
+        crossCheck('OperatingProfit', is.operatingProfitComparative, bct.operatingProfit);
+        crossCheck('NetIncome', is.netIncomeComparative, bct.netIncome);
+      }
     }
   }
 
@@ -743,6 +935,84 @@ export function validateNiifReportJson(
     }
   }
 
+  // -- E15 (subtotales y columna comparativa) — auditoría 2026-09 -------------
+  // niif-contrato-06: los subtotales impresos (activo/pasivo corriente y no
+  // corriente) y los encabezados con monto no se contrastaban y el PDF los
+  // imprime como subtotales. niif-contrato-08: la columna comparativa de los
+  // renglones no estaba cubierta por ninguna identidad. Mismo prefijo `E15.`
+  // (el canal de exportación los bloquea); una celda comparativa ausente no se
+  // trata como cero: si impide verificar, se avisa como `E15c.` (no bloquea).
+  const hasComparative = json.company.comparativePeriod !== null;
+  for (const [nombre, lineas, totalPrimario, totalComparativo] of [
+    ['Activo', bs.assets, bs.totalAssetsPrimary, bs.totalAssetsComparative],
+    ['Pasivo', bs.liabilities, bs.totalLiabilitiesPrimary, bs.totalLiabilitiesComparative],
+    ['Patrimonio', bs.equity, bs.totalEquityPrimary, bs.totalEquityComparative],
+  ] as const) {
+    const periods: Array<[StatementPeriod, string | null]> = [['primary', totalPrimario]];
+    if (hasComparative) periods.push(['comparative', totalComparativo]);
+    for (const [period, totalRaw] of periods) {
+      const total = totalRaw === null ? null : parseMoneyCop(totalRaw);
+      const etiqueta = period === 'primary' ? 'periodo actual' : 'periodo comparativo';
+      for (const s of findUnsupportedSubtotals(lineas, total, period)) {
+        warnings.push(
+          `E15. En ${nombre} (${etiqueta}), el renglón sin código "${s.label}" imprime ` +
+            `${fmtCop(s.amount)}, que no es la suma de los renglones de detalle de su bloque ni ` +
+            `el total de la sección. Un subtotal que no se reconstruye sumando la columna no ` +
+            `puede imprimirse; un encabezado no lleva monto.`,
+        );
+      }
+      if (period === 'comparative' && total !== null) {
+        const { sum, count, missing } = sumStatementDetailByPeriod(lineas, 'comparative');
+        if (count === 0 && total === ZERO) continue;
+        if (sum === total) continue;
+        if (missing > 0) {
+          warnings.push(
+            `E15c. En ${nombre} (periodo comparativo), ${missing} renglón(es) de detalle no traen ` +
+              `cifra comparativa y la columna no se puede verificar contra el total ` +
+              `${fmtCop(total)} (suma disponible ${fmtCop(sum)}).`,
+          );
+        } else {
+          warnings.push(
+            `E15. En ${nombre} (periodo comparativo), la suma de los ${count} renglones de detalle ` +
+              `(${fmtCop(sum)}) ≠ el total comparativo declarado (${fmtCop(total)}). ` +
+              `Brecha: ${fmtCop(sum - total)}. NIIF PYMES 3.14.`,
+          );
+        }
+      }
+    }
+  }
+
+  // -- E3b. Renglón de efectivo del ESF == efectivo del EFE -----------------
+  // Auditoría 2026-09 (niif-contrato-09): E3 ata cashClosing al PUC 11, pero
+  // nadie ataba el renglón '11' que imprime el ESF. Trasladar un monto de 13 a
+  // 11 conservaba el total y el ESF mostraba un efectivo distinto del cierre
+  // del EFE (NIC 7 ¶45 / NIIF PYMES 7.20).
+  {
+    const cashLines = bs.assets.filter(
+      (l) => l.account !== null && l.account.replace(/\D/g, '').startsWith('11'),
+    );
+    if (cashLines.length > 0) {
+      const esfCash = cashLines.reduce((a, l) => a + parseMoneyCop(l.amountPrimary), ZERO);
+      const efeClose = parseMoneyCop(cf.cashClosing);
+      if (esfCash !== efeClose) {
+        errors.push(
+          `E3b. Efectivo del Estado de Situación Financiera (renglones PUC 11: ${fmtCop(esfCash)}) ≠ ` +
+            `efectivo al final del EFE (${fmtCop(efeClose)}). Brecha: ${fmtCop(esfCash - efeClose)}.`,
+        );
+      }
+      if (hasComparative && cashLines.every((l) => l.amountComparative !== null)) {
+        const esfCashCmp = cashLines.reduce((a, l) => a + parseMoneyCop(l.amountComparative!), ZERO);
+        const efeOpen = parseMoneyCop(cf.cashOpening);
+        if (esfCashCmp !== efeOpen) {
+          errors.push(
+            `E3b. Efectivo del periodo comparativo en el ESF (${fmtCop(esfCashCmp)}) ≠ efectivo al ` +
+              `inicio del EFE (${fmtCop(efeOpen)}). Brecha: ${fmtCop(esfCashCmp - efeOpen)}.`,
+          );
+        }
+      }
+    }
+  }
+
   // -- E16. Los renglones del P&G sostienen la cascada que declara -----------
   //
   // Auditoría 2026-08 (superficie 5): el Estado de Resultados no tenía NINGÚN
@@ -753,49 +1023,95 @@ export function validateNiifReportJson(
   // sostiene, libre.
   //
   // La verificación NO usa etiquetas. Usa el CÓDIGO PUC de cada renglón
-  // (Decreto 2650/1993, catálogo cerrado), que es dato estructurado:
+  // (Decreto 2650/1993, catálogo cerrado), que es dato estructurado. Cascada
+  // (enmienda spec v2.1 del 2026-09-24 — grupo 42 DEBAJO de la utilidad
+  // operacional; auditoría niif-contrato-01):
   //
-  //   Utilidad Bruta = Σ|clase 4 salvo 4175| − Σ|4175| − Σ|clase 6| − Σ|clase 7|
-  //   EBIT           = Utilidad Bruta − Σ|grupo 51| − Σ|grupo 52|
-  //   UAI            = EBIT − Σ|grupo 53| − Σ|resto de clase 5 salvo 54|
-  //   Utilidad Neta  = UAI − Σ|grupo 54|
+  //   Utilidad Bruta = ingresos 41 − devoluciones 4175 − costos (clases 6 y 7)
+  //   EBIT           = Utilidad Bruta − grupo 51 − grupo 52
+  //   UAI            = EBIT + otros ingresos (42 y demás de clase 4)
+  //                    − grupo 53 − resto de clase 5 salvo 54
+  //   Utilidad Neta  = UAI − grupo 54
   //
-  // El 4175 (Devoluciones en ventas, naturaleza débito) se RESTA aunque venga
-  // en valor absoluto: NIIF 15 §47 exige presentar el ingreso neto, y un
-  // informe que liste "Ingresos brutos" y "(-) Devoluciones" por separado es
-  // presentación legítima que no debe producir un falso positivo.
+  // Un renglón con código de un dígito "4" no permite separar 41 de 42: se
+  // toma como operacional, y si el balance tiene grupo 42 la cascada no cierra
+  // contra el ancla — el modelo debe desagregar.
   //
-  // Se toma la MAGNITUD de cada renglón (`abs`) porque el contrato permite las
-  // dos convenciones —`isAbsolute = true` imprime el gasto como positivo que
-  // resta, `false` lo trae ya firmado— y un costo es una resta en ambas.
+  // Signo de cada renglón (auditoría niif-contrato-13):
+  //   - `isAbsolute = true` → magnitud: el ingreso suma y el costo/gasto resta.
+  //   - `isAbsolute = false` → el importe viaja firmado. En la clase 4 el signo
+  //     es el del ingreso (una recuperación 4250 con saldo débito resta). En
+  //     las clases 5/6/7 el contrato admite dos lecturas estables: signo de
+  //     efecto en el resultado (gasto negativo) o signo natural (gasto
+  //     positivo, saldo crédito negativo). Se acepta la cascada si cierra bajo
+  //     UNA de las dos lecturas aplicada a todos los renglones; tomar `abs`
+  //     rechazaba un P&G correcto con una partida contranatura firmada.
+  //   - 4175 siempre resta su magnitud (NIIF 15 §47).
   //
   // Tolerancia $0. Todas las cifras son enteros de centavos que el modelo
   // compone en la misma respuesta: no existe ruta de redondeo que produzca
-  // deriva de un centavo. Medido en las 7 corridas reales con LLM archivadas
-  // en `.fase0*`: la cascada reprodujo los tres subtotales con brecha $0,00 en
-  // 7/7.
+  // deriva de un centavo.
   {
     const is = json.incomeStatement;
-    const bucket = { ingresos: ZERO, devoluciones: ZERO, costos: ZERO, g51: ZERO, g52: ZERO, g53: ZERO, g54: ZERO, otros5: ZERO };
+    type Buckets = {
+      ingresos41: bigint;
+      devoluciones: bigint;
+      otrosIngresos: bigint;
+      costos: bigint;
+      g51: bigint;
+      g52: bigint;
+      g53: bigint;
+      g54: bigint;
+      otros5: bigint;
+    };
+    // Aporte de cada renglón al resultado (+ aumenta la utilidad, − la reduce).
+    let comparativeCellsMissing = 0;
+    const buildBuckets = (
+      expenseSignedIsEffect: boolean,
+      period: StatementPeriod = 'primary',
+    ): Buckets => {
+      const b: Buckets = {
+        ingresos41: ZERO, devoluciones: ZERO, otrosIngresos: ZERO, costos: ZERO,
+        g51: ZERO, g52: ZERO, g53: ZERO, g54: ZERO, otros5: ZERO,
+      };
+      for (const line of is.lines) {
+        if (line.account === null) continue; // subtotales del propio modelo
+        const code = String(line.account).replace(/\D/g, '');
+        if (code.length === 0) continue;
+        const raw = period === 'primary' ? line.amountPrimary : line.amountComparative;
+        if (raw === null) {
+          comparativeCellsMissing++;
+          continue;
+        }
+        const v = parseMoneyCop(raw);
+        if (code.startsWith('4')) {
+          if (code.startsWith('4175')) b.devoluciones -= abs(v);
+          else {
+            const aporte = line.isAbsolute ? abs(v) : v;
+            if (code === '4' || code.startsWith('41')) b.ingresos41 += aporte;
+            else b.otrosIngresos += aporte;
+          }
+          continue;
+        }
+        if (!/^[567]/.test(code)) continue;
+        const aporte = line.isAbsolute ? -abs(v) : expenseSignedIsEffect ? v : -v;
+        if (code.startsWith('6') || code.startsWith('7')) b.costos += aporte;
+        else if (code.startsWith('51')) b.g51 += aporte;
+        else if (code.startsWith('52')) b.g52 += aporte;
+        else if (code.startsWith('53')) b.g53 += aporte;
+        else if (code.startsWith('54')) b.g54 += aporte;
+        else b.otros5 += aporte;
+      }
+      return b;
+    };
     let codedLines = 0;
     let revenueLines = 0;
     for (const line of is.lines) {
-      if (line.account === null) continue; // subtotales del propio modelo
+      if (line.account === null) continue;
       const code = String(line.account).replace(/\D/g, '');
       if (code.length === 0) continue;
-      const magnitude = abs(parseMoneyCop(line.amountPrimary));
       codedLines++;
-      if (code.startsWith('4')) {
-        revenueLines++;
-        if (code.startsWith('4175')) bucket.devoluciones += magnitude;
-        else bucket.ingresos += magnitude;
-      } else if (code.startsWith('6') || code.startsWith('7')) {
-        bucket.costos += magnitude;
-      } else if (code.startsWith('51')) bucket.g51 += magnitude;
-      else if (code.startsWith('52')) bucket.g52 += magnitude;
-      else if (code.startsWith('53')) bucket.g53 += magnitude;
-      else if (code.startsWith('54')) bucket.g54 += magnitude;
-      else if (code.startsWith('5')) bucket.otros5 += magnitude;
+      if (code.startsWith('4')) revenueLines++;
     }
 
     const gross = parseMoneyCop(is.grossProfitPrimary);
@@ -818,24 +1134,38 @@ export function validateNiifReportJson(
         );
       }
     } else {
-      const grossCalc = bucket.ingresos - bucket.devoluciones - bucket.costos;
-      const opCalc = gross - bucket.g51 - bucket.g52;
-      const uaiCalc = opProfit - bucket.g53 - bucket.otros5;
-      const netCalc = uaiCalc - bucket.g54;
+      const cascadeOf = (b: Buckets) => {
+        const grossCalc = b.ingresos41 + b.devoluciones + b.costos;
+        const opCalc = gross + b.g51 + b.g52;
+        const uaiCalc = opProfit + b.otrosIngresos + b.g53 + b.otros5;
+        const netCalc = uaiCalc + b.g54;
+        return { grossCalc, opCalc, uaiCalc, netCalc };
+      };
+      const cierra = (c: ReturnType<typeof cascadeOf>) =>
+        c.grossCalc === gross && c.opCalc === opProfit && c.netCalc === netIncome;
+      // Lectura A: gasto firmado por su efecto (negativo). Lectura B: signo
+      // natural (positivo). Sólo difieren si hay gastos con isAbsolute=false.
+      const bucketsA = buildBuckets(true);
+      const bucketsB = buildBuckets(false);
+      const cascadeA = cascadeOf(bucketsA);
+      const cascadeB = cascadeOf(bucketsB);
+      const useB = !cierra(cascadeA) && cierra(cascadeB);
+      const bucket = useB ? bucketsB : bucketsA;
+      const { grossCalc, opCalc, uaiCalc, netCalc } = useB ? cascadeB : cascadeA;
 
       const cascada: Array<[string, bigint, bigint, string]> = [
         [
           'Utilidad Bruta',
           grossCalc,
           gross,
-          'Σ ingresos (clase 4) − devoluciones (4175) − costos (clases 6 y 7)',
+          'ingresos operacionales (grupo 41) − devoluciones (4175) − costos (clases 6 y 7); el grupo 42 va debajo del EBIT',
         ],
         ['Resultado Operacional (EBIT)', opCalc, opProfit, 'Utilidad Bruta − grupo 51 − grupo 52'],
         [
           'Utilidad Neta',
           netCalc,
           netIncome,
-          'EBIT − grupo 53 − resto de clase 5 − impuesto (grupo 54)',
+          'EBIT + otros ingresos (grupo 42) − grupo 53 − resto de clase 5 − impuesto (grupo 54)',
         ],
       ];
       for (const [nombre, calculado, declarado, formula] of cascada) {
@@ -847,17 +1177,84 @@ export function validateNiifReportJson(
         );
       }
 
+      // Columna comparativa (auditoría niif-contrato-08): la misma cascada con
+      // `amountComparative` contra los subtotales comparativos. Una celda
+      // ausente no se trata como cero: si impide cerrar, se avisa (`E16c.`).
+      // Con un comparativo de saldos de apertura no hay P&G comparativo (N/D).
+      if (
+        json.company.comparativePeriod !== null &&
+        !pygComparativeIsNd &&
+        is.grossProfitComparative !== null &&
+        is.operatingProfitComparative !== null &&
+        is.netIncomeComparative !== null
+      ) {
+        const grossC = parseMoneyCop(is.grossProfitComparative);
+        const opC = parseMoneyCop(is.operatingProfitComparative);
+        const netC = parseMoneyCop(is.netIncomeComparative);
+        comparativeCellsMissing = 0;
+        const evalC = (b: Buckets) => ({
+          grossCalc: b.ingresos41 + b.devoluciones + b.costos,
+          opCalc: grossC + b.g51 + b.g52,
+          netCalc: opC + b.otrosIngresos + b.g53 + b.otros5 + b.g54,
+        });
+        const bucketsCA = buildBuckets(true, 'comparative');
+        const cA = evalC(bucketsCA);
+        const missing = comparativeCellsMissing;
+        const bucketsCB = buildBuckets(false, 'comparative');
+        const cB = evalC(bucketsCB);
+        const ok = (c: ReturnType<typeof evalC>) =>
+          c.grossCalc === grossC && c.opCalc === opC && c.netCalc === netC;
+        // E22 sobre la columna comparativa, con la lectura de signo que cierra.
+        {
+          const useCB = !ok(cA) && ok(cB);
+          const bc = useCB ? bucketsCB : bucketsCA;
+          const uaiC = opC + bc.otrosIngresos + bc.g53 + bc.otros5;
+          errors.push(
+            ...uncodedIncomeRowErrors(json, 'comparative', bc, !useCB, {
+              gross: grossC,
+              op: opC,
+              uai: uaiC,
+              net: netC,
+              ori: is.oriComparative === null ? null : parseMoneyCop(is.oriComparative),
+            }),
+          );
+        }
+        if (!ok(cA) && !ok(cB)) {
+          const c = cA;
+          const pares: Array<[string, bigint, bigint]> = [
+            ['Utilidad Bruta', c.grossCalc, grossC],
+            ['Resultado Operacional (EBIT)', c.opCalc, opC],
+            ['Utilidad Neta', c.netCalc, netC],
+          ];
+          for (const [nombre, calculado, declarado] of pares) {
+            if (calculado === declarado) continue;
+            const msg =
+              `${nombre} del periodo comparativo (${json.company.comparativePeriod}): los renglones ` +
+              `suman ${fmtCop(calculado)} y el estado declara ${fmtCop(declarado)}. ` +
+              `Brecha: ${fmtCop(calculado - declarado)}.`;
+            if (missing > 0) {
+              warnings.push(
+                `E16c. ${msg} ${missing} celda(s) comparativa(s) ausente(s): la columna no es verificable.`,
+              );
+            } else {
+              errors.push(`E16. ${msg}`);
+            }
+          }
+        }
+      }
+
       // Impuesto de renta — la línea que la auditoría midió como totalmente
       // libre. Se contrasta contra el grupo 54 preprocesado con tolerancia $0.
       // Defensa Art. 647 E.T.: un gasto por impuesto que no existe en libros
       // es inexactitud sancionable con el 100% del mayor impuesto.
       if (bpt?.impuestoCausado !== undefined) {
-        const impuestoAncla = abs(parseMoneyCop(bpt.impuestoCausado));
-        if (bucket.g54 !== impuestoAncla) {
+        const impuestoAncla = parseMoneyCop(bpt.impuestoCausado);
+        const impuestoRenglones = -bucket.g54;
+        if (impuestoRenglones !== impuestoAncla) {
           errors.push(
             `E14. Impuesto de renta del periodo ${json.company.fiscalPeriod}: los renglones del ` +
-              `P&G del grupo PUC 54 suman ${fmtCop(bucket.g54)} y el preprocesador causó ` +
-              `${fmtCop(impuestoAncla)}. Brecha: ${fmtCop(bucket.g54 - impuestoAncla)}. ` +
+              `P&G del grupo PUC 54 suman ${fmtCop(impuestoRenglones)} y el preprocesador causó ` +
+              `${fmtCop(impuestoAncla)}. Brecha: ${fmtCop(impuestoRenglones - impuestoAncla)}. ` +
               `El gasto por impuesto no lo autora el analista: sale del grupo 54 del balance ` +
               `de prueba (Art. 26 y Art. 647 E.T.).`,
           );
@@ -879,58 +1276,189 @@ export function validateNiifReportJson(
         }
       }
 
-      // -- Los renglones de SUBTOTAL que el modelo escribe a mano -------------
+      // -- E22. Renglones SIN código del ERI (auditoría 2026-09-24) -----------
       //
-      // Las filas de subtotal del P&G viajan con `account = null` —no son una
-      // cuenta PUC— así que la cascada de arriba no las mira: la Utilidad Antes
-      // de Impuestos, por ejemplo, es una fila impresa que nada contrasta.
-      // Medido: sumarle $500.000.000 a esa fila producía 0 errores.
-      //
-      // La regla no usa la etiqueta (que el modelo redacta libre, y ya se vio
-      // salir como "RESULTADO OPERACIONAL", "Resultado operativo" y
-      // "RESULTADO INTEGRAL TOTAL DEL PERIODO" en corridas del mismo balance).
-      // Usa el VALOR: un subtotal honesto es, por definición, uno de los
-      // escalones de la cascada o una agregación de los renglones que el propio
-      // modelo listó. Si no es ninguno de los dos, es una cifra que nadie puede
-      // reconstruir sumando la columna.
-      //
-      // Medido sobre las 7 corridas reales archivadas: 37 de 37 filas de
-      // subtotal caen en el conjunto. Cero falsos positivos.
-      const cierres = [
-        gross,
-        opProfit,
-        uaiCalc,
-        netIncome,
-        parseMoneyCop(is.oriPrimary),
-        netIncome + parseMoneyCop(is.oriPrimary),
-      ];
-      const agregados = [
-        bucket.ingresos,
-        bucket.ingresos - bucket.devoluciones,
-        bucket.devoluciones,
-        bucket.costos,
-        bucket.g51,
-        bucket.g52,
-        bucket.g51 + bucket.g52,
-        bucket.g53,
-        bucket.g54,
-        bucket.otros5,
-        bucket.g53 + bucket.otros5,
-        bucket.g51 + bucket.g52 + bucket.g53 + bucket.g54 + bucket.otros5,
-      ];
-      const admisibles = new Set([ZERO, ...cierres, ...agregados].map((v) => v.toString()));
-      for (const line of is.lines) {
-        if (line.account !== null) continue;
-        if (line.level < 3) continue; // encabezados de sección, no subtotales
-        const v = parseMoneyCop(line.amountPrimary);
-        if (admisibles.has(v.toString()) || admisibles.has((-v).toString())) continue;
+      // Sustituye la regla de subtotales anterior, que (1) sólo miraba los
+      // renglones de nivel ≥ 3 y (2) aceptaba cualquier cifra del conjunto
+      // admisible CON EL SIGNO INVERTIDO. Medido (e2e-niif-01/-02): un renglón
+      // "UTILIDAD NETA DEL PERÍODO" por +$40.000.000 con una pérdida de
+      // −$40.000.000 pasaba (admisibles.has(-v)) y sustituía el total en PDF,
+      // Excel y Markdown; un "EBITDA" de nivel 2 por $55.555.555,00 no se
+      // revisaba. Ahora todo renglón sin código con importe se evalúa, con
+      // signo: si su rótulo es un escalón de la cascada debe ser ESA cifra
+      // anclada; si no, debe ser un escalón, una agregación de los renglones o
+      // un bloque contiguo de ellos. Los gastos y costos agregados admiten su
+      // magnitud (presentación absoluta del P&G); los resultados, no.
+      errors.push(
+        ...uncodedIncomeRowErrors(json, 'primary', bucket, !useB, {
+          gross,
+          op: opProfit,
+          uai: uaiCalc,
+          net: netIncome,
+          ori: parseMoneyCop(is.oriPrimary),
+        }),
+      );
+    }
+  }
+
+  // -- E22. Renglones sin código del ESF, con signo (e2e-niif-12) -------------
+  // `findUnsupportedSubtotals` (E15, aviso) y el gate de exportación comparaban
+  // valores absolutos: "Resultado neto del período +$40.000.000" bajo un
+  // renglón 36 de −$40.000.000 pasaba. Un subtotal honesto es, con su signo,
+  // la suma de un bloque de renglones impresos, el total de la sección o el
+  // total pasivo + patrimonio. Las correctoras ya restan por su código.
+  {
+    const liabPlusEquity = (period: StatementPeriod): bigint | null => {
+      const l = period === 'primary' ? bs.totalLiabilitiesPrimary : bs.totalLiabilitiesComparative;
+      const e = period === 'primary' ? bs.totalEquityPrimary : bs.totalEquityComparative;
+      return l !== null && e !== null ? parseMoneyCop(l) + parseMoneyCop(e) : null;
+    };
+    const periods: StatementPeriod[] = ['primary'];
+    if (hasComparative) periods.push('comparative');
+    for (const period of periods) {
+      const etiqueta =
+        period === 'primary'
+          ? `periodo ${json.company.fiscalPeriod}`
+          : `periodo comparativo ${json.company.comparativePeriod}`;
+      for (const [nombre, lineas, totalRaw] of [
+        ['Activo', bs.assets, period === 'primary' ? bs.totalAssetsPrimary : bs.totalAssetsComparative],
+        ['Pasivo', bs.liabilities, period === 'primary' ? bs.totalLiabilitiesPrimary : bs.totalLiabilitiesComparative],
+        ['Patrimonio', bs.equity, period === 'primary' ? bs.totalEquityPrimary : bs.totalEquityComparative],
+      ] as const) {
         errors.push(
-          `E16. El subtotal "${line.label}" imprime ${fmtCop(v)}, que no corresponde a ningún ` +
-            `escalón de la cascada del P&G (Utilidad Bruta ${fmtCop(gross)}, EBIT ` +
-            `${fmtCop(opProfit)}, UAI ${fmtCop(uaiCalc)}, Utilidad Neta ${fmtCop(netIncome)}) ` +
-            `ni a ninguna suma de los renglones listados. El lector no puede reconstruirlo.`,
+          ...uncodedBalanceRowErrors(
+            nombre,
+            lineas,
+            totalRaw === null ? null : parseMoneyCop(totalRaw),
+            liabPlusEquity(period),
+            period,
+            etiqueta,
+          ),
         );
       }
+    }
+  }
+
+  // -- E27. Subtotales corriente / no corriente del ESF == controlTotals ------
+  // Integración I4: los subtotales de plazo que imprime un ESF escrito por el
+  // modelo son las cifras de liquidez de los KPIs, el gate y X03, en ambos
+  // periodos (ver `termSubtotalErrors`).
+  if (options.ledgers) {
+    errors.push(
+      ...esfTermSubtotalMismatches(json, options.ledgers, { includeComparative: hasComparative }).map(
+        (m) => m.message,
+      ),
+    );
+  }
+
+  // -- E21. Renglones con código PUC anclados al balance de prueba ------------
+  // Auditoría 2026-09-24 (e2e-niif-02/-05/-06). E14/E9 anclaban los TOTALES y
+  // E3b sólo el renglón 11: el modelo podía mover $1.000.000 de deudores (13)
+  // a PPE (15), de obligaciones financieras (21) a proveedores (22), o inflar
+  // ingresos (41) y costo (61) en la misma cifra, en cualquiera de las dos
+  // columnas, con todos los totales intactos. Cada renglón con código se ancla
+  // ahora a la suma de las hojas del balance de prueba que su código agrupa
+  // (la hoja se asigna al código MÁS específico listado, así "15" bruto +
+  // "1592" depreciación también cuadra), tolerancia $0. Re-auditoría 2
+  // (e2e-niif2-01): renglón a renglón, sin unir renglones por códigos
+  // compartidos; ver `balanceLineAnchorErrors`.
+  if (options.ledgers) {
+    const ledgerPeriods: Array<[StatementPeriod, readonly LedgerLeaf[]]> = [
+      ['primary', options.ledgers.primary],
+    ];
+    if (hasComparative && options.ledgers.comparative) {
+      ledgerPeriods.push(['comparative', options.ledgers.comparative]);
+    }
+    // Hojas de los periodos presentados: un código está partido por plazo si
+    // lo está en alguno de ellos (e2e-niif2-01).
+    const presentedLeaves = ledgerPeriods.flatMap(([, leaves]) => leaves);
+    for (const [period, leaves] of ledgerPeriods) {
+      const etiqueta =
+        period === 'primary'
+          ? `periodo ${json.company.fiscalPeriod}`
+          : `periodo comparativo ${json.company.comparativePeriod}`;
+      for (const [nombre, lineas, classCode] of [
+        ['Activo', bs.assets, 1],
+        ['Pasivo', bs.liabilities, 2],
+        ['Patrimonio', bs.equity, 3],
+      ] as const) {
+        errors.push(
+          ...balanceLineAnchorErrors(nombre, lineas, classCode, leaves, period, etiqueta, presentedLeaves),
+        );
+      }
+      if (period === 'primary' || !pygComparativeIsNd) {
+        errors.push(...incomeLineAnchorErrors(json.incomeStatement.lines, leaves, period, etiqueta));
+      }
+    }
+  }
+
+  // -- E23. EFE renglón a renglón contra el determinista (e2e-niif-07) --------
+  if (options.deterministicCashFlow) {
+    for (const msg of formatCashFlowLineViolations(
+      crossCheckCashFlowLinesAgainstDeterministic(cf, options.deterministicCashFlow),
+    )) {
+      errors.push(`E23. ${msg}`);
+    }
+  }
+
+  // -- E19b. Apertura del ECP por componente == patrimonio comparativo del ESF
+  // Auditoría 2026-09-24 (e2e-niif-08): E19 sólo cruzaba el TOTAL de apertura;
+  // mover $1.000.000 de resultados acumulados a capital en la apertura (y en el
+  // cierre) salía limpio. Misma regla que E20, sobre la columna comparativa.
+  {
+    const openingRow = json.equityChanges.rows.find((r) => r.kind === 'opening_balance');
+    if (openingRow && hasComparative && bs.totalEquityComparative !== null) {
+      errors.push(...equityRowVsBalanceLines(openingRow, bs.equity, 'comparative', 'E19b', 'saldo inicial'));
+    }
+  }
+
+  // -- E24. ECP por componente contra el balance de prueba (e2e-niif-08) ------
+  if (options.ledgers) {
+    errors.push(
+      ...equityLedgerErrors(
+        json,
+        options.ledgers.primary,
+        hasComparative ? options.ledgers.comparative : null,
+        options.deterministicCashFlow ?? null,
+      ),
+    );
+  }
+
+  // -- Comparativos del EFE y del ECP (pendiente #3, NIIF PYMES 3.14) --------
+  // Las mismas identidades del periodo actual sobre la columna comparativa del
+  // EFE (E2/E3/E11 internas; E18/E23 contra el determinista) y sobre las filas
+  // del ECP del periodo comparativo (E4/E7/E17/E19 internas; E24 contra el
+  // determinista). Presentarlos sin base determinista es error.
+  {
+    const cmp = comparativeStatementErrors(json, options, pygComparativeIsNd);
+    errors.push(...cmp.errors);
+    warnings.push(...cmp.warnings);
+  }
+
+  // -- E25. Rótulos fechados en otro periodo (e2e-niif-09) --------------------
+  errors.push(...labelYearErrors(json));
+
+  // -- E26. curatorFlags == banderas del Curator (niif-contrato-23) ----------
+  if (options.curatorFlags) {
+    const expected = options.curatorFlags;
+    const emitted = json.curatorFlags;
+    for (const key of [
+      'equityConvergenceApplied',
+      'cashFlowClosureForced',
+      'negativeAssetReclassified',
+      'presumedCostWarning',
+    ] as const) {
+      if (emitted[key] !== expected[key]) {
+        errors.push(
+          `E26. curatorFlags.${key} = ${emitted[key]} y el Curator del balance de prueba registra ${expected[key]}.`,
+        );
+      }
+    }
+    if (parseMoneyCop(emitted.reclassifiedAmountCop) !== parseMoneyCop(expected.reclassifiedAmountCop)) {
+      errors.push(
+        `E26. curatorFlags.reclassifiedAmountCop ${fmtCop(parseMoneyCop(emitted.reclassifiedAmountCop))} ≠ ` +
+          `monto reclasificado por R1 en el balance de prueba ${fmtCop(parseMoneyCop(expected.reclassifiedAmountCop))}.`,
+      );
     }
   }
 
@@ -944,4 +1472,1432 @@ export function validateNiifReportJson(
 /** Valor absoluto en BigInt. */
 function abs(v: bigint): bigint {
   return v < ZERO ? -v : v;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers de E21–E25 (auditoría 2026-09-24)
+// ---------------------------------------------------------------------------
+
+interface IncomeBuckets {
+  ingresos41: bigint;
+  devoluciones: bigint;
+  otrosIngresos: bigint;
+  costos: bigint;
+  g51: bigint;
+  g52: bigint;
+  g53: bigint;
+  g54: bigint;
+  otros5: bigint;
+}
+
+type IncomeLine = NiifReportJson['incomeStatement']['lines'][number];
+type BalanceLine = NiifReportJson['balanceSheet']['assets'][number];
+
+function periodCell(line: { amountPrimary: string; amountComparative: string | null }, period: StatementPeriod) {
+  return period === 'primary' ? line.amountPrimary : line.amountComparative;
+}
+
+function codeDigits(account: string | null): string {
+  return (account ?? '').replace(/\D/g, '');
+}
+
+/**
+ * Aporte de un renglón con código al resultado (+ aumenta la utilidad, − la
+ * reduce), con la misma regla de signo que la cascada E16. `null` si el
+ * renglón no tiene código de las clases 4–7 o la celda no viaja.
+ */
+function incomeLineContribution(
+  line: IncomeLine,
+  period: StatementPeriod,
+  expenseSignedIsEffect: boolean,
+): { value: bigint; expense: boolean } | null {
+  const code = codeDigits(line.account);
+  const raw = periodCell(line, period);
+  if (code.length === 0 || raw === null) return null;
+  const v = parseMoneyCop(raw);
+  if (code.startsWith('4')) {
+    if (code.startsWith('4175')) return { value: -abs(v), expense: true };
+    return { value: line.isAbsolute ? abs(v) : v, expense: false };
+  }
+  if (!/^[567]/.test(code)) return null;
+  return { value: line.isAbsolute ? -abs(v) : expenseSignedIsEffect ? v : -v, expense: true };
+}
+
+const CASCADE_NAME: Record<IncomeCascadeKind, string> = {
+  gross: 'Utilidad Bruta',
+  operating: 'Resultado Operacional (EBIT)',
+  pretax: 'Utilidad Antes de Impuestos',
+  net: 'Utilidad Neta',
+  ori: 'Otro Resultado Integral',
+  comprehensive: 'Resultado Integral Total',
+};
+
+/** E22 del ERI: renglones sin código con importe (ver la nota en el llamador). */
+function uncodedIncomeRowErrors(
+  json: NiifReportJson,
+  period: StatementPeriod,
+  b: IncomeBuckets,
+  expenseSignedIsEffect: boolean,
+  casc: { gross: bigint; op: bigint; uai: bigint; net: bigint; ori: bigint | null },
+): string[] {
+  const lines = json.incomeStatement.lines;
+  const etiqueta =
+    period === 'primary'
+      ? `periodo ${json.company.fiscalPeriod}`
+      : `periodo comparativo ${json.company.comparativePeriod}`;
+  const admisibles = new Set<string>();
+  const add = (v: bigint) => admisibles.add(v.toString());
+  for (const v of [ZERO, casc.gross, casc.op, casc.uai, casc.net]) add(v);
+  if (casc.ori !== null) {
+    add(casc.ori);
+    add(casc.net + casc.ori);
+  }
+  // Ingresos y agregados mixtos: sólo con su signo.
+  for (const v of [
+    b.ingresos41,
+    b.ingresos41 + b.devoluciones,
+    b.otrosIngresos,
+    b.ingresos41 + b.devoluciones + b.otrosIngresos,
+    b.ingresos41 + b.otrosIngresos,
+    b.otrosIngresos + b.g53 + b.otros5,
+  ]) {
+    add(v);
+  }
+  // Costos, gastos y devoluciones: su aporte (negativo) o su magnitud impresa.
+  for (const v of [
+    b.devoluciones,
+    b.costos,
+    b.devoluciones + b.costos,
+    b.g51,
+    b.g52,
+    b.g51 + b.g52,
+    b.costos + b.g51 + b.g52,
+    b.g53,
+    b.g54,
+    b.otros5,
+    b.g53 + b.otros5,
+    b.g51 + b.g52 + b.g53 + b.g54 + b.otros5,
+    b.g51 + b.g52 + b.g53 + b.otros5,
+    b.costos + b.g51 + b.g52 + b.g53 + b.g54 + b.otros5,
+  ]) {
+    add(v);
+    add(-v);
+  }
+  const cascadeValue = (kind: IncomeCascadeKind): bigint | null => {
+    switch (kind) {
+      case 'gross':
+        return casc.gross;
+      case 'operating':
+        return casc.op;
+      case 'pretax':
+        return casc.uai;
+      case 'net':
+        return casc.net;
+      case 'ori':
+        return casc.ori;
+      case 'comprehensive':
+        return casc.ori === null ? null : casc.net + casc.ori;
+    }
+  };
+  const isCoded = (l: IncomeLine) => codeDigits(l.account).length > 0;
+  const contributions = lines.map((l) => incomeLineContribution(l, period, expenseSignedIsEffect));
+
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (isCoded(line)) continue;
+    const raw = periodCell(line, period);
+    if (raw === null) continue;
+    const v = parseMoneyCop(raw);
+    if (v === ZERO) continue;
+
+    const kind = incomeCascadeKindOfLabel(line.label);
+    if (kind !== null) {
+      const expected = cascadeValue(kind);
+      if (expected === null || v === expected) continue;
+      // "PÉRDIDA NETA" (o "UTILIDAD (PÉRDIDA) NETA") impresa en magnitud sobre
+      // una pérdida: el rótulo ya dice el signo, y la superficie imprime de
+      // todos modos el campo anclado con su signo. Un rótulo que sólo dice
+      // utilidad sobre una pérdida, no.
+      const wordsLoss = /p[eé]rdida|negativ|d[eé]ficit/i.test(line.label);
+      if (expected < ZERO && v === -expected && wordsLoss) continue;
+      out.push(
+        `E22. Estado de Resultados (${etiqueta}): el renglón sin código "${line.label}" es el escalón ` +
+          `${CASCADE_NAME[kind]} e imprime ${fmtCop(v)}; la cifra anclada del estado es ` +
+          `${fmtCop(expected)} (brecha ${fmtCop(v - expected)}). Un renglón del analista no sustituye un ` +
+          `total del estado: el total se imprime desde su campo anclado y este renglón bloquea la emisión.`,
+      );
+      continue;
+    }
+    if (admisibles.has(v.toString())) continue;
+
+    // Bloques contiguos de renglones con código, antes y después del renglón.
+    let supported = false;
+    for (const dir of [-1, 1]) {
+      let sum = ZERO;
+      let expenseOnly = true;
+      for (let j = i + dir; j >= 0 && j < lines.length && isCoded(lines[j]); j += dir) {
+        const c = contributions[j];
+        if (c === null) break;
+        sum += c.value;
+        expenseOnly = expenseOnly && c.expense;
+        if (sum === v || (expenseOnly && sum === -v)) {
+          supported = true;
+          break;
+        }
+      }
+      if (supported) break;
+    }
+    if (supported) continue;
+    out.push(
+      `E22. Estado de Resultados (${etiqueta}): el renglón sin código "${line.label}" imprime ${fmtCop(v)}, ` +
+        `que no es ningún escalón de la cascada (Utilidad Bruta ${fmtCop(casc.gross)}, EBIT ${fmtCop(casc.op)}, ` +
+        `UAI ${fmtCop(casc.uai)}, Utilidad Neta ${fmtCop(casc.net)}) ni la suma de un bloque de renglones ` +
+        `listados. Una cifra que el lector no puede reconstruir no se imprime en el estado.`,
+    );
+  }
+  return out;
+}
+
+const TERM_CONTROL_TOTAL: Record<'assets' | 'liabilities', Record<'current' | 'nonCurrent', [string, string]>> = {
+  assets: {
+    current: ['activo corriente', 'activoCorriente'],
+    nonCurrent: ['activo no corriente', 'activoNoCorriente'],
+  },
+  liabilities: {
+    current: ['pasivo corriente', 'pasivoCorriente'],
+    nonCurrent: ['pasivo no corriente', 'pasivoNoCorriente'],
+  },
+};
+
+/**
+ * E27 — subtotales corriente / no corriente del ESF contra la partición del
+ * preprocesador (integración I4). `controlTotals.activoCorriente` /
+ * `activoNoCorriente` / `pasivoCorriente` / `pasivoNoCorriente` son las cifras
+ * de los KPIs de liquidez, el gate y X03; aquí se reconstruyen al centavo
+ * desde las hojas del periodo con su plazo (`LedgerLeaf.term`: excepción de
+ * vencimiento declarada, virtual de R1 por su origen, grupo PUC). E21 ancla
+ * cada grupo y E22 exige que el subtotal sume su bloque, así que un grupo en el
+ * bloque equivocado imprimía subtotales coherentes consigo mismos y distintos
+ * de los KPIs cuando el ESF lo escribía el modelo (sin completado determinista).
+ * Tolerancia $0. Una celda `null` no se contrasta (no es $0); un encabezado sin
+ * "total" sólo si imprime monto; una sección con hojas de plazo no
+ * determinable, tampoco.
+ */
+function termSubtotalErrors(
+  nombre: string,
+  section: 'assets' | 'liabilities',
+  lines: readonly BalanceLine[],
+  leaves: readonly LedgerLeaf[],
+  period: StatementPeriod,
+  etiqueta: string,
+): string[] {
+  const classCode = section === 'assets' ? 1 : 2;
+  const expected = { current: ZERO, nonCurrent: ZERO };
+  for (const leaf of leaves) {
+    if (leaf.classCode !== classCode) continue;
+    if (leaf.term === undefined || leaf.term === null) {
+      if (leaf.cents !== ZERO) return [];
+      continue;
+    }
+    expected[leaf.term] += leaf.cents;
+  }
+  const out: string[] = [];
+  for (const [i, line] of lines.entries()) {
+    if (line.account !== null && line.account.trim() !== '') continue;
+    const kind = balanceTermOfLabel(section, line.label);
+    if (!kind) continue;
+    const raw = periodCell(line, period);
+    if (kind.header && (raw === null || parseMoneyCop(raw) === ZERO)) {
+      // Encabezado sin monto ("Pasivo no corriente", nivel de sección o
+      // subgrupo) cuyo bloque no cierra un subtotal de plazo: la suma de sus
+      // renglones es la cifra de ese plazo que lee el cliente, y un grupo
+      // ubicado bajo el encabezado equivocado salía limpio porque no había
+      // subtotal que contrastar (revisión F-contrato). Con subtotal al pie, lo
+      // contrasta el subtotal.
+      const block = line.level <= 1 ? headerBlockSum(section, lines, i, period) : null;
+      if (block === null || block === expected[kind.term]) continue;
+      const [noun, key] = TERM_CONTROL_TOTAL[section][kind.term];
+      out.push(
+        `E27. Estado de Situación Financiera — ${nombre} (${etiqueta}): los renglones bajo el encabezado ` +
+          `"${line.label}" suman ${fmtCop(block)} y el ${noun} del balance de prueba ` +
+          `(controlTotals.${key}: la cifra de los KPIs de liquidez, el gate y X03) es ` +
+          `${fmtCop(expected[kind.term])}. Brecha: ${fmtCop(block - expected[kind.term])}. La clasificación ` +
+          `corriente / no corriente del ESF es la del preprocesador, con los vencimientos declarados ` +
+          `(NIIF para las PYMES 4.4).`,
+      );
+      continue;
+    }
+    if (raw === null) continue;
+    const v = parseMoneyCop(raw);
+    const e = expected[kind.term];
+    if (v === e) continue;
+    const [noun, key] = TERM_CONTROL_TOTAL[section][kind.term];
+    out.push(
+      `E27. Estado de Situación Financiera — ${nombre} (${etiqueta}): "${line.label}" imprime ${fmtCop(v)} ` +
+        `y el ${noun} del balance de prueba (controlTotals.${key}: la cifra de los KPIs de liquidez, ` +
+        `el gate y X03) es ${fmtCop(e)}. Brecha: ${fmtCop(v - e)}. La clasificación corriente / no corriente ` +
+        `del ESF es la del preprocesador, con los vencimientos declarados (NIIF para las PYMES 4.4).`,
+    );
+  }
+  return out;
+}
+
+/**
+ * Σ con signo de los renglones con código bajo un encabezado de plazo sin
+ * monto, hasta el siguiente encabezado de plazo o el fin de la sección.
+ * `null` cuando el bloque lo cierra un subtotal de plazo (ese subtotal ya se
+ * contrasta) o alguna celda del bloque es `null` (E15c: no es $0).
+ */
+function headerBlockSum(
+  section: 'assets' | 'liabilities',
+  lines: readonly BalanceLine[],
+  headerIndex: number,
+  period: StatementPeriod,
+): bigint | null {
+  let sum = ZERO;
+  for (let j = headerIndex + 1; j < lines.length; j++) {
+    const l = lines[j];
+    if (l.account !== null && l.account.trim() !== '') {
+      const v = signedLineAmount(l as StatementLineWithColumns, period);
+      if (v === null) return null;
+      sum += v;
+      continue;
+    }
+    const kind = balanceTermOfLabel(section, l.label);
+    if (!kind) continue;
+    if (!kind.header) return null;
+    break;
+  }
+  return sum;
+}
+
+/** Un subtotal de plazo del ESF que no coincide con la partición del preprocesador (E27). */
+export interface EsfTermSubtotalMismatch {
+  section: 'assets' | 'liabilities';
+  period: StatementPeriod;
+  /** Mensaje E27 tal como lo publica el validador. */
+  message: string;
+}
+
+/**
+ * E27 sobre el ESF, por sección y periodo. Es la regla que publica
+ * `validateNiifReportJson` y la que usa el analista (I5-niif 2) para decidir
+ * si sustituye una sección escrita por el modelo por la proyección
+ * determinista antes de validar: una sola implementación, sin copias.
+ *
+ * `includeComparative` replica el `hasComparative` del validador (el informe
+ * presenta columna comparativa); una celda `null` no se contrasta.
+ */
+export function esfTermSubtotalMismatches(
+  json: Pick<NiifReportJson, 'company' | 'balanceSheet'>,
+  ledgers: { primary: readonly LedgerLeaf[] | null; comparative: readonly LedgerLeaf[] | null },
+  opts: { includeComparative: boolean },
+): EsfTermSubtotalMismatch[] {
+  const bs = json.balanceSheet;
+  const periods: Array<[StatementPeriod, readonly LedgerLeaf[] | null, string]> = [
+    ['primary', ledgers.primary, `periodo ${json.company.fiscalPeriod}`],
+  ];
+  if (opts.includeComparative) {
+    periods.push(['comparative', ledgers.comparative, `periodo comparativo ${json.company.comparativePeriod}`]);
+  }
+  const out: EsfTermSubtotalMismatch[] = [];
+  for (const [period, leaves, etiqueta] of periods) {
+    if (!leaves) continue;
+    for (const [nombre, section, lines] of [
+      ['Activo', 'assets', bs.assets],
+      ['Pasivo', 'liabilities', bs.liabilities],
+    ] as const) {
+      for (const message of termSubtotalErrors(nombre, section, lines, leaves, period, etiqueta)) {
+        out.push({ section, period, message });
+      }
+    }
+  }
+  return out;
+}
+
+/** E22 del ESF: subtotales y encabezados sin código, comparados con signo. */
+function uncodedBalanceRowErrors(
+  nombre: string,
+  lines: readonly BalanceLine[],
+  total: bigint | null,
+  liabPlusEquity: bigint | null,
+  period: StatementPeriod,
+  etiqueta: string,
+): string[] {
+  const out: string[] = [];
+  const isDetail = (l: BalanceLine) => l.account !== null && l.account.trim() !== '';
+  const presented = (l: BalanceLine) =>
+    signedLineAmount(l as StatementLineWithColumns, period) ?? ZERO;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (isDetail(line)) continue;
+    const raw = periodCell(line, period);
+    if (raw === null) continue;
+    const v = parseMoneyCop(raw);
+    if (v === ZERO) continue;
+    if (total !== null && v === total) continue;
+    if (liabPlusEquity !== null && v === liabPlusEquity) continue;
+    // Bloques que terminan justo antes del renglón (subtotal al pie, subtotal
+    // acumulado desde el inicio de la sección) y el bloque que lo sigue
+    // (encabezado con monto).
+    let supported = false;
+    let sum = ZERO;
+    for (let j = i - 1; j >= 0 && !supported; j--) {
+      if (!isDetail(lines[j])) continue;
+      sum += presented(lines[j]);
+      if (sum === v) supported = true;
+    }
+    sum = ZERO;
+    for (let j = i + 1; j < lines.length && isDetail(lines[j]) && !supported; j++) {
+      sum += presented(lines[j]);
+      if (sum === v) supported = true;
+    }
+    if (supported) continue;
+    out.push(
+      `E22. Estado de Situación Financiera — ${nombre} (${etiqueta}): el renglón sin código "${line.label}" ` +
+        `imprime ${fmtCop(v)}, que no es, con su signo, la suma de ningún bloque de renglones de la ` +
+        `sección, ni su total${total !== null ? ` (${fmtCop(total)})` : ''}. El lector no puede reconstruirlo.`,
+    );
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// E21 — un renglón, un código (re-auditoría 2, e2e-niif2-01)
+// ---------------------------------------------------------------------------
+// E21 anclaba GRUPOS de renglones unidos por un código compartido (unión de
+// conjuntos) y sólo comparaba la suma del grupo: un renglón puente en $0 con
+// dos códigos ("13 15", "41 61", "21 22") o dos renglones con el mismo código
+// permitían trasladar importes entre grupos o inventar sub-renglones con la
+// suma intacta. Ahora cada renglón con código se ancla SOLO a la suma de las
+// hojas que su código agrupa (cada hoja va al código listado MÁS específico:
+// "15" bruto + "1592" depreciación cuadran por separado; un sub-renglón de
+// detalle, p. ej. 510506, es su hoja). Un renglón con códigos de grupos
+// distintos es error (una cuenta con subcuentas suyas, "41 − 4175", se ancla a
+// la cuenta que las contiene);
+// un código repetido sólo se admite en las dos porciones corriente / no
+// corriente de un grupo que el balance de prueba parte por plazo (vencimiento
+// declarado, virtual de R1 por su origen), con los importes de la proyección
+// determinista (`buildDeterministicBreakdownByTerm`). Los errores de forma
+// (varios códigos, código repetido) se publican una vez, con el periodo
+// actual; los de importe, en cada columna.
+// ---------------------------------------------------------------------------
+
+/** Código listado MÁS específico que contiene la hoja, o `null`. */
+function mostSpecificKey(code: string, keys: readonly string[]): string | null {
+  let best: string | null = null;
+  for (const k of keys) {
+    if (code.startsWith(k) && (best === null || k.length > best.length)) best = k;
+  }
+  return best;
+}
+
+/**
+ * Código con que se ancla un renglón: el único que declara o, si declara una
+ * cuenta junto con subcuentas suyas ("41 − 4175" ingresos netos de
+ * devoluciones, "15 − 1592" PPE neta), el de la cuenta que las contiene: es un
+ * solo grupo y su ancla es la suma de todas sus hojas (revisión F-contrato).
+ * `null` si declara códigos de grupos distintos ("13 15", "41 61").
+ */
+function anchorCodeOf(codes: readonly string[]): string | null {
+  const root = codes.reduce((a, b) => (b.length < a.length ? b : a));
+  return codes.every((c) => c.startsWith(root)) ? root : null;
+}
+
+/** Renglones con UN código de la clase, agrupados por código; los de varios grupos, aparte. */
+function codedRows<L extends { account: string | null }>(
+  lines: readonly L[],
+  acceptCode: (code: string) => boolean,
+): { byKey: Map<string, number[]>; multi: Array<{ index: number; codes: string[] }>; uncoded: number[] } {
+  const byKey = new Map<string, number[]>();
+  const multi: Array<{ index: number; codes: string[] }> = [];
+  const uncoded: number[] = [];
+  lines.forEach((line, index) => {
+    if (line.account === null || line.account.trim() === '') return;
+    const codes = (line.account.match(/\d+/g) ?? []).filter(acceptCode);
+    if (codes.length === 0) {
+      uncoded.push(index);
+      return;
+    }
+    const key = anchorCodeOf(codes);
+    if (key === null) multi.push({ index, codes });
+    else byKey.set(key, [...(byKey.get(key) ?? []), index]);
+  });
+  return { byKey, multi, uncoded };
+}
+
+function multiCodeMessage(estado: string, etiqueta: string, rotulo: string, codes: readonly string[]): string {
+  return (
+    `E21. ${estado} (${etiqueta}): el renglón "${rotulo}" declara varios códigos PUC (${codes.join(', ')}). ` +
+    `Cada renglón con código se ancla a UNA cuenta o grupo del balance de prueba: un renglón que une ` +
+    `grupos permite trasladar importes entre ellos con la suma intacta. Presenta cada grupo en su renglón.`
+  );
+}
+
+function repeatedCodeMessage(estado: string, etiqueta: string, key: string, rotulos: readonly string[]): string {
+  return (
+    `E21. ${estado} (${etiqueta}): el código ${key} aparece en ${rotulos.length} renglones ` +
+    `(${rotulos.map((r) => `"${r}"`).join(', ')}). Un código PUC se presenta en un solo renglón, anclado ` +
+    `a la suma de sus cuentas; sólo un grupo que el balance de prueba parte por plazo (vencimiento ` +
+    `declarado, virtual de R1) va en dos renglones, uno por bloque. Un sub-renglón lleva el código de su ` +
+    `cuenta (p. ej. 510506), que se ancla a su hoja.`
+  );
+}
+
+/**
+ * Plazo con el que el modelo presenta cada renglón con código de una sección
+ * del ESF: el del subtotal que cierra su bloque o, sin él, el del encabezado
+ * que lo abre (en español o inglés). `null` para renglones sin código o fuera
+ * de un bloque reconocible. Es la lectura de E27, la de E21 para los grupos
+ * partidos y la del reconciliador cuando sustituye una sección por la
+ * proyección por plazo (el rótulo del modelo sigue a su bloque).
+ */
+export function balanceRowTerms(
+  section: 'assets' | 'liabilities',
+  lines: ReadonlyArray<{ account: string | null; label: string }>,
+): Array<BalanceTerm | null> {
+  const terms: Array<BalanceTerm | null> = lines.map(() => null);
+  let header: BalanceTerm | null = null;
+  let pending: number[] = [];
+  lines.forEach((l, i) => {
+    if (l.account !== null && l.account.trim() !== '') {
+      terms[i] = header;
+      pending.push(i);
+      return;
+    }
+    const kind = balanceTermOfLabel(section, l.label);
+    if (!kind) return;
+    if (kind.header) {
+      header = kind.term;
+      pending = [];
+      return;
+    }
+    for (const j of pending) terms[j] = kind.term;
+    pending = [];
+    header = null;
+  });
+  return terms;
+}
+
+const TERM_NAME: Record<BalanceTerm, string> = { current: 'corriente', nonCurrent: 'no corriente' };
+
+const NON_CURRENT_ROW_LABEL_RE = /\bno\s+corrientes?\b|\blargo\s+plazo\b|\bnon-?\s?current\b|\blong[-\s]term\b/g;
+const CURRENT_ROW_LABEL_RE = /\bcorrientes?\b|\bcorto\s+plazo\b|\bcurrent\b|\bshort[-\s]term\b/;
+
+/**
+ * Plazo que nombra el rótulo de un renglón con código ("… de largo plazo",
+ * "— porción corriente", "non-current portion"); `null` si no nombra ninguno
+ * o nombra los dos.
+ */
+function termNamedByRowLabel(label: string): BalanceTerm | null {
+  const t = label.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const rest = t.replace(NON_CURRENT_ROW_LABEL_RE, ' ');
+  const nonCurrent = rest !== t;
+  const current = CURRENT_ROW_LABEL_RE.test(rest);
+  if (nonCurrent === current) return null;
+  return nonCurrent ? 'nonCurrent' : 'current';
+}
+
+/**
+ * Plazo de cada una de las dos porciones de un grupo partido (revisión
+ * F-contrato). El del bloque en que el modelo las presenta; si sólo uno es
+ * determinable, el otro renglón es la otra porción (van una en cada bloque);
+ * sin bloques, el que nombran los rótulos cuando nombran plazos distintos.
+ * Así "Obligaciones financieras de largo plazo" o un renglón bajo el
+ * encabezado "Pasivo no corriente" no imprimen el importe de la porción
+ * corriente con el de la otra intercambiado. `[null, null]` = no determinable
+ * (se contrastan como multiconjunto).
+ */
+function splitRowTerms(
+  blockTerms: ReadonlyArray<BalanceTerm | null>,
+  labels: readonly string[],
+): [BalanceTerm | null, BalanceTerm | null] {
+  const other = (x: BalanceTerm): BalanceTerm => (x === 'current' ? 'nonCurrent' : 'current');
+  let [t0, t1] = [blockTerms[0], blockTerms[1]];
+  if (t0 === null && t1 === null) {
+    const [l0, l1] = [termNamedByRowLabel(labels[0]), termNamedByRowLabel(labels[1])];
+    if (l0 !== l1) [t0, t1] = [l0, l1];
+  }
+  if (t0 === null && t1 !== null) t0 = other(t1);
+  else if (t1 === null && t0 !== null) t1 = other(t0);
+  return [t0, t1];
+}
+
+/**
+ * E21 del ESF: cada renglón con código contra las hojas de su clase.
+ * `allLeaves` son las hojas de los periodos que presenta el informe: un código
+ * está partido por plazo si sus hojas tienen los dos plazos en alguno de ellos
+ * (una porción puede existir sólo en el comparativo e imprimirse en $0).
+ */
+function balanceLineAnchorErrors(
+  nombre: string,
+  lines: readonly BalanceLine[],
+  classCode: number,
+  leaves: readonly LedgerLeaf[],
+  period: StatementPeriod,
+  etiqueta: string,
+  allLeaves: readonly LedgerLeaf[],
+): string[] {
+  const out: string[] = [];
+  const estado = `Estado de Situación Financiera — ${nombre}`;
+  const structural = period === 'primary';
+  const rotulo = (i: number) => `${lines[i].account} — ${lines[i].label}`;
+  const { byKey, multi, uncoded } = codedRows(lines, (k) => k.startsWith(String(classCode)));
+
+  for (const i of uncoded) {
+    const raw = periodCell(lines[i], period);
+    if (raw === null || parseMoneyCop(raw) === ZERO) continue;
+    out.push(
+      `E21. ${estado} (${etiqueta}): el renglón "${rotulo(i)}" no lleva un código PUC de la clase ` +
+        `${classCode}; su cifra no se puede anclar al balance de prueba.`,
+    );
+  }
+  if (structural) {
+    for (const { index, codes } of multi) out.push(multiCodeMessage(estado, etiqueta, rotulo(index), codes));
+  }
+
+  const keys = [...byKey.keys()];
+  const assigned = new Map<string, { total: bigint; current: bigint; nonCurrent: bigint; undetermined: bigint }>();
+  // Cuentas de grupo (código de 2+ dígitos) que absorbe un renglón con el
+  // código de la CLASE ("2"): el residuo de lo que ningún otro renglón
+  // presenta, con un rótulo que no las identifica (revisión F-contrato).
+  const absorbedByClassRow = new Map<string, Set<string>>();
+  for (const leaf of leaves) {
+    if (leaf.classCode !== classCode) continue;
+    const k = mostSpecificKey(leaf.code, keys);
+    if (k === null) continue;
+    if (k.length === 1 && leaf.code.length > 1 && leaf.cents !== ZERO) {
+      absorbedByClassRow.set(k, (absorbedByClassRow.get(k) ?? new Set<string>()).add(leaf.code.slice(0, 2)));
+    }
+    const acc = assigned.get(k) ?? { total: ZERO, current: ZERO, nonCurrent: ZERO, undetermined: ZERO };
+    acc.total += leaf.cents;
+    if (leaf.term === 'current') acc.current += leaf.cents;
+    else if (leaf.term === 'nonCurrent') acc.nonCurrent += leaf.cents;
+    else acc.undetermined += leaf.cents;
+    assigned.set(k, acc);
+  }
+  const termsOf = new Map<string, Set<BalanceTerm>>();
+  for (const leaf of allLeaves) {
+    if (leaf.classCode !== classCode || (leaf.term !== 'current' && leaf.term !== 'nonCurrent')) continue;
+    const k = mostSpecificKey(leaf.code, keys);
+    if (k === null) continue;
+    termsOf.set(k, (termsOf.get(k) ?? new Set<BalanceTerm>()).add(leaf.term));
+  }
+  const section = classCode === 1 ? 'assets' : classCode === 2 ? 'liabilities' : null;
+  const rowTerms = section ? balanceRowTerms(section, lines) : null;
+
+  for (const [key, idx] of byKey) {
+    const expected = assigned.get(key) ?? { total: ZERO, current: ZERO, nonCurrent: ZERO, undetermined: ZERO };
+    const absorbed = absorbedByClassRow.get(key);
+    if (absorbed) {
+      // Un código de clase no es un grupo ni una cuenta: su importe cuadra
+      // por construcción con lo que sobra y el rótulo lo decide el modelo
+      // ("2 — Obligaciones financieras" con los proveedores dentro).
+      out.push(
+        `E21. ${estado} (${etiqueta}): ${idx.map((i) => `"${rotulo(i)}"`).join(', ')} lleva el código de la ` +
+          `clase ${key}, no el de un grupo o una cuenta, y agrupa las cuentas de los grupos ` +
+          `${[...absorbed].sort().join(', ')} que ningún otro renglón presenta. Cada grupo va en su renglón ` +
+          `con su código PUC.`,
+      );
+      continue;
+    }
+    if (idx.length === 1) {
+      const emitted = signedLineAmount(lines[idx[0]] as StatementLineWithColumns, period);
+      if (emitted === null) continue; // E15c: una celda ausente no se trata como cero.
+      if (emitted === expected.total) continue;
+      out.push(
+        `E21. ${estado} (${etiqueta}): "${rotulo(idx[0])}" imprime ${fmtCop(emitted)} y las cuentas del ` +
+          `balance de prueba de ese código suman ${fmtCop(expected.total)} (brecha ` +
+          `${fmtCop(emitted - expected.total)}). El importe de un renglón con código PUC es la suma de sus ` +
+          `cuentas: no lo redacta el analista.`,
+      );
+      continue;
+    }
+    const split = rowTerms !== null && idx.length === 2 && (termsOf.get(key)?.size ?? 0) === 2;
+    if (!split) {
+      if (structural) out.push(repeatedCodeMessage(estado, etiqueta, key, idx.map(rotulo)));
+      continue;
+    }
+    const t = splitRowTerms(idx.map((i) => rowTerms[i]), idx.map((i) => lines[i].label));
+    if (t[0] !== null && t[0] === t[1]) {
+      if (structural) {
+        out.push(
+          `E21. ${estado} (${etiqueta}): el código ${key} aparece en 2 renglones del mismo bloque ` +
+            `(${TERM_NAME[t[0]]}): ${idx.map((i) => `"${rotulo(i)}"`).join(', ')}. Las dos porciones de un ` +
+            `grupo partido por plazo van una en cada bloque (NIIF para las PYMES 4.4).`,
+        );
+      }
+      continue;
+    }
+    const amounts = idx.map((i) => signedLineAmount(lines[i] as StatementLineWithColumns, period));
+    if (amounts[0] === null || amounts[1] === null) continue; // E15c
+    const [a0, a1] = amounts as [bigint, bigint];
+    const { current: c, nonCurrent: n } = expected;
+    const known = t[0] !== null && t[1] !== null;
+    const ok =
+      expected.undetermined === ZERO &&
+      (known
+        ? a0 === (t[0] === 'current' ? c : n) && a1 === (t[1] === 'current' ? c : n)
+        : (a0 === c && a1 === n) || (a0 === n && a1 === c));
+    if (ok) continue;
+    const printed = known
+      ? [0, 1]
+          .sort((x, y) => (t[x] === 'current' ? 0 : 1) - (t[y] === 'current' ? 0 : 1))
+          .map((x) => `${fmtCop(x === 0 ? a0 : a1)} (${TERM_NAME[t[x]!]})`)
+          .join(' y ')
+      : `${fmtCop(a0)} y ${fmtCop(a1)}`;
+    out.push(
+      `E21. ${estado} (${etiqueta}): el ${key.length === 2 ? 'grupo' : 'código'} ${key} se presenta partido por ` +
+        `plazo y sus renglones imprimen ${printed}; las cuentas del balance de prueba de ese código suman ` +
+        `${fmtCop(c)} (corriente) y ${fmtCop(n)} (no corriente)` +
+        (expected.undetermined !== ZERO ? ` y ${fmtCop(expected.undetermined)} sin plazo determinable` : '') +
+        `. Cada porción es la suma de sus cuentas con ese plazo (vencimiento declarado, virtual de R1 por su ` +
+        `origen, grupo PUC): no la redacta el analista.`,
+    );
+  }
+  return out;
+}
+
+/** E21 del ERI: cada renglón con código de las clases 4–7 contra sus hojas. */
+function incomeLineAnchorErrors(
+  lines: readonly IncomeLine[],
+  leaves: readonly LedgerLeaf[],
+  period: StatementPeriod,
+  etiqueta: string,
+): string[] {
+  const out: string[] = [];
+  const estado = 'Estado de Resultados';
+  const structural = period === 'primary';
+  const rotulo = (i: number) => `${lines[i].account} — ${lines[i].label}`;
+  const { byKey, multi, uncoded } = codedRows(lines, (k) => /^[4-7]/.test(k));
+  if (structural) {
+    for (const { index, codes } of multi) out.push(multiCodeMessage(estado, etiqueta, rotulo(index), codes));
+  }
+  // Un código que no es de resultados (clases 1, 2, 8, 9…) no entra en la
+  // cascada ni se ancla a nada del ERI; la clase 3 sólo como desglose del ORI
+  // (grupo 38), que contrastan E6/E6b. Mismo criterio que el gate de
+  // exportación, para que la fase NIIF selle lo que la exportación bloquea.
+  for (const i of uncoded) {
+    const digits = lines[i].account?.match(/\d+/g) ?? [];
+    if (digits.length === 0 || digits.some((d) => d.startsWith('3'))) continue;
+    const raw = periodCell(lines[i], period);
+    if (raw === null || parseMoneyCop(raw) === ZERO) continue;
+    out.push(
+      `E21. ${estado} (${etiqueta}): el renglón "${rotulo(i)}" lleva un código que no es de resultados ` +
+        `(clases 4–7 del PUC) e imprime ${fmtCop(parseMoneyCop(raw))}: no entra en la cascada del estado ni ` +
+        `se ancla al balance de prueba.`,
+    );
+  }
+  if (byKey.size === 0) return out;
+  // Orientación de la clase 4 (firmada o en magnitudes): la del total de las
+  // ordinarias, igual que las anclas (`anchors.ts`).
+  const ordinarias = leaves
+    .filter((l) => l.classCode === 4 && !l.code.startsWith('4175'))
+    .reduce((acc, l) => acc + l.cents, ZERO);
+  const signo = ordinarias < ZERO ? BigInt(-1) : BigInt(1);
+  const keys = [...byKey.keys()];
+  const ord = new Map<string, bigint>();
+  const dev = new Map<string, bigint>();
+  const exp = new Map<string, bigint>();
+  const bump = (m: Map<string, bigint>, k: string, v: bigint) => m.set(k, (m.get(k) ?? ZERO) + v);
+  for (const leaf of leaves) {
+    if (leaf.classCode < 4 || leaf.classCode > 7) continue;
+    const k = mostSpecificKey(leaf.code, keys);
+    if (k === null) continue;
+    if (leaf.classCode === 4) bump(leaf.code.startsWith('4175') ? dev : ord, k, leaf.cents);
+    else bump(exp, k, leaf.cents);
+  }
+  for (const [key, idx] of byKey) {
+    if (idx.length > 1) {
+      if (structural) out.push(repeatedCodeMessage(estado, etiqueta, key, idx.map(rotulo)));
+      continue;
+    }
+    const i = idx[0];
+    if (periodCell(lines[i], period) === null) continue; // E16c: una celda ausente no se trata como cero.
+    const expected = signo * (ord.get(key) ?? ZERO) - abs(dev.get(key) ?? ZERO) - (exp.get(key) ?? ZERO);
+    const emittedA = incomeLineContribution(lines[i], period, true)?.value ?? ZERO;
+    const emittedB = incomeLineContribution(lines[i], period, false)?.value ?? ZERO;
+    if (emittedA === expected || emittedB === expected) continue;
+    out.push(
+      `E21. ${estado} (${etiqueta}): "${rotulo(i)}" aporta ${fmtCop(emittedA)} al resultado y las ` +
+        `cuentas del balance de prueba de ese código aportan ${fmtCop(expected)} (brecha ` +
+        `${fmtCop(emittedA - expected)}). Ingresos 41 − devoluciones 4175, costos 6/7 y gastos 51/52/53/54 ` +
+        `salen de las hojas del balance: el analista no los redacta.`,
+    );
+  }
+  return out;
+}
+
+type EquityColumns = {
+  capital: bigint;
+  prima: bigint;
+  reservas: bigint;
+  ejercicio: bigint;
+  acumulados: bigint;
+  ori: bigint;
+  /** Grupos sin columna en el ECP (34, 35, …): si ≠ 0 la comparación por columna no aplica. */
+  unmapped: bigint;
+};
+
+function equityColumnsFromLedger(leaves: readonly LedgerLeaf[]): EquityColumns {
+  const c: EquityColumns = {
+    capital: ZERO, prima: ZERO, reservas: ZERO, ejercicio: ZERO, acumulados: ZERO, ori: ZERO, unmapped: ZERO,
+  };
+  for (const leaf of leaves) {
+    if (leaf.classCode !== 3) continue;
+    const g = leaf.code.slice(0, 2);
+    if (g === '31') c.capital += leaf.cents;
+    else if (g === '32') c.prima += leaf.cents;
+    else if (g === '33') c.reservas += leaf.cents;
+    else if (g === '36') c.ejercicio += leaf.cents;
+    else if (g === '37') c.acumulados += leaf.cents;
+    else if (g === '38') c.ori += leaf.cents;
+    else c.unmapped += leaf.cents;
+  }
+  return c;
+}
+
+/**
+ * E6b — ORI del ERI contra el ancla determinista de cada periodo (enmienda 12,
+ * spec v2.1). Ancla = Δ grupo PUC 38 entre el corte de apertura y el de cierre
+ * (`buildOriAnchors`, `ComparativeStatementsBasis.oriCents`):
+ *   - periodo actual: apertura = corte comparativo (hojas `ledgers.comparative`);
+ *     sin él, $0 bajo el modo simple de PresentationV3 (lo anterior);
+ *   - periodo comparativo: apertura = corte anterior al comparativo (la base
+ *     comparativa); sin él y con saldo en el grupo 38, N/D (null); sin saldo,
+ *     $0 o N/D. Con P&G comparativo N/D (saldos de apertura) no se exige.
+ */
+function oriAnchorErrors(
+  json: NiifReportJson,
+  options: NiifJsonValidatorOptions,
+  oriPnl: bigint,
+): string[] {
+  const out: string[] = [];
+  const fp = json.company.fiscalPeriod;
+  const cp = json.company.comparativePeriod;
+  const ledgers = options.ledgers;
+  const basis = options.comparativeStatements;
+  const simpleMode = !!options.presentationV3 && options.presentationV3.oriComponents.length === 0;
+  const g38 = (leaves: readonly LedgerLeaf[]) => equityColumnsFromLedger(leaves).ori;
+  const regla =
+    'El ORI del periodo es el movimiento de la columna ORI del ECP (NIIF para las PYMES, Secciones 5 y 6 — ' +
+    '6.3(c)); lo calcula el código y el ERI lo copia.';
+
+  if (cp !== null && ledgers?.comparative) {
+    const anchor = g38(ledgers.primary) - g38(ledgers.comparative);
+    if (oriPnl !== anchor) {
+      out.push(
+        `E6b. ORI del ERI ${fp} (${fmtCop(oriPnl)}) ≠ variación del grupo PUC 38 (superávit por valorizaciones / ORI) ` +
+          `entre los cortes ${cp} y ${fp} (${fmtCop(anchor)}). Brecha: ${fmtCop(oriPnl - anchor)}. ${regla}`,
+      );
+    }
+  } else if (simpleMode && oriPnl !== ZERO) {
+    out.push(
+      `E6b. El ERI ${fp} presenta Otro Resultado Integral (${fmtCop(oriPnl)}) sin corte de apertura del periodo: ` +
+        `la variación del grupo PUC 38 no es medible y el ORI no tiene ancla; debe ser $0.`,
+    );
+  }
+
+  if (cp === null || options.comparativeIsOpening === true) return out;
+  const oriCmp = json.incomeStatement.oriComparative;
+  const cmp = oriCmp === null ? null : parseMoneyCop(oriCmp);
+  const measured = basis?.oriCents ?? null;
+  if (basis && measured !== null) {
+    if (cmp === null ? measured !== ZERO : cmp !== measured) {
+      out.push(
+        `E6b. ORI del ERI comparativo ${cp} (${cmp === null ? 'N/D' : fmtCop(cmp)}) ≠ variación del grupo PUC 38 ` +
+          `(superávit por valorizaciones / ORI) entre los cortes ${basis.openingPeriod} y ${cp} (${fmtCop(measured)})` +
+          `${cmp === null ? '' : `. Brecha: ${fmtCop(cmp - measured)}`}. ${regla}`,
+      );
+    }
+    return out;
+  }
+  if (cmp === null) return out;
+  const anchored = !!basis && !!ledgers?.comparative;
+  const saldo38 = anchored ? g38(ledgers!.comparative!) : ZERO;
+  if (saldo38 !== ZERO) {
+    out.push(
+      `E6b. ORI del ERI comparativo ${cp} (${fmtCop(cmp)}): sin un corte de apertura utilizable del periodo ` +
+        `comparativo la variación del grupo PUC 38 (saldo al cierre de ${cp}: ${fmtCop(saldo38)}) no es medible; ` +
+        `el ORI comparativo se presenta N/D (null), no ${fmtCop(cmp)}.`,
+    );
+  } else if ((simpleMode || anchored) && cmp !== ZERO) {
+    out.push(
+      `E6b. El ERI presenta Otro Resultado Integral comparativo ${cp} (${fmtCop(cmp)}) sin ancla: el balance ` +
+        `no permite medir la variación del grupo PUC 38 de ese periodo; debe ser $0 o N/D.`,
+    );
+  }
+  return out;
+}
+
+function equityColumnsOfRow(r: EquityChangeRowJson): Omit<EquityColumns, 'unmapped'> {
+  return {
+    capital: parseMoneyCop(r.capitalSocial),
+    prima: parseMoneyCop(r.primaColocacion),
+    reservas: parseMoneyCop(r.reservaLegal) + parseMoneyCop(r.otrasReservas),
+    ejercicio: parseMoneyCop(r.resultadoEjercicio),
+    acumulados: parseMoneyCop(r.resultadosAcumulados),
+    ori: parseMoneyCop(r.ori),
+  };
+}
+
+const EQUITY_COLUMN_NAMES: Record<keyof Omit<EquityColumns, 'unmapped'>, string> = {
+  capital: 'Capital social (31)',
+  prima: 'Superávit / prima (32)',
+  reservas: 'Reservas (33)',
+  ejercicio: 'Resultado del ejercicio (36)',
+  acumulados: 'Resultados acumulados (37)',
+  ori: 'ORI / superávit por valorizaciones (38)',
+};
+
+/**
+ * E19b: una fila del ECP (saldo inicial) contra los renglones de patrimonio del
+ * ESF de la columna pedida, por grupo PUC. Mismas condiciones de E20: todos los
+ * renglones con código mapeables, sin 34/35 con saldo y el ESF desagregando
+ * los grupos que el ECP usa.
+ */
+function equityRowVsBalanceLines(
+  row: EquityChangeRowJson,
+  equityLines: readonly BalanceLine[],
+  period: StatementPeriod,
+  rule: string,
+  nombreFila: string,
+): string[] {
+  const byGroup = new Map<string, bigint>();
+  let detail = 0;
+  for (const line of equityLines) {
+    if (line.account === null || line.account.trim() === '') continue;
+    const group = codeDigits(line.account).slice(0, 2);
+    if (!['31', '32', '33', '34', '35', '36', '37', '38'].includes(group)) return [];
+    const raw = periodCell(line, period);
+    if (raw === null) return [];
+    byGroup.set(group, (byGroup.get(group) ?? ZERO) + parseMoneyCop(raw));
+    detail++;
+  }
+  if (detail === 0) return [];
+  if ((byGroup.get('34') ?? ZERO) !== ZERO || (byGroup.get('35') ?? ZERO) !== ZERO) return [];
+  const cols = equityColumnsOfRow(row);
+  const groupOf: Record<keyof typeof cols, string> = {
+    capital: '31', prima: '32', reservas: '33', ejercicio: '36', acumulados: '37', ori: '38',
+  };
+  const covered = (Object.keys(groupOf) as Array<keyof typeof cols>).every(
+    (k) => byGroup.has(groupOf[k]) || cols[k] === ZERO,
+  );
+  if (!covered) return [];
+  const out: string[] = [];
+  for (const k of Object.keys(groupOf) as Array<keyof typeof cols>) {
+    const esf = byGroup.get(groupOf[k]) ?? ZERO;
+    if (cols[k] === esf) continue;
+    out.push(
+      `${rule}. ECP ${nombreFila} — ${EQUITY_COLUMN_NAMES[k]}: ${fmtCop(cols[k])} ≠ renglones del Estado ` +
+        `de Situación Financiera ${period === 'comparative' ? 'del periodo comparativo ' : ''}` +
+        `${fmtCop(esf)}. Brecha: ${fmtCop(cols[k] - esf)}. NIIF para las PYMES 6.3.`,
+    );
+  }
+  return out;
+}
+
+/**
+ * E24: columnas del ECP contra los grupos patrimoniales del balance de prueba
+ * (apertura = comparativo, cierre = periodo actual), y movimientos contra las
+ * variaciones deterministas. Un movimiento en una columna cuyo grupo no varió
+ * en el balance, una distribución sin soporte (2360/35 o disminución
+ * patrimonial no explicada) o un aporte sin aumento no explicado por el
+ * resultado son movimientos fabricados (NIIF para las PYMES 6.3, NIC 7 ¶43).
+ */
+function equityLedgerErrors(
+  json: NiifReportJson,
+  primary: readonly LedgerLeaf[],
+  comparative: readonly LedgerLeaf[] | null,
+  efe: DeterministicCashFlow | null,
+): string[] {
+  const out: string[] = [];
+  const rows = json.equityChanges.rows;
+  const opening = rows.find((r) => r.kind === 'opening_balance');
+  const closing = [...rows].reverse().find((r) => r.kind === 'closing_balance');
+  const colsP = equityColumnsFromLedger(primary);
+  const colsC = comparative ? equityColumnsFromLedger(comparative) : null;
+  const keys = Object.keys(EQUITY_COLUMN_NAMES) as Array<keyof typeof EQUITY_COLUMN_NAMES>;
+
+  const compare = (row: EquityChangeRowJson, ledger: EquityColumns, fila: string, periodo: string) => {
+    if (ledger.unmapped !== ZERO) return;
+    const cols = equityColumnsOfRow(row);
+    for (const k of keys) {
+      if (cols[k] === ledger[k]) continue;
+      out.push(
+        `E24. ECP ${fila} — ${EQUITY_COLUMN_NAMES[k]}: ${fmtCop(cols[k])} y el balance de prueba ` +
+          `${periodo} registra ${fmtCop(ledger[k])} (brecha ${fmtCop(cols[k] - ledger[k])}). ` +
+          `Cada columna del ECP es el saldo de su grupo patrimonial (NIIF para las PYMES 6.3).`,
+      );
+    }
+  };
+  if (closing) compare(closing, colsP, 'saldo final', `del periodo ${json.company.fiscalPeriod}`);
+  if (opening && colsC) {
+    compare(opening, colsC, 'saldo inicial', `del periodo comparativo ${json.company.comparativePeriod ?? ''}`);
+  }
+
+  const movements = rows.filter((r) => r.kind !== 'opening_balance' && r.kind !== 'closing_balance');
+  if (colsC && colsP.unmapped === ZERO && colsC.unmapped === ZERO) {
+    // Capital, prima, reservas y ORI sólo se mueven si su grupo varió.
+    for (const k of ['capital', 'prima', 'reservas', 'ori'] as const) {
+      if (colsP[k] !== colsC[k]) continue;
+      for (const r of movements) {
+        const v = equityColumnsOfRow(r)[k];
+        if (v === ZERO) continue;
+        out.push(
+          `E24. ECP fila "${r.label}" (${r.kind}) mueve ${EQUITY_COLUMN_NAMES[k]} en ${fmtCop(v)} y el ` +
+            `balance de prueba no registra variación de ese grupo entre ${json.company.comparativePeriod ?? 'la apertura'} ` +
+            `y ${json.company.fiscalPeriod}: el movimiento no tiene soporte.`,
+        );
+      }
+    }
+  }
+  for (const r of movements) {
+    if (r.kind === 'profit_for_period') {
+      const c = equityColumnsOfRow(r);
+      const others = c.capital + c.prima + c.reservas + c.acumulados + c.ori;
+      if (c.capital !== ZERO || c.prima !== ZERO || c.reservas !== ZERO || c.acumulados !== ZERO || c.ori !== ZERO) {
+        out.push(
+          `E24. ECP fila "${r.label}" (resultado del ejercicio) mueve columnas distintas del resultado ` +
+            `del ejercicio (${fmtCop(others)}): el resultado del periodo sólo afecta la columna 36.`,
+        );
+      }
+    }
+  }
+  if (efe) {
+    const distributionSupported =
+      efe.dividendEvidence.found ||
+      efe.ownerFlows.classification === 'distribution_pending_support' ||
+      efe.ownerFlows.classification === 'unreconciled';
+    for (const r of movements) {
+      const nonZero = keys.some((k) => equityColumnsOfRow(r)[k] !== ZERO) || parseMoneyCop(r.total) !== ZERO;
+      if (!nonZero) continue;
+      if (r.kind === 'dividend_distribution' && !distributionSupported) {
+        out.push(
+          `E24. ECP fila "${r.label}" (distribución de dividendos, ${fmtCop(parseMoneyCop(r.total))}): el ` +
+            `balance de prueba no la sostiene (sin movimiento en 2360/35 ni disminución patrimonial no ` +
+            `explicada por el resultado). Una distribución fabricada no se presenta (Art. 155 C.Co.).`,
+        );
+      }
+      if (
+        r.kind === 'capital_contribution' &&
+        parseMoneyCop(r.total) !== ZERO &&
+        efe.ownerFlows.classification !== 'contribution'
+      ) {
+        out.push(
+          `E24. ECP fila "${r.label}" (aporte de capital, ${fmtCop(parseMoneyCop(r.total))}): el patrimonio ` +
+            `del balance de prueba no aumentó más allá del resultado del ejercicio; el aporte no tiene soporte.`,
+        );
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Año citado junto a una norma ("Decreto 2420 de 2015", "Ley 1314/2009",
+ * "NIIF para las PYMES 2015"): no fecha la cifra del renglón.
+ */
+const CITATION_BEFORE_YEAR_RE =
+  /(?:\b(?:ley|decreto|dur|resoluci[oó]n|circular|concepto|oficio|sentencia|art[ií]culo|art|estatuto|acuerdo|c[oó]digo|secci[oó]n|par[aá]grafo|norma)\b\.?\s*(?:n(?:o|º|°|úm|um|úmero|umero)?\.?\s*)?[\d.\-]*\s*(?:de(?:l)?\s+)?$)|(?:\b(?:niif|nic|nif|pymes|iasb|ifrs|ias)\b[^\d]{0,24}$)/i;
+
+/**
+ * E25: rótulos de los cuatro estados que fechan una cifra en un año fuera del
+ * informe (auditoría 2026-09-24, e2e-niif-09: "Saldo al 31 de diciembre de
+ * 2023" en un informe 2025/2024). Se admiten el año del informe, el anterior
+ * (apertura) y el comparativo; los años de una cita normativa no cuentan.
+ */
+function labelYearErrors(json: NiifReportJson): string[] {
+  const fp = /\d{4}/.exec(json.company.fiscalPeriod)?.[0];
+  if (!fp) return [];
+  const allowed = new Set([fp, String(Number(fp) - 1)]);
+  const cp = json.company.comparativePeriod ? /\d{4}/.exec(json.company.comparativePeriod)?.[0] : undefined;
+  if (cp) allowed.add(cp);
+  // El ECP del periodo comparativo abre con el cierre del año anterior al
+  // comparativo (traslado de su resultado): ese año se admite SÓLO en sus
+  // filas; en el resto del informe sigue fuera de periodo (e2e-niif-09).
+  const comparativeRows = json.equityChanges.comparativeRows ?? [];
+  const allowedComparativeRows = new Set(allowed);
+  if (cp) allowedComparativeRows.add(String(Number(cp) - 1));
+  const labels: Array<[string, string, Set<string>]> = [];
+  for (const [where, lines] of [
+    ['Estado de Situación Financiera', [...json.balanceSheet.assets, ...json.balanceSheet.liabilities, ...json.balanceSheet.equity]],
+    ['Estado de Resultados', json.incomeStatement.lines],
+    ['Estado de Flujos de Efectivo', json.cashFlow.sections.flatMap((s) => s.lines)],
+  ] as const) {
+    for (const l of lines) labels.push([where, l.label, allowed]);
+  }
+  for (const r of json.equityChanges.rows) labels.push(['Estado de Cambios en el Patrimonio', r.label, allowed]);
+  for (const r of comparativeRows) {
+    labels.push(['Estado de Cambios en el Patrimonio (periodo comparativo)', r.label, allowedComparativeRows]);
+  }
+
+  const out: string[] = [];
+  for (const [where, label, years] of labels) {
+    const re = /(?<![\d/.,])((?:19|20)\d{2})(?![\d])/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(label)) !== null) {
+      const year = m[1];
+      if (years.has(year)) continue;
+      const before = label.slice(0, m.index);
+      if (/\/\s*$/.test(before) || CITATION_BEFORE_YEAR_RE.test(before)) continue;
+      out.push(
+        `E25. ${where}: el rótulo "${label}" cita el año ${year}, fuera del periodo del informe ` +
+          `(${json.company.fiscalPeriod}${json.company.comparativePeriod ? ` y comparativo ${json.company.comparativePeriod}` : ''}). ` +
+          `Un rótulo no puede fechar la cifra en otro periodo.`,
+      );
+      break;
+    }
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Comparativos del EFE y del ECP (auditoría integral 2026-09-24, pendiente #3)
+// ---------------------------------------------------------------------------
+
+const EQUITY_ROW_COLUMNS = [
+  'capitalSocial',
+  'primaColocacion',
+  'reservaLegal',
+  'otrasReservas',
+  'resultadosAcumulados',
+  'resultadoEjercicio',
+  'ori',
+  'total',
+] as const;
+
+/** El EFE declara columna comparativa (algún subtotal, total o celda no nulo). */
+function cashFlowComparativePresented(cf: NiifReportJson['cashFlow']): {
+  anyTotal: boolean;
+  allTotals: boolean;
+  anyCell: boolean;
+} {
+  const totals = [
+    cf.netChangeComparative,
+    cf.cashOpeningComparative,
+    cf.cashClosingComparative,
+    ...cf.sections.map((s) => s.netFlowComparative),
+  ];
+  // `undefined` (informe serializado antes del contrato, sin pasar por
+  // `NiifReportSchema`) cuenta como no presentado, igual que `null`.
+  const shown = (v: string | null | undefined) => v !== null && v !== undefined;
+  return {
+    anyTotal: totals.some(shown),
+    allTotals: totals.every(shown),
+    anyCell: cf.sections.some((s) => s.lines.some((l) => shown(l.amountComparative))),
+  };
+}
+
+/** La columna comparativa del EFE vista como un EFE de un periodo. */
+function comparativeCashFlowView(cf: NiifReportJson['cashFlow']): CashFlowStatementLike {
+  return {
+    sections: cf.sections.map((s) => ({
+      section: s.section,
+      lines: s.lines
+        .filter((l) => (l.amountComparative ?? null) !== null)
+        .map((l) => ({ account: l.account, label: l.label, amountPrimary: l.amountComparative as string })),
+      netFlow: s.netFlowComparative ?? '0',
+    })),
+    netChange: cf.netChangeComparative ?? '0',
+    cashOpening: cf.cashOpeningComparative ?? '0',
+    cashClosing: cf.cashClosingComparative ?? '0',
+  };
+}
+
+function comparativeStatementErrors(
+  json: NiifReportJson,
+  options: NiifJsonValidatorOptions,
+  pygComparativeIsNd: boolean,
+): { errors: string[]; warnings: string[] } {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const cp = json.company.comparativePeriod;
+  const etiqueta = `periodo comparativo ${cp ?? '(no declarado)'}`;
+  const basis = options.comparativeStatements;
+  const anchored = basis !== undefined;
+
+  // -- EFE -------------------------------------------------------------------
+  const cf = json.cashFlow;
+  const presence = cashFlowComparativePresented(cf);
+  const cfPresented = presence.anyTotal || presence.anyCell;
+  if (cfPresented && cp === null) {
+    errors.push(
+      `E2. EFE: se presenta una columna comparativa y el informe no declara periodo comparativo. ` +
+        `Una cifra comparativa sin periodo no se imprime.`,
+    );
+  } else if (presence.anyCell && !presence.anyTotal) {
+    errors.push(
+      `E2. EFE (${etiqueta}): renglones con cifra comparativa sin subtotales ni efectivo comparativos. ` +
+        `La columna comparativa del EFE la calcula el código desde el balance de prueba; una celda ` +
+        `suelta no tiene base determinista y no se imprime.`,
+    );
+  } else if (presence.anyTotal && !presence.allTotals) {
+    errors.push(
+      `E2. EFE (${etiqueta}): la columna comparativa está incompleta (subtotales o efectivo al ` +
+        `inicio/final en null). O se presenta completa o no se presenta (nota de comparativo no presentado).`,
+    );
+  } else if (presence.allTotals && cp !== null) {
+    const netChange = parseMoneyCop(cf.netChangeComparative!);
+    const opening = parseMoneyCop(cf.cashOpeningComparative!);
+    const closing = parseMoneyCop(cf.cashClosingComparative!);
+    const sumSections = cf.sections.reduce((acc, s) => acc + parseMoneyCop(s.netFlowComparative!), ZERO);
+    if (sumSections !== netChange) {
+      errors.push(
+        `E2. EFE (${etiqueta}): netChange ≠ Σ(netFlow secciones). Brecha: ${fmtCop(netChange - sumSections)}.`,
+      );
+    }
+    if (opening + netChange !== closing) {
+      errors.push(
+        `E2. EFE (${etiqueta}): cashClosing ≠ cashOpening + netChange. Brecha: ` +
+          `${fmtCop(closing - opening - netChange)}.`,
+      );
+    }
+    // E3 del comparativo: su efectivo final ES el efectivo inicial del periodo.
+    const primaryOpening = parseMoneyCop(cf.cashOpening);
+    if (closing !== primaryOpening) {
+      errors.push(
+        `E3. EFE (${etiqueta}): el efectivo al final del periodo comparativo (${fmtCop(closing)}) ≠ ` +
+          `efectivo al inicio del periodo ${json.company.fiscalPeriod} (${fmtCop(primaryOpening)}). ` +
+          `Brecha: ${fmtCop(closing - primaryOpening)}. Es el mismo saldo (NIC 7 ¶45).`,
+      );
+    }
+    const missing = cf.sections.reduce(
+      (acc, s) =>
+        acc + s.lines.filter((l) => (l.amountComparative ?? null) === null && parseMoneyCop(l.amountPrimary) !== ZERO).length,
+      0,
+    );
+    if (missing > 0) {
+      errors.push(
+        `E2. EFE (${etiqueta}): ${missing} renglón(es) sin cifra comparativa bajo una columna comparativa ` +
+          `presentada; la columna no se puede verificar contra sus subtotales.`,
+      );
+    } else {
+      // Σ renglones comparativos == subtotal comparativo de cada actividad.
+      for (const s of cf.sections) {
+        const sum = s.lines.reduce(
+          (acc, l) => ((l.amountComparative ?? null) === null ? acc : acc + parseMoneyCop(l.amountComparative!)),
+          ZERO,
+        );
+        const netFlow = parseMoneyCop(s.netFlowComparative!);
+        if (sum === netFlow) continue;
+        errors.push(
+          `E2. EFE (${etiqueta}) — actividades de ${s.section}: los renglones comparativos suman ` +
+            `${fmtCop(sum)} y el subtotal comparativo es ${fmtCop(netFlow)}. Brecha: ${fmtCop(sum - netFlow)}.`,
+        );
+      }
+    }
+    // E11 del comparativo: el método indirecto parte del resultado del periodo.
+    const operating = cf.sections.find((s) => s.section === 'operating');
+    const first = operating?.lines[0];
+    const netIncomeComparative = json.incomeStatement.netIncomeComparative;
+    if (first && first.amountComparative !== null && netIncomeComparative !== null && !pygComparativeIsNd) {
+      const firstCmp = parseMoneyCop(first.amountComparative);
+      const niCmp = parseMoneyCop(netIncomeComparative);
+      if (firstCmp !== niCmp) {
+        errors.push(
+          `E11. EFE (${etiqueta}): el primer renglón de operación (${fmtCop(firstCmp)}) ≠ utilidad neta ` +
+            `comparativa del P&G (${fmtCop(niCmp)}). Brecha: ${fmtCop(firstCmp - niCmp)}.`,
+        );
+      }
+    }
+  }
+
+  if (anchored) {
+    const detCf = basis?.cashFlow ?? null;
+    if (cfPresented && detCf === null) {
+      const reason = basis?.cashFlowNote ?? 'el balance de prueba no tiene periodo comparativo';
+      errors.push(
+        `E18. EFE (${etiqueta}): se presenta una columna comparativa sin base determinista — ${reason} ` +
+          `Un comparativo del EFE sin corte de apertura no se presenta (NIIF para las PYMES 3.14).`,
+      );
+    } else if (detCf !== null && presence.allTotals && cp !== null) {
+      const view = comparativeCashFlowView(cf);
+      for (const msg of formatCashFlowCrossCheckViolations(crossCheckCashFlowAgainstDeterministic(view, detCf))) {
+        errors.push(`E18. (${etiqueta}) ${msg}`);
+      }
+      for (const msg of formatCashFlowLineViolations(crossCheckCashFlowLinesAgainstDeterministic(view, detCf))) {
+        errors.push(`E23. (${etiqueta}) ${msg}`);
+      }
+    } else if (detCf !== null && !cfPresented && cp !== null) {
+      warnings.push(
+        `E18c. EFE: la columna comparativa ${cp} es calculable desde el balance de prueba y el informe ` +
+          `no la presenta (NIIF para las PYMES 3.14). Regenere el informe.`,
+      );
+    }
+  }
+
+  // -- ECP del periodo comparativo ---------------------------------------------
+  const rows = json.equityChanges.comparativeRows ?? null;
+  if (rows !== null) {
+    if (cp === null) {
+      errors.push(
+        `E4. ECP: se presentan filas del periodo comparativo y el informe no declara periodo comparativo.`,
+      );
+    } else {
+      for (const [index, row] of rows.entries()) {
+        const sum = EQUITY_ROW_COLUMNS.slice(0, 7).reduce((acc, k) => acc + parseMoneyCop(row[k]), ZERO);
+        const total = parseMoneyCop(row.total);
+        if (sum !== total) {
+          errors.push(
+            `E17. ECP (${etiqueta}) fila ${index + 1} (${row.kind}): suma de componentes ${fmtCop(sum)} ≠ ` +
+              `total ${fmtCop(total)}. Brecha: ${fmtCop(sum - total)}.`,
+          );
+        }
+      }
+      const opening = rows.find((r) => r.kind === 'opening_balance');
+      const closing = [...rows].reverse().find((r) => r.kind === 'closing_balance');
+      if (!opening || !closing) {
+        errors.push(`E7. ECP (${etiqueta}): debe incluir opening_balance y closing_balance.`);
+      } else {
+        for (const col of EQUITY_ROW_COLUMNS) {
+          const computed = rows.reduce<bigint>(
+            (acc, r) => (r.kind === 'closing_balance' ? acc : acc + parseMoneyCop(r[col])),
+            ZERO,
+          );
+          const closingVal = parseMoneyCop(closing[col]);
+          if (computed === closingVal) continue;
+          errors.push(
+            `E7c. ECP (${etiqueta}) columna "${col}" no cuadra: Σ filas (${fmtCop(computed)}) ≠ ` +
+              `closing_balance (${fmtCop(closingVal)}); brecha ${fmtCop(computed - closingVal)}.`,
+          );
+        }
+        const totalEquityComparative = json.balanceSheet.totalEquityComparative;
+        if (totalEquityComparative !== null && parseMoneyCop(closing.total) !== parseMoneyCop(totalEquityComparative)) {
+          errors.push(
+            `E4. ECP (${etiqueta}): saldo final ${fmtCop(parseMoneyCop(closing.total))} ≠ Total Patrimonio ` +
+              `comparativo del ESF ${fmtCop(parseMoneyCop(totalEquityComparative))}.`,
+          );
+        }
+        // E20 del comparativo: cada columna del saldo final del ECP
+        // comparativo == renglones de patrimonio del ESF comparativo.
+        if (totalEquityComparative !== null) {
+          errors.push(
+            ...equityRowVsBalanceLines(
+              closing,
+              json.balanceSheet.equity,
+              'comparative',
+              'E20c',
+              `(${etiqueta}) saldo final`,
+            ),
+          );
+        }
+        // E6 del periodo comparativo (integración I2): el ORI del ERI
+        // comparativo es la variación de la columna ORI del ECP comparativo
+        // (Δ grupo 38), igual que en el periodo actual (NIIF para las PYMES
+        // 6.3). Un ORI comparativo no presentado (null) o un P&G comparativo
+        // N/D (saldos de apertura) no se cruzan.
+        //
+        // La revisión I2 lo había apagado bajo el régimen de E6b porque E6b
+        // fijaba el ORI del ERI en $0 y el ECP comparativo determinista lleva
+        // Δ38 en la columna ORI. Con la enmienda 12 (spec v2.1) E6b ancla el ORI
+        // a esa misma Δ38, así que los dos cruces coinciden y corre siempre.
+        const oriCmp = json.incomeStatement.oriComparative;
+        if (!pygComparativeIsNd && oriCmp !== null) {
+          const oriDelta = parseMoneyCop(closing.ori) - parseMoneyCop(opening.ori);
+          const oriPnlCmp = parseMoneyCop(oriCmp);
+          if (oriDelta !== oriPnlCmp) {
+            errors.push(
+              `E6. ECP (${etiqueta}): Δ(ORI) del ECP comparativo (${fmtCop(oriDelta)}) ≠ ORI del ERI ` +
+                `comparativo (${fmtCop(oriPnlCmp)}). Brecha: ${fmtCop(oriDelta - oriPnlCmp)}. NIIF para las PYMES 6.3.`,
+            );
+          }
+        }
+        // E19 entre periodos: el saldo final del comparativo es el saldo
+        // inicial del periodo, columna a columna (NIIF para las PYMES 6.3).
+        const primaryOpening = json.equityChanges.rows.find((r) => r.kind === 'opening_balance');
+        if (primaryOpening) {
+          for (const col of EQUITY_ROW_COLUMNS) {
+            const a = parseMoneyCop(closing[col]);
+            const b = parseMoneyCop(primaryOpening[col]);
+            if (a === b) continue;
+            errors.push(
+              `E19. ECP: columna "${col}" — saldo final del periodo comparativo ${cp} (${fmtCop(a)}) ≠ saldo ` +
+                `inicial del periodo ${json.company.fiscalPeriod} (${fmtCop(b)}). Es el mismo saldo.`,
+            );
+          }
+        }
+      }
+      const profit = rows.find((r) => r.kind === 'profit_for_period');
+      const niCmp = json.incomeStatement.netIncomeComparative;
+      if (!pygComparativeIsNd && niCmp !== null) {
+        const expected = parseMoneyCop(niCmp);
+        const emitted = profit ? parseMoneyCop(profit.resultadoEjercicio) : null;
+        if (emitted !== expected) {
+          errors.push(
+            `E7a. ECP (${etiqueta}): resultado del ejercicio ${emitted === null ? 'ausente' : fmtCop(emitted)} ≠ ` +
+              `utilidad neta comparativa del P&G ${fmtCop(expected)}.`,
+          );
+        }
+      }
+      for (const r of rows) {
+        if (r.kind === 'prior_period_result_cancellation' && parseMoneyCop(r.total) !== ZERO) {
+          errors.push(
+            `E7b. ECP (${etiqueta}): el traslado del resultado anterior es interno del patrimonio y su total ` +
+              `es $0 (fila "${r.label}": ${fmtCop(parseMoneyCop(r.total))}).`,
+          );
+        }
+      }
+    }
+  }
+  if (anchored) {
+    const detRows = basis?.equityRows ?? null;
+    if (rows !== null && detRows === null) {
+      const reason = basis?.equityNote ?? 'el balance de prueba no tiene periodo comparativo';
+      errors.push(
+        `E24. ECP (${etiqueta}): se presentan filas del periodo comparativo sin base determinista — ${reason} ` +
+          `(NIIF para las PYMES 3.14).`,
+      );
+    } else if (rows !== null && detRows !== null) {
+      errors.push(...equityComparativeRowDiffs(rows, detRows, etiqueta));
+    } else if (rows === null && detRows !== null && cp !== null) {
+      warnings.push(
+        `E24c. ECP: el estado de cambios en el patrimonio del periodo comparativo ${cp} es calculable desde ` +
+          `el balance de prueba y el informe no lo presenta (NIIF para las PYMES 3.14). Regenere el informe.`,
+      );
+    }
+  }
+  return { errors, warnings };
+}
+
+/**
+ * E24 del ECP comparativo: sus filas son una proyección del balance de prueba
+ * (`buildDeterministicEquityChanges`), así que se exigen idénticas — tipo,
+ * rótulo y cada columna — a las que calcula el código.
+ */
+function equityComparativeRowDiffs(
+  rows: readonly EquityChangeRowJson[],
+  expected: readonly EquityChangeRowJson[],
+  etiqueta: string,
+): string[] {
+  const out: string[] = [];
+  if (rows.length !== expected.length) {
+    out.push(
+      `E24. ECP (${etiqueta}): ${rows.length} fila(s) presentadas y el cálculo desde el balance de prueba ` +
+        `tiene ${expected.length}. Las filas del comparativo no las redacta el analista.`,
+    );
+  }
+  const n = Math.min(rows.length, expected.length);
+  for (let i = 0; i < n; i++) {
+    const r = rows[i];
+    const e = expected[i];
+    if (r.kind !== e.kind || r.label !== e.label) {
+      out.push(
+        `E24. ECP (${etiqueta}) fila ${i + 1}: "${r.label}" (${r.kind}) y el cálculo desde el balance de ` +
+          `prueba es "${e.label}" (${e.kind}).`,
+      );
+      continue;
+    }
+    for (const col of EQUITY_ROW_COLUMNS) {
+      const a = parseMoneyCop(r[col]);
+      const b = parseMoneyCop(e[col]);
+      if (a === b) continue;
+      out.push(
+        `E24. ECP (${etiqueta}) fila "${r.label}" — columna "${col}": ${fmtCop(a)} y el balance de prueba ` +
+          `da ${fmtCop(b)} (brecha ${fmtCop(a - b)}).`,
+      );
+    }
+  }
+  return out;
 }

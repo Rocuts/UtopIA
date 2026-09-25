@@ -22,6 +22,20 @@ import type {
   TPDocumentationResult,
   TPProgressEvent,
 } from '../types';
+import {
+  notaSinMontosDelModelo,
+  textoSinMontosDeAjuste,
+  textosSinMontosDeAjuste,
+  tpAjusteCopDeterminista,
+  tpMotivoRango,
+  type TpRangeCheck,
+} from '../lib/deterministic';
+import {
+  ART_260_11_FUENTE,
+  ART_260_11_SANCIONES,
+  enforceTpSanctions,
+  topeCentavos,
+} from '../lib/sanciones-260-11';
 
 /**
  * Toma los outputs de los Agentes 1 + 2 y produce la documentación
@@ -37,6 +51,10 @@ export async function runTPDocumentationWriter(
   signal?: AbortSignal,
 ): Promise<TPDocumentationResult> {
   const system = buildTPDocumentationPrompt(company, language);
+  const check = comparableAnalysis.rangeCheck;
+  // Los topes de sanción se expresan con la UVT del año de presentación de la
+  // documentación (año gravable + 1); si esa UVT no está registrada → N/D.
+  const sanctionYear = tpAnalysis.taxYear + 1;
 
   const userContent = [
     'ANÁLISIS DEL AGENTE 1 — ANALISTA DE PRECIOS DE TRANSFERENCIA:',
@@ -48,6 +66,10 @@ export async function runTPDocumentationWriter(
     'ANÁLISIS DEL AGENTE 2 — ESTUDIO DE COMPARABLES Y BENCHMARKING:',
     '',
     comparableAnalysis.fullContent,
+    '',
+    check.conclusive
+      ? ''
+      : `ESTADO DEL ANÁLISIS ECONÓMICO: ${check.reason} La conclusión global y las filas del Formato 1125 deben presentarse como escenario ilustrativo, no como definitivas.`,
   ].join('\n');
 
   onProgress?.({
@@ -66,14 +88,86 @@ export async function runTPDocumentationWriter(
     signal,
   });
 
-  return toTPDocumentationResult(json, language);
+  return toTPDocumentationResult(
+    enforceTpDocumentation(enforceTpSanctions(json, sanctionYear), check, language),
+    check,
+    sanctionYear,
+    language,
+  );
+}
+
+/**
+ * Sobrescribe en las filas del Formato 1125 el rango (Q1, mediana, Q3) y
+ * «¿en rango?» con el cálculo determinista del Agente 2. Si el análisis no es
+ * concluyente las filas se marcan como ilustrativas.
+ */
+export function enforceTpDocumentation(
+  json: TpDocumentationReportJson,
+  check: TpRangeCheck,
+  language: 'es' | 'en' = 'es',
+): TpDocumentationReportJson {
+  const s = check.stats;
+  const ilustrativa =
+    (language === 'en' ? 'ILLUSTRATIVE — do not file: ' : 'ILUSTRATIVA — no presentar: ') +
+    (tpMotivoRango(check, language) ?? '');
+  // Ajuste en COP: "0" dentro del rango; fuera de él N/D (el contrato no trae
+  // la base del PLI en COP por operación — fase 2, pendiente #8).
+  const ajusteCop = tpAjusteCopDeterminista(check);
+  // Textos libres del modelo que hablan del ajuste: sin montos que el código
+  // no calculó cuando el ajuste en COP es N/D (I4-escudo 7). Los montos de las
+  // operaciones (transactionsDetail / transactionsOverview) no son el ajuste.
+  const sinMontos = (t: string) => textoSinMontosDeAjuste(t, ajusteCop, language);
+  return {
+    ...json,
+    executiveSummary: {
+      ...json.executiveSummary,
+      keyRisks: textosSinMontosDeAjuste(json.executiveSummary.keyRisks, ajusteCop, language),
+      keyRecommendations: textosSinMontosDeAjuste(json.executiveSummary.keyRecommendations, ajusteCop, language),
+    },
+    // Las posiciones fiscales del grupo también pueden cuantificar el ajuste.
+    masterFile: {
+      ...json.masterFile,
+      groupFinancialAndTaxPositions: sinMontos(json.masterFile.groupFinancialAndTaxPositions),
+    },
+    localFile: {
+      ...json.localFile,
+      economicAnalysisDetail: sinMontos(json.localFile.economicAnalysisDetail),
+      conclusionsByOperation: json.localFile.conclusionsByOperation.map((c) => ({
+        ...c,
+        requiredAdjustmentCop: ajusteCop,
+        fiscalImpactNote: notaSinMontosDelModelo(c.fiscalImpactNote, ajusteCop, language),
+      })),
+    },
+    formato1125Rows: json.formato1125Rows.map((r) => {
+      const remarks = r.remarks === null ? null : sinMontos(r.remarks);
+      return {
+        ...r,
+        q1Percent: s ? s.q1 : null,
+        medianPercent: s ? s.median : null,
+        q3Percent: s ? s.q3 : null,
+        isWithinRange: check.isWithinRange === true,
+        adjustmentCop: ajusteCop,
+        remarks: check.conclusive ? remarks : [ilustrativa, remarks].filter(Boolean).join(' | '),
+      };
+    }),
+    recommendations: json.recommendations.map((rec) => ({ ...rec, detail: sinMontos(rec.detail) })),
+    art647Defense: { ...json.art647Defense, rationale: sinMontos(json.art647Defense.rationale) },
+  };
+}
+
+function fmtAjuste(cents: string | null, lang: 'es' | 'en'): string {
+  return cents === null ? 'N/D' + (lang === 'en' ? ' (no verified PLI base)' : ' (sin base del PLI verificada)') : formatCopFromCents(parseMoneyCop(cents), true);
 }
 
 // ---------------------------------------------------------------------------
 // Adapter local: TpDocumentationReportJson -> TPDocumentationResult legacy
 // ---------------------------------------------------------------------------
 
-function renderExecutiveSummary(json: TpDocumentationReportJson, lang: 'es' | 'en'): string {
+function renderExecutiveSummary(
+  json: TpDocumentationReportJson,
+  check: TpRangeCheck,
+  lang: 'es' | 'en',
+): string {
   const e = json.executiveSummary;
   const conclusionLabel: Record<typeof e.overallComplianceConclusion, string> = {
     cumple: lang === 'en' ? 'COMPLIES' : 'CUMPLE',
@@ -84,7 +178,11 @@ function renderExecutiveSummary(json: TpDocumentationReportJson, lang: 'es' | 'e
     `**${lang === 'en' ? 'Objective' : 'Objetivo'}:** ${e.objective}`,
     `**${lang === 'en' ? 'Period' : 'Periodo'}:** ${e.period}`,
     `**${lang === 'en' ? 'Methods applied' : 'Métodos aplicados'}:** ${e.methodsApplied.join(', ')}`,
-    `**${lang === 'en' ? 'Compliance conclusion' : 'Conclusión global'}:** ${conclusionLabel[e.overallComplianceConclusion]}`,
+    `**${lang === 'en' ? 'Compliance conclusion' : 'Conclusión global'}:** ${
+      check.conclusive
+        ? conclusionLabel[e.overallComplianceConclusion]
+        : `${lang === 'en' ? 'NOT CONCLUSIVE (illustrative scenario)' : 'NO CONCLUYENTE (escenario ilustrativo)'} — ${tpMotivoRango(check, lang)}`
+    }`,
     '',
     e.transactionsOverview,
     '',
@@ -96,12 +194,18 @@ function renderExecutiveSummary(json: TpDocumentationReportJson, lang: 'es' | 'e
   ].join('\n');
 }
 
-function renderLocalFile(json: TpDocumentationReportJson, lang: 'es' | 'en'): string {
+function renderLocalFile(
+  json: TpDocumentationReportJson,
+  check: TpRangeCheck,
+  lang: 'es' | 'en',
+): string {
   const lf = json.localFile;
   const conclusions = lf.conclusionsByOperation
     .map((c) => {
-      const adj = formatCopFromCents(parseMoneyCop(c.requiredAdjustmentCop), true);
-      const cmp = c.complies ? (lang === 'en' ? 'COMPLIES' : 'CUMPLE') : (lang === 'en' ? 'DOES NOT COMPLY' : 'NO CUMPLE');
+      const adj = fmtAjuste(c.requiredAdjustmentCop, lang);
+      const cmp = !check.conclusive
+        ? (lang === 'en' ? 'NOT CONCLUSIVE' : 'NO CONCLUYENTE')
+        : c.complies ? (lang === 'en' ? 'COMPLIES' : 'CUMPLE') : (lang === 'en' ? 'DOES NOT COMPLY' : 'NO CUMPLE');
       return `- **${c.transactionDescription}** — ${cmp} | ${lang === 'en' ? 'Adjustment' : 'Ajuste'}: ${adj}${c.fiscalImpactNote ? ` | _${c.fiscalImpactNote}_` : ''}`;
     })
     .join('\n');
@@ -156,7 +260,7 @@ function renderFormato1125(json: TpDocumentationReportJson, lang: 'es' | 'en'): 
   const fmtPct = (v: number | null) => (v === null ? '—' : `${v.toFixed(2)}%`);
   const rows = json.formato1125Rows.map((r) => {
     const amt = formatCopFromCents(parseMoneyCop(r.amountCop), true);
-    const adj = formatCopFromCents(parseMoneyCop(r.adjustmentCop), true);
+    const adj = fmtAjuste(r.adjustmentCop, lang);
     const inRange = r.isWithinRange ? (lang === 'en' ? 'Yes' : 'Sí') : 'No';
     return `| ${r.operationCode} | ${r.relatedPartyName} | ${r.relatedPartyTaxId} | ${r.countryCode} | ${amt} | ${r.methodCode} | ${fmtPct(r.observedPliPercent)} | ${fmtPct(r.q1Percent)} | ${fmtPct(r.medianPercent)} | ${fmtPct(r.q3Percent)} | ${inRange} | ${adj} |`;
   });
@@ -167,18 +271,30 @@ function renderFormato1125(json: TpDocumentationReportJson, lang: 'es' | 'en'): 
   return [header, rows.join('\n'), '', remarks].filter(Boolean).join('\n');
 }
 
-function renderSanctions(json: TpDocumentationReportJson, lang: 'es' | 'en'): string {
-  if (json.potentialSanctions.length === 0) {
-    return lang === 'en' ? '_No sanctions documented._' : '_Sin sanciones documentadas._';
-  }
+function renderSanctions(
+  json: TpDocumentationReportJson,
+  sanctionYear: number,
+  lang: 'es' | 'en',
+): string {
+  const escenarios = json.potentialSanctions.length > 0
+    ? Array.from(new Set(json.potentialSanctions.map((s) => s.scenario)))
+    : (Object.keys(ART_260_11_SANCIONES) as Array<keyof typeof ART_260_11_SANCIONES>);
   const header = lang === 'en'
-    ? '| Scenario | Max UVT | Max COP | Description |\n|---|---:|---:|---|'
-    : '| Escenario | Máximo UVT | Máximo COP | Descripción |\n|---|---:|---:|---|';
-  const rows = json.potentialSanctions.map((s) => {
-    const cop = formatCopFromCents(parseMoneyCop(s.maximumCop), true);
-    return `| ${s.scenario.replace(/_/g, ' ')} | ${s.maximumUvt.toLocaleString('es-CO')} | ${cop} | ${s.description} |`;
-  });
-  return [header, rows.join('\n')].join('\n');
+    ? `| Literal | Scenario | Rate | Cap (UVT) | Cap (COP, UVT ${sanctionYear}) |\n|---|---|---|---:|---:|`
+    : `| Literal | Escenario | Tarifa | Tope (UVT) | Tope (COP, UVT ${sanctionYear}) |\n|---|---|---|---:|---:|`;
+  const rows = escenarios.flatMap((esc) =>
+    ART_260_11_SANCIONES[esc].map((s) => {
+      const cents = topeCentavos(s.topeUvt, sanctionYear);
+      const cop = s.topeUvt === null
+        ? '—'
+        : cents === null
+          ? `N/D (UVT ${sanctionYear} no registrada)`
+          : formatCopFromCents(BigInt(cents), true);
+      const uvt = s.topeUvt === null ? '—' : s.topeUvt.toLocaleString('es-CO');
+      return `| ${s.literal} | ${s.descripcion} | ${s.tarifa} | ${uvt} | ${cop} |`;
+    }),
+  );
+  return [header, rows.join('\n'), '', `_${lang === 'en' ? 'Source' : 'Fuente'}: ${ART_260_11_FUENTE}. ${lang === 'en' ? 'The sanction is settled with the UVT of the year it is imposed.' : 'La sanción se liquida con la UVT del año en que se impone.'}_`].join('\n');
 }
 
 function renderRecommendationsAndDefense(
@@ -198,16 +314,18 @@ function renderRecommendationsAndDefense(
   return [recs || (lang === 'en' ? '_None._' : '_Ninguna._'), defense].join('\n');
 }
 
-function toTPDocumentationResult(
+export function toTPDocumentationResult(
   json: TpDocumentationReportJson,
+  check: TpRangeCheck,
+  sanctionYear: number,
   lang: 'es' | 'en',
 ): TPDocumentationResult {
-  const executiveSummary = renderExecutiveSummary(json, lang);
-  const localReport = renderLocalFile(json, lang);
+  const executiveSummary = renderExecutiveSummary(json, check, lang);
+  const localReport = renderLocalFile(json, check, lang);
   const masterFileEquivalent = renderMasterFile(json, lang);
   const formato1125Guide = renderFormato1125(json, lang);
 
-  const sanctionsBlock = renderSanctions(json, lang);
+  const sanctionsBlock = renderSanctions(json, sanctionYear, lang);
   const recsAndDefense = renderRecommendationsAndDefense(json, lang);
   const conclusions = [
     '### ' + (lang === 'en' ? 'Potential sanctions (Art. 260-11 E.T.)' : 'Sanciones potenciales (Art. 260-11 E.T.)'),

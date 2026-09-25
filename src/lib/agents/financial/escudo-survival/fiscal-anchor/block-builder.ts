@@ -61,20 +61,20 @@ export function buildFiscalAnchorBlockMarkdown(block: FiscalAnchorBlock): string
   lines.push('');
   lines.push(`- F01 · UAI contable: ${formatCopFromCents(BigInt(block.f01))}`);
   lines.push(`- F02 · Impuesto referencia 35% (Art. 240 E.T.): ${formatCopFromCents(BigInt(block.f02))}`);
-  lines.push(`- F03 · Retenciones a favor (Cta.1355 + Cta.1805): ${formatCopFromCents(BigInt(block.f03))}`);
-  lines.push(`- F04 · Saldo neto (F02 − F03): ${formatCopFromCents(BigInt(block.f04))}  [positivo = a pagar; negativo = saldo a favor Art. 850 E.T.]`);
+  lines.push(`- F03 · Crédito de renta (135505 + 135515; 135595/1805 sólo si el nombre es de renta): ${formatCopFromCents(BigInt(block.f03))}`);
+  lines.push(`- F04 · Posición de referencia contable (F02 − F03): ${formatCopFromCents(BigInt(block.f04))}  [estimación contable, NO liquidación: no es saldo a pagar ni saldo a favor; requiere renta líquida depurada (Art. 26 E.T.) y anticipo (Art. 807 E.T.)]`);
   lines.push(`- F05 · IVA por pagar (|Cta.2408|): ${formatCopFromCents(BigInt(block.f05))}`);
   lines.push(`- F06 · Retefuente por declarar (|Cta.2365|): ${formatCopFromCents(BigInt(block.f06))}`);
   lines.push(`- F07 · ICA por pagar (|Cta.2368|): ${formatCopFromCents(BigInt(block.f07))}`);
   lines.push(`- F08 · Total pasivos fiscales (|Grupo 24|): ${formatCopFromCents(BigInt(block.f08))}`);
-  lines.push(`- F09 · Tasa efectiva tributación (Clase54 / F01): ${fmtPct(block.f09)}`);
+  lines.push(`- F09 · Tasa efectiva contable (grupo 54 / F01 UAI; no es la TTD del Art. 240 par. 6): ${fmtPct(block.f09)}`);
   lines.push(`- F10 · Eficiencia fiscal (F03 / F02): ${fmtPct(block.f10)}`);
   lines.push('');
   lines.push('### Calendario DIAN');
   lines.push(`- NIT: ${block.calendarioDian.nit || '(no disponible)'} · último dígito: ${block.calendarioDian.ultimoDigito >= 0 ? block.calendarioDian.ultimoDigito : '(verificar)'} · periodo ${block.calendarioDian.periodo}`);
   for (const v of block.calendarioDian.vencimientos) {
     lines.push(
-      `  - ${v.obligacion} (${v.frecuencia}) → ${v.proximoVencimiento} · ${v.diasRestantes} días · estado=${v.estado} · base=${v.baseCcv} · valor≈${formatCopFromCents(BigInt(v.valorEstimado))} · ${v.norma}`,
+      `  - ${v.obligacion} (${v.frecuencia}) → ${v.proximoVencimiento} · ${v.diasRestantes} días · estado=${v.estado} · base=${v.baseCcv} · valor≈${v.valorEstimado === null ? 'N/D (F04 negativa: estimación contable, verificar contra la declaración)' : formatCopFromCents(BigInt(v.valorEstimado))} · ${v.norma}`,
     );
   }
 

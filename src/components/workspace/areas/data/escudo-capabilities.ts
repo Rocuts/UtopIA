@@ -72,7 +72,7 @@ export function getEscudoZones(lang: 'es' | 'en'): CapabilityZoneItem[] {
       capabilities: [
         { name: es ? 'Planeación tributaria 3 escenarios' : 'Tax planning · 3 scenarios', desc: es ? 'Conservador, base y agresivo · ahorro en pesos.' : 'Conservative, base and aggressive · savings in pesos.', source: 'balance' },
         { name: es ? 'Optimización deducciones' : 'Deduction optimization', desc: es ? 'Analiza gastos · garantiza soporte y deducibilidad.' : 'Analyzes expenses · ensures support and deductibility.', source: 'balance' },
-        { name: es ? 'Tasa mínima · Ley 2277/2022' : 'Minimum rate · Law 2277/2022', desc: es ? 'Calcula si aplica impuesto adicional al 15%.' : 'Computes whether the 15% top-up tax applies.', source: 'balance' },
+        { name: es ? 'Tasa de Tributación Depurada (TTD, Art. 240 par. 6 E.T.)' : 'Adjusted Tax Rate (TTD, Art. 240 par. 6 Tax Code)', desc: es ? 'TTD = ID / UD (impuesto y utilidad depurados): N/D sin ID y UD verificados.' : 'TTD = adjusted tax / adjusted profit: N/A without verified figures.', source: 'balance' },
         { name: es ? 'Precios de transferencia' : 'Transfer pricing', desc: es ? 'Operaciones vinculadas bajo directrices OCDE.' : 'Related-party operations under OECD guidelines.', source: 'balance' },
         { name: es ? 'Límite bancarización Art. 771-5' : 'Cash-payment limit · Art. 771-5', desc: es ? 'Taxímetro de pagos en efectivo vs deducibilidad.' : 'Cash-payment meter vs deductibility.', source: 'balance' },
         { name: es ? 'ICUI/IBU · bebidas y ultraprocesados' : 'ICUI/IBU · beverages & ultra-processed', desc: es ? 'Liquidación monofásica por gramo/ml.' : 'Single-phase assessment per gram/ml.', source: 'auxiliares' },

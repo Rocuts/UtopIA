@@ -6,18 +6,47 @@
 // 12-dimension view organized in 3 blocks (A/B/C), a sello de calidad and a
 // list of corrective actions for dims that scored below 7/10.
 //
+// Auditoría 2026-09:
+//   - auditoria-calidad-08: el umbral se aplica sobre score/10 con un decimal
+//     (75/100 → 7,5 → en revisión); ya no se redondea al entero antes.
+//   - auditoria-calidad-09: una dimensión sin fuente es N/D (null), se excluye
+//     del promedio y se marca; un 0 real se respeta. Sin Exactitud, Completitud
+//     o Consistencia, o con menos de 9 de 12 evaluadas, el sello es
+//     "no evaluable". Ya no hay "valor por defecto 7/10".
+//   - auditoria-calidad-03: Exactitud es dimensión bloqueante (< 6/10 → sello
+//     máximo "requiere corrección") y la integridad aritmética determinista
+//     rota fuerza Exactitud = 0.
+//   - auditoria-calidad-11: sin periodo comparativo, Actualidad (proxy D14) y
+//     Comparabilidad son N/D con motivo (antes D14 = 100 por defecto).
+//
 // No LLM. No side effects. Same input -> same output.
 // ---------------------------------------------------------------------------
 
 import type { QualityReportJson, QualityDimensionJson } from '../contracts/quality-report';
+import type { AuditIntegrity } from '../audit/types';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type QualityV21Status = 'aprobado' | 'en_revision' | 'requiere_correccion';
+export type QualityV21Status = 'aprobado' | 'en_revision' | 'requiere_correccion' | 'no_evaluable';
 export type QualityV21Block = 'A' | 'B' | 'C';
-export type QualityV21SelloType = 'certificada' | 'con_observaciones' | 'requiere_correccion';
+export type QualityV21SelloType =
+  | 'certificada'
+  | 'con_observaciones'
+  | 'requiere_correccion'
+  | 'no_evaluable';
+
+/** Contexto determinista que condiciona la vista v2.1 (opcional). */
+export interface QualityV21Context {
+  /** Integridad aritmética determinista del informe evaluado. */
+  integrity?: AuditIntegrity;
+  /**
+   * `true` si hay periodo comparativo utilizable; `false` si consta que NO lo
+   * hay; `null`/ausente si no se sabe (sin preprocesador).
+   */
+  comparativeAvailable?: boolean | null;
+}
 
 export interface QualityV21Dimension {
   /** v2.1 ordinal (1..12). */
@@ -30,9 +59,9 @@ export interface QualityV21Dimension {
   name: string;
   /** Framework/norm citation (e.g. "ISO 25012"). */
   framework: string;
-  /** Score rounded to 0..10 (from internal 0..100). */
-  scoreInt0to10: number;
-  /** Status tier from the threshold table. */
+  /** Score 0..10 con un decimal (score/100 ÷ 10, sin redondear al entero). null = N/D. */
+  score10: number | null;
+  /** Status tier from the threshold table ('no_evaluable' when score10 is null). */
   status: QualityV21Status;
   /** Findings + recommendations merged from the source D-dim(s). */
   points: string[];
@@ -49,10 +78,12 @@ export interface QualityV21CorrectiveAction {
 export interface QualityV21Sello {
   type: QualityV21SelloType;
   title: string;
-  /** Same as globalScoreInt0to10 (rounded to 1 decimal). */
-  score: number;
+  /** Same as globalScore10 (one decimal, truncated). null when not evaluable. */
+  score: number | null;
   /** Number of dimensions whose status === 'aprobado'. */
   approvedCount: number;
+  /** Number of dimensions with a score (not N/D). */
+  evaluatedCount: number;
   /** Bottom-line sentence shown inside the sello frame. */
   bottomLine: string;
 }
@@ -60,10 +91,15 @@ export interface QualityV21Sello {
 export interface QualityV21View {
   /** Always 12 entries, in canonical order (block A first, then B, then C). */
   dimensions: QualityV21Dimension[];
-  /** Arithmetic average of the 12 dim scores (one decimal). */
-  globalScoreInt0to10: number;
+  /**
+   * Promedio aritmético de las dimensiones EVALUADAS (una decimal, truncado).
+   * null cuando ninguna dimensión tiene fuente.
+   */
+  globalScore10: number | null;
   /** Status tier of the global score. */
   globalStatus: QualityV21Status;
+  /** Motivos que bloquean o limitan el sello (vacío si ninguno). */
+  selloBlockers: string[];
   /** The sello block (one of three variants based on globalScore). */
   sello: QualityV21Sello;
   /** Only filled for dimensions with score < 7. Empty array when none. */
@@ -234,13 +270,17 @@ export const QUALITY_V21_DIM_META: QualityV21DimMeta[] = [
 // Threshold helpers (spec Parte V)
 // ---------------------------------------------------------------------------
 
-function statusFromScore10(score10: number): QualityV21Status {
+// Parte V: ✅ APROBADO (≥80%) · ⚠ (60-79%) · ❌ (<60%) — sobre el score SIN
+// redondear al entero (75% → 7,5 → en revisión).
+function statusFromScore10(score10: number | null): QualityV21Status {
+  if (score10 === null) return 'no_evaluable';
   if (score10 >= 8) return 'aprobado';
   if (score10 >= 6) return 'en_revision';
   return 'requiere_correccion';
 }
 
-function selloTypeFromScore10(score10: number): QualityV21SelloType {
+function selloTypeFromScore10(score10: number | null): QualityV21SelloType {
+  if (score10 === null) return 'no_evaluable';
   if (score10 >= 8) return 'certificada';
   if (score10 >= 6) return 'con_observaciones';
   return 'requiere_correccion';
@@ -254,17 +294,40 @@ function selloTitle(type: QualityV21SelloType): string {
       return 'CALIDAD CON OBSERVACIONES 1+1';
     case 'requiere_correccion':
       return 'CALIDAD REQUIERE CORRECCIÓN 1+1';
+    case 'no_evaluable':
+      return 'CALIDAD NO EVALUABLE 1+1';
   }
 }
 
-function selloBottomLine(type: QualityV21SelloType, approvedCount: number, score10: number): string {
+/** Un decimal con coma es-CO (`7,5`), igual que la página PDF de la Parte V. */
+function dec1(n: number): string {
+  return n.toFixed(1).replace('.', ',');
+}
+
+function fmtScore10(score10: number | null): string {
+  return score10 === null ? 'N/D' : dec1(score10);
+}
+
+function selloBottomLine(
+  type: QualityV21SelloType,
+  approvedCount: number,
+  evaluatedCount: number,
+  score10: number | null,
+  blockers: string[],
+): string {
+  const nd = 12 - evaluatedCount;
+  const head = `${approvedCount}/12 dimensiones aprobadas${nd > 0 ? ` (${nd} N/D)` : ''} — Score ${fmtScore10(score10)}/10.`;
+  const why = blockers.length > 0 ? ` Motivo: ${blockers.join(' ')}` : '';
   switch (type) {
     case 'certificada':
-      return `${approvedCount}/12 dimensiones aprobadas — Score ${score10.toFixed(1)}/10. Listo para revisión del contador y firma del representante legal.`;
+      // Texto de la spec v2.1 Parte V: el sello no anticipa firmas (auditoria-calidad-30).
+      return `${head} Listo para revisión del contador.`;
     case 'con_observaciones':
-      return `${approvedCount}/12 dimensiones aprobadas — Score ${score10.toFixed(1)}/10. Atender las acciones correctivas antes de la presentación oficial.`;
+      return `${head} Atender las acciones correctivas antes de la presentación oficial.${why}`;
     case 'requiere_correccion':
-      return `${approvedCount}/12 dimensiones aprobadas — Score ${score10.toFixed(1)}/10. Bloqueado para firma: corregir hallazgos críticos antes de continuar.`;
+      return `${head} Bloqueado para firma: corregir hallazgos críticos antes de continuar.${why}`;
+    case 'no_evaluable':
+      return `${head} Sello no emitido: cobertura insuficiente para evaluar la calidad.${why}`;
   }
 }
 
@@ -277,8 +340,8 @@ function selloBottomLine(type: QualityV21SelloType, approvedCount: number, score
 // emits a free-form name we fall back to substring scan against the D-tag.
 
 interface FoundDim {
-  /** 0..100 score. */
-  score: number;
+  /** 0..100 score; null = sin fuente (N/D). */
+  score: number | null;
   /** points = findings + recommendations. */
   points: string[];
   /** True if we located a real entry; false if synthesized fallback. */
@@ -317,18 +380,28 @@ function clamp0to100(n: number): number {
   return Math.round(n);
 }
 
-function round10FromScore100(score100: number): number {
-  return Math.round(clamp0to100(score100) / 10);
+/** 0..100 → 0..10 con UN decimal. No se redondea al entero (auditoria-calidad-08). */
+function score10FromScore100(score100: number | null): number | null {
+  if (score100 === null) return null;
+  return clamp0to100(score100) / 10;
+}
+
+function finiteOrNull(n: number | null | undefined): number | null {
+  return typeof n === 'number' && Number.isFinite(n) ? n : null;
 }
 
 // ---------------------------------------------------------------------------
 // Per-dim resolver — implements the mapping table from spec Parte V
 // ---------------------------------------------------------------------------
 
+const SIN_COMPARATIVO =
+  'N/D — sin periodo comparativo: la cobertura multiperiodo (D14) no tiene base y la dimensión no es evaluable (NIC 1 §38).';
+
 function resolveV21Dim(
   num: number,
   index: Map<number, QualityDimensionJson>,
   json: QualityReportJson,
+  ctx: QualityV21Context,
 ): FoundDim {
   switch (num) {
     case 1: // Accuracy <- D2
@@ -338,6 +411,9 @@ function resolveV21Dim(
     case 3: // Consistency <- D3
       return resolveSimple(index, 3, () => json.dataQuality.consistency, 'Consistencia');
     case 4: // Currentness <- D14 (multi-period coverage is the proxy for "currentness")
+      if (ctx.comparativeAvailable === false) {
+        return { score: null, points: [SIN_COMPARATIVO], found: false };
+      }
       return resolveSimple(index, 14, () => json.dataQuality.timeliness, 'Actualidad');
     case 5: // Traceability IA <- D8
       return resolveSimple(index, 8, () => json.aiGovernance.traceability, 'Trazabilidad IA');
@@ -349,31 +425,35 @@ function resolveV21Dim(
       return resolveSimple(index, 10, () => json.aiGovernance.humanOversight, 'Responsabilidad humana');
     case 9: // Relevance <- D6
       return resolveSimple(index, 6, () => json.aiGovernance.explainability, 'Relevancia');
-    case 10: // Faithful Representation <- D4
-      return resolveSimple(index, 4, () => 70, 'Representación fiel');
-    case 11: // Understandability <- D11
-      return resolveSimple(index, 11, () => 70, 'Comprensibilidad');
+    case 10: // Faithful Representation <- D4 (sin métrica raw asociada)
+      return resolveSimple(index, 4, () => null, 'Representación fiel');
+    case 11: // Understandability <- D11 (sin métrica raw asociada)
+      return resolveSimple(index, 11, () => null, 'Comprensibilidad');
     case 12: // Comparability <- (D14 + D12) / 2
-      return resolveComparabilityComposite(index, json);
+      if (ctx.comparativeAvailable === false) {
+        return { score: null, points: [SIN_COMPARATIVO], found: false };
+      }
+      return resolveComparabilityComposite(index);
     default:
       // Defensive: not reachable for 1..12.
-      return { score: 70, points: [`Dimensión v2.1 #${num} sin mapeo definido — datos incompletos.`], found: false };
+      return { score: null, points: [`Dimensión v2.1 #${num} sin mapeo definido — N/D.`], found: false };
   }
 }
 
 function resolveSimple(
   index: Map<number, QualityDimensionJson>,
   dNum: number,
-  rawFallback: () => number,
+  rawFallback: () => number | null,
   v21Name: string,
 ): FoundDim {
   const dd = readDDim(index, dNum);
   if (dd) return { score: dd.score, points: dd.points, found: true };
 
-  const raw = clamp0to100(rawFallback());
-  if (raw > 0) {
+  // Un 0 real es un valor, no "sin dato": se respeta (auditoria-calidad-09).
+  const raw = finiteOrNull(rawFallback());
+  if (raw !== null) {
     return {
-      score: raw,
+      score: clamp0to100(raw),
       points: [
         `Mapeo fallback: D${dNum} ausente en el JSON del meta-auditor — score derivado de la métrica raw (ISO 25012 / 42001).`,
       ],
@@ -381,9 +461,9 @@ function resolveSimple(
     };
   }
   return {
-    score: 70,
+    score: null,
     points: [
-      `Dato incompleto: la dimensión "${v21Name}" no recibió score de D${dNum} ni métrica raw asociada. Valor por defecto 7/10.`,
+      `N/D — la dimensión "${v21Name}" no recibió score de D${dNum} ni métrica raw asociada; se excluye del promedio.`,
     ],
     found: false,
   };
@@ -424,12 +504,17 @@ function resolveTransparencyComposite(
     };
   }
 
-  const rawFallback = Math.round(
-    clamp0to100(json.aiGovernance.antiHallucination) * 0.9 +
-      clamp0to100(json.aiGovernance.explainability) * 0.1,
-  );
+  const anti = finiteOrNull(json.aiGovernance.antiHallucination);
+  const expl = finiteOrNull(json.aiGovernance.explainability);
+  if (anti === null || expl === null) {
+    return {
+      score: null,
+      points: ['N/D — el meta-auditor no emitió D9 ni D6 ni métricas raw de gobernanza IA.'],
+      found: false,
+    };
+  }
   return {
-    score: clamp0to100(rawFallback) || 70,
+    score: clamp0to100(Math.round(clamp0to100(anti) * 0.9 + clamp0to100(expl) * 0.1)),
     points: [
       'Dato incompleto: el meta-auditor no emitió D9 ni D6. Score derivado de aiGovernance.antiHallucination + explainability.',
     ],
@@ -439,7 +524,6 @@ function resolveTransparencyComposite(
 
 function resolveComparabilityComposite(
   index: Map<number, QualityDimensionJson>,
-  json: QualityReportJson,
 ): FoundDim {
   const d14 = readDDim(index, 14);
   const d12 = readDDim(index, 12);
@@ -460,22 +544,13 @@ function resolveComparabilityComposite(
       found: false,
     };
   }
-  if (d12) {
-    return {
-      score: d12.score,
-      points: [
-        ...d12.points,
-        'Mapeo fallback: D14 (multiperiodo) ausente — Comparabilidad refleja únicamente la preparación IFRS 18 D12.',
-      ],
-      found: false,
-    };
-  }
-
-  const ifrsScore = clamp0to100(json.ifrs18Readiness.score);
+  // Sin D14 la comparabilidad no tiene base: la preparación IFRS 18 (D12) o
+  // su score raw no miden comparabilidad entre periodos (auditoria-calidad-09/-11).
   return {
-    score: ifrsScore || 70,
+    score: null,
     points: [
-      'Dato incompleto: el meta-auditor no emitió D14 ni D12. Score derivado de ifrs18Readiness.score como aproximación.',
+      ...(d12 ? d12.points : []),
+      'N/D — el meta-auditor no evaluó la cobertura multiperiodo (D14); la comparabilidad no se estima desde la preparación IFRS 18.',
     ],
     found: false,
   };
@@ -492,13 +567,13 @@ function resolveComparabilityComposite(
 function buildCorrectiveActions(dims: QualityV21Dimension[]): QualityV21CorrectiveAction[] {
   const actions: QualityV21CorrectiveAction[] = [];
   for (const d of dims) {
-    if (d.scoreInt0to10 >= 7) continue;
-    const gap = 8 - d.scoreInt0to10;
+    if (d.score10 === null || d.score10 >= 7) continue;
+    const gap = 8 - d.score10;
     const impact = Math.round((gap / 12) * 10) / 10; // one decimal
     const firstPoint = d.points.find((p) => p && p.trim().length > 0);
     const action = firstPoint
       ? `Atender: ${firstPoint}`
-      : `Revisar la dimensión "${d.name}" — score actual ${d.scoreInt0to10}/10 por debajo del umbral 7.`;
+      : `Revisar la dimensión "${d.name}" — score actual ${dec1(d.score10)}/10 por debajo del umbral 7.`;
     actions.push({
       dimNum: d.num,
       dimName: d.name,
@@ -513,44 +588,104 @@ function buildCorrectiveActions(dims: QualityV21Dimension[]): QualityV21Correcti
 // Main entry point
 // ---------------------------------------------------------------------------
 
-export function buildQualityV21View(json: QualityReportJson): QualityV21View {
+/** Dimensiones sin las cuales el sello no se emite (Bloque A — datos). */
+const CRITICAL_DIMS = [1, 2, 3] as const;
+/** Cobertura mínima de dimensiones evaluadas para emitir el sello. */
+const MIN_EVALUATED_DIMS = 9;
+/** Exactitud por debajo de este score (0..10) bloquea el sello. */
+const EXACTITUD_BLOQUEANTE = 6;
+
+export function buildQualityV21View(
+  json: QualityReportJson,
+  ctx: QualityV21Context = {},
+): QualityV21View {
   const index = indexDimensionsByD(json.dimensions);
+  const integrityBroken = ctx.integrity?.status === 'con_bloqueantes';
 
   const dimensions: QualityV21Dimension[] = QUALITY_V21_DIM_META.map((meta) => {
-    const resolved = resolveV21Dim(meta.num, index, json);
-    const score10 = round10FromScore100(resolved.score);
+    const resolved = resolveV21Dim(meta.num, index, json, ctx);
+    let score10 = score10FromScore100(resolved.score);
+    let points = resolved.points;
+    if (meta.num === 1 && integrityBroken) {
+      // Integridad aritmética determinista rota → Exactitud = 0, sin importar
+      // lo que haya puntuado el LLM (auditoria-calidad-03).
+      score10 = 0;
+      points = [
+        `Integridad aritmética determinista con bloqueantes: ${ctx.integrity!.motivos.join(' ')}`,
+        ...points,
+      ];
+    }
     return {
       num: meta.num,
       block: meta.block,
       blockTitle: meta.blockTitle,
       name: meta.name,
       framework: meta.framework,
-      scoreInt0to10: score10,
+      score10,
       status: statusFromScore10(score10),
-      points: resolved.points,
+      points,
     };
   });
 
-  const sumScores10 = dimensions.reduce((acc, d) => acc + d.scoreInt0to10, 0);
-  const globalScoreInt0to10 = Math.round((sumScores10 / dimensions.length) * 10) / 10;
-  const globalStatus = statusFromScore10(globalScoreInt0to10);
+  const evaluated = dimensions.filter((d) => d.score10 !== null);
+  const evaluatedCount = evaluated.length;
+  const globalScore10 =
+    evaluatedCount > 0
+      ? Math.floor((evaluated.reduce((acc, d) => acc + (d.score10 as number), 0) / evaluatedCount) * 10 + 1e-9) / 10
+      : null;
   const approvedCount = dimensions.filter((d) => d.status === 'aprobado').length;
-  const selloType = selloTypeFromScore10(globalScoreInt0to10);
+
+  // --- Gating del sello ---------------------------------------------------
+  const selloBlockers: string[] = [];
+  let selloType = selloTypeFromScore10(globalScore10);
+  const missingCritical = CRITICAL_DIMS.filter(
+    (n) => dimensions.find((d) => d.num === n)?.score10 === null,
+  );
+  if (missingCritical.length > 0 || evaluatedCount < MIN_EVALUATED_DIMS) {
+    selloType = 'no_evaluable';
+    if (missingCritical.length > 0) {
+      selloBlockers.push(
+        `Dimensiones críticas sin evaluar: ${missingCritical
+          .map((n) => dimensions.find((d) => d.num === n)!.name)
+          .join(', ')}.`,
+      );
+    }
+    if (evaluatedCount < MIN_EVALUATED_DIMS) {
+      selloBlockers.push(`Sólo ${evaluatedCount} de 12 dimensiones tienen fuente (mínimo ${MIN_EVALUATED_DIMS}).`);
+    }
+  } else {
+    const exactitud = dimensions.find((d) => d.num === 1)!.score10 as number;
+    if (integrityBroken) {
+      selloBlockers.push('La integridad aritmética determinista del informe tiene bloqueantes.');
+    }
+    if (exactitud < EXACTITUD_BLOQUEANTE) {
+      selloBlockers.push(`Exactitud ${dec1(exactitud)}/10 por debajo de ${EXACTITUD_BLOQUEANTE}/10 (dimensión bloqueante).`);
+    }
+    if (selloBlockers.length > 0) selloType = 'requiere_correccion';
+  }
+  const globalStatus: QualityV21Status =
+    selloType === 'no_evaluable'
+      ? 'no_evaluable'
+      : selloType === 'requiere_correccion'
+        ? 'requiere_correccion'
+        : statusFromScore10(globalScore10);
 
   const sello: QualityV21Sello = {
     type: selloType,
     title: selloTitle(selloType),
-    score: globalScoreInt0to10,
+    score: globalScore10,
     approvedCount,
-    bottomLine: selloBottomLine(selloType, approvedCount, globalScoreInt0to10),
+    evaluatedCount,
+    bottomLine: selloBottomLine(selloType, approvedCount, evaluatedCount, globalScore10, selloBlockers),
   };
 
   const correctiveActions = buildCorrectiveActions(dimensions);
 
   return {
     dimensions,
-    globalScoreInt0to10,
+    globalScore10,
     globalStatus,
+    selloBlockers,
     sello,
     correctiveActions,
   };
@@ -570,5 +705,7 @@ export function statusMarker(status: QualityV21Status): string {
       return '⚠';
     case 'requiere_correccion':
       return '❌';
+    case 'no_evaluable':
+      return '— N/D';
   }
 }

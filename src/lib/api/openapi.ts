@@ -69,14 +69,61 @@ const PROBLEM_SCHEMA = {
   required: ['type', 'title', 'status', 'code', 'request_id'],
 } as const;
 
+// Contrato tb-2026-09-24 (niif-preproceso-07): los campos de abajo son los que
+// `summarize` / `serializeTrialBalance` (trial-balances.ts) ya emiten. Los
+// añadidos en esa versión no son `required`: los summaries persistidos antes
+// de ella no los traen en el listado (el detalle los recalcula).
 const TRIAL_BALANCE_SCHEMA = {
   type: 'object',
   properties: {
     id: { type: 'string', examples: ['tb_0698fq7yv7f7btkdjq8x2xz3ec'] },
     object: { type: 'string', const: 'trial_balance' },
-    status: { type: 'string', enum: ['balanced', 'unbalanced'] },
-    period_label: { type: 'string' },
+    status: {
+      type: 'string',
+      enum: ['balanced', 'unbalanced'],
+      description:
+        'balanced sólo si equation_delta = 0 y ningún periodo del archivo trae un motivo ' +
+        'persistente. unbalanced cubre el descuadre del archivo (equation_delta ≠ 0) y también, ' +
+        'aunque la ecuación cuadre, los motivos persistentes: integridad de la lectura (importes ' +
+        'ilegibles, columnas de saldo ambiguas, filas desplazadas, códigos que no son cuentas PUC), ' +
+        'importes fuera del rango de precisión monetaria, unidad declarada ("en miles" / "en ' +
+        'millones") sin confirmar (envíe `unit` para confirmarla) y bloqueos del curador ' +
+        'posteriores al Cierre Virtual (R8), p. ej. CUR-R12. El detalle los lista en ' +
+        'validation_reasons. El riesgo de liquidez (activo corriente < pasivo corriente) no cambia ' +
+        'el status. Contrato tb-2026-09-24.3.',
+    },
+    period_label: {
+      type: 'string',
+      description:
+        'Periodo primario. Si el CSV declara la fecha de corte en su título ("Balance a junio 30 ' +
+        'de 2025") y la columna de saldo sólo trae el año, o en el encabezado de la columna de ' +
+        'saldo ("Saldo a 30/06/2025", "Saldo junio 2025"), el periodo es el corte AAAA-MM ' +
+        '(2025-06) aunque se haya enviado period_label "2025"; el detalle lo explica en ' +
+        'validation_notes (tb-2026-09-24.3).',
+    },
     row_count: { type: 'integer' },
+    unit: {
+      type: ['object', 'null'],
+      description:
+        'Unidad de los importes (tb-2026-09-24.3). declared: unidad distinta de pesos que declara ' +
+        'el CSV ("en miles de pesos") con el texto donde se leyó; confirmed: la del parámetro ' +
+        '`unit`. requires_confirmation = true ⇒ la remisión queda unbalanced hasta reenviarla con ' +
+        '`unit`. null en remisiones anteriores a tb-2026-09-24.3.',
+      properties: {
+        declared: { type: ['string', 'null'], enum: ['miles', 'millones', null] },
+        declared_text: { type: ['string', 'null'] },
+        confirmed: { type: ['string', 'null'], enum: ['pesos', 'miles', 'millones', null] },
+        requires_confirmation: { type: 'boolean' },
+      },
+      required: ['declared', 'declared_text', 'confirmed', 'requires_confirmation'],
+    },
+    sign_convention: {
+      type: ['string', 'null'],
+      enum: ['natural', 'algebraica', null],
+      description:
+        'Convención de signos detectada en la entrada (csv y rows se normalizan igual a la ' +
+        'convención natural). null si no se conoce (remisiones anteriores a tb-2026-09-24).',
+    },
     control_totals: {
       type: 'object',
       properties: {
@@ -84,7 +131,32 @@ const TRIAL_BALANCE_SCHEMA = {
         pasivo: MONEY_SCHEMA,
         patrimonio: MONEY_SCHEMA,
         ingresos_netos: MONEY_SCHEMA,
-        equation_delta: MONEY_SCHEMA,
+        equation_delta: {
+          ...MONEY_SCHEMA,
+          description:
+            'Descuadre del archivo de origen (Activo − Pasivo − Patrimonio) antes del Cierre ' +
+            'Virtual: no incluye el traslado del resultado del ejercicio (3605VC) ni la ' +
+            'reclasificación de un grupo 36 anterior (reclassified_from_3605). El curador no lo ' +
+            'absorbe; ≠ 0 ⇒ status = unbalanced.',
+        },
+        virtual_close_adjustment: {
+          ...MONEY_SCHEMA,
+          description:
+            'Histórico: monto que el Cierre Virtual (R8) absorbía en 3710VC. Desde tb-2026-09-24 ' +
+            'vale 0 (el residual está en equation_delta); se conserva por compatibilidad.',
+        },
+        reclassified_from_3605: {
+          ...MONEY_SCHEMA,
+          description:
+            'Resultado de un ejercicio anterior que seguía en el grupo 36 y se reclasificó a ' +
+            'resultados acumulados (3710VC). No es descuadre.',
+        },
+        equity_anchor_adjustment: {
+          ...MONEY_SCHEMA,
+          description:
+            'Histórico: brecha que R5 absorbía al anclar el patrimonio al ECP. Desde ' +
+            'tb-2026-09-24 vale 0; se conserva por compatibilidad.',
+        },
       },
       required: ['activo', 'pasivo', 'patrimonio', 'ingresos_netos', 'equation_delta'],
     },
@@ -109,6 +181,75 @@ const TRIAL_BALANCE_SCHEMA = {
     'findings',
     'preprocessor_version',
     'created_at',
+  ],
+} as const;
+
+// Detalle (GET /v1/trial-balances/{id}): base + motivos, discrepancias y
+// hallazgos del curador (allowlist de `serializeTrialBalanceDetail`).
+const TRIAL_BALANCE_DETAIL_SCHEMA = {
+  allOf: [
+    { $ref: '#/components/schemas/TrialBalance' },
+    {
+      type: 'object',
+      properties: {
+        validation_reasons: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Motivos por los que la remisión no es certificable (descuadres, importes ' +
+            'ilegibles, columnas ambiguas, códigos que no son cuentas PUC, precisión monetaria, ' +
+            'unidad declarada sin confirmar, bloqueos del curador post-R8). Vacío si no hay.',
+        },
+        validation_notes: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Notas informativas, no bloqueantes: cifras reexpresadas a pesos por la unidad ' +
+            'confirmada (`unit`), excepciones de vencimiento aplicadas (`maturity_overrides`), ' +
+            'fecha de corte declarada en el archivo, riesgo de liquidez.',
+        },
+        classification_note: {
+          type: ['string', 'null'],
+          description:
+            'Supuesto de clasificación corriente / no corriente por grupo PUC y, si se enviaron ' +
+            '`maturity_overrides`, las excepciones aplicadas con su monto.',
+        },
+        discrepancies: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              location: { type: 'string' },
+              reported: { type: 'number' },
+              calculated: { type: 'number' },
+              difference: { type: 'number' },
+              description: { type: 'string' },
+            },
+          },
+        },
+        curator_findings: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              code: { type: 'string' },
+              severity: { type: 'string' },
+              title: { type: 'string' },
+              description: { type: 'string' },
+              norm_reference: { type: 'string' },
+              recommendation: { type: 'string' },
+            },
+          },
+        },
+      },
+      required: [
+        'validation_reasons',
+        'validation_notes',
+        'classification_note',
+        'discrepancies',
+        'curator_findings',
+      ],
+    },
   ],
 } as const;
 
@@ -261,7 +402,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
           operationId: 'createTrialBalance',
           summary: 'Remitir un balance de prueba (CSV o filas) y validarlo',
           description:
-            'Idempotente vía header Idempotency-Key (TTL 24 h; replay devuelve la misma respuesta con Idempotent-Replayed: true). Un balance descuadrado NO es error: la remisión se crea con status=unbalanced y el descuadre viaja en control_totals.equation_delta.',
+            'Idempotente vía header Idempotency-Key (TTL 24 h; replay devuelve la misma respuesta con Idempotent-Replayed: true). Un balance descuadrado NO es error: la remisión se crea con status=unbalanced y el descuadre del archivo de origen (antes del Cierre Virtual) viaja en control_totals.equation_delta; status=unbalanced también cubre los motivos persistentes aunque la ecuación cuadre — integridad, precisión monetaria, unidad declarada sin confirmar, bloqueos del curador post-R8 (ver validation_reasons en el detalle); el riesgo de liquidez no cambia el status. csv y rows pasan por la misma normalización (convención de signos, hojas estructurales).',
           parameters: [
             {
               name: 'Idempotency-Key',
@@ -303,7 +444,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
           summary: 'Detalle recomputado (discrepancias + findings del curator)',
           parameters: [ID_PARAM],
           responses: {
-            '200': jsonResponse('Detalle', { $ref: '#/components/schemas/TrialBalance' }),
+            '200': jsonResponse('Detalle', { $ref: '#/components/schemas/TrialBalanceDetail' }),
             default: PROBLEM_RESPONSE,
           },
         },
@@ -451,6 +592,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         Problem: PROBLEM_SCHEMA,
         Money: MONEY_SCHEMA,
         TrialBalance: TRIAL_BALANCE_SCHEMA,
+        TrialBalanceDetail: TRIAL_BALANCE_DETAIL_SCHEMA,
         WebhookEndpoint: WEBHOOK_ENDPOINT_SCHEMA,
         WebhookEnvelope: WEBHOOK_ENVELOPE_SCHEMA,
         TrialBalanceCreate: jsonSchema(TrialBalanceCreateSchema),

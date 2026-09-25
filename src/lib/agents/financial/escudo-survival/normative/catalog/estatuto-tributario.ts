@@ -10,6 +10,7 @@
 // ---------------------------------------------------------------------------
 
 import type { NormativeArticleEntry } from '../types';
+import { MIN_SANCTION } from '@/lib/tools/sanction-calculator';
 
 export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
   // ─── RENTA — CONCEPTOS GENERALES ──────────────────────────────────────────
@@ -169,6 +170,30 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     tags: ['renta', 'deduccion', 'activos_fijos', 'derogado', 'PJ'],
   },
 
+  // ─── RENTA — DEROGADO (Art. 36-3) ─────────────────────────────────────────
+  // Auditoría 2026-09 (tributario-calc-01). Texto del corpus:
+  // estatuto_tributario_completo.md — «Artículo derogado a partir del 1 de
+  // enero de 2023 por el artículo 96 de la Ley 2277 de 2022».
+  {
+    id: 'ART_36_3_ET',
+    cita: 'Art. 36-3 E.T.',
+    titulo: 'Capitalizaciones no gravadas para los socios o accionistas — DEROGADO',
+    resumen:
+      'DEROGADO desde el 1-ene-2023 por el art. 96 de la Ley 2277 de 2022. Cubría la capitalización de la revalorización del patrimonio (y, en sociedades con acciones en bolsa, ciertas utilidades). DIAN Concepto 2769 de 2026: la capitalización sigue el régimen general de distribución de utilidades (Arts. 48-49, 242, 242-1 E.T.). No citar como INCRGNO vigente.',
+    textoLiteral: null,
+    estado: 'DEROGADO',
+    modificaciones: [
+      {
+        norma: 'Ley 2277 de 2022, Art. 96',
+        fecha: '2022-12-13',
+        cambio: 'Derogó el Art. 36-3 E.T. a partir del 1 de enero de 2023.',
+      },
+    ],
+    urlOficial:
+      'https://estatuto.co/?articulo=36-3',
+    tags: ['renta', 'dividendos', 'capitalizacion', 'derogado', 'socios'],
+  },
+
   // ─── TARIFAS DE RENTA ─────────────────────────────────────────────────────
   {
     id: 'ART_240_ET',
@@ -218,7 +243,7 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     cita: 'Art. 240 par. 3 E.T.',
     titulo: 'Sobretasa a la extracción de petróleo crudo y de carbón — puntos variables por percentil de precios',
     resumen:
-      'Par. 3 Art. 240: las personas jurídicas cuya actividad económica sea la extracción de hulla y carbón lignito (CIIU 0510 y 0520) o la extracción de petróleo crudo (CIIU 0610) liquidan puntos adicionales VARIABLES, determinados comparando el precio promedio del respectivo año gravable contra percentiles del precio promedio mensual de los últimos 120 meses. Escalonamiento del carbón: 0 puntos si el precio está por debajo del percentil 65; 5 puntos entre percentil 65 y 75; 10 puntos por encima del percentil 75 (tarifa total hasta 45%). Escalonamiento del petróleo crudo: 0 puntos por debajo del percentil 30; 5 puntos entre percentil 30 y 45; 10 puntos entre percentil 45 y 60; 15 puntos por encima del percentil 60 (tarifa total hasta 50%). Condición de aplicación: SOLO a contribuyentes con renta gravable igual o superior a 50.000 UVT (2026: 50.000 × $52.374 = $2.618.700.000). El precio promedio y los percentiles del año NO son un valor fijo: los certifican anualmente la UPME (carbón) y la ANH (petróleo) mediante resolución publicada a más tardar el 31 de enero, recogida en decreto reglamentario (antecedentes: Decreto 261 de 2023 y Decreto 242 de 2024). NO codificar el número de puntos del año gravable 2026 sin leer la resolución/decreto de ese año — el valor no está verificado en este catálogo y no debe alimentar una liquidación.',
+      'Par. 3 Art. 240: las personas jurídicas cuya actividad económica sea la extracción de hulla y carbón lignito (CIIU 0510 y 0520) o la extracción de petróleo crudo (CIIU 0610) liquidan puntos adicionales VARIABLES, determinados comparando el precio promedio del respectivo año gravable contra percentiles del precio promedio mensual de los últimos 120 meses. Escalonamiento del carbón: 0 puntos si el precio está por debajo del percentil 65; 5 puntos entre percentil 65 y 75; 10 puntos por encima del percentil 75 (tarifa total hasta 45%). Escalonamiento del petróleo crudo: 0 puntos por debajo del percentil 30; 5 puntos entre percentil 30 y 45; 10 puntos entre percentil 45 y 60; 15 puntos por encima del percentil 60 (tarifa total hasta 50%). Condición de aplicación: SOLO a contribuyentes con renta gravable igual o superior a 50.000 UVT (2026: 50.000 × $52.374 = $2.618.700.000). El precio promedio y los percentiles del año NO son un valor fijo: los publican anualmente la UPME (carbón) y la ANH (petróleo) mediante resolución, a más tardar el último día hábil de enero, con la información del año gravable anterior. Las autorretenciones de estos CIIU se ajustaron en línea con la sobretasa (Decreto 261 de 2023, sustituido por el Decreto 242 de 2024). NO codificar el número de puntos del año gravable 2026 sin leer la resolución de ese año — el valor no está verificado en este catálogo y no debe alimentar una liquidación.',
     textoLiteral: null,
     estado: 'VIGENTE_2026',
     modificaciones: [
@@ -240,7 +265,7 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     cita: 'Art. 240 par. 4 E.T.',
     titulo: 'Sobretasa a la generación de energía eléctrica con recursos hídricos — 3 puntos con umbral de 30.000 UVT',
     resumen:
-      'Par. 4 Art. 240: las personas jurídicas cuya actividad económica PRINCIPAL sea la generación de energía eléctrica A TRAVÉS DE RECURSOS HÍDRICOS liquidan 3 puntos adicionales (tarifa total 38%) durante los años gravables 2023, 2024, 2025 y 2026 — 2026 es el último año. Condiciones de aplicación: (a) SOLO si en el año gravable correspondiente la renta gravable es igual o superior a 30.000 UVT (2026: 30.000 × $52.374 = $1.571.220.000); (b) NO aplica a centrales cuya capacidad instalada sea igual o inferior a 1.000 kW; (c) la sobretasa no puede trasladarse al usuario final. Alcance subjetivo: la sobretasa NO cobija a las empresas de acueducto y alcantarillado. Alcance objetivo: por la exequibilidad condicionada de la Sentencia C-389 de 2023, los 3 puntos gravan ÚNICAMENTE la renta de la actividad de generación hídrica, no las demás actividades del contribuyente. El umbral de 30.000 UVT fue declarado exequible por la Sentencia C-050 de 2026.',
+      'Par. 4 Art. 240: las personas jurídicas cuya actividad económica PRINCIPAL sea la generación de energía eléctrica A TRAVÉS DE RECURSOS HÍDRICOS liquidan 3 puntos adicionales (tarifa total 38%) durante los años gravables 2023, 2024, 2025 y 2026 — 2026 es el último año. Condiciones de aplicación: (a) SOLO si en el año gravable correspondiente la renta gravable es igual o superior a 30.000 UVT (2026: 30.000 × $52.374 = $1.571.220.000); (b) NO aplica a centrales cuya capacidad instalada sea igual o inferior a 1.000 kW; (c) la sobretasa no puede trasladarse al usuario final. Alcance subjetivo: la sobretasa NO cobija a las empresas de acueducto y alcantarillado. Alcance objetivo: por la exequibilidad condicionada de la Sentencia C-389 de 2023, los 3 puntos gravan ÚNICAMENTE la renta de la actividad de generación hídrica, no las demás actividades del contribuyente. La Sentencia C-050 de 2026 declaró exequible el parágrafo frente a los cargos de libre competencia y justicia tributaria, estándose a lo resuelto en la C-389 de 2023.',
     textoLiteral: null,
     estado: 'VIGENTE_2026',
     modificaciones: [
@@ -253,6 +278,11 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
         norma: 'Sentencia C-389 de 2023 (Corte Constitucional)',
         fecha: '2023-10-04',
         cambio: 'Exequibilidad CONDICIONADA: la sobretasa solo puede aplicarse a la renta de la actividad de generación de energía eléctrica con recursos hídricos, no a otras actividades del contribuyente.',
+      },
+      {
+        norma: 'Sentencia C-050 de 2026 (Corte Constitucional)',
+        fecha: '2026-03-13',
+        cambio: 'EXEQUIBLE frente a los cargos de libre competencia económica y justicia tributaria; estarse a lo resuelto en la C-389 de 2023 (ley_2277_2022.md, jurisprudencia del par. 4).',
       },
     ],
     urlOficial:
@@ -267,7 +297,7 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     cita: 'Art. 240 par. 5 E.T.',
     titulo: 'Tarifa del 15% para servicios hoteleros, parques temáticos de ecoturismo y agroturismo',
     resumen:
-      'Par. 5 Art. 240: las rentas provenientes de servicios prestados en nuevos hoteles, en hoteles remodelados y/o ampliados, y en nuevos parques temáticos de ecoturismo y/o agroturismo, se gravan a la tarifa del 15% por un término de 10 años contados desde el inicio de las operaciones. Requisitos: municipio de hasta 200.000 habitantes (censo DANE 2022) o municipio PDET; construcción/remodelación dentro de los 5 años siguientes a la Ley 2277/2022; inscripción en el Registro Nacional de Turismo; no puede pactarse rendimiento garantizado. Excluye moteles y residencias. La tarifa del 9% NO es la tarifa vigente del sector: solo subsiste como derecho adquirido para quienes consolidaron el beneficio bajo el régimen anterior (Ley 1943/2018 – Ley 2010/2019), condición que debe acreditarse caso por caso.',
+      'Par. 5 Art. 240: las rentas provenientes de servicios prestados en nuevos hoteles, en hoteles remodelados y/o ampliados, y en nuevos parques temáticos de ecoturismo y/o agroturismo, se gravan a la tarifa del 15% por un término de 10 años contados desde el inicio de las operaciones. Requisitos: municipio de hasta 200.000 habitantes (censo DANE 2022) o municipio PDET; construcción/remodelación dentro de los 5 años siguientes a la Ley 2277/2022; inscripción en el Registro Nacional de Turismo; no puede pactarse rendimiento garantizado. Excluye moteles y residencias. La tarifa del 9% NO es la tarifa vigente del sector: solo subsiste como derecho adquirido para quienes consolidaron el beneficio bajo el régimen anterior (par. 5 en la redacción del art. 92 de la Ley 2010 de 2019), condición que debe acreditarse caso por caso.',
     textoLiteral: null,
     estado: 'MODIFICADO',
     modificaciones: [
@@ -361,6 +391,30 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     urlOficial:
       'https://estatuto.co/?articulo=242',
     tags: ['renta', 'dividendos', 'PN', 'residente', 'tarifa', 'retencion'],
+  },
+  {
+    // Fase 2 (I2 6b): la norma determinista de dividendos del Módulo 8 y del
+    // Optimizador de dividendos cita el Art. 242-1 y Capa 2 lo bloqueaba por
+    // no estar catalogado. Fuente del corpus: estatuto_tributario_completo.md
+    // (ARTÍCULO 242-1, inciso mod. art. 12 Ley 2277/2022) y
+    // escudo_normativa_supervivencia_co_2026.md.
+    id: 'ART_242_1_ET',
+    cita: 'Art. 242-1 E.T.',
+    titulo: 'Tarifa especial para dividendos o participaciones recibidas por sociedades nacionales',
+    resumen:
+      'Los dividendos pagados o abonados en cuenta a sociedades nacionales, provenientes de utilidades consideradas INCRNGO (num. 3 Art. 49), están sujetos a retención en la fuente del 10%, trasladable e imputable a la persona natural residente o al inversionista residente en el exterior. La capitalización de utilidades sigue este régimen general de distribución (Art. 36-3 derogado).',
+    textoLiteral: null,
+    estado: 'MODIFICADO',
+    modificaciones: [
+      {
+        norma: 'Ley 2277 de 2022',
+        fecha: '2022-12-13',
+        cambio: 'Art. 12: la retención trasladable pasó del 7,5% (Ley 2010/2019) al 10%.',
+      },
+    ],
+    urlOficial:
+      'https://estatuto.co/?articulo=242-1',
+    tags: ['renta', 'dividendos', 'PJ', 'sociedad_nacional', 'retencion', 'tarifa'],
   },
   {
     id: 'ART_245_ET',
@@ -749,7 +803,7 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     // Corrección normativa 2026-08: el resumen anterior omitía la exclusión del lit. e) (juegos
     // por internet) y el "desde el exterior" del lit. c). El Decreto Legislativo 175 de 2025 y
     // el Decreto 1474 de 2025 gravaron temporalmente con IVA esos juegos; el 1474 fue declarado
-    // INEXEQUIBLE (Sentencia C-079 de 2026, abril de 2026, con orden de devolución). Desde 2026
+    // INEXEQUIBLE (Corte Constitucional, 15-abr-2026, con orden de devolución). Desde 2026
     // la exclusión del lit. e) opera plenamente.
     tags: ['IVA', 'hecho_generador', 'juegos_suerte_azar', 'internet', 'servicios_exterior', 'inmuebles'],
   },
@@ -839,19 +893,19 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     cita: 'Art. 600 E.T.',
     titulo: 'Periodicidad del IVA — bimestral y cuatrimestral',
     resumen:
-      'Periodos gravables IVA 2026. Numeral 1 — declaración y pago BIMESTRAL para: (a) los grandes contribuyentes; (b) las personas jurídicas y naturales cuyos ingresos brutos a 31-dic del año gravable anterior sean iguales o superiores a 92.000 UVT; y (c) los responsables de que tratan los Arts. 477 (bienes exentos) y 481 (bienes y servicios exentos con derecho a devolución bimestral, incl. exportadores) de este Estatuto, SIN IMPORTAR EL MONTO DE SUS INGRESOS. Numeral 2 — declaración y pago CUATRIMESTRAL solo para los demás responsables, personas jurídicas y naturales, cuyos ingresos brutos a 31-dic del año anterior sean inferiores a 92.000 UVT. El período ANUAL fue ELIMINADO por Ley 1943/2018 (ratificado por Ley 2010/2019).',
+      'Periodos gravables IVA 2026. Numeral 1 — declaración y pago BIMESTRAL para: (a) los grandes contribuyentes; (b) las personas jurídicas y naturales cuyos ingresos brutos a 31-dic del año gravable anterior sean iguales o superiores a 92.000 UVT; y (c) los responsables de que tratan los Arts. 477 (bienes exentos) y 481 (bienes y servicios exentos con derecho a devolución bimestral, incl. exportadores) de este Estatuto, SIN IMPORTAR EL MONTO DE SUS INGRESOS. Numeral 2 — declaración y pago CUATRIMESTRAL solo para los demás responsables, personas jurídicas y naturales, cuyos ingresos brutos a 31-dic del año anterior sean inferiores a 92.000 UVT. No existe otra periodicidad: el artículo 196 de la Ley 1819 de 2016 sustituyó este artículo y dejó solo los períodos bimestral y cuatrimestral.',
     textoLiteral: null,
     estado: 'MODIFICADO',
+    // I5-niif 5: la eliminación del período anual se atribuía a la Ley 1943 de
+    // 2018 (INEXEQUIBLE) «ratificada» por la Ley 2010 de 2019, que no toca este
+    // artículo. Corpus: ley_1819_2016.md (art. 196) y la nota del editor del
+    // DUR 1625 de 2016 (decreto_1625_2016.md).
     modificaciones: [
       {
-        norma: 'Ley 1943 de 2018',
-        fecha: '2018-12-28',
-        cambio: 'Eliminó el período IVA anual; estableció solo bimestral y cuatrimestral.',
-      },
-      {
-        norma: 'Ley 2010 de 2019',
-        fecha: '2019-12-27',
-        cambio: 'Ratificó la eliminación del período anual.',
+        norma: 'Ley 1819 de 2016, art. 196',
+        fecha: '2016-12-29',
+        cambio:
+          'Sustituyó el artículo: bimestral (grandes contribuyentes, ingresos ≥ 92.000 UVT y responsables de los Arts. 477 y 481) y cuatrimestral (resto); eliminó la declaración anual.',
       },
     ],
     urlOficial:
@@ -988,7 +1042,7 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     cita: 'Art. 639 E.T.',
     titulo: 'Sanción mínima',
     resumen:
-      'Ninguna sanción puede ser inferior a 10 UVT. En 2026: 10 × $52.374 = $523.740 COP.',
+      `Ninguna sanción puede ser inferior a 10 UVT. En 2026: 10 × $52.374 aproximado al múltiplo de mil = $${MIN_SANCTION.toLocaleString('es-CO')} COP (Art. 868 E.T.).`,
     textoLiteral: null,
     estado: 'VIGENTE_2026',
     modificaciones: [],
@@ -1150,10 +1204,53 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     cita: 'Art. 771-5 E.T.',
     titulo: 'Bancarización — limitación de pagos en efectivo',
     resumen:
-      'Para reconocimiento fiscal (deducción, costo, IVA descontable), los pagos deben realizarse por medios diferentes al efectivo. §2: tope individual 100 UVT por NIT ($5.237.400 COP 2026). §1: tope general 40.000 UVT ($2.094.960.000) o 40% de pagos en efectivo o 35% de costos/deducciones totales (el menor).',
+      'Para reconocimiento fiscal (deducción, costo, IVA descontable), los pagos deben realizarse por medios diferentes al efectivo. §2: tope de 100 UVT por PAGO individual en efectivo (cada transacción, no acumulado por beneficiario — C.E. sentencia 26676 de 2023) ($5.237.400 COP 2026). §1: se reconocen los pagos en efectivo hasta el menor entre el 40% de lo pagado (máximo 40.000 UVT = $2.094.960.000) y el 35% de los costos y deducciones totales.',
     textoLiteral: null,
     estado: 'VIGENTE_2026',
     modificaciones: [],
+    urlOficial:
+      'https://estatuto.co/?articulo=771-5',
+    tags: ['bancarizacion', 'efectivo', 'deduccion', 'DIAN', 'auditoria'],
+  },
+  // Fase 2 (I2 6b): el encabezado de todos los módulos del Agente Fiscal y el
+  // prompt del Módulo 8 citan (y exigen con ALWAYS) los parágrafos 1 y 2 del
+  // Art. 771-5; como sólo existía la entrada del artículo, Capa 2 los
+  // bloqueaba. Fuente: estatuto_tributario_completo.md (ARTÍCULO 771-5, par. 1
+  // y 2 mod. art. 307 Ley 1819/2016).
+  {
+    id: 'ART_771_5_PAR1_ET',
+    cita: 'Art. 771-5 par. 1 E.T.',
+    titulo: 'Bancarización — reconocimiento fiscal de los pagos en efectivo (tope general)',
+    resumen:
+      'A partir del año 2021 se reconocen como costo, deducción, pasivo o impuesto descontable los pagos en efectivo hasta el menor valor entre: a) el 40% de lo pagado, sin superar 40.000 UVT, y b) el 35% de los costos y deducciones totales, independientemente del número de pagos.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [
+      {
+        norma: 'Ley 1819 de 2016',
+        fecha: '2016-12-29',
+        cambio: 'Art. 307: fijó la transición 2018-2021 y el tope permanente desde 2021.',
+      },
+    ],
+    urlOficial:
+      'https://estatuto.co/?articulo=771-5',
+    tags: ['bancarizacion', 'efectivo', 'deduccion', 'DIAN', 'auditoria'],
+  },
+  {
+    id: 'ART_771_5_PAR2_ET',
+    cita: 'Art. 771-5 par. 2 E.T.',
+    titulo: 'Bancarización — pagos individuales superiores a 100 UVT',
+    resumen:
+      'Los pagos individuales de personas jurídicas y de personas naturales con rentas no laborales que superen 100 UVT deben canalizarse por medios financieros, so pena de su desconocimiento fiscal como costo, deducción, pasivo o impuesto descontable. El tope se mide por pago individual, no acumulado por beneficiario (C.E. sentencia 26676 de 2023).',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [
+      {
+        norma: 'Ley 1819 de 2016',
+        fecha: '2016-12-29',
+        cambio: 'Art. 307: nuevo texto del parágrafo 2.',
+      },
+    ],
     urlOficial:
       'https://estatuto.co/?articulo=771-5',
     tags: ['bancarizacion', 'efectivo', 'deduccion', 'DIAN', 'auditoria'],
@@ -1263,5 +1360,287 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     modificaciones: [],
     urlOficial: 'https://estatuto.co/?articulo=752',
     tags: ['procedimiento', 'DIAN', 'requerimiento', 'informacion', 'plazo', '15_dias_habiles'],
+  },
+
+  // ─── ARTÍCULOS QUE EXIGEN LOS PROPIOS MÓDULOS DEL AGENTE FISCAL ─────────
+  // Revisión de la fase 2 (pendiente #8): el esqueleto de la carta DIAN, el
+  // refund-analyzer y el Score citan estos artículos (y los prompts los
+  // exigen con ALWAYS), pero no estaban en el catálogo: la Capa 2 los
+  // bloqueaba como NO_VERIFICADO y toda carta de defensa o análisis de
+  // devolución honesto quedaba en «bloqueo». Resúmenes tomados del texto
+  // vigente compilado en src/data/tax_docs/estatuto_tributario_completo.md.
+  {
+    id: 'ART_147_ET',
+    cita: 'Art. 147 E.T.',
+    titulo: 'Compensación de pérdidas fiscales de sociedades',
+    resumen:
+      'Las sociedades pueden compensar las pérdidas fiscales con las rentas líquidas ordinarias que obtengan en los doce (12) períodos gravables siguientes, sin perjuicio de la renta presuntiva del ejercicio (inciso mod. art. 88 Ley 1819/2016). Los socios no pueden deducir ni compensar las pérdidas de la sociedad.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=147',
+    tags: ['renta', 'perdidas_fiscales', 'compensacion'],
+  },
+  {
+    id: 'ART_651_ET',
+    cita: 'Art. 651 E.T.',
+    titulo: 'Sanción por no enviar información',
+    resumen:
+      'Sanciona a quienes, obligados a suministrar información tributaria o requeridos para ello, no la suministran dentro del plazo, la suministran con errores o no corresponde a lo solicitado. La cuantía y las reducciones por subsanar la omisión se liquidan según el propio artículo; si la sanción se impone por resolución independiente, se da traslado de cargos por un (1) mes para responder.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=651',
+    tags: ['sancion', 'informacion', 'exogena', 'pliego_cargos'],
+  },
+  {
+    id: 'ART_670_ET',
+    cita: 'Art. 670 E.T.',
+    titulo: 'Sanción por improcedencia de las devoluciones o compensaciones',
+    resumen:
+      'Las devoluciones o compensaciones no constituyen un reconocimiento definitivo: si la DIAN, mediante liquidación oficial, rechaza o modifica el saldo a favor, deben reintegrarse las sumas devueltas o compensadas en exceso más los intereses moratorios, aumentados en un 50%. Con documentos falsos o fraude se impone además una sanción del 500% del monto devuelto en forma improcedente.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=670',
+    tags: ['sancion', 'devolucion', 'saldo_favor', 'improcedencia'],
+  },
+  {
+    id: 'ART_684_ET',
+    cita: 'Art. 684 E.T.',
+    titulo: 'Facultades de fiscalización e investigación',
+    resumen:
+      'La Administración Tributaria tiene amplias facultades de fiscalización e investigación para asegurar el cumplimiento de las normas sustanciales: adelantar investigaciones, citar o requerir al contribuyente o a terceros, exigir la presentación de documentos y ordenar la exhibición de libros y comprobantes, entre otras.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=684',
+    tags: ['procedimiento', 'DIAN', 'fiscalizacion', 'requerimiento'],
+  },
+  {
+    id: 'ART_686_ET',
+    cita: 'Art. 686 E.T.',
+    titulo: 'Deber de atender requerimientos',
+    resumen:
+      'Contribuyentes y no contribuyentes deben atender los requerimientos de informaciones y pruebas relacionadas con las investigaciones de la DIAN. El plazo mínimo para responder requerimientos ordinarios o solicitudes de información es de quince (15) días calendario (Art. 261 de la Ley 223 de 1995).',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=686',
+    tags: ['procedimiento', 'DIAN', 'requerimiento', 'ordinario', 'plazo', '15_dias_calendario'],
+  },
+  {
+    id: 'ART_703_ET',
+    cita: 'Art. 703 E.T.',
+    titulo: 'El requerimiento especial como requisito previo a la liquidación',
+    resumen:
+      'Antes de la liquidación de revisión, la DIAN envía al contribuyente, por una sola vez, un requerimiento especial con todos los puntos que se propone modificar y la explicación de sus razones.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=703',
+    tags: ['procedimiento', 'DIAN', 'requerimiento_especial'],
+  },
+  {
+    id: 'ART_707_ET',
+    cita: 'Art. 707 E.T.',
+    titulo: 'Respuesta al requerimiento especial',
+    resumen:
+      'Dentro de los tres (3) meses siguientes a la notificación del requerimiento especial, el contribuyente formula por escrito sus objeciones, solicita pruebas, subsana las omisiones que permita la ley y puede pedir inspecciones tributarias conducentes.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=707',
+    tags: ['procedimiento', 'DIAN', 'requerimiento_especial', 'plazo', '3_meses'],
+  },
+  {
+    id: 'ART_716_ET',
+    cita: 'Art. 716 E.T.',
+    titulo: 'Consecuencia de la no presentación de la declaración con motivo del emplazamiento',
+    resumen:
+      'Vencido el término del emplazamiento para declarar (Art. 715 E.T.) sin que se presente la declaración, la DIAN aplica la sanción por no declarar del Art. 643 E.T.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=716',
+    tags: ['procedimiento', 'DIAN', 'emplazamiento', 'no_declarar', 'sancion'],
+  },
+  {
+    id: 'ART_807_ET',
+    cita: 'Art. 807 E.T.',
+    titulo: 'Cálculo y aplicación del anticipo',
+    resumen:
+      'Los contribuyentes del impuesto sobre la renta liquidan en su declaración un anticipo del impuesto del año siguiente, calculado sobre el impuesto determinado según el procedimiento del artículo: 25% el primer año, 50% el segundo y 75% los siguientes.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=807',
+    tags: ['renta', 'anticipo', 'declaracion'],
+  },
+  {
+    id: 'ART_857_ET',
+    cita: 'Art. 857 E.T.',
+    titulo: 'Rechazo e inadmisión de las solicitudes de devolución o compensación',
+    resumen:
+      'Las solicitudes de devolución o compensación se rechazan en forma definitiva, entre otras causales, cuando se presentan extemporáneamente o cuando el saldo ya fue objeto de devolución, compensación o imputación anterior; las demás causales de rechazo e inadmisión están en el propio artículo.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=857',
+    tags: ['devolucion', 'saldo_favor', 'rechazo', 'inadmision'],
+  },
+  {
+    id: 'ART_860_ET',
+    cita: 'Art. 860 E.T.',
+    titulo: 'Devolución con presentación de garantía',
+    resumen:
+      'Si con la solicitud se presenta una garantía a favor de la Nación, otorgada por entidad bancaria o compañía de seguros, por el monto objeto de devolución más las sanciones del Art. 670 E.T., la DIAN hace la entrega dentro de los veinte (20) días siguientes.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=860',
+    tags: ['devolucion', 'garantia', 'plazo', '20_dias'],
+  },
+  // ─── NORMAS QUE NOMBRA EL PROPIO MOTOR NORMATIVO (I4-escudo 3) ──────────
+  // El prompt del Motor Normativo (constantes, resúmenes, sanciones, tarifas
+  // de retención y blacklist) nombraba estos artículos, pero no estaban en el
+  // catálogo: la Capa 2 los bloqueaba como NO_VERIFICADO y una salida honesta
+  // que los repitiera quedaba en «bloqueo». Resúmenes tomados del texto
+  // compilado en src/data/tax_docs/estatuto_tributario_completo.md (y, para el
+  // Art. 235-2 en la TTD, de ley_2277_2022.md).
+  {
+    // estatuto_tributario_completo.md: ARTICULO 868 (mod. art. 50 Ley 1111/2006).
+    id: 'ART_868_ET',
+    cita: 'Art. 868 E.T.',
+    titulo: 'Unidad de Valor Tributario (UVT)',
+    resumen:
+      'Crea la UVT como medida de valor para ajustar las cifras de los impuestos y obligaciones administrados por la DIAN. Se reajusta cada año con la variación del IPC para ingresos medios certificada por el DANE, y la DIAN publica por resolución, antes del 1 de enero, la UVT del año gravable siguiente: cada año gravable tiene su propia UVT. Al convertir a pesos una cifra expresada en UVT se aplica el procedimiento de aproximaciones del propio artículo.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [
+      {
+        norma: 'Ley 1111 de 2006',
+        fecha: '2006-12-27',
+        cambio: 'Art. 50: nuevo texto que crea la UVT.',
+      },
+    ],
+    urlOficial: 'https://estatuto.co/?articulo=868',
+    tags: ['UVT', 'procedimiento', 'sancion', 'umbral', 'retenciones'],
+  },
+  {
+    // estatuto_tributario_completo.md: ARTÍCULO 634 (mod. art. 278 Ley 1819/2016).
+    id: 'ART_634_ET',
+    cita: 'Art. 634 E.T.',
+    titulo: 'Intereses moratorios',
+    resumen:
+      'Los contribuyentes, agentes retenedores y responsables que no paguen oportunamente los impuestos, anticipos y retenciones a su cargo liquidan y pagan intereses moratorios por cada día calendario de retardo. Los mayores valores determinados en una liquidación oficial o en la corrección de la declaración causan intereses desde el día siguiente al vencimiento del plazo en que debieron pagarse.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [
+      {
+        norma: 'Ley 1819 de 2016',
+        fecha: '2016-12-29',
+        cambio: 'Art. 278: nuevo texto (intereses por cada día calendario de retardo).',
+      },
+    ],
+    urlOficial: 'https://estatuto.co/?articulo=634',
+    tags: ['sancion', 'intereses', 'mora', 'retenciones', 'defensa'],
+  },
+  {
+    // estatuto_tributario_completo.md: ARTICULO 383 (inciso 1 y tabla mod. art. 42 Ley 2010/2019).
+    id: 'ART_383_ET',
+    cita: 'Art. 383 E.T.',
+    titulo: 'Tabla de retención en la fuente sobre rentas de trabajo',
+    resumen:
+      'Fija la tabla de retención en la fuente, en UVT, aplicable a los pagos gravables originados en la relación laboral o legal y reglamentaria y a las pensiones de jubilación, invalidez, vejez, sobrevivientes y riesgos laborales. Para el procedimiento 2, el impuesto en UVT que resulta de la tabla se divide por el ingreso laboral gravado convertido a UVT para obtener la tarifa (par. 1).',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [
+      {
+        norma: 'Ley 2010 de 2019',
+        fecha: '2019-12-27',
+        cambio: 'Art. 42: nuevo inciso 1 y nueva tabla de retención.',
+      },
+    ],
+    urlOficial: 'https://estatuto.co/?articulo=383',
+    tags: ['retenciones', 'renta', 'trabajo', 'tabla', 'PN'],
+  },
+  {
+    // estatuto_tributario_completo.md: ARTICULO 383, PARÁGRAFO 2o (inciso mod.
+    // art. 8 Ley 2277/2022; concordancia Decreto 2231 de 2023 art. 11).
+    id: 'ART_383_PAR2_ET',
+    cita: 'Art. 383 par. 2 E.T.',
+    titulo: 'Rentas de trabajo no laborales — misma tabla del Art. 383',
+    resumen:
+      'La retención del Art. 383 E.T. se aplica también a los pagos o abonos en cuenta por rentas de trabajo que no provienen de una relación laboral o legal y reglamentaria. Según el reglamento (DUR 1625/2016 Art. 1.2.4.1.17 par. 4, mod. por el Decreto 2231 de 2023), las personas naturales con esas rentas que no piden al agente retenedor aplicar costos y deducciones se retienen con la tabla del Art. 383 E.T.; si los piden, se aplican las tarifas de los Arts. 392 y 401 E.T.',
+    textoLiteral: null,
+    estado: 'MODIFICADO',
+    modificaciones: [
+      {
+        norma: 'Ley 2277 de 2022',
+        fecha: '2022-12-13',
+        cambio: 'Art. 8: nuevo texto del inciso del parágrafo 2 (rentas de trabajo no laborales).',
+      },
+    ],
+    urlOficial: 'https://estatuto.co/?articulo=383',
+    tags: ['retenciones', 'trabajo', 'honorarios', 'PN', 'reforma_2022'],
+  },
+  {
+    // estatuto_tributario_completo.md: ARTICULO 381 (fuente D. 2503/87 art. 29).
+    id: 'ART_381_ET',
+    cita: 'Art. 381 E.T.',
+    titulo: 'Certificados de retención por otros conceptos',
+    resumen:
+      'Para conceptos de retención distintos de la relación laboral o legal y reglamentaria, el agente retenedor expide anualmente un certificado con el año gravable y la ciudad donde consignó, la identificación del retenedor y del retenido, el monto y concepto del pago, la cuantía de la retención y la firma; a solicitud del beneficiario expide uno por cada retención. La retención del IVA está en el Art. 437-1 E.T.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=381',
+    tags: ['retenciones', 'certificados', 'procedimiento'],
+  },
+  {
+    // estatuto_tributario_completo.md: ARTÍCULO 243 (mod. art. 102 Ley 1819/2016).
+    id: 'ART_243_ET',
+    cita: 'Art. 243 E.T.',
+    titulo: 'Destinación específica de 9 puntos de la tarifa de renta de las personas jurídicas',
+    resumen:
+      'Desde el periodo gravable 2017, 9 puntos porcentuales de la tarifa del impuesto sobre la renta de las personas jurídicas se destinan al ICBF (2,2), al SENA (1,4), al Sistema de Seguridad Social en Salud (4,4), a la primera infancia (0,4) y a las instituciones de educación superior públicas (0,6). Es una regla de destinación del recaudo: no cambia la tarifa que liquida el contribuyente.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [
+      {
+        norma: 'Ley 1819 de 2016',
+        fecha: '2016-12-29',
+        cambio: 'Art. 102: nuevo texto (destinación de 9 puntos desde 2017).',
+      },
+    ],
+    urlOficial: 'https://estatuto.co/?articulo=243',
+    tags: ['renta', 'tarifa', 'PJ', 'destinacion'],
+  },
+  {
+    // estatuto_tributario_completo.md: ARTÍCULO 235-2 (mod. art. 91 Ley 2010/2019;
+    // numerales derogados por el art. 96 Ley 2277/2022). Literales a) y b) del
+    // numeral 4 y numeral 7 en la TTD: ley_2277_2022.md (par. 6 Art. 240).
+    id: 'ART_235_2_ET',
+    cita: 'Art. 235-2 E.T.',
+    titulo: 'Rentas exentas — lista taxativa de las excepciones del Art. 26',
+    resumen:
+      'Sin perjuicio de las rentas exentas de las personas naturales y de las reconocidas en convenios internacionales, enumera las únicas rentas exentas de que trata el Art. 26 E.T. La Ley 2277 de 2022 (art. 96) eliminó varios de sus numerales desde el 1-ene-2023: verifique que el numeral invocado siga en el texto. En la utilidad depurada de la TTD (Art. 240 par. 6 E.T.) sólo se restan las rentas exentas de los literales a) y b) del numeral 4 y del numeral 7 de este artículo.',
+    textoLiteral: null,
+    estado: 'MODIFICADO',
+    modificaciones: [
+      {
+        norma: 'Ley 2010 de 2019',
+        fecha: '2019-12-27',
+        cambio: 'Art. 91: nuevo texto del encabezado y de la lista de rentas exentas.',
+      },
+      {
+        norma: 'Ley 2277 de 2022',
+        fecha: '2022-12-13',
+        cambio: 'Art. 96: eliminó numerales de la lista a partir del 1-ene-2023.',
+      },
+    ],
+    urlOficial: 'https://estatuto.co/?articulo=235-2',
+    tags: ['renta', 'exentos', 'TTD', 'reforma_2022'],
   },
 ] as const;

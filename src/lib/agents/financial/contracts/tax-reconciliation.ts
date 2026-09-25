@@ -7,11 +7,12 @@
 //
 // Marco normativo de referencia:
 //   - Art. 772-1 E.T. (conciliación fiscal obligatoria)
-//   - Decreto 2235/2017 (reglamentación del Art. 772-1)
+//   - Decreto 1998/2017 (DUR 1625/2016 arts. 1.7.1 y ss. — reglamentación del Art. 772-1)
 //   - Formato 2516 DIAN (PJ — Formulario 110) / Formato 2517 (PN — Formulario 210)
 //   - NIC 12 (impuesto a las ganancias)
-//   - Art. 240 E.T. (tarifa 35%) — invariante 2026
-//   - UVT 2026 = $52.374 COP
+//   - Art. 240 E.T. (35% renta ordinaria) y Art. 313 E.T. (15% ganancia
+//     ocasional) según la forma de recuperación (NIC 12 §47, §51-51C)
+//   - UVT del año gravable objeto de conciliación (umbral Formato 2516)
 // ---------------------------------------------------------------------------
 
 import { z } from 'zod';
@@ -49,8 +50,20 @@ export const DifferenceClassificationSchema = z.enum([
 ]);
 
 /**
+ * Forma esperada de recuperación/liquidación de la diferencia (NIC 12 §51-51C).
+ * Define la tarifa: renta ordinaria 35% (Art. 240), venta de activo poseído
+ * ≥ 2 años 15% (ganancia ocasional, Arts. 300 y 313), o régimen especial.
+ */
+export const RecoveryFormSchema = z.enum([
+  'uso_o_realizacion_ordinaria',
+  'venta_ganancia_ocasional',
+  'regimen_especial_declarado',
+]);
+
+/**
  * Una diferencia individual. Estructura granular para que el agente downstream
- * (Deferred Tax Calculator) pueda calcular DTA/DTL × 35% sin re-parsear texto.
+ * (Deferred Tax Calculator) y el recálculo determinista (lib/deterministic.ts)
+ * operen sin re-parsear texto.
  */
 export const TaxDifferenceItemSchema = z.object({
   id: z.string().min(1).describe('ID corto para referencia cruzada con Agente 2'),
@@ -62,12 +75,17 @@ export const TaxDifferenceItemSchema = z.object({
   classification: DifferenceClassificationSchema,
   niifReference: NormaRef.describe('Norma NIIF aplicable (NIC/NIIF + párrafo, e.g. "NIC 16 §50")'),
   fiscalReference: NormaRef.describe('Artículo E.T. aplicable (e.g. "Art. 137 E.T.", "Art. 105 E.T.")'),
+  recoveryForm: RecoveryFormSchema.describe('Forma esperada de recuperación: define la tarifa del diferido'),
+  applicableRatePct: z
+    .number()
+    .nullable()
+    .describe('Tarifa sólo para régimen especial declarado (zona franca, sobretasa); null en los demás casos — el sistema la fija'),
   /**
-   * Si la diferencia es temporaria, el impuesto diferido asociado (× 35%).
-   * Si es permanente, ambos son "0". El Agente 2 valida este cálculo.
+   * Impuesto diferido de la diferencia temporaria. El sistema lo recalcula en
+   * código con la tarifa de la forma de recuperación; permanentes = "0".
    */
-  deferredTaxAssetCents: MoneyCop.describe('DTA generado (temporaria deducible × 35%); 0 si no aplica'),
-  deferredTaxLiabilityCents: MoneyCop.describe('DTL generado (temporaria imponible × 35%); 0 si no aplica'),
+  deferredTaxAssetCents: MoneyCop.describe('DTA (temporaria deducible × tarifa); 0 si no aplica — recalculado por el sistema'),
+  deferredTaxLiabilityCents: MoneyCop.describe('DTL (temporaria imponible × tarifa); 0 si no aplica — recalculado por el sistema'),
   notes: z.string().nullable().describe('Observaciones adicionales (impracticabilidad, supuesto aplicado, etc.)'),
 });
 
@@ -117,8 +135,7 @@ export const TaxDifferenceReportSchema = z.object({
   differences: z.array(TaxDifferenceItemSchema),
   /**
    * Resúmenes agregados por categoría (Σ |differenceCents|, Σ DTA, Σ DTL).
-   * Validables: la suma de ítems por categoría debe coincidir con estos
-   * totales (el orchestrator chequea post-LLM).
+   * El sistema los recalcula desde los ítems (lib/deterministic.ts).
    */
   categorySummaries: z.array(
     z.object({
@@ -157,7 +174,7 @@ export const DeferredTaxWorksheetRowSchema = z.object({
   concept: z.string().min(1),
   temporaryDifferenceCents: MoneyCop.describe('Diferencia temporaria absoluta'),
   type: z.enum(['deducible', 'imponible']),
-  taxRatePct: z.number().describe('Tarifa aplicada (35 por defecto; otra si zonas especiales)'),
+  taxRatePct: z.number().describe('Tarifa aplicada según la forma de recuperación (35 renta ordinaria; 15 ganancia ocasional; régimen especial)'),
   dtaCents: MoneyCop.describe('DTA = diferencia deducible × tarifa; 0 si imponible'),
   dtlCents: MoneyCop.describe('DTL = diferencia imponible × tarifa; 0 si deducible'),
   /**
@@ -237,7 +254,8 @@ export type EffectiveRateReconciliationJson = z.infer<typeof EffectiveRateReconc
 
 /**
  * Asiento contable recomendado. Las cuentas DEBEN ser PUC válidas (27xx para
- * impuesto diferido, 54xx para gasto, 37xx para ORI).
+ * impuesto diferido, 54xx para gasto; ORI en la cuenta mapeada del grupo 38,
+ * nunca 3705 utilidades acumuladas — prompts-normativa-25).
  */
 export const JournalEntrySchema = z.object({
   description: z.string().min(1).describe('Descripción del asiento (e.g. "Reconocimiento DTA depreciación NIIF")'),

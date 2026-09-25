@@ -57,12 +57,31 @@ describe('T2 — Shield / Liquidity', () => {
     expect(out.fired).toBe(true);
     expect(out.insight?.pillar).toBe('escudo');
   });
-  it('dispara cuando caja < utilidad×35%', () => {
+  // IW4 (ratios-kpis-10): "caja < utilidad × 35 %" no es un disparador — la
+  // utilidad contable no es base fiscal. Antes esta combinación disparaba y el
+  // correo afirmaba un "impuesto de renta proyectado" de $350M.
+  it('no dispara por caja < utilidad×35% si la autonomía es suficiente', () => {
     const out = runT2(
       { ...baseMetrics, efectivo: 5_000_000, utilidadNeta: 1_000_000_000, impuestos: 1_000_000 },
       ctx,
     );
+    expect(out.fired).toBe(false);
+  });
+  it('autonomía < 30 días ⇒ crítico de liquidez, sin cifras fiscales heurísticas', () => {
+    const out = runT2({ ...baseMetrics, diasAutonomia: 12.4, utilidadNeta: 1_000_000_000 }, ctx);
     expect(out.fired).toBe(true);
+    expect(out.insight?.severity).toBe('critico');
+    expect(out.insight?.hallazgo).toContain('12 días');
+    const text = `${out.insight?.subject} ${out.insight?.hallazgo} ${out.insight?.impacto}`;
+    expect(text).not.toMatch(/impuesto de renta|350\.000\.000|\{\{/);
+  });
+  it('autonomía entre 30 y 45 días ⇒ advertencia', () => {
+    const out = runT2({ ...baseMetrics, diasAutonomia: 40 }, ctx);
+    expect(out.fired).toBe(true);
+    expect(out.insight?.severity).toBe('advertencia');
+  });
+  it('autonomía N/D no dispara', () => {
+    expect(runT2({ ...baseMetrics, diasAutonomia: null }, ctx).fired).toBe(false);
   });
 });
 
@@ -79,6 +98,45 @@ describe('T3 — Value / Anomaly', () => {
   it('dispara con días de inventario >365', () => {
     const out = runT3({ ...baseMetrics, diasInventario: 400 }, ctx);
     expect(out.fired).toBe(true);
+    expect(out.insight?.hallazgo).toContain('días de inventario son 400');
+  });
+  // ratios-kpis-26: sin KPI de días de inventario (null con motivo en el
+  // preprocesador) el correo decía "los días de inventario son 0".
+  it('días de inventario N/D se imprimen como N/D, no como 0', () => {
+    const out = runT3({ ...baseMetrics, margenBruto: 0.95, diasInventario: null }, ctx);
+    expect(out.fired).toBe(true);
+    expect(out.insight?.hallazgo).toContain('días de inventario son N/D');
+    expect(out.insight?.hallazgo).not.toMatch(/son 0\b/);
+    const en = runT3(
+      { ...baseMetrics, margenBruto: 0.95, diasInventario: null },
+      { ...ctx, language: 'en' },
+    );
+    expect(en.insight?.hallazgo).toContain('N/A inventory days');
+  });
+  it('los días se redondean a entero', () => {
+    const out = runT3({ ...baseMetrics, diasInventario: 400.6 }, ctx);
+    expect(out.insight?.hallazgo).toContain('son 401');
+  });
+  // Integración fase 2: la plantilla escribía '{{margen_bruto_pct}}%' literal.
+  // Si T3 se dispara sólo por inventario con margen N/D, el correo decía
+  // "margen bruto reportado es —%".
+  it('margen bruto N/D se imprime N/D (N/A), sin "%" suelto', () => {
+    const out = runT3({ ...baseMetrics, margenBruto: null, diasInventario: 400 }, ctx);
+    expect(out.fired).toBe(true);
+    expect(out.insight?.hallazgo).toContain('margen bruto reportado es N/D y');
+    expect(out.insight?.hallazgo).not.toMatch(/—%|N\/D%/);
+    const en = runT3(
+      { ...baseMetrics, margenBruto: null, diasInventario: 400 },
+      { ...ctx, language: 'en' },
+    );
+    expect(en.insight?.hallazgo).toContain('gross margin is N/A with');
+    expect(en.insight?.hallazgo).not.toMatch(/—%|N\/A%/);
+  });
+  it('con margen el porcentaje conserva el "%"', () => {
+    const out = runT3({ ...baseMetrics, margenBruto: 0.95 }, ctx);
+    expect(out.insight?.hallazgo).toContain('margen bruto reportado es 95%');
+    const en = runT3({ ...baseMetrics, margenBruto: 0.95 }, { ...ctx, language: 'en' });
+    expect(en.insight?.hallazgo).toContain('gross margin is 95%');
   });
 });
 
@@ -171,5 +229,38 @@ describe('Relevance Learning — evaluateEscalation', () => {
     const future = new Date(Date.now() + 7 * 24 * 3_600_000);
     const a = makeAlert({ status: 'snoozed', snoozedUntil: future });
     expect(evaluateEscalation(a).kind).toBe('noop');
+  });
+});
+
+// Re-auditoría 2026-09-24 (ICU-06): T3 disparado sólo por días de inventario
+// decía «Margen inusualmente alto detectado» y «tu rentabilidad podría estar
+// inflada», aun con margen 35 % o N/D.
+describe('T3 — asunto e impacto según el disparador (ICU-06)', () => {
+  it('sólo inventario (margen N/D o 35 %): no habla de margen alto', () => {
+    for (const margenBruto of [null, 0.35]) {
+      for (const language of ['es', 'en'] as const) {
+        const out = runT3({ ...baseMetrics, margenBruto, diasInventario: 412.6 }, { ...ctx, language });
+        expect(out.fired).toBe(true);
+        expect(out.insight?.subject).not.toMatch(/margen inusualmente alto|unusually high margin/i);
+        expect(out.insight?.impacto).not.toMatch(/rentabilidad podría estar inflada|profitability may be inflated/i);
+        expect(out.insight?.subject).toMatch(language === 'es' ? /Inventario sin rotación/ : /Inventory not turning over/);
+      }
+    }
+  });
+
+  it('sólo margen: conserva el asunto de margen alto', () => {
+    const out = runT3({ ...baseMetrics, margenBruto: 0.95 }, ctx);
+    expect(out.insight?.subject).toMatch(/Margen inusualmente alto/);
+    expect(out.insight?.impacto).toMatch(/rentabilidad podría estar inflada/);
+  });
+
+  it('ambos disparadores: el asunto nombra los dos', () => {
+    const out = runT3({ ...baseMetrics, margenBruto: 0.95, diasInventario: 400 }, ctx);
+    expect(out.insight?.subject).toMatch(/Margen inusualmente alto e inventario sin rotación/);
+  });
+
+  it('margen 90,4 % se imprime con un decimal (umbral > 90 %)', () => {
+    expect(runT3({ ...baseMetrics, margenBruto: 0.904 }, ctx).insight?.hallazgo).toContain('margen bruto reportado es 90,4%');
+    expect(runT3({ ...baseMetrics, margenBruto: 0.904 }, { ...ctx, language: 'en' }).insight?.hallazgo).toContain('gross margin is 90.4%');
   });
 });

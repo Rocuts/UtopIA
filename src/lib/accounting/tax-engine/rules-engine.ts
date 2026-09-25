@@ -22,7 +22,7 @@
 import type { TaxRuleRow, ThirdPartyTaxProfileRow } from '@/lib/db/schema-tax';
 import type { TaxEvaluationInput } from './types';
 import { readTriggers } from './types';
-import { uvtToCopByYear } from './constants';
+import { anioColombia, uvtToCopByYear } from './constants';
 import { getRules, getTaxProfile } from './repository';
 
 // ---------------------------------------------------------------------------
@@ -43,6 +43,12 @@ export interface MatchedRule {
    * que el cliente firma ante la DIAN no puede llevar una tarifa elegida al azar.
    */
   ambiguous?: boolean;
+  /**
+   * Mensaje de revisión manual (`TaxRuleTriggers.manualReview`). Cuando está
+   * presente la regla se muestra pero NO se contabiliza: el generador de
+   * líneas la emite con confianza 0 y sin `JournalLineInput`.
+   */
+  manualReview?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -58,7 +64,11 @@ export async function matchRules(
   input: TaxEvaluationInput,
 ): Promise<MatchedRule[]> {
   const transactionDate = input.transactionDate ?? new Date();
-  const year = transactionDate.getFullYear();
+  // La vigencia de las reglas la fija la fecha de la transacción; el UVT con
+  // que se convierten las bases mínimas puede fijarlo el caller (`uvtYear`).
+  // Antes `uvtYear` se aceptaba en el contrato y se ignoraba. Sin él, el año
+  // gravable se mide en hora de Colombia, no en la del servidor.
+  const year = input.uvtYear ?? anioColombia(transactionDate);
 
   // ── Paso 1: cargar reglas activas ─────────────────────────────────────────
   const allRules = await getRules(input.workspaceId, transactionDate);
@@ -237,11 +247,27 @@ export async function matchRules(
       }
     }
 
+    // Revisión manual: la regla aplica pero su cifra no se contabiliza sin
+    // que el caller declare las calificaciones que el motor no puede inferir.
+    let manualReview: string | undefined;
+    if (triggers.manualReview) {
+      const unless = triggers.manualReview.unlessTreatments;
+      const satisfied =
+        unless !== undefined &&
+        unless.length > 0 &&
+        unless.every((t) => declaredTreatments.has(t));
+      if (!satisfied) {
+        manualReview = triggers.manualReview.message;
+        warnings.push(`Regla ${rule.code} requiere revisión manual: ${manualReview}`);
+      }
+    }
+
     // La regla pasó todos los filtros.
     matched.push({
       rule,
       taxProfile: profileLoaded ? taxProfile : null,
       warnings: dedupe(warnings),
+      ...(manualReview ? { manualReview } : {}),
     });
   }
 

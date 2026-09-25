@@ -7,6 +7,9 @@ import type { AuditReport } from '@/lib/agents/financial/audit/types';
 import type { FiscalOpinionProgressEvent } from '@/lib/agents/financial/fiscal-opinion/types';
 import { createSafeSse } from '@/lib/api/sse-safe';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
+import { resolveClientPreprocessed } from '@/lib/reports/client-preprocessed';
+import { resolveAuditedReport } from '@/lib/reports/audited-report';
+import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 
 // ---------------------------------------------------------------------------
 // POST /api/fiscal-audit-opinion
@@ -42,15 +45,32 @@ export async function POST(req: Request) {
       );
     }
 
-    const { report, auditReport, language, instructions } = parsed.data;
+    const { auditReport, language, instructions } = parsed.data;
 
     const stream =
       req.headers.get('X-Stream') === 'true' ||
       new URL(req.url).searchParams.get('stream') === '1';
 
-    // Cast the Zod-validated objects to the full types.
-    // The schema validates the minimal fields needed; downstream code uses consolidatedReport + company.
-    const typedReport = report as unknown as FinancialReport;
+    // `preprocessed` (round-trip JSON de /niif) alimenta cifras deterministas
+    // del dictamen (umbral SAGRILAFT, reclasificaciones, comparativos). Se
+    // revive y se RE-DERIVA desde sus filas con el ledger confirmado de la
+    // petición (cross-dep P1): forma inválida → 400, totales alterados → 422.
+    const client = resolveClientPreprocessed(
+      (body as { preprocessed?: unknown }).preprocessed,
+      (body as { adjustmentLedger?: unknown }).adjustmentLedger,
+    );
+    if (!client.ok) return client.response;
+    const preprocessed: PreprocessedBalance | undefined = client.preprocessed;
+
+    // I5-1: los evaluadores leen el consolidado que produce el servidor desde
+    // el JSON de las Partes I–III (con sus veredictos), no el Markdown recibido.
+    const audited = resolveAuditedReport(
+      { ...((body as { report: object }).report), company: parsed.data.report.company },
+      client,
+      language,
+    );
+    if (!audited.ok) return audited.response;
+    const typedReport: FinancialReport = audited.report;
     const typedAuditReport = auditReport as unknown as AuditReport | undefined;
 
     // Auto-fill comparativePeriod when the source FinancialReport carries
@@ -69,7 +89,7 @@ export async function POST(req: Request) {
     }
 
     if (stream) {
-      return handleStreaming(typedReport, typedAuditReport, language, instructions);
+      return handleStreaming(typedReport, typedAuditReport, language, instructions, preprocessed);
     }
 
     const fiscalOpinion = await orchestrateFiscalOpinion({
@@ -77,6 +97,7 @@ export async function POST(req: Request) {
       auditReport: typedAuditReport,
       language,
       instructions,
+      preprocessed,
     });
 
     return NextResponse.json(fiscalOpinion);
@@ -101,6 +122,7 @@ function handleStreaming(
   auditReport: AuditReport | undefined,
   language: 'es' | 'en',
   instructions: string | undefined,
+  preprocessed: PreprocessedBalance | undefined,
 ) {
   const readableStream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -108,7 +130,7 @@ function handleStreaming(
 
       try {
         const fiscalOpinion = await orchestrateFiscalOpinion(
-          { report, auditReport, language, instructions },
+          { report, auditReport, language, instructions, preprocessed },
           {
             onProgress: (event: FiscalOpinionProgressEvent) => {
               sse.send('progress', event);

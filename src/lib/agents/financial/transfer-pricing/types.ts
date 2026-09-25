@@ -5,6 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import type { CompanyInfo } from '../types';
+import type { TpRangeCheck } from './lib/deterministic';
 
 // ---------------------------------------------------------------------------
 // Extended Company Info for Transfer Pricing
@@ -60,7 +61,9 @@ export interface TransferPricingRequest {
 // ---------------------------------------------------------------------------
 
 export interface TPAnalysisResult {
-  /** Determinacion de obligatoriedad (umbrales Art. 260-1 ET) */
+  /** Año gravable del análisis (umbrales y sanciones con la UVT de ese año). */
+  taxYear: number;
+  /** Determinacion de obligatoriedad (umbrales Arts. 260-5 y 260-9 ET) */
   obligationAssessment: string;
   /** Caracterizacion de transacciones controladas */
   transactionCharacterization: string;
@@ -79,6 +82,12 @@ export interface TPAnalysisResult {
 // ---------------------------------------------------------------------------
 
 export interface ComparableAnalysisResult {
+  /**
+   * Rango intercuartil y conclusión recalculados en código (DUR 1625/2016 art.
+   * 1.2.2.2.5). `conclusive === false` ⇒ escenario ilustrativo: la
+   * documentación no puede emitir «CUMPLE» ni filas definitivas del 1125.
+   */
+  rangeCheck: TpRangeCheck;
   /** Estrategia de busqueda de comparables */
   searchStrategy: string;
   /** Criterios de comparabilidad aplicados */

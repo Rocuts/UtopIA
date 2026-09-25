@@ -16,6 +16,11 @@ import { formatCopFromCents, parseMoneyCop } from '../../contracts/money';
 import { buildDifferenceIdentifierPrompt } from '../prompts/difference-identifier.prompt';
 import type { CompanyInfo } from '../../types';
 import type { DifferenceIdentifierResult, TaxReconciliationProgressEvent } from '../types';
+import {
+  enforceDifferenceReport,
+  tarifaPorFormaRecuperacion,
+  type DifferenceCheck,
+} from '../lib/deterministic';
 
 /**
  * Processes raw accounting data and identifies all NIIF-to-fiscal differences,
@@ -58,20 +63,26 @@ export async function runDifferenceIdentifier(
     signal,
   });
 
-  return toLegacyShape(json);
+  // DTA/DTL por tarifa de la forma de recuperación, totales por categoría y
+  // cuadre de la cédula puente: recalculados en código (el LLM no decide).
+  const enforced = enforceDifferenceReport(json);
+  return toLegacyShape(enforced.json, enforced.check);
 }
 
 // ---------------------------------------------------------------------------
 // Adapter local
 // ---------------------------------------------------------------------------
 
-function toLegacyShape(json: TaxDifferenceReportJson): DifferenceIdentifierResult {
+export function toLegacyShape(
+  json: TaxDifferenceReportJson,
+  check: DifferenceCheck,
+): DifferenceIdentifierResult {
   const revenueDifferences = renderCategory(json, 'ingresos');
   const costDeductionDifferences = renderCategory(json, 'costos_deducciones');
   const assetDifferences = renderCategory(json, 'activos');
   const liabilityDifferences = renderCategory(json, 'pasivos');
   const equityDifferences = renderCategory(json, 'patrimonio');
-  const bridgeSchedule = renderBridge(json);
+  const bridgeSchedule = renderBridge(json, check);
 
   const fullContent = [
     '## 1. DIFERENCIAS EN INGRESOS',
@@ -107,6 +118,8 @@ function toLegacyShape(json: TaxDifferenceReportJson): DifferenceIdentifierResul
     .join('\n');
 
   return {
+    items: json.differences,
+    bridgeBalances: check.bridgeBalances,
     revenueDifferences,
     costDeductionDifferences,
     assetDifferences,
@@ -128,17 +141,23 @@ function renderCategory(
   const rows = items
     .map(
       (i) =>
-        `| ${i.id} | ${i.concept} | ${money(i.accountingBaseCents)} | ${money(i.fiscalBaseCents)} | ${money(i.differenceCents)} | ${classificationLabel(i.classification)} | ${i.niifReference} | ${i.fiscalReference} | ${money(i.deferredTaxAssetCents)} | ${money(i.deferredTaxLiabilityCents)} |`,
+        `| ${i.id} | ${i.concept} | ${money(i.accountingBaseCents)} | ${money(i.fiscalBaseCents)} | ${money(i.differenceCents)} | ${classificationLabel(i.classification)} | ${i.niifReference} | ${i.fiscalReference} | ${rateLabel(i)} | ${money(i.deferredTaxAssetCents)} | ${money(i.deferredTaxLiabilityCents)} |`,
     )
     .join('\n');
   return [
-    '| ID | Concepto | Base contable NIIF | Base fiscal E.T. | Diferencia | Clasificación | Norma NIIF | Norma fiscal | DTA | DTL |',
-    '|---|---|---|---|---|---|---|---|---|---|',
+    '| ID | Concepto | Base contable NIIF | Base fiscal E.T. | Diferencia | Clasificación | Norma NIIF | Norma fiscal | Tarifa | DTA | DTL |',
+    '|---|---|---|---|---|---|---|---|---|---|---|',
     rows,
   ].join('\n');
 }
 
-function renderBridge(json: TaxDifferenceReportJson): string {
+function rateLabel(i: TaxDifferenceReportJson['differences'][number]): string {
+  if (i.classification === 'permanente') return '—';
+  if (i.applicableRatePct === null) return 'N/D (régimen especial sin tarifa verificable)';
+  return `${i.applicableRatePct}% — ${tarifaPorFormaRecuperacion(i).fuente}`;
+}
+
+function renderBridge(json: TaxDifferenceReportJson, check: DifferenceCheck): string {
   const rows = json.bridgeSchedule
     .map(
       (r) =>
@@ -148,6 +167,9 @@ function renderBridge(json: TaxDifferenceReportJson): string {
   return [
     `**Patrimonio contable NIIF:** ${money(json.patrimonioNiifCents)}`,
     `**Patrimonio fiscal (Art. 282 E.T.):** ${money(json.patrimonioFiscalCents)}`,
+    check.bridgeBalances
+      ? '_Cuadre verificado en código: patrimonio NIIF + ajustes = patrimonio fiscal._'
+      : `> **LA CÉDULA PUENTE NO CUADRA:** patrimonio NIIF + ajustes − patrimonio fiscal = ${money(check.bridgeGapCents)}. No usar sin revisión.`,
     '',
     '| Concepto | Importe | Tipo | Referencia |',
     '|---|---|---|---|',

@@ -1,12 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { makeExportableReport } from '@/lib/agents/financial/__fixtures__/coherent-niif-report';
+import { makeExportableReport as makeNiifOnlyReport } from '@/lib/agents/financial/__fixtures__/coherent-niif-report';
+import { withCoherentParts } from '@/lib/reports/__tests__/coherent-parts';
 vi.mock('@/lib/auth/require-session', () => ({ requireAuthSession: vi.fn(async () => ({ ok: true })) }));
 vi.mock('@/lib/export/excel-export', () => ({ generateFinancialExcel: vi.fn(async () => Buffer.from('xlsx')) }));
 vi.mock('@/lib/export/pdf-elite-react', () => ({
   composeEditorialReport: vi.fn(() => ({})),
   renderEditorialReportToStream: vi.fn(),
 }));
-vi.mock('@/lib/agents/financial/orchestrator', () => ({
+// El resto del orquestador es real: el servidor re-renderiza las Partes con
+// sus funciones (sellos de integridad de la Parte I, I3).
+vi.mock('@/lib/agents/financial/orchestrator', async (orig) => ({
+  ...(await orig<typeof import('@/lib/agents/financial/orchestrator')>()),
   orchestrateFinancialReport: vi.fn(), BalanceValidationError: class extends Error {},
 }));
 import { POST } from '../export/route';
@@ -14,6 +18,9 @@ import { generateFinancialExcel } from '@/lib/export/excel-export';
 import { renderEditorialReportToStream } from '@/lib/export/pdf-elite-react';
 import { orchestrateFinancialReport } from '@/lib/agents/financial/orchestrator';
 import { Readable } from 'node:stream';
+
+/** Informe coherente con Partes II y III estructuradas (I3: sin JSON válido se sellan). */
+const makeExportableReport = () => withCoherentParts(makeNiifOnlyReport());
 
 const request = (body: unknown) => new Request('http://localhost/api/financial-report/export', {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),

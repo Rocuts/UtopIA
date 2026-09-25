@@ -2,7 +2,7 @@
 // Cubre: balance feliz, descuadres, restricciones de línea, reversals, precisión.
 
 import { describe, it, expect } from 'vitest';
-import { validateBalance, buildReversalLines } from '../validate';
+import { validateBalance, buildReversalLines, normalizeAmount } from '../validate';
 import { DoubleEntryError, ERR } from '../../types';
 import type { JournalLineInput } from '../../types';
 
@@ -52,17 +52,37 @@ describe('validateBalance — casos felices', () => {
     expect(result.totalCredit).toBe('1000.50');
   });
 
-  it('strings con 3 decimales se truncan a 2 (no redondean)', () => {
-    // "1234.567" → 123456 centavos (trunca el 7)
-    // "1234.563" → 123456 centavos (trunca el 3)
-    // Ambas truncan igual → balance exacto
+  // contab-nomina-12: antes este caso "pasaba" truncando (1234.567 y 1234.563
+  // → 1234.56 cuadrado), pero el servicio persistía el string crudo y
+  // NUMERIC(20,2) REDONDEA: en BD quedaban 1234.57 / 1234.56 → líneas
+  // descuadradas bajo una cabecera cuadrada. Un 3.er decimal significativo
+  // ahora se rechaza; ceros de relleno siguen aceptándose.
+  it('strings con un 3.er decimal significativo se rechazan (NUMERIC(20,2) redondearía)', () => {
+    expect(() =>
+      validateBalance([
+        debitLine('acc-a', '1234.567'),
+        creditLine('acc-b', '1234.563'),
+      ]),
+    ).toThrow(DoubleEntryError);
+    expect(() =>
+      validateBalance([debitLine('acc-a', '100.005'), creditLine('acc-b', '100.00')]),
+    ).toThrow(/more than 2 decimals/);
+  });
+
+  it('ceros de relleno más allá del 2.º decimal se aceptan', () => {
     const result = validateBalance([
-      debitLine('acc-a', '1234.567'),
-      creditLine('acc-b', '1234.563'),
+      debitLine('acc-a', '1234.560'),
+      creditLine('acc-b', '1234.56000'),
     ]);
-    // 1234.56 === 1234.56 → balance
     expect(result.totalDebit).toBe('1234.56');
     expect(result.totalCredit).toBe('1234.56');
+  });
+
+  it('normalizeAmount devuelve el NUMERIC canónico que se persiste', () => {
+    expect(normalizeAmount('1000.5')).toBe('1000.50');
+    expect(normalizeAmount('7')).toBe('7.00');
+    expect(normalizeAmount('1.500')).toBe('1.50');
+    expect(() => normalizeAmount('1.505')).toThrow(DoubleEntryError);
   });
 
   it('suma BigInt exacta: 0.10 + 0.20 === 0.30 sin error de flotante', () => {

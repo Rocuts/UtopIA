@@ -15,6 +15,7 @@ import { z } from 'zod';
 import { runRepairAgent } from '@/lib/agents/repair/agent';
 import type { RepairChatRequest } from '@/lib/agents/repair/types';
 import { redactPII } from '@/lib/security/pii-filter';
+import { adjustmentSchema } from '@/lib/reports/adjustment-ledger';
 export const maxDuration = 60;
 
 // ---------------------------------------------------------------------------
@@ -29,21 +30,12 @@ const messageSchema = z.object({
 // ---------------------------------------------------------------------------
 // Adjustment ledger (Phase 2). El cliente envia el array completo en cada
 // request (replay). El servidor es stateless; no persiste nada.
+//
+// Esquema ÚNICO del ledger (src/lib/reports/adjustment-ledger.ts), el mismo de
+// /niif, /consolidate y /export. La copia local no declaraba `period` y Zod lo
+// quitaba: un ajuste anclado al comparativo llegaba a las tools (preview y
+// `recheck_validation`) sin periodo y se aplicaba al primario (cross-dep I1-4).
 // ---------------------------------------------------------------------------
-const adjustmentSchema = z.object({
-  id: z.string().min(1).max(100),
-  accountCode: z.string().min(1).max(10),
-  accountName: z.string().min(1).max(200),
-  amount: z.number().refine(
-    (n) => Number.isFinite(n),
-    'amount debe ser finito',
-  ),
-  rationale: z.string().min(1).max(2_000),
-  status: z.enum(['proposed', 'applied', 'rejected']),
-  proposedAt: z.string().min(1).max(40),
-  appliedAt: z.string().min(1).max(40).optional(),
-  rejectedAt: z.string().min(1).max(40).optional(),
-});
 
 const requestSchema = z.object({
   messages: z.array(messageSchema).min(1).max(50),

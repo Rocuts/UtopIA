@@ -8,7 +8,10 @@
 
 /**
  * Parsea un MoneyCop a BigInt (centavos). Lanza si el string no cumple el
- * regex `^-?\d+$`.
+ * regex `^-?\d+$`. Las formas no canónicas que el regex admite ('-0', ceros a
+ * la izquierda) se normalizan aquí: `BigInt('-0') === 0n`, `BigInt('007') ===
+ * 7n`; toda aritmética y comparación posterior se hace en BigInt y la
+ * serialización (`serializeMoneyCop`) es siempre canónica.
  */
 export function parseMoneyCop(value: string): bigint {
   if (!/^-?\d+$/.test(value)) {
@@ -26,14 +29,27 @@ export function serializeMoneyCop(cents: bigint): string {
 /**
  * Formatea centavos a presentación COP colombiana: `$1.234.567,89`.
  *
- * @param cents     Centavos como bigint o number (number solo para totales chicos).
+ * @param cents     Centavos como bigint o number. Un `number` debe ser un
+ *                  ENTERO SEGURO de centavos (|n| ≤ 2^53 − 1): el helper no
+ *                  redondea (Math.round es asimétrico con medios negativos:
+ *                  −1,5 → −1 y 1,5 → 2) ni imprime en silencio una cifra que
+ *                  `number` ya no representa al centavo. NaN, ±Infinity, no
+ *                  enteros y enteros inseguros lanzan RangeError
+ *                  (niif-contrato-22). Para montos grandes, bigint/MoneyCop.
  * @param absolute  Si true, presenta valor absoluto (regla NIIF Analyst).
  *                  Si false, mantiene el signo y usa paréntesis para negativos
  *                  (convención NIIF: `($1.234,56)`).
  */
 export function formatCopFromCents(cents: bigint | number, absolute = false): string {
   const ZERO = BigInt(0);
-  const big = typeof cents === 'bigint' ? cents : BigInt(Math.round(cents));
+  if (typeof cents === 'number' && !Number.isSafeInteger(cents)) {
+    throw new RangeError(
+      `formatCopFromCents: los centavos como number deben ser un entero seguro (recibido ${
+        Number.isFinite(cents) ? (Number.isInteger(cents) ? 'entero > 2^53' : 'no entero') : String(cents)
+      }); use bigint (MoneyCop).`,
+    );
+  }
+  const big = typeof cents === 'bigint' ? cents : BigInt(cents);
   const isNegative = big < ZERO;
   const abs = isNegative ? -big : big;
   const wholeCents = abs.toString().padStart(3, '0');
@@ -43,6 +59,32 @@ export function formatCopFromCents(cents: bigint | number, absolute = false): st
   const formatted = `$${withSep},${decimalPart}`;
   if (absolute) return formatted;
   return isNegative ? `(${formatted})` : formatted;
+}
+
+/**
+ * Pesos (`number`, como viajan `controlTotals` y los resúmenes del
+ * preprocesador) → centavos EXACTOS por el texto decimal del número
+ * (`toFixed(2)`: redondeo al centavo del valor decimal, sin pasar por un
+ * `number` de centavos, que deja de ser exacto por encima de 2^53 ≈ $90
+ * billones — niif-contrato-22). Devuelve `null` si el valor no es finito o no
+ * tiene notación decimal fija (|n| ≥ 1e21): el consumidor imprime N/D, nunca
+ * una cifra inventada.
+ */
+export function pesosNumberToCents(pesos: number): bigint | null {
+  if (typeof pesos !== 'number' || !Number.isFinite(pesos)) return null;
+  const fixed = pesos.toFixed(2);
+  if (!/^-?\d+\.\d{2}$/.test(fixed)) return null;
+  return BigInt(fixed.replace('.', ''));
+}
+
+/**
+ * Formatea pesos (`number`) con la convención de `formatCopFromCents`
+ * (paréntesis para negativos salvo `absolute`), vía `pesosNumberToCents`.
+ * Valor no representable → `'N/D'`.
+ */
+export function formatCopFromPesos(pesos: number, absolute = false): string {
+  const cents = pesosNumberToCents(pesos);
+  return cents === null ? 'N/D' : formatCopFromCents(cents, absolute);
 }
 
 /** Suma una colección de MoneyCop strings y devuelve un MoneyCop. */
@@ -66,16 +108,24 @@ export function moneyCopEquals(a: string, b: string, toleranceCents: bigint = Bi
 }
 
 /**
- * Porcentaje entero de un MoneyCop, TRUNCADO hacia abajo (floor para valores
- * positivos: BigInt divide truncando hacia cero). Floor-bias deliberado para
- * defensa Art. 647 (un descuento nunca sobreestimado). `pct` es entero (ej. 25).
- * Pensado para montos NO negativos (donación, impuesto).
+ * Porcentaje entero de un MoneyCop, redondeado hacia ABAJO (floor, hacia −∞).
+ * Floor-bias deliberado para defensa Art. 647 (un descuento nunca
+ * sobreestimado). `pct` es entero (ej. 25). Los llamadores lo usan con montos
+ * no negativos (donación, impuesto, utilidad del ejercicio, capital); con un
+ * monto negativo el resultado es el floor matemático (−101 × 50 % = −51), no
+ * el truncamiento hacia cero que hacía la división BigInt (−50,
+ * niif-contrato-22).
  */
 export function pctFloorMoneyCop(value: string, pct: number): string {
   if (!Number.isInteger(pct) || pct < 0) {
     throw new Error(`pctFloorMoneyCop: pct debe ser entero >= 0 (recibido ${pct}).`);
   }
-  return serializeMoneyCop((parseMoneyCop(value) * BigInt(pct)) / BigInt(100));
+  const product = parseMoneyCop(value) * BigInt(pct);
+  const hundred = BigInt(100);
+  const quotient = product / hundred;
+  // BigInt trunca hacia cero: con resto negativo se baja un centavo más.
+  const floored = product % hundred < BigInt(0) ? quotient - BigInt(1) : quotient;
+  return serializeMoneyCop(floored);
 }
 
 /** Menor de dos MoneyCop (comparación en centavos). Empate → devuelve `a`. */

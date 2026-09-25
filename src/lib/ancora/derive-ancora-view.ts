@@ -7,28 +7,40 @@
 // Fórmulas defendibles (dictamen `escudo-tributario-co` + KB tributaria CO 2026):
 //  - EV/EBIT operacional: múltiplo de mercado 6.0× (PYME servicios CO 2026, rango
 //    sectorial 4–8×). Heurístico de mercado, NO norma. El Âncora expone EBIT (A09),
-//    no EBITDA — se rotula EV/EBIT en la UI.
+//    no EBITDA — se rotula EV/EBIT en la UI. Es un valor EMPRESA (EV).
 //  - DCF / Gordon: requieren WACC ⇒ null (faltaWacc:true) hasta que el DF lo capture.
 //  - Liquidación ≈ patrimonio neto contable (A05).
+//  - Valor de salida (`ponderado`, valoracion-01): valor del PATRIMONIO. Exige
+//    convertir el EV en patrimonio restando la deuda financiera neta; el Âncora
+//    no expone el grupo 21 ⇒ deudaNeta = null ⇒ ponderado = null. Nunca se
+//    promedia un EV con un patrimonio ni se usa el patrimonio contable solo.
 //  - Altman Z: la variante original (1968) y Z'' (servicios) exigen el término
 //    X2 = Utilidades Retenidas / Activo Total, no expuesto en el Âncora. Imputarlo
 //    sería inventar ⇒ altmanZ = null con `altmanRazon`.
-//  - capitalizacion36_3 = utilidadNeta × 0.40. Art. 36-3 E.T. (capitalización de
-//    utilidades = INCRNGO). El 40% es heurístico estratégico (porción típicamente
-//    capitalizable tras la reserva legal 10% Art. 452 C.Co.), NO porcentaje legal.
+//  - capitalizacion36_3 = null: el Art. 36-3 E.T. fue derogado (Ley 2277/2022
+//    art. 96, decisión del coordinador de la auditoría 2026-09).
 //  - scoreNiif: rúbrica determinística sobre `ancora.checks` (ecuación patrimonial
 //    actual 40 + comparativa 20 + EFE concilia 20 + sin A5 10 + sin DEV 10 = 100).
+//    Sin periodo comparativo los dos checks comparativos no son evaluables y el
+//    score se expresa sobre los 60 puntos medidos (pipeline-flujo-01).
+//  - Âncora sentinela persistido (todas las cifras NIIF "0") ⇒ vista vacía; sin
+//    comparativo, las cifras "previas" y la variación de caja son N/D.
+//  - Definiciones canónicas del preprocesador (NM-12 / recalculo-final-06):
+//    margen operacional = EBIT (A09) / ingresos operacionales netos (X05,
+//    41 − 4175; el grupo 42 va debajo de la utilidad operacional); cartera =
+//    clientes netos (A17 = 1305 + 1310 − |1399|); crecimiento de ingresos sólo
+//    entre periodos de igual duración (`periodosDeIgualDuracion`, la misma
+//    regla de meses del preprocesador y del CAGR del pilar Futuro).
 // ---------------------------------------------------------------------------
 
 import type { NiifAncora } from '@/lib/agents/financial/ancora/types';
 import type { FiscalSnapshot } from '@/lib/agents/financial/types';
 import { parseMoneyCop } from '@/lib/agents/financial/contracts/money';
+import { periodosDeIgualDuracion } from '@/lib/preprocessing/periodo-meses';
 import type { AncoraView } from './ancora-view';
 
 /** Múltiplo EV/EBIT operacional — PYME servicios CO 2026 (rango 4–8×). */
 const EV_EBIT_MULTIPLE = 6.0;
-/** Fracción de utilidad neta capitalizable — heurístico Art. 36-3 E.T. */
-const CAPITALIZACION_36_3_FRACCION = 0.4;
 
 /** MoneyCop centavos string → COP pesos. null si el string no es válido. */
 function centsToPesos(cents: string | undefined | null): number | null {
@@ -79,8 +91,8 @@ function emptyView(company?: { name?: string | null; nit?: string | null }): Anc
       crecimientoIngresosPct: null, margenNetoPct: null, margenOperacionalPct: null,
       deRatio: null,
       valoracion: {
-        evEbit: null, liquidacion: null, dcf: null, gordon: null,
-        transacciones: null, ponderado: null, faltaWacc: true,
+        evEbit: null, liquidacion: null, deudaNeta: null, equityDesdeEvEbit: null,
+        dcf: null, gordon: null, transacciones: null, ponderado: null, faltaWacc: true,
       },
       scoreNiif: null,
       altmanZ: null,
@@ -107,29 +119,43 @@ export function deriveAncoraView(
   const c = ancora.ccvNiif;
   const f = ancora.ccvFiscal;
 
+  // Defensa para Âncoras ya persistidos (localStorage) de versiones previas
+  // (pipeline-flujo-01): el sentinela de `buildNiifAncora` sin preprocesado
+  // lleva TODAS las cifras NIIF en "0". Hoy los productores emiten `null`,
+  // pero un Âncora viejo guardado seguiría pintando $0 y un score inventado.
+  if (Object.values(c).every((v) => v == null || centsToPesos(v) === 0)) return emptyView(company);
+
+  // Sin periodo comparativo, build-ancora rellena los campos "previos" con
+  // "0" y A19 = efectivo − 0: no son cifras del cliente ⇒ N/D.
+  const hasComparative = ancora.periodos.comparativo != null;
+  const prev = (v: string | undefined | null): number | null =>
+    hasComparative ? centsToPesos(v) : null;
+
   // ── NIIF (centavos → pesos) ────────────────────────────────────────────────
   const activos = centsToPesos(c.A01);
-  const activosPrev = centsToPesos(c.A02);
+  const activosPrev = prev(c.A02);
   const pasivos = centsToPesos(c.A03);
-  const pasivosPrev = centsToPesos(c.A04);
+  const pasivosPrev = prev(c.A04);
   const patrimonio = centsToPesos(c.A05);
-  const patrimonioPrev = centsToPesos(c.A06);
+  const patrimonioPrev = prev(c.A06);
   const ingresos = centsToPesos(c.A07);
-  const ingresosPrev = centsToPesos(c.A08);
+  const ingresosPrev = prev(c.A08);
   const ebitOperacional = centsToPesos(c.A09);
-  const ebitOperacionalPrev = centsToPesos(c.A10);
+  const ebitOperacionalPrev = prev(c.A10);
   const utilidadNeta = centsToPesos(c.A11);
-  const utilidadNetaPrev = centsToPesos(c.A12);
+  const utilidadNetaPrev = prev(c.A12);
   const efectivo = centsToPesos(c.A13);
-  const efectivoPrev = centsToPesos(c.A14);
+  const efectivoPrev = prev(c.A14);
   const pasivoCorriente = centsToPesos(c.A15);
   const inventarios = centsToPesos(c.A16);
   const cartera = centsToPesos(c.A17);
   const proveedores = centsToPesos(c.A18);
-  const variacionCaja = centsToPesos(c.A19);
+  const variacionCaja = prev(c.A19);
   const gananciaBruta = centsToPesos(c.X01);
   const activoCorriente = centsToPesos(c.X03);
   const activoNoCorriente = centsToPesos(c.X04);
+  // X05 no existe en Âncoras persistidos antes de 2026-09-24 ⇒ null (N/D).
+  const ingresosOperacionales = centsToPesos(c.X05);
 
   // ── Fiscal: preferir snapshot.anchor (canónico Escudo); fallback ccvFiscal ──
   const fa = fiscalSnapshot?.anchor;
@@ -149,8 +175,14 @@ export function deriveAncoraView(
   };
 
   // ── Derivados honestos ──────────────────────────────────────────────────────
+  // Crecimiento sólo entre periodos de igual duración: un corte a junio contra
+  // un año completo no es un crecimiento (NM-12, misma regla que el CAGR).
+  const periodosComparables = periodosDeIgualDuracion(
+    ancora.periodos.actual,
+    ancora.periodos.comparativo,
+  );
   const crecimientoIngresosPct =
-    ingresosPrev != null && ingresosPrev > 0 && ingresos != null
+    periodosComparables && ingresosPrev != null && ingresosPrev > 0 && ingresos != null
       ? round2(((ingresos - ingresosPrev) / ingresosPrev) * 100)
       : null;
 
@@ -160,8 +192,8 @@ export function deriveAncoraView(
       : null;
 
   const margenOperacionalPct =
-    ingresos != null && ingresos > 0 && ebitOperacional != null
-      ? round2((ebitOperacional / ingresos) * 100)
+    ingresosOperacionales != null && ingresosOperacionales > 0 && ebitOperacional != null
+      ? round2((ebitOperacional / ingresosOperacionales) * 100)
       : null;
 
   const deRatio =
@@ -178,22 +210,37 @@ export function deriveAncoraView(
   const dcf = null;
   const gordon = null;
   const transacciones = null;
-  const disponibles = [evEbit, liquidacion].filter(
-    (v): v is number => v != null,
-  );
+  // El Âncora no expone obligaciones financieras (grupo 21): sin deuda neta no
+  // hay puente EV → patrimonio. `deudaNeta` queda explícitamente en null.
+  const deudaNeta: number | null = null;
+  const equityDesdeEvEbit: number | null =
+    evEbit != null && deudaNeta != null ? round2(evEbit - deudaNeta) : null;
+  // Métodos de PATRIMONIO: sólo cuentan si existe el patrimonio implícito del
+  // múltiplo; el patrimonio contable (si es > 0) lo acompaña, nunca solo.
   const ponderado =
-    disponibles.length > 0
-      ? round2(disponibles.reduce((a, b) => a + b, 0) / disponibles.length)
+    equityDesdeEvEbit != null
+      ? round2(
+          liquidacion != null && liquidacion > 0
+            ? (equityDesdeEvEbit + liquidacion) / 2
+            : equityDesdeEvEbit,
+        )
       : null;
 
-  // scoreNiif — rúbrica determinística sobre checks reales.
+  // scoreNiif — rúbrica determinística sobre checks EVALUABLES. Sin periodo
+  // comparativo, Δ patrimonial 2024 ("0 − 0 − 0") y la conciliación del EFE
+  // (0 + A13 = A13) se cumplen por construcción: no suman puntos y el score se
+  // expresa sobre lo medido (0-100), como el health score de los pilares.
   const ck = ancora.checks;
-  let scoreNiif = 0;
-  if (ck.patrimonioDelta2025 === '0') scoreNiif += 40;
-  if (ck.patrimonioDelta2024 === '0') scoreNiif += 20;
-  if (ck.efeReconcilia === 'ok') scoreNiif += 20;
-  if (ck.alertaA5 === 'inactiva') scoreNiif += 10;
-  if (ck.alertaDev === 'inactiva') scoreNiif += 10;
+  const rubric: Array<{ weight: number; pass: boolean; evaluable: boolean }> = [
+    { weight: 40, pass: ck.patrimonioDelta2025 === '0', evaluable: true },
+    { weight: 20, pass: ck.patrimonioDelta2024 === '0', evaluable: hasComparative },
+    { weight: 20, pass: ck.efeReconcilia === 'ok', evaluable: hasComparative },
+    { weight: 10, pass: ck.alertaA5 === 'inactiva', evaluable: true },
+    { weight: 10, pass: ck.alertaDev === 'inactiva', evaluable: true },
+  ];
+  const maxEvaluable = rubric.reduce((s, r) => s + (r.evaluable ? r.weight : 0), 0);
+  const puntos = rubric.reduce((s, r) => s + (r.evaluable && r.pass ? r.weight : 0), 0);
+  const scoreNiif = Math.round((puntos * 100) / maxEvaluable);
 
   // Altman Z — no defendible sin Utilidades Retenidas (X2 = RE / Activo Total).
   const altmanZ = null;
@@ -203,10 +250,8 @@ export function deriveAncoraView(
     'inventar. Pendiente capturar utilidades retenidas para activarlo.';
 
   // Oportunidades.
-  const capitalizacion36_3 =
-    utilidadNeta != null && utilidadNeta > 0
-      ? round2(utilidadNeta * CAPITALIZACION_36_3_FRACCION)
-      : null;
+  // Art. 36-3 E.T. derogado (Ley 2277/2022 art. 96): no se estima.
+  const capitalizacion36_3: number | null = null;
   const liberacionCartera = cartera;
   const expansionIngresos =
     crecimientoIngresosPct != null && crecimientoIngresosPct > 0 && ingresos != null
@@ -233,8 +278,8 @@ export function deriveAncoraView(
     derived: {
       crecimientoIngresosPct, margenNetoPct, margenOperacionalPct, deRatio,
       valoracion: {
-        evEbit, liquidacion, dcf, gordon, transacciones, ponderado,
-        faltaWacc: true,
+        evEbit, liquidacion, deudaNeta, equityDesdeEvEbit, dcf, gordon,
+        transacciones, ponderado, faltaWacc: true,
       },
       scoreNiif,
       altmanZ,

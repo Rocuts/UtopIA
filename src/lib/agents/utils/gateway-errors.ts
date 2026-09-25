@@ -28,6 +28,7 @@ export interface FriendlyError {
     | 'gateway_unauthorized'
     | 'gateway_rate_limited'
     | 'pipeline_validation_failed'
+    | 'balance_validation_failed'
     | 'internal_error';
 }
 
@@ -159,6 +160,23 @@ const PATTERNS: Array<{
  * via console.error para que soporte pueda cruzar el id con el log.
  */
 export function toFriendlyError(error: unknown, lang: Lang = 'es'): FriendlyError {
+  // Balance bloqueado (`EscudoBalanceBloqueadoError` del Escudo, código
+  // `BALANCE_VALIDATION_FAILED` como el 422 de /niif): sus razones las escribe
+  // el preprocesador para el usuario, así que se muestran en lugar del
+  // «error interno» genérico. Detección por forma (código + razones) para no
+  // acoplar este módulo al Escudo (I4-escudo 1).
+  const balance = balanceBlockReasons(error);
+  if (balance) {
+    const intro =
+      lang === 'en'
+        ? 'The trial balance cannot be used as the basis for the figures. Fix the file and try again.'
+        : 'El balance de prueba no se puede usar como base de las cifras. Corrija el archivo y vuelva a intentarlo.';
+    return {
+      code: 'balance_validation_failed',
+      message: `${intro}\n\n${balance.map((r) => `• ${r}`).join('\n')}`,
+    };
+  }
+
   const raw =
     error instanceof Error
       ? error.message
@@ -180,4 +198,16 @@ export function toFriendlyError(error: unknown, lang: Lang = 'es'): FriendlyErro
         ? `An internal error occurred. Contact support with reference ${correlationId} if this persists.`
         : `Ocurrio un error interno. Contacta a soporte con la referencia ${correlationId} si persiste.`,
   };
+}
+
+/**
+ * Razones de un error de validación del balance (`code ===
+ * 'BALANCE_VALIDATION_FAILED'` con `reasons: string[]` no vacío), o `null`.
+ */
+function balanceBlockReasons(error: unknown): string[] | null {
+  if (!error || typeof error !== 'object') return null;
+  const e = error as { code?: unknown; reasons?: unknown };
+  if (e.code !== 'BALANCE_VALIDATION_FAILED' || !Array.isArray(e.reasons)) return null;
+  const reasons = e.reasons.filter((r): r is string => typeof r === 'string' && r.trim() !== '');
+  return reasons.length > 0 ? reasons : null;
 }

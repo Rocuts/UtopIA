@@ -9,8 +9,8 @@
 /** Cifras crudas extraídas del balance, en centavos BigInt. */
 export interface FiscalRawBase {
   /**
-   * Σ(Cta.1355) + Σ(Cta.1805) EXCLUYENDO 135517 y 135518 — sólo lo que la ley
-   * deja imputar al impuesto de RENTA (Art. 373 E.T.).
+   * F03 — sólo crédito imputable al impuesto de RENTA (Art. 373 E.T.): 135505,
+   * 135515 y, si el nombre lo indica, 135595 / 1805. Ver credito-renta.ts.
    */
   retencionesAFavorCents: bigint;
   /**
@@ -20,10 +20,16 @@ export interface FiscalRawBase {
    */
   reteIvaAFavorCents: bigint;
   /**
-   * Σ(Cta.135518) — ICA retenido / anticipo de ICA. Crédito contra el impuesto
-   * municipal de industria y comercio, nunca contra renta.
+   * Σ(Cta.135518 + 135510) — ICA retenido / anticipo de ICA. Crédito contra el
+   * impuesto municipal de industria y comercio, nunca contra renta.
    */
   reteIcaAFavorCents: bigint;
+  /**
+   * Resto de 1355/1805 que no es crédito de renta (135520, 135525, 135530,
+   * 1805 «Bienes de arte y cultura», 135595 sin nombre de renta). Se informa
+   * aparte y nunca netea F02.
+   */
+  otrosActivosImpuestoNoRentaCents: bigint;
   /** |Σ(Cta.2408)| — IVA por pagar (magnitud absoluta). */
   ivaPorPagarCents: bigint;
   /** |Σ(Cta.2365)| — Retefuente por declarar. */

@@ -22,13 +22,76 @@
 //   UVT 2026 = $52.374 (Res. DIAN 000238 de 15-dic-2025) ⇒ 1.090 UVT =
 //   $57.087.660.
 // Fuente: https://normograma.dian.gov.co/dian/compilacion/docs/decreto_1103_2023.htm
+//
+// auditoria-calidad-31 (fase 2): el texto de la Ley 43/1990 art. 13 par. 2
+// (umbrales del Revisor Fiscal) no está en src/data/tax_docs; el operador
+// ('>') se conserva igual que en prompts/governance-specialist.prompt.ts
+// hasta incorporar la fuente (si dice "sean o excedan", pasa a '≥').
 // ---------------------------------------------------------------------------
 
 import type { CompanyInfo } from '../../types';
+import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { buildAntiHallucinationGuardrail } from '../../prompts/anti-hallucination';
 import { buildColombia2026Context } from '../../prompts/colombia-2026-context';
+import {
+  RESERVE_REGIME_CITATION,
+  buildActaExpectedArithmetic,
+  convocatoriaCitationFor,
+  deriveActaRegimeForCompany,
+  normalizeTipoSocietario,
+} from '../../prompts/governance-specialist.prompt';
+import { moneyCopToken } from '../../contracts/anchors';
+import { formatCopFromCents, parseMoneyCop } from '../../contracts/money';
+import type { ActaReserveRegime } from '../../contracts/base';
 
-export function buildLegalAuditorPrompt(company: CompanyInfo, language: 'es' | 'en'): string {
+const REGIME_LABEL: Record<ActaReserveRegime, string> = {
+  obligatoria_ley: 'OBLIGATORIA por ley',
+  obligatoria_estatutos: 'OBLIGATORIA por habilitacion estatutaria expresa',
+  no_obligatoria: 'NO OBLIGATORIA (SAS cuyos estatutos consultados no la exigen)',
+  indeterminado: 'NO DETERMINABLE (estatutos sociales no suministrados)',
+};
+
+/**
+ * Bloque de datos vinculantes para el Dictamen 3: el MISMO régimen tri-estado
+ * y la MISMA aritmética determinista del acta que recibió Governance
+ * (`buildActaExpectedArithmetic`). El Auditor Legal copia, no calcula
+ * (prompts-normativa-07).
+ */
+function renderLegalBindingBlock(company: CompanyInfo, preprocessed?: PreprocessedBalance): string {
+  const regime = deriveActaRegimeForCompany(company);
+  const lines: string[] = [];
+  lines.push('<datos_vinculantes>');
+  lines.push(`- Regimen de reserva legal (dato de entrada, NO derivarlo): ${REGIME_LABEL[regime]} — ${RESERVE_REGIME_CITATION[regime]}.`);
+  lines.push(
+    `- patrimonyDistribution.reservaLegalObligatoria = ${regime === 'indeterminado' ? 'null' : regime === 'no_obligatoria' ? 'false' : 'true'} (valor VINCULANTE).`,
+  );
+  const acta = buildActaExpectedArithmetic(company, preprocessed);
+  if (!acta) {
+    lines.push('- Cifras vinculantes del acta: NO DISPONIBLES (sin totales de control del preprocesador). montoReserva10pctCop=null y utilidadDisponibleCop=null; NEVER calcularlas.');
+  } else {
+    const fmt = (c: string) => `${formatCopFromCents(parseMoneyCop(c), false)} → ${moneyCopToken(parseMoneyCop(c))}`;
+    const perdida = parseMoneyCop(acta.netIncomeCop) < BigInt(0);
+    lines.push(`- ${perdida ? 'Perdida' : 'Utilidad'} neta del ejercicio (con signo): ${fmt(acta.netIncomeCop)}`);
+    lines.push(
+      `- Reserva legal del ejercicio: ${acta.distributionApplies ? fmt(acta.reservaLegalDelEjercicioCop) : 'no aplica (montoReserva10pctCop=null)'}`,
+    );
+    if (regime !== 'indeterminado') {
+      const disponible = parseMoneyCop(acta.saldoDistribuibleCop) - parseMoneyCop(acta.reservaLegalDelEjercicioCop);
+      lines.push(`- Utilidad disponible tras reserva legal: ${fmt(disponible.toString())}`);
+    } else {
+      lines.push('- Utilidad disponible tras reserva legal: depende de los estatutos no suministrados (utilidadDisponibleCop=null).');
+    }
+    lines.push('- Estas cifras se copian carácter por carácter desde su token `[MoneyCop: N]`; NEVER recalcularlas.');
+  }
+  lines.push('</datos_vinculantes>');
+  return lines.join('\n');
+}
+
+export function buildLegalAuditorPrompt(
+  company: CompanyInfo,
+  language: 'es' | 'en',
+  preprocessed?: PreprocessedBalance,
+): string {
   const guardrail = buildAntiHallucinationGuardrail(language);
   const context2026 = buildColombia2026Context(language);
 
@@ -37,10 +100,15 @@ export function buildLegalAuditorPrompt(company: CompanyInfo, language: 'es' | '
       ? 'CRITICAL: respond entirely in English.'
       : 'CRITICO: responde completamente en espanol.';
 
+  // Tipo societario normalizado (fuente única compartida con Governance):
+  // "S.A." / "S.A.S." / "Ltda." con puntos ya no caen en otra rama.
   const entityType = company.entityType?.toUpperCase() || 'SAS';
-  const isSAS = entityType.includes('SAS');
-  const isLTDA = entityType.includes('LTDA');
-  const isSA = entityType.includes('SA') && !isSAS;
+  const tipo = normalizeTipoSocietario(company.entityType);
+  const isSAS = tipo === 'SAS';
+  const isLTDA = tipo === 'LTDA';
+  const isSA = tipo === 'SA';
+  const convocatoriaCitation = convocatoriaCitationFor(tipo);
+  const regime = deriveActaRegimeForCompany(company);
 
   const primaryLaw = isSAS
     ? 'Ley 1258 de 2008 (SAS)'
@@ -48,19 +116,23 @@ export function buildLegalAuditorPrompt(company: CompanyInfo, language: 'es' | '
       ? 'C.Co. Arts. 353-372 (LTDA)'
       : isSA
         ? 'Ley 222 de 1995 + C.Co. Arts. 373-460 (S.A.)'
-        : 'Ley 1258 de 2008 (SAS, supletorio)';
+        : 'Codigo de Comercio y estatutos (tipo societario no identificado)';
 
   // Reglas por tipo societario, expresadas como hechos consultables (no como
   // pasos procedurales). El modelo selecciona la regla aplicable al evaluar.
   const tipoSocietarioRules: string[] = [];
+  tipoSocietarioRules.push('- Todas las sociedades: sin la mayoria del 78% de las acciones, cuotas o partes de interes representadas, se reparte al menos el 50% de las utilidades liquidas del ejercicio o del saldo tras enjugar perdidas (Art. 155 C.Co., mod. Art. 240 Ley 222/1995).');
   if (isSAS) {
-    tipoSocietarioRules.push('- SAS: convocatoria segun estatutos o Art. 20 Ley 1258/2008. Quorum supletorio: pluralidad con mayoria absoluta (Art. 22 Ley 1258/2008). Reserva legal 10% por remision del Art. 45 Ley 1258/2008 al regimen de la S.A. (Art. 452 C.Co.). Revisor fiscal obligatorio si ingresos>3.000 SMMLV o activos>5.000 SMMLV.');
+    tipoSocietarioRules.push('- SAS: convocatoria segun estatutos o, en su defecto, Art. 20 Ley 1258/2008 (comunicacion escrita con 5 dias habiles). Quorum supletorio: pluralidad con mayoria absoluta (Art. 22 Ley 1258/2008). Reserva legal: se rige por el regimen de <datos_vinculantes>; la Ley 1258 no la impone y Supersociedades (Oficios 220-115333/2009 y 220-069664/2017) sostiene que solo procede con estipulacion estatutaria. Revisor fiscal obligatorio si ingresos>3.000 SMMLV o activos>5.000 SMMLV (Art. 13 par. 2 Ley 43/1990).');
   }
   if (isSA) {
-    tipoSocietarioRules.push('- S.A.: convocatoria con 15 dias habiles de antelacion (Art. 424 C.Co.). Quorum: mayoria de acciones suscritas (Art. 427 C.Co.). Reserva legal 10% bajo Art. 452 C.Co. Dividendos minimo 50% si reservas>=capital (Art. 155 C.Co. con mayoria 78%). Revisor fiscal SIEMPRE obligatorio (Art. 203 C.Co.).');
+    tipoSocietarioRules.push('- S.A.: convocatoria con 15 dias habiles de antelacion cuando se examinan los estados financieros de fin de ejercicio (Art. 424 C.Co.). Quorum: mayoria de acciones suscritas (Art. 427 C.Co.). Reserva legal 10% bajo Art. 452 C.Co. El minimo a repartir sube al 70% cuando las reservas legal, estatutaria y ocasionales exceden el 100% del capital suscrito (Art. 454 C.Co.). Revisor fiscal SIEMPRE obligatorio (Art. 203 C.Co.).');
   }
   if (isLTDA) {
-    tipoSocietarioRules.push('- LTDA: convocatoria segun estatutos o Arts. 181-186 C.Co. Quorum: mayoria de socios representando al menos la mitad del capital (Art. 359 C.Co.). Reserva legal 10% bajo Art. 371 + 452 C.Co. Dividendos en proporcion a aportes (Art. 150 C.Co.). Revisor fiscal obligatorio si ingresos>3.000 SMMLV o activos>5.000 SMMLV.');
+    tipoSocietarioRules.push('- LTDA: convocatoria segun estatutos o Arts. 181-186 C.Co. Quorum: mayoria de socios representando al menos la mitad del capital (Art. 359 C.Co.). Reserva legal 10% bajo Art. 371 + 452 C.Co. Dividendos en proporcion a aportes (Art. 150 C.Co.). Revisor fiscal obligatorio si ingresos>3.000 SMMLV o activos>5.000 SMMLV (Art. 13 par. 2 Ley 43/1990).');
+  }
+  if (tipo === 'OTRO') {
+    tipoSocietarioRules.push('- Tipo societario no identificado: evaluar contra los estatutos y el Codigo de Comercio; NEVER presumir el regimen supletorio de la SAS.');
   }
 
   return `${guardrail}
@@ -82,7 +154,7 @@ ${tipoSocietarioRules.join('\n')}
 <success_criteria>
 - complianceScore: ejemplar (90-100, listo para firma), bueno (75-89, ajustes formales), parcial (60-74, requiere correccion), incumplimientos significativos (40-59, riesgo de nulidad parcial), deficiente (0-39, no debe firmarse).
 - Cada finding cita ley + articulo o circular SuperSociedades exacta.
-- Reserva legal 10% sobre utilidad NETA del ejercicio (no bruta ni operacional), hasta 50% del capital suscrito. Verificar el nombre: la del 10% obligatoria es "Reserva Legal", NUNCA "Reserva Estatutaria" (la estatutaria es adicional y voluntaria).
+- Reserva legal segun el regimen de <datos_vinculantes>: cuando es obligatoria, 10% de la utilidad liquida del ejercicio hasta 50% del capital suscrito (Art. 452 C.Co.), con el nombre "Reserva Legal" (la estatutaria es adicional y voluntaria). If el regimen es NO OBLIGATORIA o NO DETERMINABLE then la ausencia de reserva legal en el acta NO es incumplimiento otherwise su omision es hallazgo.
 - Acta debe cubrir minimos del Art. 189 C.Co.: fecha/hora/lugar, numero consecutivo, asistentes, orden del dia, deliberaciones, votos, hora de cierre, firmas de presidente y secretario.
 - Dividendos: pago dentro del ano siguiente al decreto (Art. 156 C.Co.). Tributacion en cabeza del socio bajo el Art. 242 E.T. (mod. Art. 3 Ley 2277/2022, vigente desde el AG 2023):
   - Dividendo NO gravado a persona natural residente: retencion en la fuente 0% hasta 1.090 UVT y 15% sobre el exceso de 1.090 UVT = $57.087.660 (paragrafo Art. 242 E.T. reglamentado por el Decreto 1103 de 2023); es anticipo imputable. El dividendo se integra a la renta y tributa a la tarifa progresiva del Art. 241 E.T. (0%-39%), con el descuento del Art. 254-1 E.T. (19% sobre el exceso de 1.090 UVT).
@@ -93,13 +165,13 @@ ${tipoSocietarioRules.join('\n')}
 - Inter-periodo (si hay comparativo): movimiento patrimonial = utilidad del ejercicio - dividendos declarados +/- aportes. Reserva legal acumulativa creciente (salvo tope 50%).
 - finding.period: "${company.fiscalPeriod}", "YYYY → YYYY" o null si no aplica.
 - societaryObligations: arreglo de EXACTAMENTE 14 entradas en este ORDEN FIJO (no cambies el orden, no agregues, no quites):
-  1.  obligation="Convocatoria Asamblea" — reference="Art. 424 C.Co."
+  1.  obligation="Convocatoria Asamblea" — reference="${convocatoriaCitation}"
   2.  obligation="Quorum" — reference="Art. 427 C.Co. / Art. 359 C.Co. / Art. 22 Ley 1258/2008" segun tipo societario
   3.  obligation="Orden del dia" — reference="Art. 425 C.Co."
   4.  obligation="EEFF aprobados" — reference="Art. 446 C.Co."
   5.  obligation="Informe de gestion" — reference="Art. 47 Ley 222/1995"
   6.  obligation="Destinacion utilidades" — reference="Art. 155 C.Co. / Art. 451 C.Co."
-  7.  obligation="Reserva legal 10%" — reference="Art. 452 C.Co."
+  7.  obligation="Reserva legal 10%" — reference="${RESERVE_REGIME_CITATION[regime]}" — status='no_aplica' cuando el regimen es NO OBLIGATORIA; nunca 'incumplido' cuando es NO DETERMINABLE
   8.  obligation="Libro de actas" — reference="Art. 189 C.Co."
   9.  obligation="Libro de accionistas" — reference="Art. 195 C.Co. / Art. 12 Ley 1258/2008"
   10. obligation="Matricula mercantil" — reference="Art. 19 C.Co."
@@ -108,17 +180,17 @@ ${tipoSocietarioRules.join('\n')}
   13. obligation="Registro Unico de Beneficiarios Finales (RUB)" — reference="Resolucion DIAN 000164/2021 (Arts. 631-5 y 631-6 E.T., Ley 2155/2021)"
   14. obligation="RUT/CIIU" — reference="Art. 555-2 E.T. / Resolucion DIAN 000114/2020"
   status por entrada: 'cumplido' si la evidencia es suficiente; 'parcial' si hay evidencia parcial o ambigua; 'incumplido' si la evidencia confirma incumplimiento; 'no_aplica' si la obligacion no aplica al tipo societario (ej. SAS unipersonal sin asamblea).
-- patrimonyDistribution: calcula utilidadNetaCop a partir del reporte, montoReserva10pctCop = 10% sobre utilidadNetaCop si reservaLegalObligatoria=true (Art. 452 C.Co.), utilidadDisponibleCop = utilidadNetaCop - montoReserva10pctCop. Las cifras viajan en centavos COP como string (MoneyCop). impuestoDividendosComment SIEMPRE cita "Art. 242 E.T." y describe el regimen vigente: para dividendos NO gravados a persona natural residente, retencion en la fuente del 15% sobre el exceso de 1.090 UVT ($57.087.660) y 0% hasta 1.090 UVT (paragrafo Art. 242 E.T. + Decreto 1103 de 2023), con integracion a la renta a la tarifa del Art. 241 E.T. y descuento del Art. 254-1 E.T.; para dividendos GRAVADOS (par. 2 Art. 49 E.T.), tarifa del Art. 240 E.T. (35%). NEVER escribas "retencion 10%" asociada al Art. 242 E.T.
-- capitalizacionAnalysis: emite null cuando NO se propone capitalizacion. Si proposed=true, baseLegal="Ley 1258/2008 Art. 5" (SAS) o equivalente; beneficioFiscal cita "Art. 36-3 E.T."; procedimiento lista pasos concretos (acta, escritura, registro, reforma estatutos).
+- patrimonyDistribution: utilidadNetaCop, reservaLegalObligatoria, montoReserva10pctCop y utilidadDisponibleCop se COPIAN de <datos_vinculantes> (NEVER multiplicar ni restar); con perdida la utilidad neta va con signo negativo. Las cifras viajan en centavos COP como string (MoneyCop). impuestoDividendosComment SIEMPRE cita "Art. 242 E.T." y describe el regimen vigente: para dividendos NO gravados a persona natural residente, retencion en la fuente del 15% sobre el exceso de 1.090 UVT ($57.087.660) y 0% hasta 1.090 UVT (paragrafo Art. 242 E.T. + Decreto 1103 de 2023), con integracion a la renta a la tarifa del Art. 241 E.T. y descuento del Art. 254-1 E.T.; para dividendos GRAVADOS (par. 2 Art. 49 E.T.), tarifa del Art. 240 E.T. (35%). NEVER escribas "retencion 10%" asociada al Art. 242 E.T.
+- capitalizacionAnalysis: emite null cuando NO se propone capitalizacion. Si proposed=true, baseLegal="${isSAS ? 'Art. 29 Ley 1258/2008 (reforma estatutaria, mitad mas una de las acciones presentes; documento privado inscrito en el Registro Mercantil)' : 'Art. 158 C.Co. (reforma estatutaria por escritura publica inscrita en el Registro Mercantil)'}"; beneficioFiscal="Dividendo en especie (Art. 30 E.T.): depuracion de la porcion no gravada (Arts. 48 y 49 E.T.) y retencion segun la calidad del accionista (Arts. 242, 242-1 o 245 E.T.)"; procedimiento lista pasos concretos (acta, reforma estatutaria, registro).
 - riesgosLegales: emite null si no se identifican riesgos; de lo contrario, lista cada riesgo con normaAplicable EXACTA (no "el Codigo de Comercio").
 - auditOpinion.type: 'sin_observaciones' (sin findings altos/criticos), 'con_observaciones_subsanables' (1+ findings medio o alto subsanables), 'con_hallazgos_inmediatos' (1+ findings critico/alto que exigen accion inmediata). text formal, sin marketing.
-- requiredActions: ordenadas por priority desc (alta -> baja). Cada accion cita reference normativa y plazo si el articulo lo define (ej. "30 dias desde el cierre" para Art. 446 C.Co.). plazo=null cuando la norma no fija termino.
+- requiredActions: ordenadas por priority desc (alta -> baja). Cada accion cita reference normativa y plazo solo si el articulo lo define (ej. reunion ordinaria "dentro de los tres meses siguientes al vencimiento del ejercicio", Art. 422 C.Co.). plazo=null cuando la norma no fija termino.
 </success_criteria>
 
 <judgment_rules>
 - If la reserva del 10% obligatorio del Art. 452 C.Co. aparece como "Reserva Estatutaria" en notas, acta o EEFF, Then hallazgo medio "Reclasificar a Reserva Legal — Art. 452 C.Co."; Otherwise omite.
 - If el acta omite cualquiera de los minimos del Art. 189 C.Co. (fecha/hora/lugar, numero, asistentes, orden del dia, deliberaciones, votos, firmas), Then hallazgo critico "Acta no apta para firma — Art. 189 C.Co."; Otherwise no comentar.
-- If hay reparto de utilidades pero no se cumple el minimo del Art. 155 C.Co. cuando aplica (S.A. con reservas>=capital), Then hallazgo alto; Otherwise verifica solo proporcionalidad estatutaria.
+- If se reparte menos del 50% de las utilidades liquidas (o del saldo tras enjugar perdidas) sin la mayoria del 78% (Art. 155 C.Co.), o menos del 70% en una S.A. cuyas reservas exceden el 100% del capital suscrito (Art. 454 C.Co.), Then hallazgo alto; Otherwise verifica solo proporcionalidad estatutaria.
 - If el reporte cita un codigo CIIU de 4 digitos pero no hay RUT ni certificado de Camara de Comercio en evidencia, Then hallazgo medio "Inferencia CIIU sin sustento — Resolucion DIAN 000114/2020 + Art. 555-2 E.T."; Otherwise aceptar.
 - If la entidad debe tener revisor fiscal por los umbrales legales y el reporte no indica que exista o lo hace difusamente, Then hallazgo alto "Verificar designacion de revisor fiscal — Ley 43/1990 Art. 13 + Art. 203 C.Co. segun aplique"; Otherwise omite.
 - If movimiento patrimonial inter-periodo no concilia con utilidad - dividendos +/- aportes, Then hallazgo alto bajo Arts. 155-156 C.Co.; Otherwise no comentar.
@@ -129,6 +201,8 @@ ${tipoSocietarioRules.join('\n')}
 - ALWAYS cita ley + articulo exacto. Nunca "el Codigo de Comercio" a secas.
 - NEVER inventes circulares SuperSociedades, conceptos, ni decretos.
 - NEVER atribuyas al Art. 242 E.T. una retencion del 10% ni una tarifa plana del 20%: el 10% es del Art. 242-1 E.T. (sociedad nacional receptora) y el 20% es del Art. 245 E.T. (no residentes).
+- NEVER cites el Art. 36-3 E.T. (derogado por el Art. 96 de la Ley 2277/2022) ni el Art. 5 de la Ley 1258/2008 (contenido del documento de constitucion) como base de una capitalizacion.
+- NEVER afirmes que la SAS esta obligada a reserva legal por remision del Art. 45 Ley 1258/2008: el regimen es el de <datos_vinculantes>.
 - ALWAYS los codigos de finding siguen el formato LEG-001, LEG-002, ... consecutivos.
 - NEVER asumas requisitos que no apliquen al tipo societario indicado en empresa_auditada.
 - ALWAYS distingue requisitos IMPERATIVOS (la ley exige, severity alto/critico) de RECOMENDACIONES (buenas practicas, severity informativo/bajo).
@@ -140,6 +214,8 @@ ${tipoSocietarioRules.join('\n')}
 - ALWAYS auditOpinion.text mantiene tono formal de Auditor Legal. Sin adjetivos de marketing (Elite, Premium, Excelente, Solido) — el spec v2.1 los prohibe.
 - ALWAYS requiredActions ordena por priority descendente; misma prioridad mantiene orden de aparicion del finding asociado.
 </constraints>
+
+${renderLegalBindingBlock(company, preprocessed)}
 
 <empresa_auditada>
 - Razon Social: ${company.name}

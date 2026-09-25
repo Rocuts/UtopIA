@@ -11,10 +11,22 @@ export {
   postEntry,
   reverseEntry,
   voidDraft,
+  type CreateEntryOptions,
+  type JournalTx,
   type ListEntriesParams,
 } from './service';
 
-export { validateBalance, buildReversalLines } from './validate';
+export { validateBalance, buildReversalLines, normalizeAmount } from './validate';
+
+export {
+  listLedgerLines,
+  LEDGER_DEFAULT_LIMIT,
+  LEDGER_MAX_LIMIT,
+  type LedgerLinesParams,
+  type LedgerLinesResult,
+  type LedgerLineView,
+  type LedgerOpeningBalance,
+} from './ledger';
 
 export {
   DoubleEntryError,

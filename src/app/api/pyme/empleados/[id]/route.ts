@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
 import * as repo from '@/lib/db/pyme-empleados';
-import { updateEmpleadoBodySchema } from '@/lib/validation/pyme-schemas';
+import { empleadoSalaryIssues, updateEmpleadoBodySchema } from '@/lib/validation/pyme-schemas';
 import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ---------------------------------------------------------------------------
@@ -38,6 +38,24 @@ export async function PATCH(
     const empleadoId = idSchema.parse(id);
     const ws = await getOrCreateWorkspace();
     const body = updateEmpleadoBodySchema.parse(await req.json());
+
+    // Reglas de salario sobre el registro COMBINADO (tipo/salario/integral
+    // pueden venir por separado en el PATCH).
+    const current = await repo.getEmpleado(empleadoId, ws.id);
+    if (!current) {
+      return NextResponse.json({ ok: false, error: 'not_found' }, { status: 404 });
+    }
+    const issues = empleadoSalaryIssues({
+      tipo: body.tipo ?? current.tipo,
+      salarioCop: body.salarioCop ?? Number(current.salarioCop),
+      salarioIntegral: body.salarioIntegral ?? current.salarioIntegral,
+    });
+    if (issues.length > 0) {
+      return NextResponse.json(
+        { ok: false, error: 'invalid_input', details: { formErrors: issues, fieldErrors: {} } },
+        { status: 400 },
+      );
+    }
 
     const updated = await repo.updateEmpleado(empleadoId, ws.id, {
       ...body,

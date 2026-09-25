@@ -7,11 +7,27 @@ import { getOrCreateWorkspace } from '@/lib/db/workspace';
 import { requireAuthSession } from '@/lib/auth/require-session';
 import { addDocumentsToStore, invalidateVectorStore, getStoragePath } from '@/lib/rag/vectorstore';
 import {
-  parseTrialBalanceCSV,
   preprocessTrialBalance,
-  detectYearFromString,
   type PreprocessedBalance,
 } from '@/lib/preprocessing/trial-balance';
+import {
+  descartarConfirmacionesDelArchivo,
+  MARCA_XLSX_A_CENTAVOS,
+  parseUploadedTrialBalanceText,
+  TrialBalanceIngestError,
+} from '@/lib/preprocessing/raw-data';
+import {
+  sanitizeSheetLabel,
+  xlsxRowLosesDecimals,
+  xlsxRowToCsvLine,
+  type XlsxNumberPrecision,
+} from '@/lib/upload/xlsx-csv';
+import {
+  escribirDirectivasIngesta,
+  leerCampoUnidad,
+  type UnidadMonetaria,
+  type UploadUnitInfo,
+} from '@/lib/upload/ingest-directives';
 import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import fs from 'fs';
@@ -257,49 +273,6 @@ function stripBOM(text: string): string {
 }
 
 /**
- * Convierte una celda de ExcelJS a string legible para el LLM.
- * ExcelJS devuelve distintos shapes por celda — sin mapeo explicito,
- * `String(v)` produce `"[object Object]"` para formulas, hyperlinks,
- * rich text y errores, y formatos de fecha inestables para Date.
- *
- * Mapeo:
- *  - null/undefined -> ''
- *  - string        -> as-is
- *  - number        -> solo si es finito (evita NaN/Infinity)
- *  - boolean       -> 'true' / 'false'
- *  - Date          -> YYYY-MM-DD (formato estable)
- *  - formula       -> .result (valor calculado)
- *  - hyperlink     -> .text (etiqueta visible)
- *  - rich text     -> concatenacion de .richText[].text
- *  - error         -> .error (ej. '#DIV/0!')
- *  - otros objetos -> '' (en lugar de '[object Object]')
- */
-function cellToString(v: unknown): string {
-  if (v === null || v === undefined) return '';
-  if (typeof v === 'string') return v;
-  if (typeof v === 'number') return Number.isFinite(v) ? String(v) : '';
-  if (typeof v === 'boolean') return v ? 'true' : 'false';
-  if (v instanceof Date) return v.toISOString().slice(0, 10);
-  if (typeof v === 'object') {
-    const obj = v as Record<string, unknown>;
-    // Formula: { formula: '...', result: <valor> }
-    if ('result' in obj) return cellToString(obj.result);
-    // Rich text: { richText: [{ text: '...' }, ...] }
-    if (Array.isArray(obj.richText)) {
-      return obj.richText
-        .map((piece) => (piece && typeof piece === 'object' && 'text' in piece ? String((piece as { text: unknown }).text ?? '') : ''))
-        .join('');
-    }
-    // Hyperlink: { text: '...', hyperlink: '...' }
-    if (typeof obj.text === 'string') return obj.text;
-    // Error: { error: '#DIV/0!' }
-    if (typeof obj.error === 'string') return obj.error;
-    return '';
-  }
-  return '';
-}
-
-/**
  * Extract text from a scanned (image-only) PDF.
  * Envia el PDF como file part al modelo multimodal via AI SDK con el provider
  * `@ai-sdk/openai` (auth con `OPENAI_API_KEY` directo, sin gateway). El modelo
@@ -407,7 +380,14 @@ async function extractTextFromImage(buffer: Buffer, filename: string): Promise<s
 }
 
 // Supported file types and their text extractors
-async function extractText(buffer: Buffer, filename: string): Promise<string> {
+async function extractText(
+  buffer: Buffer,
+  filename: string,
+  // P4-a: con la unidad confirmada en miles / millones las celdas numéricas
+  // del XLSX conservan todos sus decimales (dos decimales de la unidad no son
+  // centavos); en pesos se redondean al centavo como siempre.
+  xlsxPrecision: XlsxNumberPrecision = 'cents',
+): Promise<string> {
   const ext = path.extname(filename).toLowerCase();
 
   if (!ALLOWED_UPLOAD_EXTENSIONS.has(ext)) {
@@ -528,31 +508,36 @@ async function extractText(buffer: Buffer, filename: string): Promise<string> {
       'XLSX',
     );
     const blocks: string[] = [];
+    // recalculo-final2-04: sin unidad confirmada las celdas se leen a
+    // centavos; si alguna perdió decimales, el texto lo declara para que una
+    // confirmación posterior de miles/millones no reexprese cifras redondeadas.
+    let perdioDecimales = false;
     workbook.eachSheet((worksheet) => {
       const rows: string[] = [];
-      let header: string | null = null;
-      worksheet.eachRow((row, rowNumber) => {
+      worksheet.eachRow((row) => {
         // row.values es un array sparse con shapes heterogeneos por celda
-        // (formulas, hyperlinks, rich text, errores, Date). cellToString
-        // maneja cada variante y evita basura tipo "[object Object]".
-        const values = row.values as unknown[];
-        const csv = values.slice(1).map(cellToString).join(',');
-        if (rowNumber === 1) header = csv;
-        rows.push(csv);
+        // (formulas, hyperlinks, rich text, errores, Date). xlsxRowToCsvLine
+        // los convierte a texto y escapa cada campo segun RFC 4180: un nombre
+        // de cuenta con coma ("Propiedades, planta y equipo") ya no desplaza
+        // las columnas (ingesta-05).
+        const line = xlsxRowToCsvLine(row.values as unknown[], rows.length === 0, xlsxPrecision);
+        // Filas sin ningún valor (sólo formato) no aportan: si quedaran
+        // primeras, el parser las tomaría como encabezado.
+        if (/^,*$/.test(line)) return;
+        if (xlsxPrecision === 'cents' && !perdioDecimales) {
+          perdioDecimales = xlsxRowLosesDecimals(row.values as unknown[]);
+        }
+        rows.push(line);
       });
       if (rows.length === 0) return;
-      // Detectar año a partir del nombre de hoja (e.g. "2024", "Balance 2025").
-      // Si la hoja se llama explicitamente con un año, lo usamos como
-      // etiqueta de periodo y forzamos toda esa hoja al mismo periodo.
-      const sheetYear = detectYearFromString(worksheet.name);
-      const periodLabel = sheetYear ?? worksheet.name;
-      // Re-emitimos el header en cada bloque para que parseTrialBalanceCSV
-      // pueda procesarlo de forma independiente. Si la primera fila ya es el
-      // header, no hace falta agregarlo otra vez (rows[0] === header).
-      const body = header ? rows.join('\n') : rows.join('\n');
-      blocks.push(`[period=${periodLabel}]\n${body}\n[/period]`);
+      // Cada hoja viaja como bloque etiquetado con su NOMBRE. El periodo lo
+      // decide `parseUploadedTrialBalanceText` (raw-data.ts): encabezados con
+      // año explicito mandan sobre el nombre de la hoja; mes y año del nombre
+      // distinguen hojas del mismo ejercicio.
+      blocks.push(`[period=${sanitizeSheetLabel(worksheet.name)}]\n${rows.join('\n')}\n[/period]`);
     });
-    return blocks.join('\n\n');
+    const text = blocks.join('\n\n');
+    return perdioDecimales && text ? `${text}\n\n${MARCA_XLSX_A_CENTAVOS}` : text;
   }
 
   throw new Error('Unsupported file type.');
@@ -682,20 +667,60 @@ interface ProcessDocumentResult {
   success: true;
   filename: string;
   chunks: number;
+  /**
+   * Texto para el chat y el RAG por conversacion. En un balance preprocesado
+   * lleva el informe de validacion antepuesto (`…DATOS ORIGINALES:\n<datos>`).
+   * NO es re-parseable como CSV: para el pipeline NIIF usar `rawData`.
+   */
   extractedText: string;
+  /**
+   * Texto extraido SIN el informe de validacion: el CSV original o los
+   * bloques `[period=<hoja>]` del XLSX. Es lo que /api/financial-report/niif
+   * espera en `rawData` para re-derivar el preprocesado en servidor.
+   */
+  rawData: string;
   validationReport: string | undefined;
   detectedCaseType: DetectedCaseType;
   isTrialBalance: boolean;
   preprocessed: PreprocessedBalance | null;
   detectedPeriods: string[];
+  /** Avisos de ingesta no bloqueantes (p. ej. codigos repetidos sumados). */
+  ingestWarnings: string[];
+  /**
+   * Motivos por los que un balance no se pudo preprocesar (p. ej. dos hojas
+   * con cifras distintas para el mismo periodo). El informe NIIF los devuelve
+   * como 422 si se intenta generar con este archivo.
+   */
+  ingestErrors: string[];
+  /**
+   * P4-a: unidad de los importes. `requiresConfirmation` = el archivo declara
+   * "en miles / millones" y el usuario aún no confirmó la unidad: el balance
+   * sigue bloqueado (motivo en `preprocessed…integrityReasons`) hasta que el
+   * cliente reenvíe el archivo con `unitMultiplier`. `null` si el documento no
+   * es un balance tabular.
+   */
+  unit: UploadUnitInfo | null;
   message: string;
+}
+
+/** Extensiones cuyo texto se preprocesa como balance de prueba. */
+const TABULAR_EXTENSIONS = new Set(['.csv', '.xlsx', '.xls']);
+
+interface ProcessDocumentOptions {
+  /**
+   * Unidad CONFIRMADA por el usuario (`unitMultiplier` de la solicitud). Se
+   * aplica en centavos exactos y viaja como directiva en `rawData`.
+   */
+  unidadConfirmada?: UnidadMonetaria | null;
 }
 
 async function processDocument(
   buffer: Buffer,
   filename: string,
   contextLabel: string,
+  options: ProcessDocumentOptions = {},
 ): Promise<ProcessDocumentResult> {
+  const unidadConfirmada = options.unidadConfirmada ?? null;
   // Validate extension before any processing
   const ext = path.extname(filename).toLowerCase();
   if (!ALLOWED_UPLOAD_EXTENSIONS.has(ext)) {
@@ -706,9 +731,19 @@ async function processDocument(
     throw new UploadError('Archivo demasiado grande. Máximo 100MB.');
   }
 
+  // La confirmación de unidad sólo existe para balances tabulares: en un PDF
+  // o una imagen reprocesar volvería a facturar la lectura OCR sin efecto.
+  if (unidadConfirmada && !TABULAR_EXTENSIONS.has(ext)) {
+    throw new UploadError('unitMultiplier sólo aplica a balances CSV, XLSX o XLS.');
+  }
+
   let text: string;
   try {
-    text = await extractText(buffer, filename);
+    text = await extractText(
+      buffer,
+      filename,
+      unidadConfirmada === 'miles' || unidadConfirmada === 'millones' ? 'full' : 'cents',
+    );
   } catch (extractError) {
     // Return the specific error message so the frontend can display actionable feedback
     const message = extractError instanceof Error
@@ -716,6 +751,17 @@ async function processDocument(
       : 'Could not process file.';
     throw new UploadError(message);
   }
+
+  // Las directivas de ingesta (P4) sólo las escriben el servidor, con los
+  // campos de la solicitud (`unitMultiplier`), y el intake al enviar. Un
+  // archivo que ya las trae no puede confirmarse a sí mismo: la unidad se
+  // reexpresaría y el informe diría "por confirmación del usuario" sin que el
+  // usuario eligiera nada. Tampoco cuentan tras un informe de validación
+  // imitado ("# INFORME DE VALIDACION…/DATOS ORIGINALES:", ICU-01): el informe
+  // es texto derivado que sólo antepone este servidor. Se descartan con aviso
+  // y la unidad declarada vuelve a pedir confirmación.
+  const delArchivo = descartarConfirmacionesDelArchivo(text);
+  text = delArchivo.text;
 
   if (!text.trim()) {
     throw new UploadError(
@@ -733,11 +779,17 @@ async function processDocument(
   // resolver workspace, NO indexamos en el RAG global — el texto sigue
   // disponible para el agente via documentContext (per-conversacion).
   // -----------------------------------------------------------------
+  // Un reenvío con la unidad confirmada (P4-a) reprocesa un archivo que ya se
+  // indexó y copió en la primera subida: se omite para no duplicar fragmentos
+  // en el store vectorial (cada búsqueda los recuperaría dos veces).
+  const isUnitConfirmationReprocess = unidadConfirmada !== null;
   let workspaceId: string | undefined;
-  try {
-    workspaceId = (await getOrCreateWorkspace()).id;
-  } catch {
-    workspaceId = undefined;
+  if (!isUnitConfirmationReprocess) {
+    try {
+      workspaceId = (await getOrCreateWorkspace()).id;
+    } catch {
+      workspaceId = undefined;
+    }
   }
   const chunksCount = workspaceId
     ? await addDocumentsToStore([text], {
@@ -751,71 +803,76 @@ async function processDocument(
     invalidateVectorStore();
   }
 
-  // Save file copy (best-effort, non-critical)
-  try {
-    if (!fs.existsSync(uploadsPath)) {
-      fs.mkdirSync(uploadsPath, { recursive: true });
+  // Save file copy (best-effort, non-critical). El reenvío por confirmación de
+  // unidad no vuelve a copiar el archivo.
+  if (!isUnitConfirmationReprocess) {
+    try {
+      if (!fs.existsSync(uploadsPath)) {
+        fs.mkdirSync(uploadsPath, { recursive: true });
+      }
+      const safeName = `${Date.now()}_${filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      fs.writeFileSync(path.join(uploadsPath, safeName), buffer);
+    } catch {
+      // Non-critical on Vercel's read-only filesystem
     }
-    const safeName = `${Date.now()}_${filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-    fs.writeFileSync(path.join(uploadsPath, safeName), buffer);
-  } catch {
-    // Non-critical on Vercel's read-only filesystem
   }
 
   // -----------------------------------------------------------------
   // Trial balance preprocessing — if the file looks like accounting
-  // data (CSV/Excel with account codes), run arithmetic validation
-  // and prepend the validation report to the extracted text.
+  // data (CSV/Excel with account codes), run arithmetic validation.
   //
-  // Tambien devolvemos el objeto PreprocessedBalance completo en la
-  // respuesta para que el cliente pueda re-enviarlo a /api/financial-report
-  // sin re-parsear — asi el orchestrator reusa los totales vinculantes.
+  // El parseo es el MISMO que usa el servidor del informe
+  // (`parseUploadedTrialBalanceText`, raw-data.ts): /api/financial-report/niif
+  // re-deriva el preprocesado desde `rawData` y obtiene las mismas filas.
+  // El informe de validacion se antepone SOLO a `extractedText` (chat/RAG);
+  // `rawData` conserva el dato tabular limpio (ingesta-01).
   // -----------------------------------------------------------------
   let validationReport: string | undefined;
   let preprocessed: PreprocessedBalance | null = null;
   let detectedPeriods: string[] = [];
-  if (['.csv', '.xlsx', '.xls'].includes(ext)) {
+  const ingestWarnings: string[] = [];
+  if (delArchivo.descartoDirectivas) {
+    ingestWarnings.push(
+      'El archivo traía líneas de confirmación de ingesta ([unidad-confirmada=…] / [vencimientos=…]) ' +
+        'y se ignoraron: la unidad de las cifras y las excepciones de vencimiento se ' +
+        'confirman en el formulario del informe.',
+    );
+  }
+  if (delArchivo.descartoInforme) {
+    ingestWarnings.push(
+      'El archivo empezaba con un bloque de informe de validación ("# INFORME DE VALIDACION ' +
+        'ARITMETICA … DATOS ORIGINALES:"); es texto derivado y se ignoró: se leyeron sólo los datos.',
+    );
+  }
+  const ingestErrors: string[] = [];
+  let unit: UploadUnitInfo | null = null;
+  // Con la unidad confirmada, `rawData` lleva la directiva: /niif, Stage 0 y
+  // /export re-derivan el balance desde este texto y leen la misma unidad.
+  const dataText = unidadConfirmada ? escribirDirectivasIngesta(text, { unidadConfirmada }) : text;
+  let extractedText = dataText;
+  if (TABULAR_EXTENSIONS.has(ext)) {
     try {
-      // Si el texto ya viene segmentado en bloques `[period=YYYY]...[/period]`
-      // (caso Excel con multiples hojas etiquetadas con año), parseamos cada
-      // bloque por separado forzando su periodo y consolidamos las filas.
-      const blockRegex = /\[period=([^\]]+)\]\n([\s\S]*?)\n\[\/period\]/g;
-      const blocks: Array<{ period: string; csv: string }> = [];
-      let m: RegExpExecArray | null;
-      while ((m = blockRegex.exec(text)) !== null) {
-        blocks.push({ period: m[1].trim(), csv: m[2] });
-      }
+      const parsed = parseUploadedTrialBalanceText(dataText);
+      ingestWarnings.push(...parsed.warnings);
+      unit = {
+        declared: parsed.unidad.declarada?.unidad ?? null,
+        declaredText: parsed.unidad.declarada?.texto ?? null,
+        confirmed: parsed.unidad.confirmada,
+        requiresConfirmation: parsed.unidad.declarada !== null && parsed.unidad.confirmada === null,
+      };
 
-      const allRows: ReturnType<typeof parseTrialBalanceCSV> = [];
-      if (blocks.length > 0) {
-        for (const b of blocks) {
-          const yr = detectYearFromString(b.period) ?? b.period;
-          const parsed = parseTrialBalanceCSV(b.csv, { forcePeriod: yr });
-          // Merge balances by code: si el mismo codigo aparece en varios
-          // bloques, fusionamos balancesByPeriod en una sola fila.
-          for (const row of parsed) {
-            const existing = allRows.find((r) => r.code === row.code);
-            if (existing) {
-              Object.assign(existing.balancesByPeriod, row.balancesByPeriod);
-            } else {
-              allRows.push(row);
-            }
-          }
-        }
-      } else {
-        // CSV sin segmentacion explicita: parser detecta columnas multi-año.
-        const parsed = parseTrialBalanceCSV(text);
-        allRows.push(...parsed);
-      }
-
-      if (allRows.length > 10) {
-        const pp = preprocessTrialBalance(allRows);
+      if (parsed.rows.length > 10) {
+        // ingesta-09 (cross-dep W3-A): las columnas de saldo inicial/anterior
+        // marcan su periodo como saldos de apertura (P&G comparativo N/D).
+        const pp = preprocessTrialBalance(parsed.rows, { openingPeriods: parsed.openingPeriods });
         if (pp.auxiliaryCount > 0) {
           preprocessed = pp;
-          validationReport = pp.validationReport;
+          validationReport = ingestWarnings.length > 0
+            ? `${pp.validationReport}\n\n### Avisos de ingesta\n\n${ingestWarnings.map((w) => `- ${w}`).join('\n')}\n`
+            : pp.validationReport;
           detectedPeriods = pp.periods.map((p) => p.period);
-          // Prepend validation report so agents receive validated data
-          text = `${pp.validationReport}\n\n---\n\nDATOS ORIGINALES:\n${text}`;
+          // Prepend validation report so chat agents receive validated data
+          extractedText = `${validationReport}\n\n---\n\nDATOS ORIGINALES:\n${dataText}`;
           // Invalidate workspace-balance tag so ERP sync consumers and
           // cached dashboard queries pick up the freshly uploaded balance.
           // 'default' profile: 5 min stale / 15 min revalidate (same as
@@ -823,8 +880,12 @@ async function processDocument(
           revalidateTag('workspace-balance', 'default');
         }
       }
-    } catch {
-      // Non-critical: if preprocessing fails, the raw text still works
+    } catch (err) {
+      if (err instanceof TrialBalanceIngestError) {
+        // Conflicto de hojas/periodos: no se elige una hoja en silencio.
+        ingestErrors.push(...err.reasons);
+      }
+      // Otros fallos: non-critical, el texto crudo sigue disponible.
     }
   }
 
@@ -833,18 +894,22 @@ async function processDocument(
   // is best suited for so the frontend can auto-suggest the right flow.
   // Uses keyword heuristics (zero LLM) for instant detection.
   // -----------------------------------------------------------------
-  const detectedCaseType = classifyDocument(text, filename, ext);
+  const detectedCaseType = classifyDocument(extractedText, filename, ext);
 
   return {
     success: true,
     filename,
     chunks: chunksCount,
-    extractedText: text,
+    extractedText,
+    rawData: dataText,
     validationReport,
     detectedCaseType,
     isTrialBalance: !!validationReport,
     preprocessed,
     detectedPeriods,
+    ingestWarnings,
+    ingestErrors,
+    unit,
     message: chunksCount > 0
       ? `Documento "${filename}" procesado en ${chunksCount} fragmentos e indexado.`
       : `Documento "${filename}" procesado exitosamente. Texto extraido disponible para consulta.`,
@@ -910,6 +975,11 @@ export async function POST(req: Request) {
         );
       }
       const { blobUrl, context, filename: bodyFilename } = parsed.data;
+      // P4-a: confirmación de unidad (campo opcional fuera del esquema base).
+      const unitField = leerCampoUnidad((body as { unitMultiplier?: unknown }).unitMultiplier);
+      if (!unitField.ok) {
+        return NextResponse.json({ error: unitField.error }, { status: 400 });
+      }
 
       // Anti-SSRF: solo aceptamos URLs de Vercel Blob. El host debe terminar
       // en `.vercel-storage.com` (cubre tambien `.blob.vercel-storage.com`).
@@ -968,7 +1038,9 @@ export async function POST(req: Request) {
       }
 
       try {
-        const result = await processDocument(buffer, filename, contextLabel);
+        const result = await processDocument(buffer, filename, contextLabel, {
+          unidadConfirmada: unitField.unidad,
+        });
         // toJsonSafe: `preprocessed.controlTotals.cents` es BigInt — sin la
         // conversion, JSON.stringify lanza y todo balance real devolvia 500.
         return NextResponse.json(toJsonSafe(result));
@@ -995,6 +1067,10 @@ export async function POST(req: Request) {
     if (!file) {
       return NextResponse.json({ error: 'No file provided.' }, { status: 400 });
     }
+    const unitField = leerCampoUnidad(formData.get('unitMultiplier'));
+    if (!unitField.ok) {
+      return NextResponse.json({ error: unitField.error }, { status: 400 });
+    }
 
     // Validate extension before any processing
     const ext = path.extname(file.name).toLowerCase();
@@ -1009,7 +1085,9 @@ export async function POST(req: Request) {
     const buffer = Buffer.from(await file.arrayBuffer());
 
     try {
-      const result = await processDocument(buffer, file.name, contextLabel);
+      const result = await processDocument(buffer, file.name, contextLabel, {
+        unidadConfirmada: unitField.unidad,
+      });
       return NextResponse.json(toJsonSafe(result));
     } catch (err) {
       if (err instanceof UploadError) {

@@ -144,7 +144,7 @@ describe('renderMarkdown — tabla resumen meta-auditoría', () => {
     }
     // Global row marker
     expect(md).toContain('SCORE GLOBAL');
-    expect(md).toMatch(/8\.0\/10/); // default 80 -> 8/10 per dim -> global 8.0
+    expect(md).toMatch(/8,0\/10/); // default 80 -> 8/10 per dim -> global 8.0
   });
 });
 
@@ -228,10 +228,11 @@ describe('renderMarkdown — conclusion and legacy 14-dim appendix coexist', () 
 // ---------------------------------------------------------------------------
 
 describe('renderMarkdown — output uses buildQualityV21View as single source of truth', () => {
-  it('global score in the table equals the view.globalScoreInt0to10', () => {
+  it('global score in the table equals the view.globalScore10', () => {
     const json = makeJson({ defaultScore: 80 });
     const view = buildQualityV21View(json);
     const md = __test_renderMarkdown(json);
-    expect(md).toContain(`**${view.globalScoreInt0to10.toFixed(1)}/10**`);
+    // Coma decimal es-CO (reportes-export-19), como la página PDF de la Parte V.
+    expect(md).toContain(`**${view.globalScore10!.toFixed(1).replace('.', ',')}/10**`);
   });
 });

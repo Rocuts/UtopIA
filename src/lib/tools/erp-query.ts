@@ -14,6 +14,9 @@
 
 import type { ERPProvider, ERPCredentials, ERPTrialBalance, ERPJournalEntry, ERPInvoice, ERPContact, ERPAccount } from '@/lib/erp/types';
 import { getConnector } from '@/lib/erp/registry';
+import { resolveERPPeriod, ERPPeriodError } from '@/lib/erp/period';
+import { trialBalanceLeafAccounts, trialBalanceToCSV } from '@/lib/erp/trial-balance-serialization';
+import { parseTrialBalanceCSV, preprocessTrialBalance } from '@/lib/preprocessing/trial-balance';
 
 // ─── Public Types ────────────────────────────────────────────────────────────
 
@@ -53,70 +56,31 @@ function formatCOP(amount: number): string {
 interface DateRange {
   dateFrom: string;
   dateTo: string;
+  /** Etiqueta canónica del periodo ("2025", "2025-Q3", "2025-06" o "desde..hasta"). */
   label: string;
 }
 
 /**
- * Parse a period string into a concrete date range.
+ * Resuelve el rango efectivo con la misma regla que los conectores
+ * (`resolveERPPeriod`): "2025", "2025-Q3", "2025-06" o fechas explícitas.
+ * Las fechas explícitas tienen prioridad. Un formato no soportado lanza
+ * `ERPPeriodError` en vez de enviar al ERP fechas como "2025-NaN".
  *
- *   "2025"     → 2025-01-01 to 2025-12-31
- *   "2025-Q1"  → 2025-01-01 to 2025-03-31
- *   "2025-Q2"  → 2025-04-01 to 2025-06-30
- *   "2025-Q3"  → 2025-07-01 to 2025-09-30
- *   "2025-Q4"  → 2025-10-01 to 2025-12-31
+ * Sin periodo: el balance de prueba usa el mes en curso (saldos a su corte);
+ * las demás consultas, el año en curso.
  */
-function parsePeriod(period: string): DateRange {
-  const quarterMatch = period.match(/^(\d{4})-Q([1-4])$/i);
-  if (quarterMatch) {
-    const year = quarterMatch[1];
-    const quarter = parseInt(quarterMatch[2], 10);
-    const startMonth = (quarter - 1) * 3 + 1;
-    const endMonth = startMonth + 2;
-    const lastDay = new Date(parseInt(year, 10), endMonth, 0).getDate();
-    return {
-      dateFrom: `${year}-${String(startMonth).padStart(2, '0')}-01`,
-      dateTo: `${year}-${String(endMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
-      label: `${year} T${quarter}`,
-    };
-  }
-
-  const yearMatch = period.match(/^(\d{4})$/);
-  if (yearMatch) {
-    return {
-      dateFrom: `${yearMatch[1]}-01-01`,
-      dateTo: `${yearMatch[1]}-12-31`,
-      label: yearMatch[1],
-    };
-  }
-
-  // Fall back: treat as-is, label with the raw string
-  return {
-    dateFrom: period,
-    dateTo: period,
-    label: period,
-  };
-}
-
-/**
- * Resolve the effective date range from explicit dates or a period string.
- * Explicit dateFrom/dateTo take precedence over the period shorthand.
- */
-function resolveDateRange(args: QueryERPArgs): DateRange {
+function resolveDateRange(args: QueryERPArgs, now = new Date()): DateRange {
+  let resolved;
   if (args.dateFrom && args.dateTo) {
-    return {
-      dateFrom: args.dateFrom,
-      dateTo: args.dateTo,
-      label: `${args.dateFrom} a ${args.dateTo}`,
-    };
+    resolved = resolveERPPeriod(`${args.dateFrom}..${args.dateTo}`);
+  } else if (args.period) {
+    resolved = resolveERPPeriod(args.period);
+  } else if (args.type === 'trial_balance') {
+    resolved = resolveERPPeriod(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+  } else {
+    resolved = resolveERPPeriod(String(now.getFullYear()));
   }
-
-  if (args.period) {
-    return parsePeriod(args.period);
-  }
-
-  // Default to current year
-  const year = new Date().getFullYear().toString();
-  return parsePeriod(year);
+  return { dateFrom: resolved.from, dateTo: resolved.to, label: resolved.label };
 }
 
 // ─── PUC Class Names ─────────────────────────────────────────────────────────
@@ -135,17 +99,80 @@ const PUC_CLASS_NAMES: Record<number, string> = {
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 
+/** Importe con signo (los saldos invertidos deben verse, no ocultarse con |x|). */
+function formatSignedCOP(amount: number): string {
+  return formatCOP(amount);
+}
+
+interface KeyFigures {
+  activo: number;
+  pasivo: number;
+  patrimonio: number;
+  ingresosNetos: number | null;
+  costoVentas6: number | null;
+  costoProduccion7: number | null;
+  resultadoOperacional: number | null;
+  utilidadNeta: number;
+  blocking: boolean;
+  reasons: string[];
+}
+
+/**
+ * Cifras clave con la MISMA función determinista que alimenta los informes:
+ * serializador ERP → parser CSV → preprocesador. Sólo para balances completos.
+ * Resultado operacional = controlTotals.ebit del preprocesador (utilidad bruta
+ * con costos de las clases 6 y 7, menos gastos operacionales 51 y 52).
+ */
+function computeKeyFigures(tb: ERPTrialBalance): KeyFigures {
+  const snapshot = preprocessTrialBalance(parseTrialBalanceCSV(trialBalanceToCSV(tb))).primary;
+  const ct = snapshot.controlTotals;
+  return {
+    activo: ct.activo,
+    pasivo: ct.pasivo,
+    patrimonio: ct.patrimonio,
+    ingresosNetos: ct.ingresosNetos ?? null,
+    costoVentas6: ct.costoVentas6 ?? null,
+    costoProduccion7: ct.costoProduccion7 ?? null,
+    resultadoOperacional: ct.ebit ?? null,
+    utilidadNeta: ct.utilidadNeta,
+    blocking: snapshot.validation.blocking,
+    reasons: snapshot.validation.reasons,
+  };
+}
+
+const ND = 'N/D';
+const orND = (value: number | null) => (value === null ? ND : formatSignedCOP(value));
+
 function formatTrialBalance(tb: ERPTrialBalance, accountCodeFilter?: string): string {
   const lines: string[] = [];
+  const movementsOnly = tb.balanceStatus === 'movements_only';
 
-  lines.push(`# Balance de Prueba — ${tb.companyName}`);
+  if (movementsOnly) {
+    lines.push(`# Movimientos contables del periodo — ${tb.companyName || 'Empresa'}`);
+    lines.push('');
+    lines.push(`> NO es un balance de prueba. ${tb.balanceStatusReason ?? ''}`.trim());
+    lines.push('> No se calculan activos, pasivos, patrimonio, resultado ni cuadre: sin saldos iniciales esas cifras serían la variación del periodo.');
+  } else if (tb.balanceStatus === 'partial') {
+    lines.push(`# Balance de Prueba PARCIAL — ${tb.companyName || 'Empresa'}`);
+    lines.push('');
+    lines.push(`> ${tb.balanceStatusReason ?? 'Balance parcial.'}`);
+  } else {
+    lines.push(`# Balance de Prueba — ${tb.companyName || 'Empresa'}`);
+  }
   if (tb.companyNit) lines.push(`NIT: ${tb.companyNit}`);
-  lines.push(`Periodo: ${tb.period} | Moneda: ${tb.currency}`);
+  lines.push(`Periodo: ${tb.period} | Moneda: ${tb.currency || 'no determinada'}`);
   lines.push(`Generado: ${tb.generatedAt}`);
+  if (tb.warnings.length > 0) {
+    lines.push('');
+    lines.push('## Advertencias de integridad');
+    for (const w of tb.warnings) lines.push(`- ${w}`);
+  }
   lines.push('');
 
-  // Filter accounts if accountCode is specified
-  let accounts = tb.accounts;
+  // Cuentas a sumar: en movimientos, todas las cuentas con movimiento (cada
+  // línea afecta una sola cuenta); en saldos, sólo las hojas de la jerarquía
+  // real para no sumar subcuenta y auxiliares a la vez.
+  let accounts = movementsOnly ? tb.accounts : trialBalanceLeafAccounts(tb);
   if (accountCodeFilter) {
     accounts = accounts.filter(a => a.code.startsWith(accountCodeFilter));
     lines.push(`> Filtro aplicado: cuentas que inician con "${accountCodeFilter}"`);
@@ -156,80 +183,89 @@ function formatTrialBalance(tb: ERPTrialBalance, accountCodeFilter?: string): st
   const classTotals = new Map<number, { debit: number; credit: number; balance: number }>();
   for (const acct of accounts) {
     const cls = acct.pucClass ?? parseInt(acct.code.charAt(0), 10);
-    if (isNaN(cls)) continue;
+    if (!Number.isFinite(cls)) continue;
     const current = classTotals.get(cls) ?? { debit: 0, credit: 0, balance: 0 };
-    // Only sum auxiliaries to avoid double-counting
-    if (acct.isAuxiliary) {
-      current.debit += acct.debit;
-      current.credit += acct.credit;
-      current.balance += acct.balance;
-    }
+    current.debit += acct.debit;
+    current.credit += acct.credit;
+    current.balance += acct.balance;
     classTotals.set(cls, current);
   }
 
-  lines.push('## Resumen por Clase PUC');
+  const lastColumn = movementsOnly ? 'Movimiento neto (D − C)' : 'Saldo';
+  lines.push(movementsOnly ? '## Movimientos por Clase PUC' : '## Resumen por Clase PUC');
   lines.push('');
-  lines.push('| Clase | Nombre | Debitos | Creditos | Saldo |');
+  lines.push(`| Clase | Nombre | Debitos | Creditos | ${lastColumn} |`);
   lines.push('|-------|--------|---------|----------|-------|');
   for (const [cls, totals] of [...classTotals.entries()].sort((a, b) => a[0] - b[0])) {
     const name = PUC_CLASS_NAMES[cls] ?? `Clase ${cls}`;
     lines.push(
-      `| ${cls} | ${name} | ${formatCOP(totals.debit)} | ${formatCOP(totals.credit)} | ${formatCOP(totals.balance)} |`,
+      `| ${cls} | ${name} | ${formatCOP(totals.debit)} | ${formatCOP(totals.credit)} | ${formatSignedCOP(totals.balance)} |`,
     );
   }
   lines.push('');
 
   // ── Key Financial Highlights ──
-  const totalRevenue = classTotals.get(4)?.balance ?? 0;
-  const totalExpenses = classTotals.get(5)?.balance ?? 0;
-  const totalCosts = classTotals.get(6)?.balance ?? 0;
-  const totalAssets = classTotals.get(1)?.balance ?? 0;
-  const totalLiabilities = classTotals.get(2)?.balance ?? 0;
-  const totalEquity = classTotals.get(3)?.balance ?? 0;
-
   lines.push('## Cifras Clave');
   lines.push('');
-  lines.push(`- **Ingresos totales:** ${formatCOP(Math.abs(totalRevenue))}`);
-  lines.push(`- **Gastos totales:** ${formatCOP(Math.abs(totalExpenses))}`);
-  lines.push(`- **Costos de venta:** ${formatCOP(Math.abs(totalCosts))}`);
-  lines.push(`- **Resultado operacional:** ${formatCOP(Math.abs(totalRevenue) - Math.abs(totalExpenses) - Math.abs(totalCosts))}`);
-  lines.push(`- **Total activos:** ${formatCOP(Math.abs(totalAssets))}`);
-  lines.push(`- **Total pasivos:** ${formatCOP(Math.abs(totalLiabilities))}`);
-  lines.push(`- **Total patrimonio:** ${formatCOP(Math.abs(totalEquity))}`);
+  if (movementsOnly) {
+    lines.push('- No disponibles: el ERP sólo entregó movimientos del periodo (sin saldo inicial ni saldos acumulados).');
+  } else if (tb.balanceStatus !== 'complete') {
+    lines.push(`- No disponibles: ${tb.balanceStatusReason ?? 'balance parcial.'}`);
+  } else {
+    let figures: KeyFigures | null = null;
+    let unavailable = '';
+    try {
+      figures = computeKeyFigures(tb);
+    } catch (error) {
+      unavailable = error instanceof Error ? error.message : 'no se pudo preprocesar el balance.';
+    }
+    if (!figures) {
+      lines.push(`- No disponibles: ${unavailable}`);
+    } else {
+      lines.push(`- **Total activos:** ${formatSignedCOP(figures.activo)}`);
+      lines.push(`- **Total pasivos:** ${formatSignedCOP(figures.pasivo)}`);
+      lines.push(`- **Total patrimonio:** ${formatSignedCOP(figures.patrimonio)}`);
+      lines.push(`- **Ingresos netos (clase 4 menos devoluciones 4175):** ${orND(figures.ingresosNetos)}`);
+      lines.push(`- **Costo de ventas (clase 6):** ${orND(figures.costoVentas6)}`);
+      lines.push(`- **Costos de producción (clase 7):** ${orND(figures.costoProduccion7)}`);
+      lines.push(
+        `- **Resultado operacional (utilidad bruta − gastos operacionales 51 y 52):** ${orND(figures.resultadoOperacional)}`,
+      );
+      lines.push(`- **Resultado del ejercicio:** ${formatSignedCOP(figures.utilidadNeta)}`);
+      lines.push(
+        figures.blocking
+          ? `- **Validación del preprocesador:** BLOQUEADA — ${figures.reasons.join(' ')}`
+          : '- **Validación del preprocesador:** sin bloqueos.',
+      );
+    }
+  }
   lines.push('');
 
   // ── Detailed Accounts Table ──
-  // Show auxiliary accounts (up to 100 to keep output manageable)
-  const detailAccounts = accounts
-    .filter(a => a.isAuxiliary)
-    .slice(0, 100);
-
+  const detailAccounts = accounts.slice(0, 100);
   if (detailAccounts.length > 0) {
-    lines.push('## Detalle de Cuentas Auxiliares');
+    lines.push(movementsOnly ? '## Detalle de Cuentas con Movimiento' : '## Detalle de Cuentas Auxiliares');
     lines.push('');
-    lines.push('| Codigo | Cuenta | Debitos | Creditos | Saldo |');
+    lines.push(`| Codigo | Cuenta | Debitos | Creditos | ${lastColumn} |`);
     lines.push('|--------|--------|---------|----------|-------|');
     for (const acct of detailAccounts) {
       lines.push(
-        `| ${acct.code} | ${acct.name} | ${formatCOP(acct.debit)} | ${formatCOP(acct.credit)} | ${formatCOP(acct.balance)} |`,
+        `| ${acct.code} | ${acct.name} | ${formatCOP(acct.debit)} | ${formatCOP(acct.credit)} | ${formatSignedCOP(acct.balance)} |`,
       );
     }
-    if (accounts.filter(a => a.isAuxiliary).length > 100) {
-      lines.push(`| ... | *${accounts.filter(a => a.isAuxiliary).length - 100} cuentas adicionales omitidas* | | | |`);
+    if (accounts.length > 100) {
+      lines.push(`| ... | *${accounts.length - 100} cuentas adicionales omitidas* | | | |`);
     }
     lines.push('');
   }
 
   // ── Totals ──
-  lines.push('## Totales');
+  // Sumas del periodo tal como las entrega el ERP. Débitos = créditos es una
+  // condición necesaria de la partida doble, no prueba que los saldos cuadren.
+  lines.push('## Sumas del Periodo');
   lines.push(`- **Total debitos:** ${formatCOP(tb.totalDebit)}`);
   lines.push(`- **Total creditos:** ${formatCOP(tb.totalCredit)}`);
-  const diff = Math.abs(tb.totalDebit - tb.totalCredit);
-  if (diff > 1) {
-    lines.push(`- **Diferencia:** ${formatCOP(diff)} (el balance NO cuadra)`);
-  } else {
-    lines.push('- **Diferencia:** $0 (el balance cuadra correctamente)');
-  }
+  lines.push(`- **Diferencia débitos − créditos:** ${formatSignedCOP(tb.totalDebit - tb.totalCredit)}`);
 
   return lines.join('\n');
 }
@@ -604,21 +640,38 @@ export async function queryERP(
     ...connection.credentials,
   };
 
+  // Periodo validado ANTES de llamar al ERP: un formato no soportado no debe
+  // convertirse en fechas inválidas ni en un rango distinto al pedido.
+  let range: DateRange;
+  try {
+    range = resolveDateRange(args);
+  } catch (error) {
+    if (!(error instanceof ERPPeriodError)) throw error;
+    return {
+      content:
+        `${error.message} Periodo recibido: "${args.period ?? `${args.dateFrom ?? ''}..${args.dateTo ?? ''}`}". ` +
+        'Ejemplos válidos: "2025", "2025-Q3", "2025-06" o dateFrom/dateTo en formato AAAA-MM-DD.',
+      provider,
+      recordCount: 0,
+      period: args.period ?? 'N/A',
+    };
+  }
+
   try {
     const connector = await getConnector(provider);
-    const range = resolveDateRange(args);
 
     switch (args.type) {
       case 'trial_balance': {
-        const periodLabel = args.period ?? range.label;
-        const tb = await connector.getTrialBalance(credentials, periodLabel);
+        const tb = await connector.getTrialBalance(credentials, range.label);
         const content = formatTrialBalance(tb, args.accountCode);
-        const recordCount = tb.accounts.filter(a => a.isAuxiliary).length;
+        const recordCount = tb.balanceStatus === 'movements_only'
+          ? tb.accounts.length
+          : trialBalanceLeafAccounts(tb).length;
         return {
           content,
           provider,
           recordCount,
-          period: periodLabel,
+          period: tb.period,
         };
       }
 

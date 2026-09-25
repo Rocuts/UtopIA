@@ -10,7 +10,10 @@
 // fueron eliminadas; todo vive ahora en cada PeriodSnapshot.
 //
 // Layout multiperiodo (cuando preprocessed.periods.length >= 2):
-//   Balance / P&L: Cuenta | Saldo {comparative} | Saldo {primary} | Variacion $ | Variacion %
+//   Balance / P&L: Cuenta | Saldo {primary} | Saldo {comparative} | Variacion $ | Variacion %
+//   (periodo actual primero, el mismo orden del PDF y del Markdown —
+//   reportes-export-20; la variación va en color neutro: su signo no dice si
+//   es buena o mala sin la naturaleza de la cuenta).
 //   KPIs: bloque por periodo con columnas paralelas
 //   Validacion: una seccion por periodo
 //   Resumen: bloque comparativo si aplica
@@ -18,9 +21,31 @@
 
 import ExcelJS from 'exceljs';
 import type { FinancialReport } from '@/lib/agents/financial/types';
-import { formatCopFromCents, parseMoneyCop } from '@/lib/agents/financial/contracts/money';
+import { formatCopFromPesos, parseMoneyCop } from '@/lib/agents/financial/contracts/money';
 import type { NiifReportJson } from '@/lib/agents/financial/contracts/niif-report';
-import type { StatementLineJson } from '@/lib/agents/financial/contracts/base';
+import { StrategyReportSchema } from '@/lib/agents/financial/contracts/strategy-report';
+import { applyKpiAnchors } from '@/lib/agents/financial/validators/strategy-anchors';
+import { renderStrategyKpisMarkdown } from '@/lib/agents/financial/agents/strategy-director';
+import type { StatementLineJson, StatementNoteJson } from '@/lib/agents/financial/contracts/base';
+import {
+  CURRENCY_NOTE,
+  cashFlowHasComparativeColumn,
+  cashFlowMethodLabel,
+  comparativeStatementLegend,
+  narrativeDisclaimer,
+  incomeStatementPresentationRows,
+  normalizeNiifStatementLabels,
+  presentedLineCents,
+  resolvePeriodoTipos,
+  statementDateLabel,
+  type PeriodoTipo,
+} from './statement-presentation';
+import {
+  formatStatementNote,
+  openingBalancesPygLegend,
+  OPENING_PYG_PLACEHOLDER,
+} from './pdf-elite-react/compose-statements-from-json';
+import { revenueBreakdown } from './revenue';
 import type {
   ControlTotals,
   PreprocessedBalance,
@@ -54,10 +79,14 @@ const COLORS = {
 
 const FONT_MAIN = 'Calibri';
 
-// Colombian currency format codes.
-// The [$-es-CO] LCID prefix forces Excel to render with Colombian locale rules:
-//   thousands separator = "."  |  decimal separator = ","
-// producing: $1.234.567,89  (regardless of the viewer's OS regional settings).
+// Formatos de moneda COP.
+// En un código de formato de Excel, `,` y `.` NO son caracteres literales: son
+// los marcadores del separador de miles y del decimal que el visor toma de su
+// configuración regional (sistema o aplicación). El prefijo [$-es-CO] fija la
+// configuración regional de fechas, nombres de mes y símbolos, pero NO fuerza
+// los separadores (reportes-export-19): en un equipo es-CO la celda se ve
+// $1.234.567,89 y en uno en-US, $1,234,567.89. El valor numérico es el mismo;
+// las cifras incrustadas en texto usan `fmtCopPesos`, que sí es es-CO fijo.
 //
 // La sección negativa usa PARÉNTESIS — misma convención NIIF que
 // `formatCopFromCents` (contracts/money.ts) y que los estados financieros del
@@ -68,7 +97,9 @@ const FONT_MAIN = 'Calibri';
 // (Art. 457 num. 2 C.Co.) y debe verse como tal.
 const NUM_FMT_COP = '[$-es-CO]"$"#,##0.00;[$-es-CO]("$"#,##0.00)';
 const NUM_FMT_COP_INT = '[$-es-CO]"$"#,##0;[$-es-CO]("$"#,##0)';
-const NUM_FMT_PCT = '0.00%;-0.00%;"—"';
+// Sin sección de cero "—": un 0 % real y un N/D se veían idénticos
+// (reportes-export-12). N/D se escribe ahora como texto "N/D".
+const NUM_FMT_PCT = '0.00%;-0.00%;0.00%';
 
 /**
  * MoneyCop (string de centavos) → pesos como `number` para la celda de Excel.
@@ -93,8 +124,10 @@ function centsToPesos(value: string): number {
  * workbook sale ahora de la misma aritmética exacta en centavos.
  */
 function fmtCopPesos(pesos: number): string {
-  if (!Number.isFinite(pesos)) return 'N/D';
-  return formatCopFromCents(Math.round(pesos * 100), false);
+  // Pesos → centavos exactos por el texto decimal (redondeo simétrico al
+  // centavo y sin pasar por un `number` de centavos, que deja de ser exacto
+  // por encima de 2^53 — niif-contrato-22). Mismo helper que el PDF.
+  return formatCopFromPesos(pesos, false);
 }
 
 // ---------------------------------------------------------------------------
@@ -103,6 +136,8 @@ function fmtCopPesos(pesos: number): string {
 
 interface PeriodView {
   period: string;
+  /** Año completo / corte parcial inferido del archivo (fecha de corte). */
+  periodoTipo?: PeriodoTipo;
   classes: PUCClass[];
   summary: {
     totalAssets: number;
@@ -126,6 +161,12 @@ interface PeriodView {
    * `controlTotals.roe` (patrimonio promedio).
    */
   controlTotals?: ControlTotals;
+  /**
+   * ingesta-09: el periodo proviene de una columna de saldo inicial/anterior
+   * (`PeriodSnapshot.saldosDeApertura`). Su ESF es el de apertura; su P&G no
+   * es un P&G comparativo: se presenta N/D y sin variaciones de resultados.
+   */
+  saldosDeApertura?: boolean;
 }
 
 interface PeriodLayout {
@@ -152,23 +193,59 @@ interface PeriodLayout {
  * Construye un PeriodLayout consumible desde el contrato T1
  * (preprocessed.primary, preprocessed.comparative, preprocessed.periods[]).
  */
+/**
+ * Resumen del periodo POSTERIOR al curator (normativa-metricas NM-04).
+ *
+ * `snapshot.summary` se calcula antes del curator: R1 reclasifica un activo
+ * negativo (sobregiro) al pasivo y R8 cierra el resultado en el patrimonio,
+ * pero el resumen conservaba los totales previos. El .xlsx imprimía entonces
+ * Total Activo 1.150 M en KPIs y Resumen (y como total de la hoja Balance sin
+ * JSON) frente a 1.180 M en el balance, el PDF y las anclas, con un
+ * endeudamiento calculado sobre la otra base. Los totales del balance, la
+ * utilidad neta y la ecuación salen de `controlTotals` —la base de las anclas y
+ * de los ratios—; el resto del resumen (ingresos, gastos, costos) no lo altera
+ * el curator.
+ */
+function postCuratorSummary(p: PreprocessedBalance['primary']): PeriodView['summary'] {
+  const ct = p.controlTotals;
+  if (!ct) return p.summary;
+  const cents = (ct as { cents?: { activo?: bigint; pasivo?: bigint; patrimonio?: bigint } }).cents;
+  const diffCents =
+    typeof cents?.activo === 'bigint' && typeof cents.pasivo === 'bigint' && typeof cents.patrimonio === 'bigint'
+      ? cents.activo - cents.pasivo - cents.patrimonio
+      : BigInt(Math.round((ct.activo - ct.pasivo - ct.patrimonio) * 100));
+  return {
+    ...p.summary,
+    totalAssets: ct.activo,
+    totalLiabilities: ct.pasivo,
+    totalEquity: ct.patrimonio,
+    netIncome: ct.utilidadNeta,
+    equationBalance: Number(diffCents) / 100,
+    equationBalanced: diffCents === BigInt(0),
+  };
+}
+
 function buildPeriodLayout(prep: PreprocessedBalance): PeriodLayout {
   const all: PeriodView[] = prep.periods.map((p) => ({
     period: p.period,
+    periodoTipo: p.periodoTipo,
     classes: p.classes,
-    summary: p.summary,
+    summary: postCuratorSummary(p),
     discrepancies: p.discrepancies,
     missingExpectedAccounts: p.missingExpectedAccounts,
     controlTotals: p.controlTotals,
+    saldosDeApertura: p.saldosDeApertura === true,
   }));
 
   const primary: PeriodLayout['primary'] = {
     period: prep.primary.period,
+    periodoTipo: prep.primary.periodoTipo,
     classes: prep.primary.classes,
-    summary: prep.primary.summary,
+    summary: postCuratorSummary(prep.primary),
     discrepancies: prep.primary.discrepancies,
     missingExpectedAccounts: prep.primary.missingExpectedAccounts,
     controlTotals: prep.primary.controlTotals,
+    saldosDeApertura: prep.primary.saldosDeApertura === true,
     reclassifications: prep.primary.reclassifications ?? prep.primary.curator?.reclassifications,
     equityAnchorAdjustment: prep.primary.equityAnchorAdjustment ?? undefined,
     cashFlowClosureAdjustment:
@@ -186,11 +263,13 @@ function buildPeriodLayout(prep: PreprocessedBalance): PeriodLayout {
   const comparative: PeriodView | null = prep.comparative
     ? {
         period: prep.comparative.period,
+        periodoTipo: prep.comparative.periodoTipo,
         classes: prep.comparative.classes,
-        summary: prep.comparative.summary,
+        summary: postCuratorSummary(prep.comparative),
         discrepancies: prep.comparative.discrepancies,
         missingExpectedAccounts: prep.comparative.missingExpectedAccounts,
         controlTotals: prep.comparative.controlTotals,
+        saldosDeApertura: prep.comparative.saldosDeApertura === true,
       }
     : null;
 
@@ -261,6 +340,7 @@ export interface ExcelExportOptions {
  */
 export async function generateFinancialExcel(options: ExcelExportOptions): Promise<Buffer> {
   const { report, preprocessed } = options;
+  const language = options.language ?? 'es';
   const wb = new ExcelJS.Workbook();
 
   wb.creator = '1+1 Financial Orchestrator';
@@ -270,16 +350,19 @@ export async function generateFinancialExcel(options: ExcelExportOptions): Promi
   const layout = preprocessed ? buildPeriodLayout(preprocessed) : null;
 
   // Tab 1: Balance / Estado de Situacion Financiera
-  addBalanceSheet(wb, report, layout);
+  addBalanceSheet(wb, report, layout, language);
 
   // Tab 2: P&L / Estado de Resultados
-  addIncomeStatement(wb, report, layout);
+  addIncomeStatement(wb, report, layout, language);
 
   // Complete the four structured statements from the same validated JSON.
-  if (report.niifAnalysis.json) addCashFlowAndEquitySheets(wb, report);
+  if (report.niifAnalysis.json) {
+    addCashFlowAndEquitySheets(wb, report, layout, language);
+    addTechnicalNotesSheet(wb, report, language);
+  }
 
   // Tab 3: KPIs / Indicadores
-  addKPISheet(wb, report, layout);
+  addKPISheet(wb, report, layout, language);
 
   // Tab 4: Validated Data (if preprocessed data available)
   if (layout) {
@@ -287,7 +370,7 @@ export async function generateFinancialExcel(options: ExcelExportOptions): Promi
   }
 
   // Tab 5: Report Summary
-  addSummarySheet(wb, report, layout);
+  addSummarySheet(wb, report, layout, language);
 
   // Tab 6: Ajustes Pulido Diamante (only when at least one mutation is present)
   if (layout && hasPulidoDiamanteData(layout)) {
@@ -298,47 +381,129 @@ export async function generateFinancialExcel(options: ExcelExportOptions): Promi
   return Buffer.from(buffer);
 }
 
-function addCashFlowAndEquitySheets(wb: ExcelJS.Workbook, report: FinancialReport): void {
-  const json = report.niifAnalysis.json!;
+function addCashFlowAndEquitySheets(
+  wb: ExcelJS.Workbook,
+  report: FinancialReport,
+  layout: PeriodLayout | null,
+  language: 'es' | 'en' = 'es',
+): void {
+  const json = presentableJson(report, layout, language)!;
+  const fp = json.company.fiscalPeriod;
+  const cp = json.company.comparativePeriod;
+  // Columna comparativa del EFE y ECP del periodo comparativo (auditoría
+  // 2026-09-24, pendiente #3): los calcula el código desde el corte anterior
+  // al comparativo. Sin ellos, la nota determinista de comparativo no
+  // presentado (NIIF para las PYMES 3.14) se declara en el propio estado
+  // (reportes-export-13). Orden de columnas: periodo actual | comparativo,
+  // igual que el PDF.
+  const cf = json.cashFlow;
+  const cfComparative = cp !== null && cashFlowHasComparativeColumn(cf);
+  const comparativeRows = cp !== null ? (json.equityChanges.comparativeRows ?? []) : [];
+  const ecComparative = comparativeRows.length > 0;
+  const periodLine = (shown: boolean) =>
+    `${statementDate('period', report, layout, shown)} · ${CURRENCY_NOTE}`;
+  const legendFont = { name: FONT_MAIN, size: 9, italic: true, color: { argb: COLORS.orange } };
+
   const cash = wb.addWorksheet('Flujos de Efectivo');
-  cash.columns = [{ width: 58 }, { width: 24 }];
-  cash.addRow(['ESTADO DE FLUJOS DE EFECTIVO', json.company.fiscalPeriod]);
-  cash.addRow([report.company.name, 'COP']);
-  const addCash = (label: string, cents: string, bold = false) => {
-    const row = cash.addRow([label, centsToPesos(cents)]);
+  cash.columns = [{ width: 58 }, { width: 24 }, ...(cfComparative ? [{ width: 24 }] : [])];
+  cash.addRow(['ESTADO DE FLUJOS DE EFECTIVO', fp, ...(cfComparative ? [cp] : [])]);
+  cash.addRow([json.company.name, 'COP', ...(cfComparative ? ['COP'] : [])]);
+  cash.addRow([periodLine(cfComparative)]).font = { name: FONT_MAIN, size: 9, italic: true };
+  const cashLegend = comparativeStatementLegend('cashFlow', json);
+  if (cashLegend) cash.addRow([cashLegend]).font = legendFont;
+  const lastCashCol = cfComparative ? 3 : 2;
+  const addCash = (label: string, cents: string, comparative: string | null | undefined, bold = false) => {
+    const values: Array<string | number> = [label, centsToPesos(cents)];
+    if (cfComparative) values.push(comparative !== null && comparative !== undefined ? centsToPesos(comparative) : 'n/c');
+    const row = cash.addRow(values);
     row.font = { name: FONT_MAIN, bold };
-    row.getCell(2).numFmt = NUM_FMT_COP;
+    for (let col = 2; col <= lastCashCol; col++) {
+      if (typeof row.getCell(col).value === 'number') row.getCell(col).numFmt = NUM_FMT_COP;
+    }
   };
-  addCash('Efectivo al inicio', json.cashFlow.cashOpening, true);
+  addCash('Efectivo al inicio', cf.cashOpening, cf.cashOpeningComparative, true);
   const sectionNames = { operating: 'Operación', investing: 'Inversión', financing: 'Financiación' };
-  for (const section of json.cashFlow.sections) {
+  for (const section of cf.sections) {
     cash.addRow([sectionNames[section.section]]).font = { name: FONT_MAIN, bold: true };
-    for (const line of section.lines) addCash(line.label, line.amountPrimary);
-    addCash(`Flujo neto de ${sectionNames[section.section]}`, section.netFlow, true);
+    for (const line of section.lines) addCash(line.label, line.amountPrimary, line.amountComparative);
+    addCash(`Flujo neto de ${sectionNames[section.section]}`, section.netFlow, section.netFlowComparative, true);
   }
-  addCash('Variación neta del efectivo', json.cashFlow.netChange, true);
-  addCash('Efectivo al cierre', json.cashFlow.cashClosing, true);
-  cash.addRow([json.cashFlow.methodNote]);
+  addCash('Variación neta del efectivo', cf.netChange, cf.netChangeComparative, true);
+  addCash('Efectivo al cierre', cf.cashClosing, cf.cashClosingComparative, true);
+  cash.addRow([cashFlowMethodLabel(cf.methodNote, cf.degeneracyFlag, language)]).font = {
+    name: FONT_MAIN, size: 9, italic: true,
+  };
 
   const equity = wb.addWorksheet('Cambios en Patrimonio');
   equity.columns = [{ width: 46 }, ...Array.from({ length: 8 }, () => ({ width: 23 }))];
-  equity.addRow(['ESTADO DE CAMBIOS EN EL PATRIMONIO', json.company.fiscalPeriod]);
-  equity.addRow([report.company.name, 'COP']);
+  equity.addRow(['ESTADO DE CAMBIOS EN EL PATRIMONIO', fp, ...(ecComparative ? [cp] : [])]);
+  equity.addRow([json.company.name, 'COP']);
+  equity.addRow([periodLine(ecComparative)]).font = { name: FONT_MAIN, size: 9, italic: true };
+  const equityLegend = comparativeStatementLegend('equity', json);
+  if (equityLegend) equity.addRow([equityLegend]).font = legendFont;
   equity.addRow(['Movimiento', 'Capital social', 'Prima colocación', 'Reserva legal',
     'Otras reservas', 'Resultados acumulados', 'Resultado ejercicio', 'ORI', 'Total'])
     .font = { name: FONT_MAIN, bold: true };
   const keys = ['capitalSocial', 'primaColocacion', 'reservaLegal', 'otrasReservas',
     'resultadosAcumulados', 'resultadoEjercicio', 'ori', 'total'] as const;
-  for (const movement of json.equityChanges.rows) {
-    const row = equity.addRow([movement.label, ...keys.map(key => centsToPesos(movement[key]))]);
-    row.font = { name: FONT_MAIN, bold: ['opening_balance', 'closing_balance'].includes(movement.kind) };
-    for (let col = 2; col <= 9; col++) row.getCell(col).numFmt = NUM_FMT_COP;
+  const addMovements = (rows: NiifReportJson['equityChanges']['rows']) => {
+    for (const movement of rows) {
+      const row = equity.addRow([movement.label, ...keys.map(key => centsToPesos(movement[key]))]);
+      row.font = { name: FONT_MAIN, bold: ['opening_balance', 'closing_balance'].includes(movement.kind) };
+      for (let col = 2; col <= 9; col++) row.getCell(col).numFmt = NUM_FMT_COP;
+    }
+  };
+  if (ecComparative) {
+    // Los dos periodos apilados en orden cronológico (NIIF para las PYMES 6.3):
+    // el cierre del comparativo es la apertura del periodo actual.
+    equity.addRow([`Periodo ${cp}`]).font = { name: FONT_MAIN, bold: true, color: { argb: COLORS.darkNavy } };
+    addMovements(comparativeRows);
+    equity.addRow([`Periodo ${fp}`]).font = { name: FONT_MAIN, bold: true, color: { argb: COLORS.darkNavy } };
+  }
+  addMovements(json.equityChanges.rows);
+  // e2e-niif-10: las notas en prosa del ECP las redacta el LLM y sus cifras no
+  // se anclan; se rotulan como narrativa no auditada (mismo aviso del PDF).
+  const equityNotes = json.equityChanges.notes.map(formatStatementNote).filter(Boolean);
+  if (equityNotes.length > 0) {
+    equity.addRow([narrativeDisclaimer(language)]).font = {
+      name: FONT_MAIN, size: 8, italic: true, color: { argb: COLORS.orange },
+    };
+  }
+  for (const n of equityNotes) {
+    equity.addRow([n]).font = { name: FONT_MAIN, size: 8, italic: true };
   }
   for (const sheet of [cash, equity]) {
-    sheet.views = [{ state: 'frozen', ySplit: 3 }];
+    sheet.views = [{ state: 'frozen', ySplit: 2 }];
     sheet.pageSetup = { orientation: sheet === equity ? 'landscape' : 'portrait',
       fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
   }
+}
+
+/**
+ * Notas técnicas globales del JSON validado (mapeo PUC, reclasificaciones,
+ * impracticabilidades). Son parte del contrato NIIF y no se exportaban en
+ * ningún formato (reportes-export-11). El JSON valida su forma, no sus cifras:
+ * son prosa del Pass-3 y llevan el aviso de narrativa no auditada, igual que en
+ * el PDF (e2e-niif-10).
+ */
+function addTechnicalNotesSheet(
+  wb: ExcelJS.Workbook,
+  report: FinancialReport,
+  language: 'es' | 'en' = 'es',
+): void {
+  const notes = (report.niifAnalysis.json?.technicalNotes ?? [])
+    .map(formatStatementNote)
+    .filter((n) => n.length > 0);
+  if (notes.length === 0) return;
+  const ws = wb.addWorksheet('Notas Técnicas');
+  ws.columns = [{ width: 120 }];
+  ws.addRow(['NOTAS TÉCNICAS DE LOS ESTADOS FINANCIEROS']).font = { name: FONT_MAIN, bold: true, size: 12 };
+  const id = reportIdentity(report);
+  ws.addRow([`${id.name} | NIT: ${id.nit} | Periodo: ${id.fiscalPeriod}`]).font = { name: FONT_MAIN, size: 9 };
+  ws.addRow([narrativeDisclaimer(language)]).font = {
+    name: FONT_MAIN, size: 9, italic: true, color: { argb: COLORS.orange },
+  };
+  for (const n of notes) ws.addRow([n]).font = { name: FONT_MAIN, size: 9 };
 }
 
 /** Returns true if any Pulido Diamante mutation data exists in the primary snapshot. */
@@ -362,16 +527,17 @@ function addBalanceSheet(
   wb: ExcelJS.Workbook,
   report: FinancialReport,
   layout: PeriodLayout | null,
+  language: 'es' | 'en' = 'es',
 ): void {
   const ws = wb.addWorksheet('Balance NIIF', { properties: { tabColor: { argb: COLORS.gold } } });
   ws.properties.defaultColWidth = 18;
 
   // Header
-  addSheetHeader(ws, 'ESTADO DE SITUACION FINANCIERA', report);
+  addSheetHeader(ws, 'ESTADO DE SITUACION FINANCIERA', report, statementDate('position', report, layout));
 
   let row = 6;
 
-  const json = report.niifAnalysis.json;
+  const json = presentableJson(report, layout, language);
 
   if (json) {
     // ── Fuente canónica: JSON-strict validado del NIIF Analyst ──────────────
@@ -385,6 +551,7 @@ function addBalanceSheet(
     // rubro. El preprocesado sigue alimentando las pestañas de trazabilidad
     // (Validacion, Pulido Diamante) y los ratios de la pestaña KPIs.
     row = addBalanceSheetFromJson(ws, row, json);
+    row = addStatementNotes(ws, row, json.balanceSheet.notes, language);
   } else if (layout) {
     const { primary, comparative, isMultiPeriod } = layout;
 
@@ -450,11 +617,11 @@ function addBalanceSheet(
       r.getCell(2).font = { name: FONT_MAIN, size: 9, italic: true };
       // Convergence row preserves sign (can be negative) — NO Math.abs
       if (isMultiPeriod) {
-        r.getCell(3).value = 0;
+        r.getCell(3).value = convAdjAmount;
         r.getCell(3).numFmt = NUM_FMT_COP;
-        r.getCell(4).value = convAdjAmount;
+        r.getCell(3).font = { name: FONT_MAIN, size: 9, italic: true };
+        r.getCell(4).value = 0;
         r.getCell(4).numFmt = NUM_FMT_COP;
-        r.getCell(4).font = { name: FONT_MAIN, size: 9, italic: true };
       } else {
         r.getCell(3).value = convAdjAmount;
         r.getCell(3).numFmt = NUM_FMT_COP;
@@ -585,6 +752,8 @@ function addJsonStatementRow(
   amountComparative: string | null,
   hasComparative: boolean,
   emphasis: 'plain' | 'subtotal' | 'total',
+  /** Texto fijo de la columna comparativa (p. ej. N/D del P&G de apertura); sin variaciones. */
+  comparativeText?: string,
 ): number {
   const r = ws.getRow(row);
   const bold = emphasis !== 'plain';
@@ -601,30 +770,18 @@ function addJsonStatementRow(
   const primary = centsToPesos(amountPrimary);
   // `n/c` (no comparativo) hace visible el hueco cuando el informe DECLARA
   // comparativo pero la línea no lo trae — misma convención que el PDF.
-  const comparative = amountComparative !== null ? centsToPesos(amountComparative) : null;
+  const comparative =
+    comparativeText === undefined && amountComparative !== null ? centsToPesos(amountComparative) : null;
 
   if (hasComparative) {
-    r.getCell(3).value = comparative ?? 'n/c';
-    if (comparative !== null) r.getCell(3).numFmt = NUM_FMT_COP;
-    r.getCell(3).font = { name: FONT_MAIN, size, bold, color: { argb: COLORS.textMuted } };
-    r.getCell(4).value = primary;
-    r.getCell(4).numFmt = NUM_FMT_COP;
-    r.getCell(4).font = { name: FONT_MAIN, size, bold };
-    if (comparative !== null) {
-      const delta = primary - comparative;
-      r.getCell(5).value = delta;
-      r.getCell(5).numFmt = NUM_FMT_COP;
-      r.getCell(5).font = {
-        name: FONT_MAIN, size, bold,
-        color: { argb: delta >= 0 ? COLORS.green : COLORS.red },
-      };
-      r.getCell(6).value = comparative !== 0 ? delta / Math.abs(comparative) : 0;
-      r.getCell(6).numFmt = NUM_FMT_PCT;
-      r.getCell(6).font = {
-        name: FONT_MAIN, size, bold,
-        color: { argb: delta >= 0 ? COLORS.green : COLORS.red },
-      };
-    }
+    // Periodo actual | comparativo (reportes-export-20: mismo orden del PDF).
+    r.getCell(3).value = primary;
+    r.getCell(3).numFmt = NUM_FMT_COP;
+    r.getCell(3).font = { name: FONT_MAIN, size, bold };
+    r.getCell(4).value = comparative ?? comparativeText ?? 'n/c';
+    if (comparative !== null) r.getCell(4).numFmt = NUM_FMT_COP;
+    r.getCell(4).font = { name: FONT_MAIN, size, bold, color: { argb: COLORS.textMuted } };
+    if (comparative !== null) writeVariationCells(r, primary, comparative, { size, bold });
   } else {
     r.getCell(3).value = primary;
     r.getCell(3).numFmt = NUM_FMT_COP;
@@ -640,6 +797,29 @@ function addJsonStatementRow(
   return row + 1;
 }
 
+/**
+ * Variación $ y % (cols 5 y 6) del periodo actual contra el comparativo.
+ * Color NEUTRO (reportes-export-20): pintar en verde toda variación ≥ 0 dejaba
+ * en verde un aumento de gastos o de pasivos; el signo sin la naturaleza de la
+ * cuenta no dice si la variación es favorable. Los negativos van entre
+ * paréntesis por el formato numérico.
+ */
+function writeVariationCells(
+  r: ExcelJS.Row,
+  current: number,
+  previous: number,
+  style: { size: number; bold: boolean },
+): void {
+  const delta = current - previous;
+  const font = { name: FONT_MAIN, size: style.size, bold: style.bold, color: { argb: COLORS.textDark } };
+  r.getCell(5).value = delta;
+  r.getCell(5).numFmt = NUM_FMT_COP;
+  r.getCell(5).font = font;
+  r.getCell(6).value = previous !== 0 ? delta / Math.abs(previous) : 0;
+  r.getCell(6).numFmt = NUM_FMT_PCT;
+  r.getCell(6).font = font;
+}
+
 /** `level` del contrato: 0=sección 1=subgrupo 2=detalle 3=subtotal 4=total. */
 function emphasisForLevel(level: number): 'plain' | 'subtotal' | 'total' {
   if (level === 4) return 'total';
@@ -652,13 +832,20 @@ function addJsonLines(
   startRow: number,
   lines: StatementLineJson[],
   hasComparative: boolean,
+  comparativeText?: string,
 ): number {
   let row = startRow;
+  // Correctoras (1592, 1399…) en magnitud absoluta se escriben NEGATIVAS: así
+  // la columna suma el total impreso, igual que E15 y que el PDF
+  // (reportes-export-17).
+  const presented = (line: StatementLineJson, v: string): string =>
+    presentedLineCents(line.account, parseMoneyCop(v), line.isAbsolute).toString(10);
   for (const line of lines) {
     row = addJsonStatementRow(
       ws, row, line.account, line.label,
-      line.amountPrimary, line.amountComparative,
-      hasComparative, emphasisForLevel(line.level),
+      presented(line, line.amountPrimary),
+      line.amountComparative !== null ? presented(line, line.amountComparative) : null,
+      hasComparative, emphasisForLevel(line.level), comparativeText,
     );
   }
   return row;
@@ -750,27 +937,44 @@ function addIncomeStatementFromJson(
   ws: ExcelJS.Worksheet,
   startRow: number,
   json: NiifReportJson,
+  comparativeIsOpening = false,
 ): number {
   const p = json.incomeStatement;
   const hasComparative = json.company.comparativePeriod !== null;
+  // ingesta-09: comparativo de saldos de apertura → P&G comparativo N/D.
+  const comparativeText = hasComparative && comparativeIsOpening ? OPENING_PYG_PLACEHOLDER : undefined;
   let row = startRow;
 
   row = addStatementColumnHeader(
     ws, row, json.company.fiscalPeriod, json.company.comparativePeriod,
   );
-  row = addJsonLines(ws, row, p.lines, hasComparative);
 
-  // Totales vinculantes del contrato. Se anexan sólo si el analista no los
-  // emitió ya como línea — misma regla que `niifJsonToIncomeTable` en el PDF,
-  // para que ambos entregables listen exactamente las mismas filas.
-  const emitted = new Set(p.lines.map((l) => l.label.trim().toUpperCase()));
-  const pushTotal = (label: string, primary: string, comp: string | null) => {
-    if (emitted.has(label.toUpperCase())) return;
-    row = addJsonStatementRow(ws, row, null, label, primary, comp, hasComparative, 'total');
-  };
-  pushTotal('UTILIDAD BRUTA', p.grossProfitPrimary, p.grossProfitComparative);
-  pushTotal('UTILIDAD OPERATIVA (EBIT)', p.operatingProfitPrimary, p.operatingProfitComparative);
-  pushTotal('UTILIDAD NETA DEL PERÍODO', p.netIncomePrimary, p.netIncomeComparative);
+  // Regla única compartida con el PDF y el Markdown
+  // (`incomeStatementPresentationRows`, auditoría 2026-09-24 e2e-niif-01): los
+  // escalones de la cascada (UTILIDAD/PÉRDIDA bruta, operativa, antes de
+  // impuestos y neta; ORI y resultado integral total) se imprimen SIEMPRE desde
+  // los campos anclados del JSON; un renglón del analista no los sustituye.
+  for (const r of incomeStatementPresentationRows(p)) {
+    if (r.total) {
+      row = addJsonStatementRow(
+        ws, row, null, r.label, r.amountPrimary, r.amountComparative, hasComparative, 'total', comparativeText,
+      );
+    } else {
+      row = addJsonLines(
+        ws, row,
+        [{
+          account: r.account, label: r.label, amountPrimary: r.amountPrimary,
+          amountComparative: r.amountComparative, level: r.level as StatementLineJson['level'],
+          isAbsolute: r.isAbsolute,
+        }],
+        hasComparative, comparativeText,
+      );
+    }
+  }
+
+  if (comparativeText !== undefined) {
+    row = addOpeningPygLegend(ws, row, json.company.comparativePeriod ?? '');
+  }
 
   if (p.modeBanner) {
     row++;
@@ -792,15 +996,16 @@ function addIncomeStatement(
   wb: ExcelJS.Workbook,
   report: FinancialReport,
   layout: PeriodLayout | null,
+  language: 'es' | 'en' = 'es',
 ): void {
   const ws = wb.addWorksheet('Estado Resultados', { properties: { tabColor: { argb: COLORS.darkNavy } } });
   ws.properties.defaultColWidth = 18;
 
-  addSheetHeader(ws, 'ESTADO DE RESULTADOS INTEGRAL', report);
+  addSheetHeader(ws, 'ESTADO DE RESULTADOS INTEGRAL', report, statementDate('period', report, layout));
 
   let row = 6;
 
-  const json = report.niifAnalysis.json;
+  const json = presentableJson(report, layout, language);
 
   // Banner de Advertencia R7 (costo presunto) — vive en el preprocesado y es
   // independiente de la fuente de las cifras, así que se pinta en ambas ramas.
@@ -831,34 +1036,53 @@ function addIncomeStatement(
     // (`totalRevenue − totalCosts`) omitía el costo de producción (clase 7) y
     // las devoluciones en ventas (4175), de modo que el .xlsx podía imprimir
     // una utilidad bruta distinta de la del HTML para el mismo informe.
-    row = addIncomeStatementFromJson(ws, row, json);
+    const comparativePeriod = json.company.comparativePeriod;
+    const comparativeIsOpening =
+      comparativePeriod !== null &&
+      layout?.comparative?.saldosDeApertura === true &&
+      layout.comparative.period.includes(comparativePeriod);
+    row = addIncomeStatementFromJson(ws, row, json, comparativeIsOpening);
+    row = addStatementNotes(ws, row, json.incomeStatement.notes, language);
   } else if (layout) {
     const { primary, comparative, isMultiPeriod } = layout;
 
     row = addStatementColumnHeader(ws, row, primary.period, comparative?.period ?? null);
 
-    // INGRESOS
-    row = addSectionHeader(ws, row, 'INGRESOS OPERACIONALES', isMultiPeriod);
-    row = addClassRows(ws, row, primary, comparative, 4);
+    // INGRESOS — detalle de la clase 4 tal cual la balanza, y debajo los
+    // ingresos operacionales netos (41 − 4175) que sostienen la utilidad
+    // bruta. La Σ de la clase 4 no es "total ingresos": mezcla devoluciones y
+    // no operacionales (ratios-kpis-04). Grupo 42 va debajo del resultado
+    // operacional (decisión de negocio del coordinador).
+    const revP = revenueBreakdown(primary);
+    const revC = comparative ? revenueBreakdown(comparative) : null;
+    const nd = (v: number | null | undefined) => (v === null || v === undefined ? Number.NaN : v);
+    // ingesta-09: comparativo de saldos de apertura → sin P&G del periodo
+    // anterior; cuentas y totales del comparativo N/D, sin variaciones.
+    const pygND = comparative?.saldosDeApertura === true;
+    const cmp = (v: number | undefined): number | undefined =>
+      v === undefined ? undefined : pygND ? Number.NaN : v;
+    const classOpts = { comparativeNd: pygND };
+    row = addSectionHeader(ws, row, 'INGRESOS (CLASE 4 — SALDOS DE LA BALANZA)', isMultiPeriod);
+    row = addClassRows(ws, row, primary, comparative, 4, classOpts);
     row = addStatementTotalRow(
       ws,
       row,
-      'TOTAL INGRESOS',
-      primary.summary.totalRevenue,
-      comparative?.summary.totalRevenue,
+      'INGRESOS OPERACIONALES NETOS (41 − 4175)',
+      nd(revP.operacionalesNetos),
+      cmp(revC ? nd(revC.operacionalesNetos) : undefined),
       isMultiPeriod,
     );
     row++;
 
     // COSTOS (Clase 6)
     row = addSectionHeader(ws, row, 'COSTO DE VENTAS', isMultiPeriod);
-    row = addClassRows(ws, row, primary, comparative, 6);
+    row = addClassRows(ws, row, primary, comparative, 6, classOpts);
     row = addStatementTotalRow(
       ws,
       row,
       'TOTAL COSTOS',
       primary.summary.totalCosts,
-      comparative?.summary.totalCosts,
+      cmp(comparative?.summary.totalCosts),
       isMultiPeriod,
     );
     row++;
@@ -866,27 +1090,40 @@ function addIncomeStatement(
     // UTILIDAD BRUTA — ingresos menos costo de ventas (clase 6) Y costo de
     // producción (clase 7). Omitir la clase 7 sobreestimaba la utilidad bruta
     // de cualquier empresa manufacturera respecto del HTML/PDF.
-    const grossOf = (s: PeriodView['summary']) =>
-      s.totalRevenue - s.totalCosts - s.totalProduction;
+    const grossOf = (s: PeriodView['summary'], opNetos: number | null | undefined) =>
+      opNetos === null || opNetos === undefined
+        ? Number.NaN
+        : opNetos - s.totalCosts - s.totalProduction;
     row = addStatementTotalRow(
       ws,
       row,
       'UTILIDAD BRUTA',
-      grossOf(primary.summary),
-      comparative ? grossOf(comparative.summary) : undefined,
+      grossOf(primary.summary, revP.operacionalesNetos),
+      cmp(comparative ? grossOf(comparative.summary, revC?.operacionalesNetos) : undefined),
+      isMultiPeriod,
+    );
+    row++;
+
+    // Otros ingresos no operacionales (grupo 42 y demás de la clase 4).
+    row = addStatementTotalRow(
+      ws,
+      row,
+      'OTROS INGRESOS NO OPERACIONALES',
+      nd(revP.noOperacionales),
+      cmp(revC ? nd(revC.noOperacionales) : undefined),
       isMultiPeriod,
     );
     row++;
 
     // GASTOS
     row = addSectionHeader(ws, row, 'GASTOS OPERACIONALES', isMultiPeriod);
-    row = addClassRows(ws, row, primary, comparative, 5);
+    row = addClassRows(ws, row, primary, comparative, 5, classOpts);
     row = addStatementTotalRow(
       ws,
       row,
       'TOTAL GASTOS',
       primary.summary.totalExpenses,
-      comparative?.summary.totalExpenses,
+      cmp(comparative?.summary.totalExpenses),
       isMultiPeriod,
     );
     row++;
@@ -897,9 +1134,12 @@ function addIncomeStatement(
       row,
       'UTILIDAD NETA',
       primary.summary.netIncome,
-      comparative?.summary.netIncome,
+      cmp(comparative?.summary.netIncome),
       isMultiPeriod,
     );
+    if (pygND && comparative) {
+      row = addOpeningPygLegend(ws, row + 1, comparative.period);
+    }
   } else {
     ws.getRow(row).getCell(1).value = report.niifAnalysis.incomeStatement || report.niifAnalysis.fullContent;
     ws.getRow(row).getCell(1).font = { name: FONT_MAIN, size: 9 };
@@ -921,6 +1161,7 @@ function addKPISheet(
   wb: ExcelJS.Workbook,
   report: FinancialReport,
   layout: PeriodLayout | null,
+  language: 'es' | 'en' = 'es',
 ): void {
   const ws = wb.addWorksheet('KPIs', { properties: { tabColor: { argb: COLORS.green } } });
 
@@ -940,9 +1181,16 @@ function addKPISheet(
   // KPIs narrativos del Strategy Director (mantenemos contenido del reporte)
   ws.getRow(row).getCell(1).value = 'KPIs del Analisis Estrategico (narrativa)';
   ws.getRow(row).getCell(1).font = { name: FONT_MAIN, bold: true, size: 12, color: { argb: COLORS.darkNavy } };
-  row += 2;
+  row += 1;
+  row = addNarrativeDisclaimer(ws, row, language);
+  row += 1;
 
-  const content = report.strategicAnalysis.fullContent;
+  // Pendiente #2 (auditoría integral 2026-09-24): la tabla de KPIs se
+  // re-renderiza desde el JSON con `applyKpiAnchors` re-aplicado, de modo que un
+  // informe persistido antes del cambio tampoco imprime la cifra del modelo de
+  // un KPI sin ancla determinista (N/D con motivo). Sin JSON válido se conserva
+  // el Markdown tal cual.
+  const content = strategyContentWithAnchoredKpis(report);
   const sections = content.split('\n');
 
   for (const line of sections) {
@@ -968,8 +1216,44 @@ function addKPISheet(
 }
 
 /**
+ * `fullContent` de la Parte II con la sección "## 2. KPIs FINANCIEROS"
+ * reconstruida desde el JSON validado tras `applyKpiAnchors` (idempotente).
+ */
+function strategyContentWithAnchoredKpis(report: FinancialReport): string {
+  const content = report.strategicAnalysis.fullContent;
+  const parsed = StrategyReportSchema.safeParse(report.strategicAnalysis.json);
+  if (!parsed.success) return content;
+  const lines = content.split('\n');
+  const start = lines.findIndex((l) => /^##\s+2\.\s+KPIs FINANCIEROS/i.test(l.trim()));
+  if (start < 0) return content;
+  const next = lines.findIndex((l, i) => i > start && /^##\s/.test(l.trim()));
+  const end = next < 0 ? lines.length : next;
+  const anchored = applyKpiAnchors(parsed.data, {}, { keepWhenNoSource: true });
+  const section = renderStrategyKpisMarkdown(anchored.json, {
+    kpisNeutralized: anchored.neutralized,
+    kpisRecomputed: anchored.recomputed,
+  });
+  return [...lines.slice(0, start), ...section.split('\n'), '', ...lines.slice(end)].join('\n');
+}
+
+/** Escribe una cifra de KPI: número con formato, o "N/D" como TEXTO (nunca 0). */
+function writeKpiCell(cell: ExcelJS.Cell, value: number | null, numFmt: string): void {
+  if (value === null || !Number.isFinite(value)) {
+    cell.value = 'N/D';
+    cell.alignment = { horizontal: 'right' };
+    return;
+  }
+  cell.value = value;
+  cell.numFmt = numFmt;
+}
+
+function kpiNumFmt(k: KPIRow): string {
+  return k.isPct ? NUM_FMT_PCT : k.isMoney ? NUM_FMT_COP_INT : '0.00';
+}
+
+/**
  * Tabla comparativa de KPIs deterministicos derivados del preprocessed.
- * Layout: KPI | <comparative.period> | <primary.period> | Variacion $ | Variacion %
+ * Layout: KPI | <primary.period> | <comparative.period> | Variacion $ | Variacion % (reportes-export-20)
  */
 function addKPIComparativeBlock(
   ws: ExcelJS.Worksheet,
@@ -982,8 +1266,8 @@ function addKPIComparativeBlock(
   ws.getRow(row).getCell(1).font = { name: FONT_MAIN, bold: true, size: 12, color: { argb: COLORS.darkNavy } };
   row += 2;
 
-  // Headers
-  const headers = ['KPI', comparative.period, primary.period, 'Variacion', 'Variacion %'];
+  // Headers — periodo actual | comparativo (reportes-export-20).
+  const headers = ['KPI', primary.period, comparative.period, 'Variacion', 'Variacion %'];
   const hRow = ws.getRow(row);
   headers.forEach((h, i) => {
     const cell = hRow.getCell(i + 1);
@@ -999,25 +1283,15 @@ function addKPIComparativeBlock(
     const r = ws.getRow(row);
     r.getCell(1).value = k.label;
     r.getCell(1).font = { name: FONT_MAIN, size: 10 };
-    r.getCell(2).value = k.prev;
-    r.getCell(3).value = k.curr;
-    r.getCell(4).value = k.delta;
-    r.getCell(5).value = k.deltaPct;
-
-    if (k.isPct) {
-      r.getCell(2).numFmt = NUM_FMT_PCT;
-      r.getCell(3).numFmt = NUM_FMT_PCT;
-      r.getCell(4).numFmt = NUM_FMT_PCT;
-    } else if (k.isMoney) {
-      r.getCell(2).numFmt = NUM_FMT_COP_INT;
-      r.getCell(3).numFmt = NUM_FMT_COP_INT;
-      r.getCell(4).numFmt = NUM_FMT_COP_INT;
-    } else {
-      r.getCell(2).numFmt = '0.00';
-      r.getCell(3).numFmt = '0.00';
-      r.getCell(4).numFmt = '0.00';
+    const fmt = kpiNumFmt(k);
+    writeKpiCell(r.getCell(2), k.curr, fmt);
+    writeKpiCell(r.getCell(3), k.prev, fmt);
+    writeKpiCell(r.getCell(4), k.delta, fmt);
+    writeKpiCell(r.getCell(5), k.deltaPct, NUM_FMT_PCT);
+    if (k.note) {
+      r.getCell(6).value = k.note;
+      r.getCell(6).font = { name: FONT_MAIN, size: 8, italic: true, color: { argb: COLORS.orange } };
     }
-    r.getCell(5).numFmt = NUM_FMT_PCT;
 
     if (row % 2 === 0) {
       for (let i = 1; i <= 5; i++) {
@@ -1055,14 +1329,10 @@ function addKPISinglePeriodBlock(
   for (const k of kpis) {
     const r = ws.getRow(row);
     r.getCell(1).value = k.label;
-    r.getCell(2).value = k.curr;
-
-    if (k.isPct) {
-      r.getCell(2).numFmt = NUM_FMT_PCT;
-    } else if (k.isMoney) {
-      r.getCell(2).numFmt = NUM_FMT_COP_INT;
-    } else {
-      r.getCell(2).numFmt = '0.00';
+    writeKpiCell(r.getCell(2), k.curr, kpiNumFmt(k));
+    if (k.note) {
+      r.getCell(3).value = k.note;
+      r.getCell(3).font = { name: FONT_MAIN, size: 8, italic: true, color: { argb: COLORS.orange } };
     }
 
     if (row % 2 === 0) {
@@ -1078,18 +1348,26 @@ function addKPISinglePeriodBlock(
 
 interface KPIRow {
   label: string;
-  curr: number;
-  prev: number;
-  delta: number;
-  deltaPct: number;
+  /** `null` = N/D (sin base verificada). Nunca se sustituye por 0. */
+  curr: number | null;
+  prev: number | null;
+  delta: number | null;
+  deltaPct: number | null;
   isPct: boolean;
   isMoney: boolean;
+  /** Marca visible junto a la fila (spec v10.1: △ base de cierre / bases distintas). */
+  note?: string;
 }
 
 /**
  * Ratio de un periodo, con la MISMA precedencia que usan el PDF y el HTML:
- * primero el campo pre-calculado de `controlTotals` (Wave 2.F4, fuente única),
- * y sólo si viene null/ausente —balances cacheados pre-F4— el cálculo local.
+ * primero el campo pre-calculado de `controlTotals` (Wave 2.F4, fuente única).
+ *
+ * Auditoría 2026-09 (reportes-export-12): `null` en `controlTotals` significa
+ * "denominador nulo o anómalo → N/D", y NO debe caer al cálculo local (que
+ * producía, p. ej., un ROE de 200 % sobre el patrimonio de cierre). Sólo un
+ * campo AUSENTE (`undefined`, balances cacheados pre-F4) usa el fallback, y el
+ * fallback también devuelve `null` cuando su denominador es 0.
  *
  * `controlTotals` guarda los porcentajes en escala 0-100; las celdas de Excel
  * llevan `NUM_FMT_PCT`, que espera una fracción, de ahí el /100.
@@ -1097,80 +1375,158 @@ interface KPIRow {
 function ratioFromControlTotals(
   view: PeriodView | null,
   pick: (ct: ControlTotals) => number | null | undefined,
-  fallback: () => number,
+  fallback: () => number | null,
   isPercentScale: boolean,
-): number {
+): number | null {
   const ct = view?.controlTotals;
-  const pre = ct ? pick(ct) : null;
-  if (typeof pre === 'number' && Number.isFinite(pre)) {
+  const pre = ct ? pick(ct) : undefined;
+  if (pre === null) return null;
+  if (typeof pre === 'number') {
+    if (!Number.isFinite(pre)) return null;
     return isPercentScale ? pre / 100 : pre;
   }
   return fallback();
 }
 
+const safeDiv = (num: number, den: number): number | null =>
+  den === 0 || !Number.isFinite(num) || !Number.isFinite(den) ? null : num / den;
+
+/**
+ * Base del ROE/ROA de un periodo: 'promedio' sólo cuando el preprocesador
+ * calculó el ratio sobre el promedio con el comparativo (promedio ≠ cierre).
+ * Spec v10.1 §KPIs: △ cuando se calcula sobre el saldo de cierre.
+ */
+function ratioBasis(
+  view: PeriodView | null,
+  field: 'roe' | 'roa',
+): 'promedio' | 'cierre' | 'desconocida' {
+  const ct = view?.controlTotals;
+  // Campo ausente → el fallback local divide por el saldo de CIERRE.
+  if (!ct || ct[field] === undefined) return 'cierre';
+  const avg = field === 'roe' ? ct.patrimonioPromedio : ct.activoPromedio;
+  const close = field === 'roe' ? ct.patrimonio : ct.activo;
+  if (typeof avg !== 'number') return 'desconocida';
+  return avg !== close ? 'promedio' : 'cierre';
+}
+
 function computeKPIs(primary: PeriodView, comparative: PeriodView | null): KPIRow[] {
-  const kpiOf = (label: string, currVal: number, prevVal: number, opts: { isPct?: boolean; isMoney?: boolean }): KPIRow => {
-    const delta = currVal - prevVal;
-    const deltaPct = prevVal !== 0 ? delta / Math.abs(prevVal) : 0;
+  const kpiOf = (
+    label: string,
+    currVal: number | null,
+    prevVal: number | null,
+    opts: { isPct?: boolean; isMoney?: boolean; comparable?: boolean },
+  ): KPIRow => {
+    const comparable = opts.comparable ?? true;
+    const delta = comparable && currVal !== null && prevVal !== null ? currVal - prevVal : null;
+    const deltaPct =
+      delta !== null && prevVal !== null && prevVal !== 0 ? delta / Math.abs(prevVal) : null;
     return { label, curr: currVal, prev: prevVal, delta, deltaPct, isPct: !!opts.isPct, isMoney: !!opts.isMoney };
   };
 
   const p = primary.summary;
-  const c = comparative?.summary ?? {
-    totalAssets: 0, totalLiabilities: 0, totalEquity: 0, totalRevenue: 0,
-    totalExpenses: 0, totalCosts: 0, totalProduction: 0, netIncome: 0,
-    equationBalance: 0, equationBalanced: true,
-  };
+  const c = comparative?.summary ?? null;
+  // ingesta-09: un comparativo de saldos de apertura no tiene P&G del periodo
+  // anterior; sus cifras de resultados son N/D (no $0) y no hay variación.
+  const pygNdC = comparative?.saldosDeApertura === true;
+  const openingNote = pygNdC && comparative
+    ? `△ ${comparative.period}: saldos de apertura — sin resultados del periodo anterior`
+    : undefined;
+
+  // "Ingresos" = ingresos operacionales netos (41 − 4175), nunca la Σ de la
+  // clase 4 (ratios-kpis-04). El margen neto usa los ingresos NETOS de
+  // devoluciones, misma base que `controlTotals.margenNeto`.
+  const revP = revenueBreakdown(primary);
+  const revC = comparative && !pygNdC ? revenueBreakdown(comparative) : null;
 
   const margenNetoP = ratioFromControlTotals(
     primary, (ct) => ct.margenNeto,
-    () => (p.totalRevenue !== 0 ? p.netIncome / p.totalRevenue : 0), true,
+    () => (revP.netosTotales === null ? null : safeDiv(p.netIncome, revP.netosTotales)), true,
   );
-  const margenNetoC = ratioFromControlTotals(
-    comparative, (ct) => ct.margenNeto,
-    () => (c.totalRevenue !== 0 ? c.netIncome / c.totalRevenue : 0), true,
-  );
+  const margenNetoC = comparative
+    ? ratioFromControlTotals(
+        comparative, (ct) => ct.margenNeto,
+        () => (revC?.netosTotales == null || !c ? null : safeDiv(c.netIncome, revC.netosTotales)), true,
+      )
+    : null;
 
   const endeudamientoP = ratioFromControlTotals(
     primary, (ct) => ct.endeudamientoTotal,
-    () => (p.totalAssets !== 0 ? p.totalLiabilities / p.totalAssets : 0), true,
+    () => safeDiv(p.totalLiabilities, p.totalAssets), true,
   );
-  const endeudamientoC = ratioFromControlTotals(
-    comparative, (ct) => ct.endeudamientoTotal,
-    () => (c.totalAssets !== 0 ? c.totalLiabilities / c.totalAssets : 0), true,
-  );
+  const endeudamientoC = comparative && c
+    ? ratioFromControlTotals(
+        comparative, (ct) => ct.endeudamientoTotal,
+        () => safeDiv(c.totalLiabilities, c.totalAssets), true,
+      )
+    : null;
 
   const roaP = ratioFromControlTotals(
     primary, (ct) => ct.roa,
-    () => (p.totalAssets !== 0 ? p.netIncome / p.totalAssets : 0), true,
+    () => safeDiv(p.netIncome, p.totalAssets), true,
   );
-  const roaC = ratioFromControlTotals(
-    comparative, (ct) => ct.roa,
-    () => (c.totalAssets !== 0 ? c.netIncome / c.totalAssets : 0), true,
-  );
+  const roaC = comparative && c && !pygNdC
+    ? ratioFromControlTotals(comparative, (ct) => ct.roa, () => safeDiv(c.netIncome, c.totalAssets), true)
+    : null;
 
   // ROE: `controlTotals.roe` usa patrimonio PROMEDIO. Recalcularlo aquí sobre
   // el patrimonio de cierre imprimía en el .xlsx un ROE distinto al del HTML y
   // al del PDF para el mismo informe.
   const roeP = ratioFromControlTotals(
     primary, (ct) => ct.roe,
-    () => (p.totalEquity !== 0 ? p.netIncome / p.totalEquity : 0), true,
+    () => safeDiv(p.netIncome, p.totalEquity), true,
   );
-  const roeC = ratioFromControlTotals(
-    comparative, (ct) => ct.roe,
-    () => (c.totalEquity !== 0 ? c.netIncome / c.totalEquity : 0), true,
-  );
+  const roeC = comparative && c && !pygNdC
+    ? ratioFromControlTotals(comparative, (ct) => ct.roe, () => safeDiv(c.netIncome, c.totalEquity), true)
+    : null;
+
+  // Rótulo de la base (△) y comparabilidad: el periodo más antiguo no tiene
+  // comparativo propio, así que su ROE/ROA es sobre saldo de cierre; restarlo
+  // de un ROE sobre promedio mezcla bases (reportes-export-12).
+  const basisNote = (field: 'roe' | 'roa') => {
+    const bp = ratioBasis(primary, field);
+    const bc = comparative ? ratioBasis(comparative, field) : bp;
+    const noun = field === 'roe' ? 'patrimonio' : 'activo';
+    const describe = (b: typeof bp) => (b === 'cierre' ? `${noun} de cierre` : `${noun} promedio`);
+    if (comparative && bp !== bc && bp !== 'desconocida' && bc !== 'desconocida') {
+      return {
+        note: `△ Bases distintas: ${comparative.period} sobre ${describe(bc)}, ${primary.period} sobre ${describe(bp)}; variación no calculada`,
+        comparable: false,
+      };
+    }
+    return {
+      note: bp === 'cierre' ? `△ Calculado sobre ${noun} de cierre` : undefined,
+      comparable: true,
+    };
+  };
+  const roeMeta = basisNote('roe');
+  const roaMeta = basisNote('roa');
+  // ROE N/D por base no interpretable (patrimonio promedio ≤ 0): la nota es el
+  // motivo que publicó el preprocesador, no la base de un cálculo que no se
+  // hizo (ratios-kpis-07). Mismo texto que la tarjeta del PDF.
+  const ndMotivo = (view: PeriodView | null) => view?.controlTotals?.kpiNdMotivos?.roe ?? null;
+  const roeNdNote =
+    roeP === null && ndMotivo(primary)
+      ? ndMotivo(primary)!
+      : comparative && roeC === null && ndMotivo(comparative)
+        ? `${comparative.period}: ${ndMotivo(comparative)}`
+        : null;
 
   return [
-    kpiOf('Total Activo', p.totalAssets, c.totalAssets, { isMoney: true }),
-    kpiOf('Total Pasivo', p.totalLiabilities, c.totalLiabilities, { isMoney: true }),
-    kpiOf('Total Patrimonio', p.totalEquity, c.totalEquity, { isMoney: true }),
-    kpiOf('Total Ingresos', p.totalRevenue, c.totalRevenue, { isMoney: true }),
-    kpiOf('Utilidad Neta', p.netIncome, c.netIncome, { isMoney: true }),
-    kpiOf('Margen Neto', margenNetoP, margenNetoC, { isPct: true }),
+    kpiOf('Total Activo', p.totalAssets, c?.totalAssets ?? null, { isMoney: true }),
+    kpiOf('Total Pasivo', p.totalLiabilities, c?.totalLiabilities ?? null, { isMoney: true }),
+    kpiOf('Total Patrimonio', p.totalEquity, c?.totalEquity ?? null, { isMoney: true }),
+    {
+      ...kpiOf('Ingresos operacionales netos', revP.operacionalesNetos, revC?.operacionalesNetos ?? null, { isMoney: true }),
+      note: openingNote,
+    },
+    {
+      ...kpiOf('Utilidad Neta', p.netIncome, pygNdC ? null : c?.netIncome ?? null, { isMoney: true }),
+      note: openingNote,
+    },
+    kpiOf('Margen Neto', margenNetoP, pygNdC ? null : margenNetoC, { isPct: true }),
     kpiOf('Endeudamiento', endeudamientoP, endeudamientoC, { isPct: true }),
-    kpiOf('ROA', roaP, roaC, { isPct: true }),
-    kpiOf('ROE', roeP, roeC, { isPct: true }),
+    { ...kpiOf('ROA', roaP, roaC, { isPct: true, comparable: roaMeta.comparable }), note: roaMeta.note },
+    { ...kpiOf('ROE', roeP, roeC, { isPct: true, comparable: roeMeta.comparable }), note: roeNdNote ?? roeMeta.note },
   ];
 }
 
@@ -1242,6 +1598,17 @@ function addValidationSheet(wb: ExcelJS.Workbook, layout: PeriodLayout): void {
       ws.getRow(row).getCell(1).value = `DISCREPANCIAS DETECTADAS — ${p.period}`;
       ws.getRow(row).getCell(1).font = { name: FONT_MAIN, bold: true, size: 11, color: { argb: COLORS.red } };
       row++;
+      // reportes-export-21: estas discrepancias se miden sobre el balance de
+      // prueba recibido, ANTES del Curator; listarlas junto a totales "OK" sin
+      // decirlo confundía al cliente. Se declara la base y el estado posterior.
+      ws.getRow(row).getCell(1).value =
+        'Medidas sobre el balance de prueba recibido, antes de los ajustes del Curator (cierre virtual del ' +
+        'resultado, reclasificaciones). Estado posterior al Curator, base de los estados financieros: ' +
+        (p.summary.equationBalanced
+          ? 'ecuación patrimonial A = P + C cuadra.'
+          : `ecuación patrimonial descuadrada por ${fmtCopPesos(p.summary.equationBalance)}.`);
+      ws.getRow(row).getCell(1).font = { name: FONT_MAIN, size: 9, italic: true };
+      row++;
 
       for (const d of p.discrepancies) {
         ws.getRow(row).getCell(1).value = d.location;
@@ -1278,10 +1645,14 @@ function addValidationSheet(wb: ExcelJS.Workbook, layout: PeriodLayout): void {
 // Tab 5: Full Report Summary
 // ---------------------------------------------------------------------------
 
+/** Encabezado de Parte I–III del consolidado (`# PARTE I: …`). */
+const CONSOLIDATED_PART_HEADING_RE = /^#\s*PART(?:E)?\s+I{1,3}\b/i;
+
 function addSummarySheet(
   wb: ExcelJS.Workbook,
   report: FinancialReport,
   layout: PeriodLayout | null,
+  language: 'es' | 'en' = 'es',
 ): void {
   const ws = wb.addWorksheet('Resumen', { properties: { tabColor: { argb: COLORS.gold } } });
 
@@ -1295,8 +1666,19 @@ function addSummarySheet(
     row += 2;
   }
 
+  // procedencia-R2-01: el aviso de narrativa IA no auditada va debajo de
+  // cada encabezado de Parte I–III —junto a su prosa (notas, acta, análisis),
+  // como en el PDF— y en el idioma del informe; antes era un único renglón en
+  // español al inicio de la hoja, por encima del sello de procedencia.
+  // Un consolidado sin encabezados de Parte (histórico) conserva el aviso al
+  // inicio: toda su prosa queda cubierta.
   const content = report.consolidatedReport;
   const lines = content.split('\n');
+  const partHeadings = lines.some((l) => CONSOLIDATED_PART_HEADING_RE.test(l.trim()));
+  if (!partHeadings) {
+    row = addNarrativeDisclaimer(ws, row, language);
+    row++;
+  }
 
   for (const line of lines) {
     if (line.trim()) {
@@ -1309,6 +1691,7 @@ function addSummarySheet(
         size: isHeader ? 11 : 9,
       };
       row++;
+      if (CONSOLIDATED_PART_HEADING_RE.test(line.trim())) row = addNarrativeDisclaimer(ws, row, language);
     }
   }
 
@@ -1326,16 +1709,25 @@ function addComparativeSummaryBlock(
   ws.getRow(row).getCell(1).font = { name: FONT_MAIN, bold: true, size: 13, color: { argb: COLORS.gold } };
   row += 2;
 
-  const lines: Array<[string, number, number]> = [
+  // "Ingresos" = ingresos operacionales netos (41 − 4175), no la Σ de la
+  // clase 4 (ratios-kpis-04). Sin detalle PUC → N/D.
+  // ingesta-09: comparativo de saldos de apertura → resultados N/D.
+  const pygNdC = comparative.saldosDeApertura === true;
+  const lines: Array<[string, number | null, number | null]> = [
     ['Total Activo', comparative.summary.totalAssets, primary.summary.totalAssets],
     ['Total Pasivo', comparative.summary.totalLiabilities, primary.summary.totalLiabilities],
     ['Total Patrimonio', comparative.summary.totalEquity, primary.summary.totalEquity],
-    ['Ingresos', comparative.summary.totalRevenue, primary.summary.totalRevenue],
-    ['Utilidad Neta', comparative.summary.netIncome, primary.summary.netIncome],
+    [
+      'Ingresos operacionales netos',
+      pygNdC ? null : revenueBreakdown(comparative).operacionalesNetos,
+      revenueBreakdown(primary).operacionalesNetos,
+    ],
+    ['Utilidad Neta', pygNdC ? null : comparative.summary.netIncome, primary.summary.netIncome],
   ];
 
   // Header
-  const headers = ['Concepto', comparative.period, primary.period, 'Variacion', '% Var'];
+  // Periodo actual | comparativo (reportes-export-20).
+  const headers = ['Concepto', primary.period, comparative.period, 'Variacion', '% Var'];
   const hRow = ws.getRow(row);
   headers.forEach((h, i) => {
     const cell = hRow.getCell(i + 1);
@@ -1349,14 +1741,15 @@ function addComparativeSummaryBlock(
   for (const [label, prev, curr] of lines) {
     const r = ws.getRow(row);
     r.getCell(1).value = label;
-    r.getCell(2).value = prev;
-    r.getCell(2).numFmt = NUM_FMT_COP_INT;
-    r.getCell(3).value = curr;
-    r.getCell(3).numFmt = NUM_FMT_COP_INT;
-    r.getCell(4).value = curr - prev;
-    r.getCell(4).numFmt = NUM_FMT_COP_INT;
-    r.getCell(5).value = prev !== 0 ? (curr - prev) / Math.abs(prev) : 0;
-    r.getCell(5).numFmt = NUM_FMT_PCT;
+    const delta = prev !== null && curr !== null ? curr - prev : null;
+    writeKpiCell(r.getCell(2), curr, NUM_FMT_COP_INT);
+    writeKpiCell(r.getCell(3), prev, NUM_FMT_COP_INT);
+    writeKpiCell(r.getCell(4), delta, NUM_FMT_COP_INT);
+    writeKpiCell(
+      r.getCell(5),
+      delta !== null && prev !== null && prev !== 0 ? delta / Math.abs(prev) : null,
+      NUM_FMT_PCT,
+    );
     if (row % 2 === 0) {
       for (let i = 1; i <= 5; i++) {
         r.getCell(i).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.lightGray } };
@@ -1371,7 +1764,75 @@ function addComparativeSummaryBlock(
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-function addSheetHeader(ws: ExcelJS.Worksheet, title: string, report: FinancialReport): void {
+/**
+ * Identidad de la empresa para cabeceras: la del JSON validado (misma fuente
+ * que las columnas y las hojas EFE/ECP). Antes la cabecera usaba
+ * `report.company` y las columnas `json.company`, así que un informe podía
+ * decir "Periodo: 2024" arriba y "Saldo 2025" en la columna (reportes-export-10).
+ */
+function reportIdentity(report: FinancialReport): { name: string; nit: string; fiscalPeriod: string } {
+  const c = report.niifAnalysis?.json?.company;
+  if (c) return { name: c.name, nit: c.nit, fiscalPeriod: c.fiscalPeriod };
+  return {
+    name: report.company.name,
+    nit: report.company.nit,
+    fiscalPeriod: report.company.fiscalPeriod,
+  };
+}
+
+/**
+ * Fecha de corte / periodo cubierto de los estados (NIIF para las PYMES 3.23),
+ * derivada del tipo de periodo que el preprocesador infirió — nunca supuesta.
+ */
+/**
+ * JSON NIIF con los rótulos deterministas que imprimen todas las superficies
+ * (auditoría 2026-09-24, e2e-niif-09): grupos PUC con el rótulo del catálogo,
+ * filas del ECP con el periodo del informe y el calificativo del resultado
+ * según su signo. Misma función que el PDF y el orquestador.
+ */
+function presentableJson(
+  report: FinancialReport,
+  layout: PeriodLayout | null,
+  language: 'es' | 'en' = 'es',
+): NiifReportJson | undefined {
+  const json = report.niifAnalysis?.json;
+  if (!json) return undefined;
+  const tipos = resolvePeriodoTipos(
+    json.company.fiscalPeriod,
+    json.company.comparativePeriod,
+    layout?.primary ?? null,
+    layout?.comparative ?? null,
+  );
+  return normalizeNiifStatementLabels(json, { primaryPeriodoTipo: tipos.primaryPeriodoTipo, language }).json;
+}
+
+function statementDate(
+  kind: 'position' | 'period',
+  report: FinancialReport,
+  layout: PeriodLayout | null,
+  /** El estado imprime el comparativo; si no, el rótulo no lo nombra. */
+  comparativeShown = true,
+): string {
+  const json = report.niifAnalysis?.json;
+  const fiscalPeriod = json?.company.fiscalPeriod ?? report.company.fiscalPeriod;
+  const comparativePeriod = comparativeShown
+    ? json?.company.comparativePeriod ?? layout?.comparative?.period ?? report.company.comparativePeriod ?? null
+    : null;
+  const tipos = resolvePeriodoTipos(
+    fiscalPeriod,
+    comparativePeriod,
+    layout?.primary ?? null,
+    layout?.comparative ?? null,
+  );
+  return statementDateLabel(kind, { fiscalPeriod, comparativePeriod, ...tipos });
+}
+
+function addSheetHeader(
+  ws: ExcelJS.Worksheet,
+  title: string,
+  report: FinancialReport,
+  dateLine?: string,
+): void {
   // Gold bar effect
   const r1 = ws.getRow(1);
   r1.getCell(1).value = '1+1 | Reporte Financiero Elite';
@@ -1381,16 +1842,52 @@ function addSheetHeader(ws: ExcelJS.Worksheet, title: string, report: FinancialR
   r2.getCell(1).value = title;
   r2.getCell(1).font = { name: FONT_MAIN, bold: true, size: 14, color: { argb: COLORS.darkNavy } };
 
+  const id = reportIdentity(report);
   const r3 = ws.getRow(3);
-  r3.getCell(1).value = `${report.company.name} | NIT: ${report.company.nit} | Periodo: ${report.company.fiscalPeriod}`;
+  r3.getCell(1).value = `${id.name} | NIT: ${id.nit} | Periodo: ${id.fiscalPeriod}`;
   r3.getCell(1).font = { name: FONT_MAIN, size: 10, color: { argb: COLORS.textMuted } };
 
-  ws.getRow(4).getCell(1).value = '';
+  const r4 = ws.getRow(4);
+  r4.getCell(1).value = dateLine ? `${dateLine} · ${CURRENCY_NOTE}` : '';
+  r4.getCell(1).font = { name: FONT_MAIN, size: 9, italic: true, color: { argb: COLORS.textMuted } };
+}
+
+/** Notas estructuradas del JSON validado debajo del estado (reportes-export-11). */
+function addStatementNotes(
+  ws: ExcelJS.Worksheet,
+  startRow: number,
+  notes: StatementNoteJson[] | undefined,
+  language: 'es' | 'en' = 'es',
+): number {
+  const lines = (notes ?? []).map(formatStatementNote).filter((n) => n.length > 0);
+  if (lines.length === 0) return startRow;
+  let row = startRow + 1;
+  ws.getRow(row).getCell(2).value = 'Notas';
+  ws.getRow(row).getCell(2).font = { name: FONT_MAIN, bold: true, size: 9 };
+  row++;
+  // e2e-niif-10: prosa del LLM cuyas cifras no se anclan — mismo aviso que el PDF.
+  ws.getRow(row).getCell(2).value = narrativeDisclaimer(language);
+  ws.getRow(row).getCell(2).font = { name: FONT_MAIN, size: 8, italic: true, color: { argb: COLORS.orange } };
+  row++;
+  for (const n of lines) {
+    ws.getRow(row).getCell(2).value = n;
+    ws.getRow(row).getCell(2).font = { name: FONT_MAIN, size: 8, italic: true };
+    row++;
+  }
+  return row;
+}
+
+/** Rótulo visible sobre la narrativa del LLM (Resumen / KPIs narrativos). */
+function addNarrativeDisclaimer(ws: ExcelJS.Worksheet, row: number, language: 'es' | 'en' = 'es'): number {
+  const r = ws.getRow(row);
+  r.getCell(1).value = narrativeDisclaimer(language);
+  r.getCell(1).font = { name: FONT_MAIN, size: 9, italic: true, color: { argb: COLORS.orange } };
+  return row + 1;
 }
 
 /**
  * Encabezado de columnas de un estado financiero. En multiperiodo:
- *   col 1: Codigo | col 2: Cuenta | col 3: <comparative> | col 4: <primary> | col 5: Var $ | col 6: Var %
+ *   col 1: Codigo | col 2: Cuenta | col 3: <primary> | col 4: <comparative> | col 5: Var $ | col 6: Var %
  * En periodo unico:
  *   col 1: Codigo | col 2: Cuenta | col 3: Saldo
  */
@@ -1405,8 +1902,8 @@ function addStatementColumnHeader(
   r.getCell(1).value = 'Codigo';
   r.getCell(2).value = 'Cuenta';
   if (comparativePeriod) {
-    r.getCell(3).value = `Saldo ${comparativePeriod}`;
-    r.getCell(4).value = `Saldo ${primaryPeriod}`;
+    r.getCell(3).value = `Saldo ${primaryPeriod}`;
+    r.getCell(4).value = `Saldo ${comparativePeriod}`;
     r.getCell(5).value = 'Variacion $';
     r.getCell(6).value = 'Variacion %';
   } else {
@@ -1424,6 +1921,14 @@ function addStatementColumnHeader(
     r.getCell(7).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.orange } };
     r.getCell(7).alignment = { horizontal: 'center' };
   }
+  return row + 1;
+}
+
+/** Leyenda del P&G comparativo N/D cuando el comparativo es un saldo de apertura (ingesta-09). */
+function addOpeningPygLegend(ws: ExcelJS.Worksheet, row: number, comparativePeriod: string): number {
+  const r = ws.getRow(row);
+  r.getCell(2).value = openingBalancesPygLegend(comparativePeriod);
+  r.getCell(2).font = { name: FONT_MAIN, size: 8, italic: true, color: { argb: COLORS.orange } };
   return row + 1;
 }
 
@@ -1461,10 +1966,10 @@ function addClassRows(
   primary: PeriodView,
   comparative: PeriodView | null,
   classCode: number,
-  opts: { reclassifications?: Reclassification[] } = {},
+  opts: { reclassifications?: Reclassification[]; comparativeNd?: boolean } = {},
 ): number {
   let row = startRow;
-  const { reclassifications } = opts;
+  const { reclassifications, comparativeNd } = opts;
   const primaryCl = findClass(primary.classes, classCode);
   const comparativeCl = comparative ? findClass(comparative.classes, classCode) : undefined;
 
@@ -1482,7 +1987,9 @@ function addClassRows(
     const merged = unionAccounts(primaryCl, comparativeCl);
     for (const meta of merged) {
       const currBal = primaryCl ? findAccountBalance([primaryCl], meta.code) ?? 0 : 0;
-      const prevBal = comparativeCl ? findAccountBalance([comparativeCl], meta.code) ?? 0 : 0;
+      const prevBal = comparativeNd
+        ? null
+        : comparativeCl ? findAccountBalance([comparativeCl], meta.code) ?? 0 : 0;
       row = addAccountRowMulti(ws, row, meta.code, meta.name, prevBal, currBal, footnoteMap.get(meta.code));
     }
   } else if (primaryCl) {
@@ -1530,14 +2037,15 @@ function addAccountRowSingle(
 
 /**
  * Fila de cuenta con layout multiperiodo:
- *   Codigo | Cuenta | Saldo {prev} | Saldo {curr} | Variacion $ | Variacion % | Nota Reclasificación?
+ *   Codigo | Cuenta | Saldo {curr} | Saldo {prev} | Variacion $ | Variacion % | Nota Reclasificación?
  */
 function addAccountRowMulti(
   ws: ExcelJS.Worksheet,
   row: number,
   code: string,
   name: string,
-  prevBalance: number,
+  /** `null` = N/D (P&G de un comparativo de saldos de apertura): sin variación. */
+  prevBalance: number | null,
   currBalance: number,
   footnote?: string,
 ): number {
@@ -1546,27 +2054,22 @@ function addAccountRowMulti(
   r.getCell(1).font = { name: FONT_MAIN, size: 9, color: { argb: COLORS.textMuted } };
   r.getCell(2).value = name;
   r.getCell(2).font = { name: FONT_MAIN, size: 9 };
-  r.getCell(3).value = prevBalance;
+  r.getCell(3).value = currBalance;
   r.getCell(3).numFmt = NUM_FMT_COP;
-  r.getCell(3).font = { name: FONT_MAIN, size: 9, color: { argb: COLORS.textMuted } };
-  r.getCell(4).value = currBalance;
+  r.getCell(3).font = { name: FONT_MAIN, size: 9 };
+  if (prevBalance === null) {
+    writeKpiCell(r.getCell(4), null, NUM_FMT_COP);
+    r.getCell(4).font = { name: FONT_MAIN, size: 9, color: { argb: COLORS.textMuted } };
+    if (footnote) {
+      r.getCell(7).value = footnote;
+      r.getCell(7).font = { name: FONT_MAIN, size: 8, italic: true, color: { argb: COLORS.orange } };
+    }
+    return row + 1;
+  }
+  r.getCell(4).value = prevBalance;
   r.getCell(4).numFmt = NUM_FMT_COP;
-  r.getCell(4).font = { name: FONT_MAIN, size: 9 };
-  const delta = currBalance - prevBalance;
-  r.getCell(5).value = delta;
-  r.getCell(5).numFmt = NUM_FMT_COP;
-  r.getCell(5).font = {
-    name: FONT_MAIN,
-    size: 9,
-    color: { argb: delta >= 0 ? COLORS.green : COLORS.red },
-  };
-  r.getCell(6).value = prevBalance !== 0 ? delta / Math.abs(prevBalance) : 0;
-  r.getCell(6).numFmt = NUM_FMT_PCT;
-  r.getCell(6).font = {
-    name: FONT_MAIN,
-    size: 9,
-    color: { argb: delta >= 0 ? COLORS.green : COLORS.red },
-  };
+  r.getCell(4).font = { name: FONT_MAIN, size: 9, color: { argb: COLORS.textMuted } };
+  writeVariationCells(r, currBalance, prevBalance, { size: 9, bold: false });
   if (footnote) {
     r.getCell(7).value = footnote;
     r.getCell(7).font = { name: FONT_MAIN, size: 8, italic: true, color: { argb: COLORS.orange } };
@@ -1595,26 +2098,29 @@ function addStatementTotalRow(
   r.getCell(2).value = label;
   r.getCell(2).font = { name: FONT_MAIN, bold: true, size: 10, color: { argb: COLORS.darkNavy } };
 
+  // Cifra sin base (NaN) → "N/D" como texto, nunca 0.
+  if (!Number.isFinite(primaryAmount) || (comparativeAmount !== undefined && !Number.isFinite(comparativeAmount))) {
+    const put = (col: number, v: number | undefined) => {
+      if (v === undefined) return;
+      writeKpiCell(r.getCell(col), Number.isFinite(v) ? v : null, NUM_FMT_COP);
+    };
+    if (isMultiPeriod && comparativeAmount !== undefined) {
+      put(3, primaryAmount);
+      put(4, comparativeAmount);
+    } else {
+      put(3, primaryAmount);
+    }
+    return row + 1;
+  }
+
   if (isMultiPeriod && comparativeAmount !== undefined) {
-    r.getCell(3).value = comparativeAmount;
+    r.getCell(3).value = primaryAmount;
     r.getCell(3).numFmt = NUM_FMT_COP;
-    r.getCell(3).font = { name: FONT_MAIN, bold: true, size: 10, color: { argb: COLORS.textMuted } };
-    r.getCell(4).value = primaryAmount;
+    r.getCell(3).font = { name: FONT_MAIN, bold: true, size: 10 };
+    r.getCell(4).value = comparativeAmount;
     r.getCell(4).numFmt = NUM_FMT_COP;
-    r.getCell(4).font = { name: FONT_MAIN, bold: true, size: 10 };
-    const delta = primaryAmount - comparativeAmount;
-    r.getCell(5).value = delta;
-    r.getCell(5).numFmt = NUM_FMT_COP;
-    r.getCell(5).font = {
-      name: FONT_MAIN, bold: true, size: 10,
-      color: { argb: delta >= 0 ? COLORS.green : COLORS.red },
-    };
-    r.getCell(6).value = comparativeAmount !== 0 ? delta / Math.abs(comparativeAmount) : 0;
-    r.getCell(6).numFmt = NUM_FMT_PCT;
-    r.getCell(6).font = {
-      name: FONT_MAIN, bold: true, size: 10,
-      color: { argb: delta >= 0 ? COLORS.green : COLORS.red },
-    };
+    r.getCell(4).font = { name: FONT_MAIN, bold: true, size: 10, color: { argb: COLORS.textMuted } };
+    writeVariationCells(r, primaryAmount, comparativeAmount, { size: 10, bold: true });
 
     for (let i = 2; i <= 6; i++) {
       r.getCell(i).border = { top: { style: 'thin', color: { argb: COLORS.darkNavy } } };

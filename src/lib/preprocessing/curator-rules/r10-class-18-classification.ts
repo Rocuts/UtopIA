@@ -20,6 +20,8 @@
 // en `snapshot.findings` y emite findings cualitativos.
 // ---------------------------------------------------------------------------
 
+import { filtrarCreditoRenta } from '@/lib/accounting/renta-credit';
+
 import type { PUCClass, PeriodSnapshot } from '../trial-balance';
 import type { Class18ClassificationAudit, CuratorFinding } from './types';
 
@@ -27,6 +29,11 @@ import type { Class18ClassificationAudit, CuratorFinding } from './types';
 const TAX_CAUSATION_MATERIALITY = 1_000_000; // $1M COP
 /** Tolerancia para considerar grupo 24 ≈ 0. */
 const TAX_PAYABLE_TOLERANCE = 1_000; // $1K COP
+/**
+ * Proporción del gasto de renta que los anticipos/retenciones de renta deben
+ * cubrir para explicar un pasivo 2404 en cero por compensación.
+ */
+const RENTA_CREDIT_COVERAGE = 0.5;
 
 export interface R10Result {
   audit: Class18ClassificationAudit;
@@ -65,12 +72,30 @@ export function runR10(snapshot: PeriodSnapshot): R10Result {
   const taxPayable = taxPayableAccounts.reduce((s, a) => s + a.balance, 0);
 
   // -------------------------------------------------------------------------
+  // 3.b Anticipos y retenciones de RENTA (1355/1805). Auditoría 2026-09
+  //     (niif-preproceso-18): con la liquidación privada, el pasivo 2404 puede
+  //     quedar en 0 porque las retenciones y anticipos superan o igualan el
+  //     impuesto (Art. 850 E.T.; compensación NIC 12 ¶71). Sólo cuentan los
+  //     créditos de renta de la regla ÚNICA (`@/lib/accounting/renta-credit`,
+  //     re-auditoría NM-06): 135505/135515 salvo nombre de otro tributo;
+  //     135595 y 1805 sólo con nombre de renta (incluida la autorretención).
+  //     135510/135517/135518/135520… (ICA, IVA, sobrantes) no.
+  // -------------------------------------------------------------------------
+  const rentaCredits = filtrarCreditoRenta(class1?.accounts ?? []).reduce(
+    (s, a) => s + a.balance,
+    0,
+  );
+  const compensacionExplicada =
+    taxExpense > 0 && rentaCredits >= taxExpense * RENTA_CREDIT_COVERAGE;
+
+  // -------------------------------------------------------------------------
   // 4. Banderas determinísticas.
   // -------------------------------------------------------------------------
   const cuenta18UsadaComoGasto = class18Balance < -TAX_PAYABLE_TOLERANCE;
-  const missingTaxCausation =
+  const pasivoAusente =
     taxExpense > TAX_CAUSATION_MATERIALITY &&
     Math.abs(taxPayable) <= TAX_PAYABLE_TOLERANCE;
+  const missingTaxCausation = pasivoAusente && !compensacionExplicada;
 
   const audit: Class18ClassificationAudit = {
     class18BalanceCop: class18Balance,
@@ -131,9 +156,24 @@ export function runR10(snapshot: PeriodSnapshot): R10Result {
         'la renta y complementarios por pagar). Si la entidad pagó directamente sin causar, ' +
         'reverter el cargo a caja y reclasificar.',
       impact:
-        'El informe NO es emitible mientras este flag esté activo: la utilidad neta ' +
-        'reportada incluye un gasto sin contraparte de pasivo, violando la ecuación ' +
-        'patrimonial Activo = Pasivo + Patrimonio.',
+        'El informe NO es emitible mientras este flag esté activo: el gasto de renta del ' +
+        'periodo no tiene contrapartida verificable (pasivo 2404 ni anticipos/retenciones de ' +
+        'renta que lo compensen).',
+      period: snapshot.period,
+    });
+  } else if (pasivoAusente && compensacionExplicada) {
+    findings.push({
+      code: 'CUR-R10',
+      severity: 'informativo',
+      title: 'Impuesto de renta causado y compensado con anticipos/retenciones',
+      description:
+        `Grupo 54xx reporta $${formatCOP(taxExpense)} de gasto de renta y el grupo 24xx está en ` +
+        `$${formatCOP(taxPayable)}; los anticipos y retenciones de renta (1355/1805) suman ` +
+        `$${formatCOP(rentaCredits)}, lo que explica la compensación del pasivo.`,
+      normReference: 'Art. 850 E.T. + NIC 12 párr. 71 (compensación de activos y pasivos corrientes)',
+      recommendation:
+        'Conservar el formulario 110 (liquidación privada) como soporte de la compensación.',
+      impact: 'Informativo: no bloquea la emisión.',
       period: snapshot.period,
     });
   }

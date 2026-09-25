@@ -13,10 +13,15 @@ import { TrendingUp, TrendingDown, BarChart3, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatPesosInteger } from '@/lib/format/cop';
 import { PymeSubpageShell } from '@/components/workspace/pyme/PymeSubpageShell';
+import { useLanguage } from '@/context/LanguageContext';
+import type { Dictionary } from '@/lib/i18n/dictionaries';
+
+/** Textos de la vista (es/en), ICU-08. */
+export type HistoricoLabels = Dictionary['pyme']['historico'];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface MonthData {
+export interface MonthData {
   label: string;
   ingresos: number;
   egresos: number;
@@ -28,7 +33,7 @@ interface MonthData {
 interface SummaryResponse {
   ok: boolean;
   summary?: {
-    totals: { ingresos: number; egresos: number; margen: number; margenPct: number };
+    totals: { ingresos: number; egresos: number; margen: number; margenPct: number | null };
   };
 }
 
@@ -36,7 +41,7 @@ interface SummaryResponse {
 
 const COP = (n: number) => `$${formatPesosInteger(n)}`;
 
-function buildMonthSlots(count = 6): Array<{ year: number; month: number; label: string }> {
+function buildMonthSlots(count = 6, locale = 'es-CO'): Array<{ year: number; month: number; label: string }> {
   const result = [];
   const now = new Date();
   for (let i = count - 1; i >= 0; i--) {
@@ -44,7 +49,7 @@ function buildMonthSlots(count = 6): Array<{ year: number; month: number; label:
     result.push({
       year: d.getFullYear(),
       month: d.getMonth() + 1,
-      label: d.toLocaleDateString('es-CO', { month: 'short', year: '2-digit' }),
+      label: d.toLocaleDateString(locale, { month: 'short', year: '2-digit' }),
     });
   }
   return result;
@@ -68,8 +73,10 @@ async function fetchMonthSummary(year: number, month: number): Promise<{ ingreso
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function MiHistoricoView() {
+  const { t } = useLanguage();
+  const labels = t.pyme.historico;
   const [months, setMonths] = useState<MonthData[]>(() =>
-    buildMonthSlots(6).map((s) => ({
+    buildMonthSlots(6, labels.locale).map((s) => ({
       label: s.label,
       ingresos: 0,
       egresos: 0,
@@ -81,7 +88,7 @@ export function MiHistoricoView() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    const slots = buildMonthSlots(6);
+    const slots = buildMonthSlots(6, labels.locale);
     // Mark each slot loading asynchronously to avoid synchronous setState in effect
     const aborted = { current: false };
     slots.forEach(async (slot, idx) => {
@@ -102,7 +109,7 @@ export function MiHistoricoView() {
       });
     });
     return () => { aborted.current = true; };
-  }, [refreshKey]);
+  }, [refreshKey, labels.locale]);
 
   const maxVal = Math.max(...months.map((m) => Math.max(m.ingresos, m.egresos)), 1);
   const totalIngresos = months.reduce((s, m) => s + m.ingresos, 0);
@@ -113,13 +120,13 @@ export function MiHistoricoView() {
   return (
     <PymeSubpageShell>
       <h1 className="font-serif-elite text-3xl font-medium tracking-tight text-n-1000 mb-5">
-        Histórico
+        {labels.title}
       </h1>
       {/* KPI band */}
       <div className="grid grid-cols-3 gap-3 mb-6">
-        <KpiChip label="Ingresos 6 meses" value={COP(totalIngresos)} positive />
-        <KpiChip label="Egresos 6 meses" value={COP(totalEgresos)} positive={false} />
-        <KpiChip label="Margen acumulado" value={COP(totalMargen)} positive={totalMargen >= 0} />
+        <KpiChip label={labels.ingresos6m} value={COP(totalIngresos)} positive />
+        <KpiChip label={labels.egresos6m} value={COP(totalEgresos)} positive={false} />
+        <KpiChip label={labels.margenAcumulado} value={COP(totalMargen)} positive={totalMargen >= 0} />
       </div>
 
       {/* Bar chart */}
@@ -130,24 +137,24 @@ export function MiHistoricoView() {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5" style={{ color: '#357A28' }} strokeWidth={1.75} aria-hidden />
-            <span className="font-semibold text-n-1000 text-sm">Últimos 6 meses</span>
+            <span className="font-semibold text-n-1000 text-sm">{labels.ultimos6}</span>
           </div>
           <button
             type="button"
             onClick={() => setRefreshKey((k) => k + 1)}
             disabled={!allLoaded}
             className="inline-flex items-center gap-1 text-xs text-n-600 hover:text-n-1000 disabled:opacity-40 transition-colors"
-            aria-label="Actualizar"
+            aria-label={labels.actualizar}
           >
             <RefreshCw className={cn('h-3.5 w-3.5', !allLoaded && 'animate-spin')} strokeWidth={2} />
-            Actualizar
+            {labels.actualizar}
           </button>
         </div>
 
         {/* Legend */}
         <div className="flex gap-4 mb-4">
-          <LegendDot color="#357A28" label="Ingresos" />
-          <LegendDot color="#A83838" label="Egresos" />
+          <LegendDot color="#357A28" label={labels.ingresos} />
+          <LegendDot color="#A83838" label={labels.egresos} />
         </div>
 
         {/* Bars */}
@@ -159,13 +166,13 @@ export function MiHistoricoView() {
                   pct={maxVal > 0 ? m.ingresos / maxVal : 0}
                   color="#357A28"
                   loading={m.loading}
-                  title={`Ingresos ${m.label}: ${COP(m.ingresos)}`}
+                  title={`${labels.ingresos} ${m.label}: ${COP(m.ingresos)}`}
                 />
                 <Bar
                   pct={maxVal > 0 ? m.egresos / maxVal : 0}
                   color="#A83838"
                   loading={m.loading}
-                  title={`Egresos ${m.label}: ${COP(m.egresos)}`}
+                  title={`${labels.egresos} ${m.label}: ${COP(m.egresos)}`}
                 />
               </div>
               <span className="text-[10px] text-n-500 font-medium uppercase">{m.label}</span>
@@ -177,7 +184,7 @@ export function MiHistoricoView() {
       {/* Monthly detail list */}
       <div className="space-y-2">
         {months.map((m, i) => (
-          <MonthRow key={i} data={m} />
+          <MonthRow key={i} data={m} labels={labels} />
         ))}
       </div>
     </PymeSubpageShell>
@@ -218,7 +225,12 @@ function Bar({ pct, color, loading, title }: { pct: number; color: string; loadi
   );
 }
 
-function MonthRow({ data }: { data: MonthData }) {
+/**
+ * Fila del mes. El estado («Cargando…», «Sin datos») es texto que el usuario
+ * lee: text-n-600 (terciario legible), no text-n-400, que es nivel de
+ * superficie y cae por debajo de 2:1 en modo claro (CLAUDE.md, ICU-08).
+ */
+export function MonthRow({ data, labels }: { data: MonthData; labels: HistoricoLabels }) {
   const positive = data.margen >= 0;
   return (
     <div
@@ -232,9 +244,9 @@ function MonthRow({ data }: { data: MonthData }) {
         <span className="text-sm font-semibold text-n-1000 uppercase">{data.label}</span>
       </div>
       {data.loading ? (
-        <span className="text-xs text-n-400 animate-pulse">Cargando…</span>
+        <span className="text-xs text-n-600 animate-pulse">{labels.cargando}</span>
       ) : data.error ? (
-        <span className="text-xs text-n-400">Sin datos</span>
+        <span className="text-xs text-n-600">{labels.sinDatos}</span>
       ) : (
         <div className="flex gap-4 text-xs">
           <span className="text-[#357A28] font-medium num">{COP(data.ingresos)}</span>

@@ -10,7 +10,7 @@ status: vigente
 effectiveFrom: 2025-06-01
 lastVerified: 2026-05-02
 tags: [autorretencion, renta, dian, retenciones, 2025, 2026]
-relatedNorms: ["Ley 2277 de 2022", "Decreto 1625 de 2016", "ET Art. 365"]
+relatedNorms: ["Ley 2155 de 2021", "Ley 2277 de 2022", "Decreto 1625 de 2016", "ET Art. 365"]
 fetch_failed: false
 ---
 
@@ -18,7 +18,7 @@ fetch_failed: false
 
 ## Resumen ejecutivo
 
-El Decreto 572 del 28 de mayo de 2025 modifica las tarifas de autorretención de renta del impuesto sobre la renta de personas jurídicas y ajusta las bases mínimas para la práctica de retención en la fuente. Entró en vigor el **1 de junio de 2025** y aplica para todo el ejercicio gravable 2025 en adelante. Se enmarca dentro de las medidas para acercar el recaudo anticipado del impuesto al 35% efectivo dispuesto por la Ley 2277/2022 (Art. 240 ET).
+El Decreto 572 del 28 de mayo de 2025 modifica las tarifas de autorretención de renta del impuesto sobre la renta de personas jurídicas y ajusta las bases mínimas para la práctica de retención en la fuente. Entró en vigor el **1 de junio de 2025** y aplica para todo el ejercicio gravable 2025 en adelante. Se enmarca dentro de las medidas para acercar el recaudo anticipado al impuesto a cargo, liquidado con la tarifa general del 35 % del Art. 240 E.T. (fijada por el art. 7 de la Ley 2155 de 2021 a partir del año gravable 2022 y conservada por el art. 10 de la Ley 2277 de 2022).
 
 ## Cambios principales
 
@@ -32,11 +32,15 @@ Las tarifas se incrementan según código CIIU. Tarifas representativas:
 
 > Las tarifas exactas se publican en el Anexo del Decreto. El cliente debe consultar su CIIU principal y aplicar la tarifa correspondiente.
 
-### 2. Bases mínimas (Art. 2)
-Se mantienen las bases mínimas históricas en **UVT** (no en pesos):
-- Compras: 27 UVT (≈ $1.414.098 con UVT 2026 = $52.374)
-- Servicios generales: 4 UVT (≈ $209.496)
-- Honorarios: sin base mínima
+### 2. Bases mínimas (Arts. 2 y 6)
+El decreto **reduce** las bases mínimas en UVT (texto primario en `decreto_0572_2025.md`):
+- **Servicios**: no se practica retención cuando la cuantía individual es inferior a **2 UVT** (art. 2 → DUR 1625/2016 Art. 1.2.4.4.1; antes 4 UVT). 2 UVT ≈ $104.748 con UVT 2026.
+- **Compras y demás otros ingresos tributarios**: excluidos los pagos inferiores a **10 UVT** (art. 6 → literal i del Art. 1.2.4.9.1; antes 27 UVT). 10 UVT ≈ $523.740 con UVT 2026.
+- Honorarios: sin base mínima.
+
+Vigencia: desde el 01-jun-2025 (art. 9: primer día del mes siguiente a la publicación). Entre el 08-may y el 30-jun-2026 rigieron de nuevo las bases anteriores (4 / 27 UVT) por suspensión provisional del Consejo de Estado; las bases reducidas se restablecieron desde el 01-jul-2026 (auto CE 30229 del 02-jun-2026).
+
+> Corrección auditoría 2026-09: la versión anterior de este resumen afirmaba que el decreto mantenía las bases de 27 y 4 UVT, en contradicción con su propio texto.
 
 ### 3. Excluidos
 - Régimen SIMPLE de tributación (Arts. 903-916 ET) — no aplican autorretención.

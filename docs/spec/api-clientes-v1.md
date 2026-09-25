@@ -219,7 +219,7 @@ Respuesta `201 Created` + `Location` (y webhook `trial_balance.processed` al wor
 {
   "id": "tb_0698fq7yv7f7btkdjq8x2xz3ec",
   "object": "trial_balance",
-  "status": "unbalanced",
+  "status": "balanced",
   "period_label": "2025",
   "row_count": 184,
   "control_totals": {
@@ -234,8 +234,64 @@ Respuesta `201 Created` + `Location` (y webhook `trial_balance.processed` al wor
 }
 ```
 
-`GET /api/v1/trial-balances/{id}` añade `discrepancies[]` y `curator_findings[]` completos
-(recomputados). El CSV acepta los mismos alias de columnas del parser interno
+Semántica de `status` y `equation_delta` (contrato `tb-2026-09-24`, auditoría 2026-09,
+niif-preproceso-07):
+
+- `equation_delta` es el descuadre del **archivo de origen** (Activo − Pasivo − Patrimonio)
+  **antes del Cierre Virtual**: no cuenta el traslado del resultado del ejercicio (3605VC) ni
+  la reclasificación de un grupo 36 anterior (`reclassified_from_3605`). El curador ya no lo
+  absorbe (`virtual_close_adjustment` y `equity_anchor_adjustment` se conservan en 0 por
+  compatibilidad).
+- `status: "balanced"` exige `equation_delta = 0` **y** ningún motivo persistente en ningún
+  periodo del archivo (contrato `tb-2026-09-24.2`, recalculo-final-04). `status: "unbalanced"`
+  cubre el descuadre y también, aunque la ecuación cuadre, los motivos persistentes:
+  integridad de la lectura (importes ilegibles, columnas de saldo ambiguas, filas desplazadas,
+  códigos que no son cuentas PUC), importes fuera del rango de precisión monetaria, unidad
+  declarada ("en miles/millones") sin confirmar y bloqueos del curador posteriores al Cierre
+  Virtual R8 (p. ej. CUR-R12, que desde la ronda final de la fase 2 también se evalúa con la
+  columna de saldo inicial del ejercicio, recalculo-final2-01); el detalle los lista en
+  `validation_reasons[]`.
+- El riesgo de liquidez (activo corriente < pasivo corriente) no es motivo persistente: no
+  bloquea ni cambia el `status`.
+
+Parámetros opcionales de la remisión (contrato `tb-2026-09-24.3`, pendiente #4 de la
+auditoría integral 2026-09-24):
+
+- `unit`: `pesos` | `miles` | `millones` — unidad **confirmada** de los importes. Decisión: una
+  unidad declarada por el archivo ("en miles de pesos") nunca se aplica en silencio; sin `unit`
+  la remisión es `unbalanced` con el motivo (recalculo-final-03) y el recurso expone
+  `unit: {declared, declared_text, confirmed, requires_confirmation}`. Con `unit` cada importe
+  se reexpresa desde su texto decimal a centavos exactos (aritmética entera, no
+  `valor × 1000` en coma flotante) y el detalle lo revela en `validation_notes[]`. En `rows[]`
+  un importe reexpresado fuera de 2^53 centavos es `400 validation_failed` con puntero. El
+  texto del CSV no puede confirmar su propia unidad: sólo cuenta `unit`.
+- Importes de tres decimales con `unit` en miles o millones (re-auditoría final de la fase 2,
+  recalculo-final2-02 / ICU-02): un importe del `csv` con un único separador seguido de
+  exactamente tres cifras (`848,123`) se lee con el separador decimal que muestra el archivo
+  (celdas con los dos separadores, grupos de miles repetidos o fracciones de otra longitud);
+  sin evidencia, un CSV separado por `;` usa coma decimal. Decisión: sin evidencia o con
+  evidencia contradictoria el importe es ambiguo y es motivo de integridad (`unbalanced`, con
+  el motivo en `validation_reasons[]`); nunca se lee ×1.000 en silencio. En pesos, sin `unit`,
+  la regla morfológica no cambia.
+- `maturity_overrides`: `{código: "corriente" | "no_corriente"}` (clases 1 y 2, máximo 500, el
+  código más específico prevalece). Decisión: la clasificación por grupo PUC sigue siendo el
+  supuesto por defecto (NIC 1 párr. 66-76 / NIIF PYMES 4.5-4.8); las excepciones se aplican de
+  forma determinista, viajan en las filas persistidas y se revelan con su monto en
+  `classification_note`. Sin excepciones las cifras son idénticas.
+- Fecha de corte declarada en el título del CSV (P4-c): con una columna de saldo que sólo
+  trae el año, el periodo primario pasa a `AAAA-MM` (p. ej. `2025-06`) aunque el cliente haya
+  enviado `period_label: "2025"`. Decisión: el archivo prevalece sobre la etiqueta porque la
+  duración del P&G decide la anualización de los KPIs; la nota en `validation_notes[]` cita el
+  texto del archivo. Si la columna de saldo no trae año y el cliente envía `period_label`, se
+  conserva su etiqueta y la nota dice que la fecha del título no se interpretó.
+- Fecha de corte en el encabezado de la columna de saldo (re-auditoría final de la fase 2,
+  ICU-03): una fecha de fin de mes en el encabezado ("Saldo a 30/06/2025", "Saldo junio 2025",
+  "Saldo 2025-06") fija el periodo de esa columna (`2025-06`, también con `period_label:
+  "2025"`); un 31 de diciembre deja el año (periodo cerrado). Una fecha a mitad de mes no se
+  interpreta y la nota lo dice. Con saldo inicial y final fechados, cada columna toma su mes.
+
+`GET /api/v1/trial-balances/{id}` añade `validation_reasons[]`, `validation_notes[]`,
+`classification_note`, `discrepancies[]` y `curator_findings[]` completos (recomputados). El CSV acepta los mismos alias de columnas del parser interno
 (codigo/cuenta/débito/crédito/saldo por año). 422 `empty_trial_balance` si no se reconoce
 ninguna fila válida.
 

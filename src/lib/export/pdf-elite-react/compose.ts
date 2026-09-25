@@ -37,12 +37,16 @@ import type {
   RecommendationItem,
   ReportMeta,
   SignatureBlockSpec,
+  TocAnchorId,
   TocEntry,
   WaterfallItem,
 } from './types';
 import type { FinancialReport } from '@/lib/agents/financial/types';
 import type { AuditReport } from '@/lib/agents/financial/audit/types';
 import type { QualityAssessment } from '@/lib/agents/financial/quality/types';
+import type { QualityReportJson } from '@/lib/agents/financial/contracts/quality-report';
+import { buildQualityV21View, type QualityV21Context } from '@/lib/agents/financial/quality/v21-mapping';
+import { deriveQualityContext, deriveQualityScore } from '@/lib/agents/financial/quality/agent';
 import type {
   ControlTotals,
   PreprocessedBalance,
@@ -55,12 +59,17 @@ import {
   renderSignatureBlock,
 } from '@/lib/agents/financial/fiscal-opinion/signatories';
 import {
+  formatStatementNote,
   niifJsonToBalanceTable,
   niifJsonToCashFlowTable,
   niifJsonToEquityTable,
   niifJsonToIncomeTable,
+  type StatementTableContext,
 } from './compose-statements-from-json';
-import { formatCopFromCents } from '@/lib/agents/financial/contracts/money';
+import { formatCopFromPesos } from '@/lib/agents/financial/contracts/money';
+import { adjustmentTrailRows, type AdjustmentsTrail } from '@/lib/reports/adjustment-ledger';
+import { narrativeDisclaimer, resolvePeriodoTipos } from '../statement-presentation';
+import { revenueBreakdown, type RevenueBreakdown } from '../revenue';
 
 // ─── v2.2 — Scrubber de metadatos internos (correcciones #6, #11, #12) ───────
 //
@@ -157,6 +166,33 @@ export interface ComposeInput {
    * Si presente, cada flag false omite la(s) página(s) correspondiente(s).
    */
   outputOptions?: OutputOptionsToggle | null;
+  /**
+   * Procedencia de `auditReport` / `qualityReport`. Sólo 'server-persisted'
+   * (versión guardada y autorizada en el servidor) permite renderizar el
+   * dictamen especializado y el sello de calidad. Sin ella —hoy la ruta los
+   * recibe en el cuerpo de la petición— se omiten y el apéndice lo explica
+   * (reportes-export-11): un dictamen "favorable" o un grado "A+" enviados por
+   * el cliente no pueden salir con la marca del informe.
+   */
+  assuranceProvenance?: 'server-persisted' | null;
+  /**
+   * Ajustes confirmados del Doctor de Datos que el servidor aplicó al balance
+   * (procedencia-R2-02): los de la versión persistida o, sin ella, los del
+   * ledger de la petición. Alimentan la tabla "Ajustes Aplicados" del anexo
+   * con la misma información que la traza del consolidado; antes el PDF
+   * imprimía las cifras ajustadas sin divulgar los ajustes.
+   */
+  appliedAdjustments?: AdjustmentsTrail | null;
+}
+
+const UNVERIFIED_ASSURANCE_NOTE =
+  'Las páginas de Auditoría Especializada y Meta-auditoría de Calidad se omitieron: sus ' +
+  'resultados llegaron con la solicitud de exportación y no pueden verificarse contra una ' +
+  'versión persistida en el servidor.';
+
+/** Aviso en cursiva al inicio de un bloque de narrativa redactada por el LLM. */
+function withNarrativeDisclaimer(md: string, language: 'es' | 'en' = 'es'): string {
+  return md.trim() ? `*${narrativeDisclaimer(language)}*\n\n${md}` : md;
 }
 
 export function composeEditorialReport(input: ComposeInput): EditorialReport {
@@ -167,27 +203,40 @@ export function composeEditorialReport(input: ComposeInput): EditorialReport {
     language,
     emittable,
     dictamen,
-    auditReport,
-    qualityReport,
+    auditReport: auditReportInput,
+    qualityReport: qualityReportInput,
     outputOptions,
+    assuranceProvenance,
+    appliedAdjustments,
   } = input;
+  const assuranceVerified = assuranceProvenance === 'server-persisted';
+  const auditReport = assuranceVerified ? auditReportInput : null;
+  const qualityReport = assuranceVerified ? qualityReportInput : null;
+  const assuranceOmitted = !assuranceVerified && !!(auditReportInput || qualityReportInput);
 
   const meta = buildMeta(report, language, emittable, preprocessed);
   const cover = buildCover(report, language);
   const toc = { entries: buildTocEntries(language, !!pillars) };
   const directorLetter = buildDirectorLetter(report, language);
   const totals = readControlTotals(preprocessed);
-  const kpiGrid = buildKpiGrid(totals, pillars ?? null);
-  const waterfall = { items: buildWaterfall(totals) };
+  const revenue = revenueBreakdown(
+    (preprocessed as { primary?: PeriodSnapshot } | null | undefined)?.primary ?? null,
+    report.niifAnalysis?.json ?? null,
+  );
+  const kpiGrid = buildKpiGrid(totals, pillars ?? null, revenue);
+  const waterfall = { items: buildWaterfall(totals, revenue) };
   const dialGauges = { gauges: buildDialGauges(totals) };
   const pillarsSpec = buildPillarsSpec(pillars ?? null);
-  const statements = buildStatements(report);
-  const breakEven = buildBreakEven(report);
-  const projectedCashFlow = buildProjectedCashFlow(report);
-  const notes = { blocks: buildNotes(report) };
-  const recommendations = { items: buildRecommendations(report) };
-  const shareholderMinutes = buildShareholderMinutes(report);
-  const appendix = buildAppendix(report, preprocessed, totals, emittable);
+  const statements = buildStatements(report, preprocessed, language);
+  const breakEven = buildBreakEven(report, language);
+  const projectedCashFlow = buildProjectedCashFlow(report, language);
+  const notes = { blocks: buildNotes(report, language) };
+  const recommendations = { items: buildRecommendations(report, language) };
+  const shareholderMinutes = buildShareholderMinutes(report, language);
+  const appendix = buildAppendix(report, preprocessed, totals, emittable, appliedAdjustments ?? null, language);
+  if (assuranceOmitted) {
+    appendix.validationWarnings = [...(appendix.validationWarnings ?? []), UNVERIFIED_ASSURANCE_NOTE];
+  }
   const signatureBlock = buildSignatureBlock(report);
   const emphasisParagraphs = buildEmphasisParagraphs(dictamen);
 
@@ -229,7 +278,10 @@ export function composeEditorialReport(input: ComposeInput): EditorialReport {
   if (auditFindings) {
     out.auditFindings = auditFindings;
   }
-  const qualityScores = buildQualityScores(qualityReport ?? null);
+  const qualityScores = buildQualityScores(
+    qualityReport ?? null,
+    qualityReport ? deriveQualityContext({ report, auditReport: auditReport ?? undefined, preprocessed: preprocessed ?? undefined }) : {},
+  );
   if (qualityScores) {
     out.qualityScores = qualityScores;
   }
@@ -293,21 +345,93 @@ function buildAuditFindings(audit: AuditReport | null): AuditFindingsSpec | unde
     informativo: audit.findingCounts?.informativo ?? 0,
   };
 
+  // Cobertura (auditoria-calidad-21): con dominios fallidos el overallScore
+  // es un promedio PARCIAL; se propaga para rotularlo en la página.
+  const cov = audit.coverage;
+  const coverage =
+    cov && Number.isFinite(cov.completed)
+      ? { completed: cov.completed, total: 4 as const, partial: !!cov.partial }
+      : undefined;
+
   return {
-    overallScore: Math.round(audit.overallScore ?? 0),
-    opinionType: (audit.opinionType ?? 'abstension') as AuditOpinionKind,
+    overallScore: roundOrNull(audit.overallScore),
+    opinionType: toOpinionKind(audit.opinionType),
     opinionText: scrubInternalMetadata(audit.opinionText ?? ''),
     auditorCards,
     topFindings,
     findingCounts,
     executiveSummary: scrubInternalMetadata(audit.executiveSummary ?? ''),
+    ...(coverage ? { coverage } : {}),
   };
+}
+
+const OPINION_KINDS: readonly AuditOpinionKind[] = [
+  'favorable',
+  'con_salvedades',
+  'desfavorable',
+  'abstension',
+  'no_emitida',
+];
+
+/**
+ * Opinión ausente o desconocida → 'no_emitida' (auditoria-calidad-04). Antes
+ * caía a 'abstension': una abstención es una opinión formal que exige
+ * evidencia (NIA 705), no el valor por defecto de un dato faltante.
+ */
+function toOpinionKind(v: unknown): AuditOpinionKind {
+  return OPINION_KINDS.includes(v as AuditOpinionKind) ? (v as AuditOpinionKind) : 'no_emitida';
+}
+
+function roundOrNull(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : null;
 }
 
 // ─── Quality scores builder ───────────────────────────────────────────────────
 // Map QualityAssessment (meta-auditor) → QualityScoresSpec.
 
-function buildQualityScores(q: QualityAssessment | null): QualityScoresSpec | undefined {
+/**
+ * QualityAssessment (legado) → forma del JSON del meta-auditor para recalcular
+ * la vista v2.1. Un campo ausente o no finito queda NaN → N/D en la vista
+ * (nunca 0); una dimensión sin score numérico se descarta.
+ */
+function qualityJsonFromAssessment(q: QualityAssessment): QualityReportJson {
+  const n = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN);
+  return {
+    overallScore: n(q.overallScore),
+    grade: 'F',
+    executiveSummary: '',
+    dimensions: (q.dimensions ?? [])
+      .filter((d) => d && typeof d.name === 'string' && Number.isFinite(d.score))
+      .map((d) => ({
+        name: d.name,
+        score: d.score,
+        framework: d.framework ?? '',
+        findings: Array.isArray(d.findings) ? d.findings : [],
+        recommendations: Array.isArray(d.recommendations) ? d.recommendations : [],
+      })),
+    dataQuality: {
+      completeness: n(q.dataQuality?.completeness),
+      accuracy: n(q.dataQuality?.accuracy),
+      consistency: n(q.dataQuality?.consistency),
+      timeliness: n(q.dataQuality?.timeliness),
+      validity: n(q.dataQuality?.validity),
+    },
+    aiGovernance: {
+      traceability: n(q.aiGovernance?.traceability),
+      explainability: n(q.aiGovernance?.explainability),
+      antiHallucination: n(q.aiGovernance?.antiHallucination),
+      humanOversight: n(q.aiGovernance?.humanOversight),
+    },
+    ifrs18Readiness: { ready: false, score: n(q.ifrs18Readiness?.score), gaps: [] },
+    priorityRecommendations: [],
+    conclusion: '',
+  };
+}
+
+function buildQualityScores(
+  q: QualityAssessment | null,
+  context: QualityV21Context,
+): QualityScoresSpec | undefined {
   if (!q) return undefined;
 
   const dimensions: QualityDimensionBar[] = (q.dimensions ?? []).map((d) => ({
@@ -316,25 +440,40 @@ function buildQualityScores(q: QualityAssessment | null): QualityScoresSpec | un
     framework: d.framework,
   }));
 
+  // Veredicto = sello v2.1 recalculado de las dimensiones, y score/grade
+  // internos DERIVADOS de él (auditoria-calidad-10): el grade libre del LLM
+  // ("A+ · 96" con dimensiones en 50) ya no llega a la PDF, tampoco desde un
+  // informe persistido antes de la corrección. Un dato ausente es N/D, no 0
+  // ni 'F' (reportes-export-11).
+  const view = buildQualityV21View(qualityJsonFromAssessment(q), context);
+  const derived = deriveQualityScore(view);
   return {
-    overallScore: Math.round(q.overallScore ?? 0),
-    grade: q.grade ?? 'F',
+    overallScore: derived.overallScore,
+    grade: derived.grade,
+    sello: {
+      type: view.sello.type,
+      title: view.sello.title,
+      score10: view.sello.score,
+      approvedCount: view.sello.approvedCount,
+      evaluatedCount: view.sello.evaluatedCount,
+      bottomLine: view.sello.bottomLine,
+    },
     dimensions,
-    ifrs18Ready: !!q.ifrs18Readiness?.ready,
-    ifrs18Score: Math.round(q.ifrs18Readiness?.score ?? 0),
+    ifrs18Ready: typeof q.ifrs18Readiness?.ready === 'boolean' ? q.ifrs18Readiness.ready : null,
+    ifrs18Score: roundOrNull(q.ifrs18Readiness?.score),
     ifrs18Gaps: scrubNotes(q.ifrs18Readiness?.gaps),
     dataQuality: {
-      completeness: Math.round(q.dataQuality?.completeness ?? 0),
-      accuracy: Math.round(q.dataQuality?.accuracy ?? 0),
-      consistency: Math.round(q.dataQuality?.consistency ?? 0),
-      timeliness: Math.round(q.dataQuality?.timeliness ?? 0),
-      validity: Math.round(q.dataQuality?.validity ?? 0),
+      completeness: roundOrNull(q.dataQuality?.completeness),
+      accuracy: roundOrNull(q.dataQuality?.accuracy),
+      consistency: roundOrNull(q.dataQuality?.consistency),
+      timeliness: roundOrNull(q.dataQuality?.timeliness),
+      validity: roundOrNull(q.dataQuality?.validity),
     },
     aiGovernance: {
-      traceability: Math.round(q.aiGovernance?.traceability ?? 0),
-      explainability: Math.round(q.aiGovernance?.explainability ?? 0),
-      antiHallucination: Math.round(q.aiGovernance?.antiHallucination ?? 0),
-      humanOversight: Math.round(q.aiGovernance?.humanOversight ?? 0),
+      traceability: roundOrNull(q.aiGovernance?.traceability),
+      explainability: roundOrNull(q.aiGovernance?.explainability),
+      antiHallucination: roundOrNull(q.aiGovernance?.antiHallucination),
+      humanOversight: roundOrNull(q.aiGovernance?.humanOversight),
     },
     executiveSummary: scrubInternalMetadata(q.executiveSummary ?? ''),
   };
@@ -541,8 +680,25 @@ function buildMeta(
     typeof preprocessed === 'object' &&
     (preprocessed as { comparativos_impracticables?: boolean }).comparativos_impracticables === true;
 
+  // pipeline-flujo-14 (defensa en profundidad): /export responde 422 para un
+  // informe sin Partes II/III; si el composer se invoca igual, la portada no
+  // puede presentarlo como completo.
+  const isEmptyPart = (part: { fullContent?: unknown } | null | undefined) =>
+    !part || typeof part.fullContent !== 'string' || part.fullContent.trim().length === 0;
+  const missingParts: string[] = [];
+  if (isEmptyPart(report.strategicAnalysis)) {
+    missingParts.push(language === 'en' ? 'Part II (Strategy)' : 'Parte II (Estrategia)');
+  }
+  if (isEmptyPart(report.governance)) {
+    missingParts.push(language === 'en' ? 'Part III (Governance)' : 'Parte III (Gobierno)');
+  }
+
   if (emittable && emittable.ok === false) {
     watermark = 'BLOQUEADO';
+  } else if (missingParts.length > 0) {
+    watermark = 'INCOMPLETO';
+    watermarkSubtitle =
+      (language === 'en' ? 'MISSING: ' : 'FALTA: ') + missingParts.join(' · ');
   } else if (comparativosImpracticables) {
     watermark = 'BORRADOR';
     watermarkSubtitle = language === 'en'
@@ -559,12 +715,17 @@ function buildMeta(
     watermark = 'BORRADOR';
   }
 
+  // Identidad desde el JSON validado cuando existe: es la misma fuente de las
+  // columnas de los estados. Antes la portada usaba `report.company` y las
+  // columnas `json.company`, y el gate no las comparaba (reportes-export-10).
+  const jc = report.niifAnalysis?.json?.company;
   return {
-    companyName: report.company?.name ?? 'N/D',
-    nit: report.company?.nit ?? 'N/D',
-    entityType: report.company?.entityType,
-    fiscalPeriod: report.company?.fiscalPeriod ?? 'N/D',
-    comparativePeriod: report.company?.comparativePeriod,
+    companyName: jc?.name ?? report.company?.name ?? 'N/D',
+    nit: jc?.nit ?? report.company?.nit ?? 'N/D',
+    entityType: report.company?.entityType ?? jc?.entityType ?? undefined,
+    fiscalPeriod: jc?.fiscalPeriod ?? report.company?.fiscalPeriod ?? 'N/D',
+    comparativePeriod: jc ? (jc.comparativePeriod ?? undefined) : report.company?.comparativePeriod,
+    niifGroup: jc?.niifGroup ?? null,
     generatedAt: report.generatedAt ?? new Date().toISOString(),
     language,
     ...(watermark ? { watermark } : {}),
@@ -575,7 +736,7 @@ function buildMeta(
 function buildCover(report: FinancialReport, language: 'es' | 'en') {
   const title =
     language === 'en' ? 'Editorial Financial Report' : 'Informe Financiero Editorial';
-  const subtitle = report.company?.name ?? '';
+  const subtitle = report.niifAnalysis?.json?.company.name ?? report.company?.name ?? '';
   return {
     title,
     subtitle,
@@ -584,22 +745,37 @@ function buildCover(report: FinancialReport, language: 'es' | 'en') {
 }
 
 function buildTocEntries(language: 'es' | 'en', includePillars: boolean): TocEntry[] {
+  // Orden del documento (EditorialReportDoc). Cada entrada lleva el ancla de
+  // la página que abre la sección: `render.ts` la numera con la página real y
+  // omite las secciones que no se imprimieron (reportes-export-21). La entrada
+  // "Resumen ejecutivo" se retiró: ninguna página del informe la sostenía.
   const isEs = language === 'es';
   const entries: TocEntry[] = [];
-  const push = (label: string, uppercase: boolean) =>
-    entries.push({ label, page: 1, uppercase });
-  push(isEs ? 'Carta del director' : 'Director letter', false);
-  push(isEs ? 'Resumen ejecutivo' : 'Executive summary', false);
-  push(isEs ? 'TEMA 1: Indicadores clave' : 'TOPIC 1: Key indicators', true);
-  push(isEs ? 'TEMA 2: Cascada de utilidad' : 'TOPIC 2: Profit waterfall', true);
-  push(isEs ? 'TEMA 3: Diales de salud' : 'TOPIC 3: Health dials', true);
-  if (includePillars) {
-    push(isEs ? 'TEMA 4: Pilares' : 'TOPIC 4: Pillars', true);
-  }
-  push(isEs ? 'TEMA 5: Estados financieros' : 'TOPIC 5: Financial statements', true);
-  push(isEs ? 'TEMA 6: Notas' : 'TOPIC 6: Notes', true);
-  push(isEs ? 'TEMA 7: Recomendaciones' : 'TOPIC 7: Recommendations', true);
-  push(isEs ? 'Apéndice normativo' : 'Normative appendix', false);
+  let topic = 0;
+  const push = (es: string, en: string, anchor: TocAnchorId, isTopic: boolean) => {
+    const label = isEs ? es : en;
+    if (isTopic) topic += 1;
+    entries.push({
+      label: isTopic ? `${isEs ? 'TEMA' : 'TOPIC'} ${topic}: ${label}` : label,
+      page: 1,
+      uppercase: isTopic,
+      anchor,
+    });
+  };
+  push('Carta del director', 'Director letter', 'director', false);
+  push('Indicadores clave', 'Key indicators', 'kpi', true);
+  push('Estados financieros', 'Financial statements', 'statements', true);
+  push('Cascada de utilidad', 'Profit waterfall', 'waterfall', true);
+  push('Diales de salud', 'Health dials', 'dials', true);
+  push('Punto de equilibrio', 'Break-even point', 'breakEven', true);
+  push('Flujo de caja proyectado', 'Projected cash flow', 'projectedCashFlow', true);
+  if (includePillars) push('Pilares', 'Pillars', 'pillars', true);
+  push('Notas', 'Notes', 'notes', true);
+  push('Recomendaciones', 'Recommendations', 'recommendations', true);
+  push('Acta de asamblea', 'Shareholders minutes', 'minutes', false);
+  push('Auditoría especializada', 'Specialized audit', 'audit', false);
+  push('Meta-auditoría de calidad', 'Quality meta-audit', 'quality', false);
+  push('Apéndice normativo', 'Normative appendix', 'appendix', false);
   return entries;
 }
 
@@ -657,8 +833,15 @@ function readControlTotals(
 // y ninguno coincidía con el HTML, que consume `controlTotals` por contrato
 // (`html-editor.prompt.ts`: "ROE consistente ... fórmula única de
 // controlTotals.roe"). Este resolver es el único punto donde se decide de dónde
-// sale cada ratio: primero el campo pre-calculado del preprocesador, y sólo si
-// viene null/ausente (balances cacheados pre-F4) se recurre al fallback local.
+// sale cada ratio.
+//
+// Auditoría 2026-09 (reportes-export-12): `null` y "ausente" NO son lo mismo.
+// `controlTotals` declara `null` cuando el denominador es 0/anómalo "para que
+// el renderer pinte ND, NUNCA un fallback silencioso"; el resolver anterior
+// usaba `??` y convertía ese null en un cálculo local distinto (patrimonio
+// promedio 0 → ROE 200 % sobre el patrimonio de cierre). Ahora:
+//   - campo `undefined` (balance cacheado pre-F4) → fallback local, rotulado;
+//   - campo `null` → N/D.
 //
 // Convención de escala, la misma que `ControlTotals`:
 //   - `*Pct`   → porcentaje 0-100 (ej. 40 = 40 %).
@@ -673,6 +856,18 @@ interface ResolvedRatios {
   margenNetoPct: number | null;
   /** ROE en PORCENTAJE (0-100). */
   roePct: number | null;
+  /** true cuando el ROE está calculado sobre patrimonio de CIERRE (spec v10.1: marca △). */
+  roeOnClosingEquity: boolean;
+}
+
+/** `undefined` → fallback (legado); `null` → N/D; número finito → tal cual. */
+function preferField(
+  field: number | null | undefined,
+  fallback: () => number | null,
+): number | null {
+  if (field === undefined) return fallback();
+  if (field === null || !Number.isFinite(field)) return null;
+  return field;
 }
 
 function resolveRatios(totals: ControlTotals): ResolvedRatios {
@@ -684,67 +879,122 @@ function resolveRatios(totals: ControlTotals): ResolvedRatios {
     return r === null ? null : r * 100;
   };
 
+  // Margen neto: el denominador es el ingreso NETO de devoluciones (misma base
+  // que `controlTotals.margenNeto`), nunca la Σ de la clase 4.
+  const ingresosNetos =
+    totals.ingresosNetos ??
+    (totals.cents ? Number(totals.cents.ingresosNetos) / 100 : undefined);
+
+  const roePct = preferField(totals.roe, () => pctOf(totals.utilidadNeta, totals.patrimonio));
+  const roeOnClosingEquity =
+    totals.roe === undefined ||
+    (typeof totals.patrimonioPromedio === 'number' && totals.patrimonioPromedio === totals.patrimonio);
+
   return {
-    razonCorriente:
-      totals.razonCorriente ?? div(totals.activoCorriente, totals.pasivoCorriente),
-    pruebaAcida:
-      totals.pruebaAcida ??
+    razonCorriente: preferField(totals.razonCorriente, () =>
+      div(totals.activoCorriente, totals.pasivoCorriente),
+    ),
+    pruebaAcida: preferField(totals.pruebaAcida, () =>
       div(totals.activoCorriente - (totals.inventarios14 ?? 0), totals.pasivoCorriente),
-    endeudamientoPct: totals.endeudamientoTotal ?? pctOf(totals.pasivo, totals.activo),
+    ),
+    endeudamientoPct: preferField(totals.endeudamientoTotal, () => pctOf(totals.pasivo, totals.activo)),
     // `coberturaIntereses === null` significa "sin gasto financiero" (no es 0).
     // Sin el campo (balances pre-F4) tampoco hay denominador para calcularlo.
-    coberturaIntereses: totals.coberturaIntereses ?? null,
-    margenNetoPct: totals.margenNeto ?? pctOf(totals.utilidadNeta, totals.ingresos),
-    roePct: totals.roe ?? pctOf(totals.utilidadNeta, totals.patrimonio),
+    coberturaIntereses: preferField(totals.coberturaIntereses, () => null),
+    margenNetoPct: preferField(totals.margenNeto, () =>
+      typeof ingresosNetos === 'number' ? pctOf(totals.utilidadNeta, ingresosNetos) : null,
+    ),
+    roePct,
+    roeOnClosingEquity: roePct !== null && roeOnClosingEquity,
   };
 }
 
 // ─── KPI grid ─────────────────────────────────────────────────────────────────
 
+const ND = 'N/D';
+
 function buildKpiGrid(
   totals: ControlTotals | null,
   pillars: PillarsResult | null,
+  revenue: RevenueBreakdown,
 ): KpiGridSpec {
   const kpis: KpiCell[] = [];
   if (totals) {
     const ratios = resolveRatios(totals);
 
-    push(kpis, 'Activo Total', formatCop(totals.activo));
-    push(kpis, 'Pasivo Total', formatCop(totals.pasivo));
-    push(kpis, 'Patrimonio', formatCop(totals.patrimonio));
-    push(kpis, 'Ingresos', formatCop(totals.ingresos));
-    push(kpis, 'Gastos + Costos', formatCop(totals.gastos));
-    push(kpis, 'Utilidad Neta', formatCop(totals.utilidadNeta));
+    push(kpis, 'Activo Total', formatCop(totals.activo), 'estructura');
+    push(kpis, 'Pasivo Total', formatCop(totals.pasivo), 'estructura');
+    push(kpis, 'Patrimonio', formatCop(totals.patrimonio), 'estructura');
+    // "Ingresos" = ingresos operacionales netos (41 − 4175), nunca la Σ de la
+    // clase 4 con devoluciones y no operacionales (ratios-kpis-04).
+    push(
+      kpis,
+      'Ingresos operacionales netos',
+      revenue.operacionalesNetos === null ? ND : formatCop(revenue.operacionalesNetos),
+      'resultados',
+      revenue.operacionalesNetos === null ? 'Sin detalle PUC de la clase 4 para separar el grupo 41' : undefined,
+    );
+    push(kpis, 'Gastos + Costos', formatCop(totals.gastos), 'resultados');
+    push(kpis, 'Utilidad Neta', formatCop(totals.utilidadNeta), 'resultados');
 
-    if (ratios.margenNetoPct !== null) {
-      push(kpis, 'Margen Neto', formatPct(ratios.margenNetoPct / 100));
-    }
-    if (ratios.roePct !== null) {
-      push(kpis, 'ROE', formatPct(ratios.roePct / 100));
-    }
-    if (ratios.razonCorriente !== null) {
-      push(kpis, 'Razón Corriente', formatRatio(ratios.razonCorriente));
-    }
-    if (ratios.endeudamientoPct !== null) {
-      push(kpis, 'Endeudamiento', formatPct(ratios.endeudamientoPct / 100));
-    }
+    // Ratios: un null del preprocesador se imprime N/D (reportes-export-12),
+    // nunca se omite en silencio ni se sustituye.
+    push(
+      kpis,
+      'Margen Neto',
+      ratios.margenNetoPct === null ? ND : formatPct(ratios.margenNetoPct / 100),
+      'rentabilidad',
+    );
+    push(
+      kpis,
+      'ROE',
+      ratios.roePct === null ? ND : formatPct(ratios.roePct / 100),
+      'rentabilidad',
+      // El motivo que publicó el preprocesador (p. ej. patrimonio promedio ≤ 0)
+      // viaja a la celda; no se recalcula el ROE (ratios-kpis-07).
+      ratios.roePct === null
+        ? totals.kpiNdMotivos?.roe ?? 'Patrimonio promedio nulo o anómalo'
+        : ratios.roeOnClosingEquity
+          ? '△ sobre patrimonio de cierre (sin promedio con el comparativo)'
+          : undefined,
+    );
+    push(
+      kpis,
+      'Razón Corriente',
+      ratios.razonCorriente === null ? ND : formatRatio(ratios.razonCorriente),
+      'liquidez',
+    );
+    push(
+      kpis,
+      'Endeudamiento',
+      ratios.endeudamientoPct === null ? ND : formatPct(ratios.endeudamientoPct / 100),
+      'liquidez',
+    );
   }
 
   // Pillar-derived cards (pick the headline KPI from each pilar.kpis if present).
   if (pillars) {
     const ebitda = findCardValue(pillars.valor, 'ebitda');
-    if (ebitda !== null) push(kpis, 'EBITDA', formatCop(ebitda));
+    if (ebitda !== null) push(kpis, 'EBITDA', formatCop(ebitda), 'resultados');
     const autonomia = findCardValue(pillars.escudo, 'autonomia');
-    if (autonomia !== null) push(kpis, 'Días Autonomía', `${Math.round(autonomia)} días`);
+    if (autonomia !== null) push(kpis, 'Días Autonomía', `${Math.round(autonomia)} días`, 'liquidez');
     const cagr = findCardValue(pillars.futuro, 'cagr');
-    if (cagr !== null) push(kpis, 'Crecimiento Ingresos', formatPct(cagr));
+    if (cagr !== null) push(kpis, 'Crecimiento Ingresos', formatPct(cagr), 'rentabilidad');
   }
 
-  return { kpis: kpis.slice(0, 12) };
+  // Sin recorte silencioso (reportes-export-18): compose emite a lo sumo 13
+  // KPIs (10 del balance + 3 de pilares) y la página los agrupa por categoría.
+  return { kpis };
 }
 
-function push(arr: KpiCell[], label: string, value: string): void {
-  arr.push({ label, value });
+function push(
+  arr: KpiCell[],
+  label: string,
+  value: string,
+  category: KpiCell['category'],
+  note?: string,
+): void {
+  arr.push({ label, value, category, ...(note ? { note } : {}) });
 }
 
 function findCardValue(
@@ -774,7 +1024,8 @@ function findCardValue(
 // ─── Waterfall ────────────────────────────────────────────────────────────────
 
 /**
- * Puente Ingresos → (Gastos + Costos) → (Impuestos) → Utilidad Neta.
+ * Puente Ingresos operacionales netos → (+ Otros ingresos no operacionales) →
+ * (Gastos + Costos) → (Impuestos) → Utilidad Neta.
  *
  * Invariante que este builder debe cumplir: la suma acumulada de las barras
  * intermedias tiene que aterrizar EXACTAMENTE en la barra total. El gráfico
@@ -782,21 +1033,41 @@ function findCardValue(
  * puente descuadrado: el error se vuelve invisible y el cliente lee un nivel
  * intermedio falso.
  *
- * El defecto anterior: la barra "(Impuestos)" restaba `impuestosCuenta24`, que
- * es el SALDO del pasivo fiscal (PUC 24 — lo que se le debe a la DIAN al
- * cierre), no el GASTO de impuestos del periodo. Además `controlTotals.gastos`
- * (Clase 5+6+7) YA incluye el gasto de impuestos del grupo 54 y
- * `utilidadNeta = ingresos − gastos`, de modo que la barra extra doble-contaba.
+ * Auditoría 2026-08: la barra "(Impuestos)" restaba el SALDO del pasivo fiscal
+ * (PUC 24); ahora usa el impuesto causado real (`cents.impuestoCausado`, grupo
+ * 54) separado de `gastos`, que ya lo incluye.
  *
- * Corrección: el impuesto se SEPARA de la barra de gastos usando el impuesto
- * causado real del periodo (`cents.impuestoCausado`, grupo 54). Cuando ese
- * ancla no está disponible (balances cacheados pre-cents) el puente se emite
- * con una sola barra de deducción, que sigue cerrando contra Utilidad Neta.
+ * Auditoría 2026-09 (ratios-kpis-04): la barra inicial era `controlTotals
+ * .ingresos` (Σ clase 4 = bruto + devoluciones + no operacionales) y el puente
+ * no cerraba contra la utilidad neta, que el preprocesador calcula sobre los
+ * ingresos NETOS. Ahora arranca en los ingresos operacionales netos (41 − 4175)
+ * y los no operacionales (grupo 42) van en su propia barra.
  */
-function buildWaterfall(totals: ControlTotals | null): WaterfallItem[] {
+function buildWaterfall(totals: ControlTotals | null, revenue: RevenueBreakdown): WaterfallItem[] {
   if (!totals) return [];
   const items: WaterfallItem[] = [];
-  items.push({ label: 'Ingresos', amount: totals.ingresos, sign: 'pos' });
+
+  if (revenue.operacionalesNetos !== null && revenue.noOperacionales !== null) {
+    items.push({ label: 'Ingresos operacionales netos', amount: revenue.operacionalesNetos, sign: 'pos' });
+    if (revenue.noOperacionales !== 0) {
+      items.push(
+        revenue.noOperacionales > 0
+          ? { label: 'Otros ingresos (no operacionales)', amount: revenue.noOperacionales, sign: 'pos' }
+          : { label: '(Otros ingresos netos negativos)', amount: revenue.noOperacionales, sign: 'neg' },
+      );
+    }
+  } else if (revenue.netosTotales !== null) {
+    // Sin detalle para separar el grupo 41 se rotula lo que es: el total de la
+    // clase 4 neto de devoluciones, incluidos los no operacionales.
+    items.push({
+      label: 'Ingresos netos totales (incl. no operacionales)',
+      amount: revenue.netosTotales,
+      sign: 'pos',
+    });
+  } else {
+    // Balance legado sin `ingresosNetos`: única cifra disponible, rotulada.
+    items.push({ label: 'Ingresos (Σ clase 4)', amount: totals.ingresos, sign: 'pos' });
+  }
 
   // `cents` viaja en centavos (BigInt) — a pesos para la misma unidad que el
   // resto de `controlTotals`.
@@ -825,6 +1096,14 @@ function buildWaterfall(totals: ControlTotals | null): WaterfallItem[] {
 
 // ─── Dial gauges ──────────────────────────────────────────────────────────────
 
+/**
+ * Auditoría 2026-09 (reportes-export-05): el dial imprimía el valor RECORTADO a
+ * la escala (una razón corriente de 10 salía "5.00"), convertía los ratios null
+ * en 0 (zona crítica) y usaba punto decimal y fracción ("0.10") junto a la
+ * tarjeta "10,0 %" del mismo PDF. Ahora la aguja se recorta pero la cifra
+ * impresa es la real, en es-CO y en la misma unidad que la tarjeta; sin dato →
+ * "N/D" sin aguja.
+ */
 function buildDialGauges(totals: ControlTotals | null): DialGaugeSpec[] {
   if (!totals) return [];
 
@@ -832,65 +1111,63 @@ function buildDialGauges(totals: ControlTotals | null): DialGaugeSpec[] {
   // indicador para que el dial y la tarjeta no puedan contradecirse.
   const ratios = resolveRatios(totals);
 
-  const razonCorriente = ratios.razonCorriente ?? 0;
-  const pruebaAcida = ratios.pruebaAcida ?? 0;
+  // `endeudamientoTotal` tiene escala definida POR CONTRATO: porcentaje 0-100.
+  // El dial trabaja en fracción 0-1 (umbrales 0,3 / 0,5 / 0,7) pero imprime el
+  // porcentaje, igual que la tarjeta.
+  const endeudamientoFrac =
+    ratios.endeudamientoPct === null ? null : ratios.endeudamientoPct / 100;
 
-  // `endeudamientoTotal` tiene escala definida POR CONTRATO: porcentaje 0-100
-  // (`computeDerivedKpis` multiplica la razón por 100). El código anterior
-  // aplicaba la heurística `> 1 ? /100 : v`, que asume que todo porcentaje es
-  // mayor que 1: una SAS capitalizada con 0,8 % de endeudamiento entraba como
-  // 0,8 en una escala 0-1 con umbrales [0,3 / 0,5 / 0,7] y el dial la pintaba
-  // en zona crítica al 80 %, contradiciendo el bloque de KPIs del mismo PDF.
-  const endeudamiento = (ratios.endeudamientoPct ?? 0) / 100;
+  const dial = (
+    base: Omit<DialGaugeSpec, 'value' | 'displayValue' | 'noData' | 'outOfScale'>,
+    real: number | null,
+    display: (v: number) => string,
+    noDataCaption?: string,
+  ): DialGaugeSpec => {
+    if (real === null) {
+      return {
+        ...base,
+        value: base.min,
+        displayValue: ND,
+        noData: true,
+        ...(noDataCaption ? { caption: noDataCaption } : {}),
+      };
+    }
+    const needle = clampForGauge(real, base.min, base.max);
+    return {
+      ...base,
+      value: needle,
+      displayValue: display(real),
+      ...(needle !== real ? { outOfScale: true } : {}),
+    };
+  };
 
-  // Cobertura de Intereses — null significa "sin gasto financiero"
-  // (gastoFinanciero5305 === 0); se renderiza como "N/A" en lugar de 0, que
-  // sería información falsa.
-  const coberturaIntereses = ratios.coberturaIntereses;
-
-  // Construir array de gauges; Cobertura Intereses solo se incluye cuando el
-  // ratio es computable (not null) — evita mostrar dial con valor 0 cuando el
-  // KPI no aplica para la empresa.
-  const gauges: DialGaugeSpec[] = [
-    {
-      label: 'Razón Corriente',
-      value: clampForGauge(razonCorriente, 0, 5),
-      min: 0,
-      max: 5,
-      thresholds: [1.0, 1.5, 2.5],
-      areaAccent: 'escudo' as AreaKey,
-      caption: 'Óptimo ≥ 1,5',
-    },
-    {
-      label: 'Prueba Ácida',
-      value: clampForGauge(pruebaAcida, 0, 3),
-      min: 0,
-      max: 3,
-      thresholds: [0.7, 1.0, 2.0],
-      areaAccent: 'escudo' as AreaKey,
-      caption: 'Óptimo ≥ 1,0',
-    },
-    {
-      label: 'Endeudamiento',
-      value: clampForGauge(endeudamiento, 0, 1),
-      min: 0,
-      max: 1,
-      thresholds: [0.3, 0.5, 0.7],
-      areaAccent: 'verdad' as AreaKey,
-      caption: 'Óptimo ≤ 0,5',
-    },
-    {
-      label: 'Cobertura Intereses',
-      value: coberturaIntereses != null ? clampForGauge(coberturaIntereses, 0, 10) : 0,
-      min: 0,
-      max: 10,
-      thresholds: [1.5, 3.0, 6.0],
-      areaAccent: 'futuro' as AreaKey,
-      caption: coberturaIntereses != null ? 'Óptimo ≥ 3,0' : 'Sin gasto financiero',
-    },
+  return [
+    dial(
+      { label: 'Razón Corriente', min: 0, max: 5, thresholds: [1.0, 1.5, 2.5], areaAccent: 'escudo' as AreaKey, caption: 'Óptimo ≥ 1,5' },
+      ratios.razonCorriente,
+      formatRatio,
+      'Sin pasivo corriente o dato no disponible',
+    ),
+    dial(
+      { label: 'Prueba Ácida', min: 0, max: 3, thresholds: [0.7, 1.0, 2.0], areaAccent: 'escudo' as AreaKey, caption: 'Óptimo ≥ 1,0' },
+      ratios.pruebaAcida,
+      formatRatio,
+      'Sin pasivo corriente o dato no disponible',
+    ),
+    dial(
+      { label: 'Endeudamiento', min: 0, max: 1, thresholds: [0.3, 0.5, 0.7], areaAccent: 'verdad' as AreaKey, caption: 'Óptimo ≤ 50 %' },
+      endeudamientoFrac,
+      (v) => formatPct(v),
+      'Activo nulo o dato no disponible',
+    ),
+    dial(
+      { label: 'Cobertura Intereses', min: 0, max: 10, thresholds: [1.5, 3.0, 6.0], areaAccent: 'futuro' as AreaKey, caption: 'Óptimo ≥ 3,0' },
+      ratios.coberturaIntereses,
+      formatRatio,
+      // `null` = sin gasto financiero (5305): el indicador no aplica.
+      'Sin gasto financiero: no aplica',
+    ),
   ];
-
-  return gauges;
 }
 
 function clampForGauge(v: number, min: number, max: number): number {
@@ -966,17 +1243,25 @@ function formatPillarValue(kpi: PillarKpi): string {
 
 // ─── Statements ───────────────────────────────────────────────────────────────
 
-function buildStatements(report: FinancialReport) {
+function buildStatements(
+  report: FinancialReport,
+  preprocessed: PreprocessedBalance | null | undefined,
+  language: 'es' | 'en' = 'es',
+) {
   // Fase 3.1 — prefer JSON-strict del NIIF Analyst cuando esté disponible.
   // Parser Markdown queda como fallback para reportes legacy ingestados antes
   // del refactor (e.g. reportes históricos en DB / fixtures viejos).
   const json = report.niifAnalysis?.json;
   if (json) {
+    const ctx = {
+      ...statementContext(json.company.fiscalPeriod, json.company.comparativePeriod, preprocessed),
+      language,
+    };
     return {
-      balance: niifJsonToBalanceTable(json),
-      income: niifJsonToIncomeTable(json),
-      cashFlow: niifJsonToCashFlowTable(json),
-      equity: niifJsonToEquityTable(json),
+      balance: labelLlmStatementNotes(niifJsonToBalanceTable(json, ctx), json.balanceSheet?.notes, language),
+      income: labelLlmStatementNotes(niifJsonToIncomeTable(json, ctx), json.incomeStatement?.notes, language),
+      cashFlow: niifJsonToCashFlowTable(json, ctx),
+      equity: labelLlmStatementNotes(niifJsonToEquityTable(json, ctx), json.equityChanges?.notes, language),
     };
   }
   return {
@@ -987,21 +1272,88 @@ function buildStatements(report: FinancialReport) {
   };
 }
 
+/**
+ * Las notas en prosa de cada estado (`balanceSheet/incomeStatement/equityChanges.notes`)
+ * las redacta el LLM y sus cifras no se contrastan con las anclas: se imprimían
+ * bajo el estado como si fueran parte del estado validado (e2e-niif-10). Si el
+ * estado trae alguna nota, la primera línea del pie es el aviso de narrativa no
+ * auditada (mismo texto que el resto de la narrativa del PDF y el Excel).
+ */
+function labelLlmStatementNotes<T extends { footnotes?: string[] }>(
+  table: T,
+  notes: ReadonlyArray<{ body: string }> | null | undefined,
+  language: 'es' | 'en' = 'es',
+): T {
+  const hasLlmNotes = (notes ?? []).some((n) => typeof n?.body === 'string' && n.body.trim().length > 0);
+  if (!hasLlmNotes || !table) return table;
+  return { ...table, footnotes: [narrativeDisclaimer(language), ...(table.footnotes ?? [])] };
+}
+
+/**
+ * Tipo de periodo (año completo / corte parcial) que el preprocesador infirió
+ * del archivo, SÓLO cuando el snapshot corresponde al mismo año del JSON. Sin
+ * esa coincidencia no se afirma una fecha de corte (reportes-export-14).
+ */
+function statementContext(
+  fiscalPeriod: string,
+  comparativePeriod: string | null,
+  preprocessed: PreprocessedBalance | null | undefined,
+): StatementTableContext {
+  const pp = preprocessed as
+    | { primary?: Partial<PeriodSnapshot> | null; comparative?: Partial<PeriodSnapshot> | null }
+    | null
+    | undefined;
+  const comparative = pp?.comparative;
+  // ingesta-09: comparativo de saldos de apertura, sólo si el snapshot es el
+  // del periodo comparativo que declara el JSON (misma regla que el tipo).
+  const comparativeSaldosDeApertura =
+    !!comparativePeriod &&
+    comparative?.saldosDeApertura === true &&
+    typeof comparative.period === 'string' &&
+    comparative.period.includes(comparativePeriod);
+  return {
+    ...resolvePeriodoTipos(fiscalPeriod, comparativePeriod, pp?.primary, comparative),
+    ...(comparativeSaldosDeApertura ? { comparativeSaldosDeApertura: true } : {}),
+  };
+}
+
 // ─── Notes ────────────────────────────────────────────────────────────────────
 
-function buildNotes(report: FinancialReport) {
+function buildNotes(report: FinancialReport, language: 'es' | 'en' = 'es') {
   const md = report.governance?.financialNotes ?? '';
   const sections = parseHeadingSections(md, 2);
   // Fallback to level 3 if level 2 yielded nothing (defensive).
   const eff = sections.length > 0 ? sections : parseHeadingSections(md, 3);
-  return eff.map((s) => {
+  const blocks = eff.map((s, i) => {
     const body = scrubInternalMetadata(s.body);
     return {
       heading: scrubInternalMetadata(s.heading),
-      bodyMarkdown: body,
+      // Notas en prosa del LLM: el aviso de narrativa no auditada va al inicio
+      // de la sección (reportes-export-11).
+      bodyMarkdown: i === 0 ? withNarrativeDisclaimer(body, language) : body,
       citations: extractCitations(body),
     };
   });
+
+  // Notas técnicas estructuradas del JSON NIIF validado (mapeo PUC,
+  // reclasificaciones, impracticabilidades). Antes no se exportaban en ningún
+  // formato aunque son parte del contrato (reportes-export-11).
+  const technical = (report.niifAnalysis?.json?.technicalNotes ?? [])
+    .map((n) => scrubInternalMetadata(formatStatementNote(n)))
+    .filter((n) => n.length > 0);
+  if (technical.length > 0) {
+    const body = technical.map((n) => `- ${n}`).join('\n');
+    blocks.push({
+      heading:
+        language === 'en'
+          ? 'Technical notes to the financial statements'
+          : 'Notas técnicas de los estados financieros',
+      // Prosa del Pass-3 del LLM: sus cifras no se anclan (e2e-niif-10).
+      bodyMarkdown: withNarrativeDisclaimer(body, language),
+      citations: extractCitations(body),
+    });
+  }
+  return blocks;
 }
 
 // ─── Break-Even Analysis ──────────────────────────────────────────────────────
@@ -1009,70 +1361,112 @@ function buildNotes(report: FinancialReport) {
 // strategicAnalysis.breakEvenAnalysis). Retorna undefined si el campo está
 // vacío para que la página se omita.
 
-function buildBreakEven(report: FinancialReport) {
+function buildBreakEven(report: FinancialReport, language: 'es' | 'en' = 'es') {
   const raw = (report.strategicAnalysis?.breakEvenAnalysis ?? '').trim();
   if (!raw) return undefined;
   const md = scrubInternalMetadata(raw);
-  return { bodyMarkdown: md, citations: extractCitations(md) };
+  return { bodyMarkdown: withNarrativeDisclaimer(md, language), citations: extractCitations(md) };
 }
 
 // ─── Projected Cash Flow ──────────────────────────────────────────────────────
 // Proyección de flujo de caja 12 meses — markdown del Director de Estrategia
 // (FinancialReport.strategicAnalysis.projectedCashFlow). Undefined si vacío.
 
-function buildProjectedCashFlow(report: FinancialReport) {
+function buildProjectedCashFlow(report: FinancialReport, language: 'es' | 'en' = 'es') {
   const raw = (report.strategicAnalysis?.projectedCashFlow ?? '').trim();
   if (!raw) return undefined;
   const md = scrubInternalMetadata(raw);
-  return { bodyMarkdown: md, citations: extractCitations(md) };
+  return { bodyMarkdown: withNarrativeDisclaimer(md, language), citations: extractCitations(md) };
 }
 
 // ─── Shareholder Minutes ──────────────────────────────────────────────────────
 // Acta de asamblea (Art. 187 Ley 222/1995) — markdown del Especialista de
 // Gobierno (FinancialReport.governance.shareholderMinutes). Undefined si vacío.
 
-function buildShareholderMinutes(report: FinancialReport) {
+function buildShareholderMinutes(report: FinancialReport, language: 'es' | 'en' = 'es') {
   const raw = (report.governance?.shareholderMinutes ?? '').trim();
   if (!raw) return undefined;
   const md = scrubInternalMetadata(raw);
-  return { bodyMarkdown: md, citations: extractCitations(md) };
+  return { bodyMarkdown: withNarrativeDisclaimer(md, language), citations: extractCitations(md) };
 }
 
 // ─── Recommendations ──────────────────────────────────────────────────────────
 
 const ROTATION: AreaKey[] = ['futuro', 'valor', 'escudo', 'verdad'];
 
-function buildRecommendations(report: FinancialReport): RecommendationItem[] {
+function buildRecommendations(report: FinancialReport, language: 'es' | 'en' = 'es'): RecommendationItem[] {
   const md = report.strategicAnalysis?.strategicRecommendations ?? '';
   const items = parseNumberedList(md);
   return items.map((it, idx) => ({
     title: scrubInternalMetadata(it.title),
-    bodyMarkdown: scrubInternalMetadata(it.body),
+    bodyMarkdown:
+      idx === 0 ? withNarrativeDisclaimer(scrubInternalMetadata(it.body), language) : scrubInternalMetadata(it.body),
     areaAccent: ROTATION[idx % ROTATION.length],
   }));
 }
 
 // ─── Appendix ─────────────────────────────────────────────────────────────────
 
+/**
+ * Motivo de descuadre de la ecuación calculado ANTES del curator que el
+ * resumen POSTERIOR al curator ya resolvió (normativa-metricas NM-04).
+ *
+ * `validation.reasons` se escribe al construir el snapshot, antes de R1/R8: con
+ * un sobregiro reclasificado al pasivo y el resultado cerrado en el patrimonio,
+ * el apéndice imprimía "Activo (1.150.000.000,00) != Pasivo (470.000.000,00) +
+ * Patrimonio (…)" al lado de un balance de $1.180.000.000,00 que sí cuadra.
+ * Sólo se descartan los motivos de ECUACIÓN, y sólo si los totales de control
+ * (la base de las anclas, el balance y el PDF) cuadran al centavo; los motivos
+ * de integridad y los bloqueos del curator se conservan siempre.
+ */
+function isResolvedPreCuratorEquationReason(reason: string, snap: PeriodSnapshot | undefined): boolean {
+  if (!snap) return false;
+  const persistent = new Set([
+    ...(snap.validation?.integrityReasons ?? []),
+    ...(snap.validation?.curatorBlockingReasons ?? []),
+  ]);
+  if (persistent.has(reason)) return false;
+  if (
+    !/ecuaci[oó]n contable no cuadra|descuadre coincide aproximadamente con la utilidad|Total Patrimonio .* < 1% del Activo/i.test(
+      reason,
+    )
+  ) {
+    return false;
+  }
+  const ct = snap.controlTotals;
+  if (!ct) return false;
+  const cents = (ct as { cents?: { activo?: bigint; pasivo?: bigint; patrimonio?: bigint } }).cents;
+  if (typeof cents?.activo === 'bigint' && typeof cents.pasivo === 'bigint' && typeof cents.patrimonio === 'bigint') {
+    return cents.activo === cents.pasivo + cents.patrimonio;
+  }
+  return Math.round(ct.activo * 100) === Math.round(ct.pasivo * 100) + Math.round(ct.patrimonio * 100);
+}
+
 function buildAppendix(
   report: FinancialReport,
   preprocessed: PreprocessedBalance | null | undefined,
   totals: ControlTotals | null,
   emittable: EmittableGate | undefined,
+  appliedAdjustments: AdjustmentsTrail | null = null,
+  language: 'es' | 'en' = 'es',
 ) {
-  // adjustmentsTable from a possible governance.adjustmentsLedger field
-  // (defensive — the type may not surface it yet).
+  // Ajustes confirmados que aplicó el servidor (procedencia-R2-02). Sin ellos,
+  // el campo defensivo `governance.adjustmentsLedger` (histórico: ninguna fase
+  // lo produce y el re-render del servidor lo recorta del cuerpo).
+  const serverRows = appliedAdjustmentsTable(appliedAdjustments, language);
   const ledger = (report.governance as unknown as {
     adjustmentsLedger?: unknown;
   }).adjustmentsLedger;
-  const adjustmentsTable = parseAdjustmentsLedger(ledger);
+  const adjustmentsTable = serverRows.length > 0 ? serverRows : parseAdjustmentsLedger(ledger);
 
   // Validation warnings: snapshot.validation.* (defensive optional chain on
   // the in-flight preprocessor shape).
   const validationWarnings: string[] = [];
   if (preprocessed) {
     const primary = (preprocessed as { primary?: PeriodSnapshot }).primary;
-    const primaryWarnings = primary?.validation?.reasons ?? [];
+    const primaryWarnings = (primary?.validation?.reasons ?? []).filter(
+      (w) => !isResolvedPreCuratorEquationReason(String(w), primary),
+    );
     for (const w of primaryWarnings) validationWarnings.push(scrubInternalMetadata(String(w)));
     const adjustments = primary?.validation?.adjustments ?? [];
     for (const a of adjustments) validationWarnings.push(scrubInternalMetadata(String(a)));
@@ -1126,6 +1520,23 @@ export function parseCopAmount(raw: unknown): number | null {
   const n = Number(normalized);
   if (!Number.isFinite(n)) return null;
   return negative ? -n : n;
+}
+
+/**
+ * Renglones "Ajustes Aplicados" desde la traza del servidor: cuenta y monto en
+ * sus columnas; id, periodo, saldo previo → saldo nuevo y razón en la
+ * descripción (la misma información que la traza del consolidado).
+ */
+function appliedAdjustmentsTable(trail: AdjustmentsTrail | null, language: 'es' | 'en'): AdjustmentRow[] {
+  const en = language === 'en';
+  return adjustmentTrailRows(trail).map((r) => ({
+    cuenta: r.accountCode,
+    descripcion:
+      `${r.accountName}${r.period ? ` (${r.period})` : ''} — ${r.rationale} ` +
+      `[id ${r.id}; ${en ? 'previous balance' : 'saldo previo'} ${r.previous} → ` +
+      `${en ? 'new balance' : 'saldo nuevo'} ${r.next}${r.isNewAccount ? (en ? '; new account' : '; cuenta nueva') : ''}]`,
+    ajuste: r.amountPesos,
+  }));
 }
 
 function parseAdjustmentsLedger(ledger: unknown): AdjustmentRow[] {
@@ -1203,7 +1614,12 @@ function formatBindingTotals(t: ControlTotals): string {
   lines.push(`    Corriente:     ${formatCop(t.pasivoCorriente)}`);
   lines.push(`    No corriente:  ${formatCop(t.pasivoNoCorriente)}`);
   lines.push(`  Patrimonio:    ${formatCop(t.patrimonio)}`);
-  lines.push(`  Ingresos:      ${formatCop(t.ingresos)}`);
+  // Σ clase 4 tal cual la balanza (bruto + devoluciones + no operacionales): se
+  // rotula como tal para no confundirla con los ingresos operacionales.
+  lines.push(`  Σ clase 4:     ${formatCop(t.ingresos)}`);
+  if (typeof t.ingresosNetos === 'number') {
+    lines.push(`  Ingresos netos (clase 4 − 4175): ${formatCop(t.ingresosNetos)}`);
+  }
   lines.push(`  Gastos+Costos: ${formatCop(t.gastos)}`);
   lines.push(`  Utilidad Neta: ${formatCop(t.utilidadNeta)}`);
   return lines.join('\n');
@@ -1221,13 +1637,15 @@ function formatBindingTotals(t: ControlTotals): string {
  * mismo entregable, y dos redondeos distintos (`toLocaleString` sobre float vs
  * aritmética exacta en centavos). Se unifica en el helper canónico.
  *
- * `controlTotals` viaja en PESOS (number); el helper trabaja en centavos, por
- * eso el ×100 redondeado — el mismo redondeo al centavo que usa el
- * preprocesador (`toRawString`).
+ * `controlTotals` viaja en PESOS (number); el helper trabaja en centavos. La
+ * conversión va por el texto decimal (`formatCopFromPesos`), igual que
+ * `fmtCopPesos` del Excel: `Math.round(n * 100)` deja de ser un entero seguro
+ * por encima de ~$90 billones y, desde niif-contrato-22, `formatCopFromCents`
+ * lanza RangeError con él (integración I2).
  */
 function formatCop(n: number | undefined | null): string {
   if (typeof n !== 'number' || !Number.isFinite(n)) return 'N/D';
-  return formatCopFromCents(Math.round(n * 100), false);
+  return formatCopFromPesos(n, false);
 }
 
 function formatRatio(n: number | undefined | null): string {

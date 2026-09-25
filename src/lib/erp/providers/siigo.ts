@@ -4,6 +4,16 @@
 // Docs: https://siigonube.siigo.com/
 
 import { BaseERPConnector } from '../connector';
+import { connectionKey } from '../session-store';
+import { resolveERPPeriod } from '../period';
+import { buildMovementsTrialBalance } from '../trial-balance-builders';
+import {
+  accountLevelFromCode,
+  deriveParentCode,
+  markLeafAccounts,
+  pucClassFromCode,
+  pucTypeFromCode,
+} from '../puc';
 import type {
   ERPCredentials,
   ERPAccount,
@@ -16,6 +26,8 @@ import type {
 
 const SIIGO_BASE_URL = 'https://services.siigo.com/alliances/api';
 const SIIGO_SIGN_IN_URL = `${SIIGO_BASE_URL}/siigoapi-users/v1/sign-in`;
+/** Tope de páginas por listado: evita un ciclo sin fin si el API ignora `page`. */
+const SIIGO_MAX_PAGES = 1000;
 
 // ─── Siigo API response shapes ──────────────────────────────────────────────
 
@@ -100,38 +112,33 @@ interface SiigoPaginatedResponse<T> {
 export class SiigoConnector extends BaseERPConnector {
   readonly provider = 'siigo' as const;
 
-  /** In-memory token cache (token + expiry). */
-  private cachedToken: { token: string; expiresAt: number } | null = null;
-
   // ─── Auth helpers ────────────────────────────────────────────────────────
 
   /**
-   * Authenticate with Siigo and return a Bearer token.
-   * Caches the token until it expires.
+   * Authenticate with Siigo and return a Bearer token. The token is cached
+   * per connection (provider + credential fingerprint), never per instance.
    */
-  private async getToken(credentials: ERPCredentials): Promise<string> {
-    // Return cached token if still valid (with 60s margin)
-    if (this.cachedToken && Date.now() < this.cachedToken.expiresAt - 60_000) {
-      return this.cachedToken.token;
-    }
-
+  private async getToken(
+    credentials: ERPCredentials,
+    options: { forceRefresh?: boolean } = {},
+  ): Promise<string> {
     const userName = credentials.username;
     const accessKey = credentials.apiKey;
     if (!userName || !accessKey) {
       throw new Error('Siigo credentials require "username" and "apiKey" (access key).');
     }
 
-    const response = await this.fetchJSON<SiigoSignInResponse>(SIIGO_SIGN_IN_URL, {
-      method: 'POST',
-      body: JSON.stringify({ userName, accessKey }),
-    });
-
-    this.cachedToken = {
-      token: response.access_token,
-      expiresAt: Date.now() + response.expires_in * 1000,
-    };
-
-    return this.cachedToken.token;
+    return this.sessions.resolve(
+      connectionKey(credentials, 'token'),
+      async () => {
+        const response = await this.fetchJSON<SiigoSignInResponse>(SIIGO_SIGN_IN_URL, {
+          method: 'POST',
+          body: JSON.stringify({ userName, accessKey }),
+        });
+        return { value: response.access_token, ttlMs: (response.expires_in ?? 0) * 1000 };
+      },
+      { refreshMarginMs: 60_000, forceRefresh: options.forceRefresh },
+    );
   }
 
   /** Build auth headers with the Bearer token. */
@@ -149,6 +156,12 @@ export class SiigoConnector extends BaseERPConnector {
   /**
    * Fetch all pages from a Siigo paginated endpoint.
    * Siigo uses `page` and `page_size` query params.
+   *
+   * ingesta-22: se cuentan los registros REALMENTE recibidos. Sin
+   * `pagination.total_results` se itera hasta una página vacía (antes el total
+   * valía 0 y sólo se leía la primera página); con el total, el conteo final
+   * debe coincidir o se lanza error: un listado incompleto nunca se usa como si
+   * estuviera completo.
    */
   private async fetchAllPages<T>(
     path: string,
@@ -157,12 +170,16 @@ export class SiigoConnector extends BaseERPConnector {
   ): Promise<T[]> {
     const results: T[] = [];
     const pageSize = 100;
-    let page = 1;
+    let expectedTotal: number | null = null;
 
     const headers = await this.getAuthHeaders(credentials);
 
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
+    for (let page = 1; ; page++) {
+      if (page > SIIGO_MAX_PAGES) {
+        throw new Error(
+          `Siigo ${path}: más de ${SIIGO_MAX_PAGES} páginas sin terminar la paginación; los datos no se usan.`,
+        );
+      }
       const qs = new URLSearchParams({
         ...params,
         page: String(page),
@@ -170,24 +187,29 @@ export class SiigoConnector extends BaseERPConnector {
       });
       const url = this.buildUrl(`${path}?${qs.toString()}`);
       const response = await this.fetchJSON<SiigoPaginatedResponse<T>>(url, { headers });
+      const total = response.pagination?.total_results;
+      if (typeof total === 'number' && Number.isFinite(total)) expectedTotal = total;
 
-      if (!response.results || response.results.length === 0) break;
-      results.push(...response.results);
-
-      const totalResults = response.pagination?.total_results ?? 0;
-      if (results.length >= totalResults) break;
-      page++;
+      const pageResults = response.results ?? [];
+      if (pageResults.length === 0) break;
+      results.push(...pageResults);
+      if (expectedTotal !== null && results.length >= expectedTotal) break;
     }
 
+    if (expectedTotal !== null && results.length !== expectedTotal) {
+      throw new Error(
+        `Siigo ${path}: paginación incompleta (${results.length} de ${expectedTotal} registros).`,
+      );
+    }
     return results;
   }
 
   // ─── Interface implementation ────────────────────────────────────────────
 
-  /** Test connection by attempting sign-in. */
+  /** Test connection by attempting a fresh sign-in (never a cached token). */
   async testConnection(credentials: ERPCredentials): Promise<boolean> {
     try {
-      await this.getToken(credentials);
+      await this.getToken(credentials, { forceRefresh: true });
       return true;
     } catch {
       return false;
@@ -197,60 +219,34 @@ export class SiigoConnector extends BaseERPConnector {
   /** Fetch the full chart of accounts. */
   async getChartOfAccounts(credentials: ERPCredentials): Promise<ERPAccount[]> {
     const raw = await this.fetchAllPages<SiigoAccount>('/v1/accounts', credentials);
-    return raw.map((a) => this.mapAccount(a));
+    return markLeafAccounts(raw.filter((a) => Boolean(a.code)).map((a) => this.mapAccount(a)));
   }
 
   /**
-   * Build a trial balance by aggregating journal entries for the period.
-   * @param period - ISO month string, e.g. "2026-03"
+   * Movements of the period aggregated from journals. The alliances API does
+   * not expose opening or accumulated balances, so the result is flagged
+   * `movements_only` and is never presented or serialized as a trial balance.
+   * @param period - "AAAA", "AAAA-MM", "AAAA-Qn" or "AAAA-MM-DD..AAAA-MM-DD"
    */
   async getTrialBalance(
     credentials: ERPCredentials,
     period: string,
   ): Promise<ERPTrialBalance> {
-    const [year, month] = period.split('-').map(Number);
-    const dateFrom = `${period}-01`;
-    const lastDay = new Date(year, month, 0).getDate();
-    const dateTo = `${period}-${String(lastDay).padStart(2, '0')}`;
+    const resolved = resolveERPPeriod(period);
 
     const [accounts, entries] = await Promise.all([
       this.getChartOfAccounts(credentials),
-      this.getJournalEntries(credentials, dateFrom, dateTo),
+      this.getJournalEntries(credentials, resolved.from, resolved.to),
     ]);
 
-    // Aggregate debits/credits per account code
-    const aggregation = new Map<string, { debit: number; credit: number }>();
-    for (const entry of entries) {
-      for (const line of entry.lines) {
-        const existing = aggregation.get(line.accountCode) ?? { debit: 0, credit: 0 };
-        existing.debit += line.debit;
-        existing.credit += line.credit;
-        aggregation.set(line.accountCode, existing);
-      }
-    }
-
-    const tbAccounts: ERPAccount[] = accounts.map((acct) => {
-      const agg = aggregation.get(acct.code);
-      return {
-        ...acct,
-        debit: agg?.debit ?? 0,
-        credit: agg?.credit ?? 0,
-        balance: (agg?.debit ?? 0) - (agg?.credit ?? 0),
-      };
-    });
-
-    const totalDebit = tbAccounts.reduce((s, a) => s + a.debit, 0);
-    const totalCredit = tbAccounts.reduce((s, a) => s + a.credit, 0);
-
-    return {
-      period,
+    return buildMovementsTrialBalance({
+      providerName: 'Siigo',
+      period: resolved,
+      chart: accounts,
+      lines: entries.flatMap((e) => e.lines),
       companyName: '',
       currency: 'COP',
-      accounts: tbAccounts,
-      totalDebit,
-      totalCredit,
-      generatedAt: new Date().toISOString(),
-    };
+    });
   }
 
   /** Fetch journal entries (vouchers) for a date range. */
@@ -372,52 +368,15 @@ export class SiigoConnector extends BaseERPConnector {
     return {
       code,
       name: a.name,
-      type: mapPUCType(code),
+      type: pucTypeFromCode(code),
       pucClass: pucClassFromCode(code),
       balance: 0,
       debit: 0,
       credit: 0,
-      level: accountLevel(code),
+      level: accountLevelFromCode(code),
       parentCode: code.length > 1 ? deriveParentCode(code) : undefined,
-      isAuxiliary: code.length >= 6,
+      // Recalculado por jerarquía real en getChartOfAccounts (markLeafAccounts).
+      isAuxiliary: false,
     };
   }
-}
-
-// ─── Shared PUC helpers ──────────────────────────────────────────────────────
-
-function mapPUCType(code: string): ERPAccount['type'] {
-  const first = code.charAt(0);
-  switch (first) {
-    case '1': return 'asset';
-    case '2': return 'liability';
-    case '3': return 'equity';
-    case '4': return 'revenue';
-    case '5': return 'cost';
-    case '6': return 'expense';
-    case '7': return 'cost';
-    default: return 'asset';
-  }
-}
-
-function pucClassFromCode(code: string): number {
-  const n = parseInt(code.charAt(0), 10);
-  return isNaN(n) ? 0 : n;
-}
-
-function accountLevel(code: string): number {
-  if (code.length <= 1) return 1;
-  if (code.length <= 2) return 2;
-  if (code.length <= 4) return 3;
-  if (code.length <= 6) return 4;
-  return 5;
-}
-
-/** Derive the parent PUC code by trimming the last level of digits. */
-function deriveParentCode(code: string): string | undefined {
-  if (code.length > 6) return code.slice(0, 6);
-  if (code.length > 4) return code.slice(0, 4);
-  if (code.length > 2) return code.slice(0, 2);
-  if (code.length > 1) return code.slice(0, 1);
-  return undefined;
 }

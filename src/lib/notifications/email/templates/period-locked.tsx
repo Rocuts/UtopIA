@@ -30,6 +30,13 @@ const btn = (href: string, label: string) => (
   </a>
 );
 
+/** KPI sin base verificada (null / no finito) ⇒ "N/D", nunca 0. */
+const ND = 'N/D';
+const copOrNd = (v: string | null | undefined): string =>
+  typeof v === 'string' && v.trim().length > 0 ? v : ND;
+const pctOrNd = (v: number | null | undefined): string =>
+  typeof v === 'number' && Number.isFinite(v) ? `${v.toFixed(1)}%` : ND;
+
 const pillarRow = (label: string, value: string) => (
   <tr key={label}>
     <td
@@ -236,19 +243,19 @@ export function PeriodLockedEmail({
                           <tbody>
                             {pillarRow(
                               '🛡️ Resiliencia — Provisión Impuestos',
-                              pillars.resiliencia.totalProvisionTaxesCop,
+                              copOrNd(pillars.resiliencia.totalProvisionTaxesCop),
                             )}
                             {pillarRow(
                               '💰 Valor — EBITDA',
-                              pillars.valor.ebitdaCop,
+                              copOrNd(pillars.valor.ebitdaCop),
                             )}
                             {pillarRow(
                               '✅ Verdad — Docs Verificados',
-                              `${pillars.verdad.documentsVerifiedPct.toFixed(1)}%`,
+                              pctOrNd(pillars.verdad.documentsVerifiedPct),
                             )}
                             {pillarRow(
                               '🚀 Futuro — Free Cash Flow',
-                              pillars.futuro.freeCashFlowProjectedCop,
+                              copOrNd(pillars.futuro.freeCashFlowProjectedCop),
                             )}
                           </tbody>
                         </table>

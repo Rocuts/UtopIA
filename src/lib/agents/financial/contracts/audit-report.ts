@@ -227,7 +227,7 @@ export type NiifAuditReportJson = z.infer<typeof NiifAuditReportSchema>;
 // Spec v2.1 Dictamen 2 — sub-schemas estructurados para el Auditor Tributario
 // ---------------------------------------------------------------------------
 // El dictamen v2.1 exige analisis numerados 2-9: renta (cascada), retenciones,
-// IVA/ICA, TMT, riesgos, calendario, opinion, acciones. Cada bloque vive como
+// IVA/ICA, TTD, riesgos, calendario, opinion, acciones. Cada bloque vive como
 // schema nullable en `TaxAuditReportSchema` para preservar el formato legacy.
 // ---------------------------------------------------------------------------
 
@@ -252,13 +252,13 @@ export const RentaAnalysisSchema = z.object({
     .describe('Utilidad contable antes de impuestos en centavos. Null si no se infiere.'),
   provisionTeoricaCop: MoneyCop
     .nullable()
-    .describe('Provision teorica = utilidadAntesImpuestos x tarifa / 100. Null si no se calcula.'),
+    .describe('Impuesto teorico a tarifa nominal sobre la UAI (referencia de conciliacion contable NIC 12 par. 81(c) / Sec. 29; NO es renta liquida ni impuesto a pagar). El sistema lo recalcula. Null si falta la UAI.'),
   impuestoRegistradoCop: MoneyCop
     .nullable()
-    .describe('Impuesto registrado en P&L o estimado por Cta.1805. Null si no se identifica.'),
+    .describe('Gasto por impuesto de renta CORRIENTE del periodo (PUC 5405). Excluye el impuesto diferido. Null si no se identifica.'),
   brechaCop: MoneyCop
     .nullable()
-    .describe('Brecha = provisionTeorica - impuestoRegistrado. Null si falta cualquiera de los dos.'),
+    .describe('Diferencia de conciliacion = impuesto teorico - impuesto corriente registrado (con signo). El sistema la recalcula. Null si falta cualquiera de los dos.'),
   evaluacion: TaxEvaluacionEnum,
   accion: z.string().min(1).describe('Accion recomendada concreta'),
   reference: NormaRef.describe(
@@ -268,22 +268,25 @@ export const RentaAnalysisSchema = z.object({
 export type RentaAnalysisJson = z.infer<typeof RentaAnalysisSchema>;
 
 /**
- * Analisis 3 — Retenciones, anticipos y posicion fiscal neta.
+ * Analisis 3 — Retenciones, anticipos y posicion fiscal neta DE RENTA.
  *
- * Convencion de signos: los saldos se entregan en centavos absolutos; el
- * orquestador ya emitio Cta.1355/1805 (debitos) y Cta.24 (acreedoras). El
- * agente reporta posicionFiscalNeta como activo (saldo a favor) cuando es
- * positivo, pasivo (saldo a pagar) cuando es negativo.
+ * Posicion de renta = (anticipos y retenciones de renta en la 1355 + 1805
+ * sólo si su nombre es fiscal) − 2404. Positivo = saldo a favor; negativo =
+ * saldo a pagar. NO incluye IVA/ICA ni el grupo 24 completo, y no suma el
+ * impuesto diferido (no exigible). La 1805 en el PUC (D. 2650/1993) es
+ * "Bienes de arte y cultura": sólo cuenta si el nombre de la cuenta indica
+ * impuesto/anticipo/retención/saldo a favor. El adapter recalcula estas
+ * cifras desde el preprocesador (auditoria-calidad-22).
  */
 export const RetencionesAnalysisSchema = z.object({
-  saldo1355Cop: MoneyCop.nullable().describe('Saldo Cta.1355 (anticipos)'),
-  saldo1805Cop: MoneyCop.nullable().describe('Saldo Cta.1805 (impuesto diferido activo)'),
-  saldo24Cop: MoneyCop.nullable().describe('Saldo Cta.24 (impuestos por pagar)'),
+  saldo1355Cop: MoneyCop.nullable().describe('Saldo de anticipos y retenciones de RENTA en la Cta.1355 (135505, 135515; 135595 solo si su nombre es de renta). Excluye IVA/ICA (135510, 135517, 135518, ...). Null si no hay detalle.'),
+  saldo1805Cop: MoneyCop.nullable().describe('Saldo Cta.1805 SOLO si el nombre de la cuenta indica impuesto, anticipo, retencion o saldo a favor; en el PUC la 1805 es "Bienes de arte y cultura" y entonces va null.'),
+  saldo24Cop: MoneyCop.nullable().describe('Saldo Cta.2404 (impuesto de renta y complementarios por pagar). NO el grupo 24 completo.'),
   posicionFiscalNetaCop: MoneyCop
     .nullable()
-    .describe('Posicion fiscal neta. Positivo=saldo a favor, negativo=saldo a pagar.'),
+    .describe('Posicion de renta = (1355 renta + 1805 fiscal) - 2404. Positivo=saldo a favor, negativo=saldo a pagar.'),
   evaluacion: z.string().min(1).describe('Conclusion breve sobre la posicion fiscal'),
-  reference: NormaRef.describe('Norma de respaldo (Art. 850 E.T., Decreto 2235/2017, etc.)'),
+  reference: NormaRef.describe('Norma de respaldo (Art. 850 E.T.; DUR 1625/2016 Arts. 1.6.1.21.1 y ss., devoluciones y compensaciones; etc.)'),
 });
 export type RetencionesAnalysisJson = z.infer<typeof RetencionesAnalysisSchema>;
 
@@ -308,15 +311,28 @@ export const IvaIcaAnalysisSchema = z.object({
 });
 export type IvaIcaAnalysisJson = z.infer<typeof IvaIcaAnalysisSchema>;
 
-/** Estado TMT (Tasa Minima de Tributacion, paragrafo 6 Art. 240 E.T.). */
-export const TmtStatusEnum = z.enum(['cumple', 'no_cumple', 'no_aplica']);
+/**
+ * Estado TTD (Tasa de Tributacion Depurada, paragrafo 6 Art. 240 E.T.).
+ * `no_determinable`: faltan impuesto depurado (ID), utilidad depurada (UD) o
+ * la verificacion del ambito — el impuesto contable / UAI NO es la TTD.
+ */
+export const TmtStatusEnum = z.enum(['cumple', 'no_cumple', 'no_aplica', 'no_determinable']);
 export type TmtStatusJson = z.infer<typeof TmtStatusEnum>;
 
 /**
- * Analisis 5 — Tasa Minima de Tributacion (Ley 2277/2022).
+ * Analisis 5 — Tasa de Tributación Depurada (TTD, Art. 240 par. 6 E.T.;
+ * Ley 2277/2022).
  * Aplica a TODO contribuyente de renta de los Arts. 240 / 240-1 E.T. sin
- * umbral de activos o patrimonio; 'no_aplica' se reserva para las excepciones
- * legales del paragrafo 6 (RTE Art. 19, SIMPLE, ZESE, hoteles parag. 5, etc.).
+ * umbral de activos o patrimonio. 'no_aplica' se reserva para:
+ *   - las exclusiones del texto del paragrafo 6 (ley_2277_2022.md), listadas
+ *     en EXCEPCIONES_TTD_PAR6 (tax-planning/prompts/tax-optimizer.prompt.ts):
+ *     personas juridicas extranjeras sin residencia, ZESE durante la tarifa
+ *     del 0%, ZOMAC, sociedades de los paragrafos 1, 5 y 7 del Art. 240 (los
+ *     5 y 7 si no estan obligadas al informe pais por pais), UD <= 0 y
+ *     contribuyentes del Art. 32 E.T.;
+ *   - quien no liquida el Art. 240: el RTE (Art. 19) y el SIMPLE no son
+ *     contribuyentes del Art. 240, asi que la TTD no les aplica; no son
+ *     excepciones del paragrafo 6.
  */
 export const TmtAnalysisSchema = z.object({
   tasaMinimaExigidaPct: z
@@ -325,9 +341,9 @@ export const TmtAnalysisSchema = z.object({
   tasaEfectivaPct: z
     .number()
     .nullable()
-    .describe('Tasa efectiva = impuestoRegistrado / utilidadAntesImpuestos x 100. Null si no se calcula.'),
+    .describe('TTD = ID / UD x 100 (par. 6 Art. 240 E.T.). Null sin ID y UD depurados y ambito verificado; nunca impuesto contable / UAI.'),
   status: TmtStatusEnum,
-  reference: NormaRef.describe('Norma TMT. Ej: "Art. 240-1 E.T.; Ley 2277/2022"'),
+  reference: NormaRef.describe('Norma de la Tasa de Tributación Depurada (TTD, Art. 240 par. 6 E.T.). Ej: "Art. 240 par. 6 E.T.; Ley 2277/2022"'),
 });
 export type TmtAnalysisJson = z.infer<typeof TmtAnalysisSchema>;
 
@@ -416,10 +432,10 @@ export const TaxAuditReportSchema = z.object({
   ivaIcaAnalysis: IvaIcaAnalysisSchema
     .nullable()
     .describe('Analisis de IVA e ICA. Null si se omite formato v2.1.'),
-  /** Analisis 5 — Tasa Minima de Tributacion (paragrafo 6 Art. 240 E.T.). */
+  /** Analisis 5 — Tasa de Tributación Depurada (TTD, Art. 240 par. 6 E.T.). */
   tmtAnalysis: TmtAnalysisSchema
     .nullable()
-    .describe('Analisis TMT. Null si se omite formato v2.1.'),
+    .describe('Analisis de la Tasa de Tributación Depurada (TTD, Art. 240 par. 6 E.T.). Null si se omite formato v2.1.'),
   /** Analisis 6 — Riesgos tributarios priorizados. */
   riesgosTributarios: z
     .array(RiesgoTributarioSchema)
@@ -448,7 +464,8 @@ export type TaxAuditReportJson = z.infer<typeof TaxAuditReportSchema>;
 // La especificación v2.1 "Dictamen 3 — Auditor Legal" exige un dictamen
 // estructurado con secciones formales: (i) tabla de 14 obligaciones
 // societarias, (ii) análisis de distribución del patrimonio, (iii) análisis
-// de capitalización (Ley 1258/2008 Art. 5), (iv) riesgos legales, (v)
+// de capitalización (reforma estatutaria: Art. 29 Ley 1258/2008 en SAS;
+// Art. 158 C.Co. en sociedades del C.Co.), (iv) riesgos legales, (v)
 // opinión del auditor legal y (vi) acciones requeridas.
 //
 // Todas las sub-secciones son `.nullable()` (no `.optional()`) para
@@ -458,7 +475,7 @@ export type TaxAuditReportJson = z.infer<typeof TaxAuditReportSchema>;
 //
 // Las 14 obligaciones societarias canónicas (orden fijo, ver
 // `legal-auditor.prompt.ts` y `legal-auditor.ts:renderMarkdown`):
-//   1.  Convocatoria Asamblea (Art. 424 C.Co.)
+//   1.  Convocatoria (SAS: Art. 20 Ley 1258; S.A.: Art. 424 C.Co.; Ltda.: Arts. 181-186 C.Co.)
 //   2.  Quórum (Art. 427 / 359 / Ley 1258 Art. 22)
 //   3.  Orden del día (Art. 425 C.Co.)
 //   4.  EEFF aprobados (Art. 446 C.Co.)
@@ -470,7 +487,7 @@ export type TaxAuditReportJson = z.infer<typeof TaxAuditReportSchema>;
 //   10. Matrícula mercantil (Art. 19 C.Co.)
 //   11. Revisor Fiscal (Art. 203 C.Co. / Ley 43/1990)
 //   12. RL en Cámara (Art. 442 C.Co.)
-//   13. Beneficiario Final UIAF (Resolución 164/2021)
+//   13. Registro Único de Beneficiarios Finales — RUB DIAN (Resolución 000164/2021)
 //   14. RUT/CIIU (Art. 555-2 E.T. / Res. DIAN 000114/2020)
 // ---------------------------------------------------------------------------
 
@@ -505,13 +522,14 @@ export const PatrimonyDistributionSchema = z.object({
     .describe('Utilidad neta del ejercicio en centavos COP. Null si no se identifica.'),
   reservaLegalObligatoria: z
     .boolean()
-    .describe('True si la entidad debe constituir reserva legal del 10% (Art. 452 C.Co.).'),
+    .nullable()
+    .describe('Copia del regimen de reserva legal indicado en el prompt: true (obligatoria), false (SAS cuyos estatutos no la exigen), null (estatutos no suministrados: no determinable).'),
   montoReserva10pctCop: MoneyCop
     .nullable()
-    .describe('Monto del 10% de reserva legal sobre utilidad neta. Null si no aplica.'),
+    .describe('Reserva legal del ejercicio COPIADA de las cifras vinculantes del acta (no calcular). Null si no aplica o no hay cifra vinculante.'),
   utilidadDisponibleCop: MoneyCop
     .nullable()
-    .describe('Utilidad disponible para distribución tras reserva legal. Null si no calculable.'),
+    .describe('Utilidad disponible tras reserva legal COPIADA de las cifras vinculantes del acta (no calcular). Null si no hay cifra vinculante.'),
   tipoDividendoPosible: z
     .enum(['ordinario', 'preferencial', 'no_aplica'])
     .nullable()
@@ -530,7 +548,7 @@ export const CapitalizacionAnalysisSchema = z.object({
   baseLegal: z
     .string()
     .min(1)
-    .describe('Base legal de la capitalización. Ej: "Ley 1258/2008 Art. 5"'),
+    .describe('Base legal de la capitalización (reforma estatutaria). Ej: "Art. 29 Ley 1258/2008" (SAS) o "Art. 158 C.Co." (sociedades del C.Co.)'),
   documentoRequerido: z
     .string()
     .min(1)
@@ -538,7 +556,7 @@ export const CapitalizacionAnalysisSchema = z.object({
   beneficioFiscal: z
     .string()
     .min(1)
-    .describe('Beneficio fiscal aplicable. Ej: "Art. 36-3 E.T. — exento impuesto a dividendos"'),
+    .describe('Tratamiento fiscal: dividendo en especie (Art. 30 E.T.), depuración Arts. 48-49 E.T. y retención Arts. 242/242-1/245 E.T. El Art. 36-3 E.T. está derogado (Ley 2277/2022 art. 96).'),
   procedimiento: z
     .array(z.string().min(1))
     .describe('Pasos del procedimiento de capitalización en orden cronológico.'),
@@ -657,7 +675,7 @@ export type FiscalReviewMaterialityJson = z.infer<typeof FiscalReviewMateriality
 export const FiscalReviewGoingConcernSchema = z.object({
   hasMaterialUncertainty: z
     .boolean()
-    .describe('True si existe incertidumbre material sobre empresa en funcionamiento'),
+    .describe('True solo si subsiste incertidumbre material tras evaluar los planes de la administracion (NIA 570 par. 16-18); los indicadores por si solos no la constituyen'),
   indicatorsFound: z
     .array(z.string())
     .describe('Indicadores observados (financieros, operacionales, legales). Vacio si no hay duda.'),
@@ -706,7 +724,16 @@ export type FiscalReviewGoingConcernJson = z.infer<typeof FiscalReviewGoingConce
 //   3.  Variacion de proveedores anormal
 //   4.  Saldo retenciones a favor (Cta. 1355) creciente
 //   5.  Cumplimiento Formato 2516 / Conciliacion fiscal
-//   6.  Cumplimiento Beneficiario Final UIAF
+//   6.  Cumplimiento Beneficiario Final — RUB DIAN (Art. 631-6 E.T., mod. Ley
+//       2155/2021; el registro lo administra la DIAN, no la UIAF)
+//
+// Auditoría 2026-09 (auditoria-calidad-23): esos 6 indicadores no eran los
+// del spec v2.1 Parte IV Dictamen 4 §4 y exigían bandas sectoriales no
+// disponibles. El adapter reemplaza el arreglo por los 6 del spec calculados
+// en código desde el preprocesador (margen neto vs sector CIIU, costo de
+// ventas < 1% de ingresos, brecha impuesto contable vs tasa nominal,
+// variación de ingresos > 40%, proveedores > 90% del pasivo, efectivo > 50%
+// del activo) y deriva nivel global y opinión con UNA regla determinista.
 // ---------------------------------------------------------------------------
 
 export const FormalObligationStatusEnum = z.enum([
@@ -753,14 +780,14 @@ export const CriticalSaldosSchema = z.object({
     .describe('IVA por pagar neto (Cta. 2408 - Cta. 1355 IVA) en centavos COP.'),
   anticipoRentaSiguienteCop: MoneyCop
     .nullable()
-    .describe('Anticipo renta del siguiente periodo (Art. 807 E.T.) en centavos COP.'),
+    .describe('Anticipo renta del siguiente periodo (Art. 807 E.T.). Null salvo impuesto neto de renta, retenciones del ano y anos declarando verificados.'),
   sancionPotencialMoraCop: MoneyCop
     .nullable()
-    .describe('Sancion potencial por mora si aplica (Art. 641 E.T.) en centavos COP.'),
+    .describe('Sancion potencial por EXTEMPORANEIDAD (Art. 641 E.T.) en centavos COP; null sin evidencia de presentacion extemporanea. La mora en el pago genera intereses (Arts. 634-635 E.T.), no esta sancion.'),
 });
 export type CriticalSaldosJson = z.infer<typeof CriticalSaldosSchema>;
 
-export const DianRiskLevelEnum = z.enum(['bajo', 'medio', 'alto']);
+export const DianRiskLevelEnum = z.enum(['bajo', 'medio', 'alto', 'no_determinable']);
 export type DianRiskLevelJson = z.infer<typeof DianRiskLevelEnum>;
 
 export const DianRiskIndicatorSchema = z.object({
@@ -779,11 +806,11 @@ export type DianRiskIndicatorJson = z.infer<typeof DianRiskIndicatorSchema>;
 export const Obligations2026Schema = z.object({
   anticipoRenta2026Cop: MoneyCop
     .nullable()
-    .describe('Anticipo de renta 2026 estimado en centavos COP (Art. 807 E.T.).'),
+    .describe('Anticipo de renta (Art. 807 E.T.) = max(0, porcentaje x impuesto neto de renta (o promedio de los dos ultimos anos) - retenciones del ano); porcentaje 25/50/75 segun anos declarando. Null si falta cualquier insumo verificado.'),
   baseAnticipo: z
     .string()
     .min(1)
-    .describe('Base de calculo del anticipo. Ej: "75% del impuesto causado 2025"'),
+    .describe('Base y motivo del anticipo. Si es null, explicar que insumo del Art. 807 E.T. falta.'),
   icaEstimado2026Cop: MoneyCop
     .nullable()
     .describe('ICA estimado 2026 en centavos COP. Null si no aplica.'),
@@ -794,7 +821,12 @@ export const Obligations2026Schema = z.object({
 });
 export type Obligations2026Json = z.infer<typeof Obligations2026Schema>;
 
-export const FiscalAuditOpinionTypeEnum = z.enum(['riesgo_bajo', 'riesgo_medio', 'riesgo_alto']);
+export const FiscalAuditOpinionTypeEnum = z.enum([
+  'riesgo_bajo',
+  'riesgo_medio',
+  'riesgo_alto',
+  'riesgo_no_determinable',
+]);
 export type FiscalAuditOpinionTypeJson = z.infer<typeof FiscalAuditOpinionTypeEnum>;
 
 export const FiscalAuditOpinionSchema = z.object({
@@ -823,6 +855,24 @@ export const FiscalRequiredActionSchema = z.object({
 });
 export type FiscalRequiredActionJson = z.infer<typeof FiscalRequiredActionSchema>;
 
+/**
+ * Hallazgo del Revisor Fiscal con las marcas que exige la NIA 705 para
+ * modificar la opinión: una opinión desfavorable (adversa) requiere
+ * incorrecciones materiales Y generalizadas; la abstención, una limitación
+ * al alcance con efectos posibles generalizados (auditoria-calidad-12).
+ */
+export const FiscalReviewFindingSchema = AuditFindingSchema.extend({
+  pervasive: z
+    .boolean()
+    .nullable()
+    .describe('True si los efectos del hallazgo son materiales Y generalizados (NIA 705 par. 5). Null si no aplica.'),
+  scopeLimitation: z
+    .boolean()
+    .nullable()
+    .describe('True si el hallazgo es una imposibilidad de obtener evidencia suficiente (limitacion al alcance, NIA 705 par. 9). Null si no aplica.'),
+});
+export type FiscalReviewFindingJson = z.infer<typeof FiscalReviewFindingSchema>;
+
 export const FiscalReviewReportSchema = z.object({
   complianceScore: ComplianceScore,
   executiveSummary: z
@@ -831,7 +881,7 @@ export const FiscalReviewReportSchema = z.object({
     .describe('Evaluacion general de razonabilidad de los EEFF (2-3 parrafos)'),
   materiality: FiscalReviewMaterialitySchema,
   goingConcern: FiscalReviewGoingConcernSchema,
-  findings: z.array(AuditFindingSchema).describe('Hallazgos de aseguramiento (NIA/ISA + Ley 43/1990)'),
+  findings: z.array(FiscalReviewFindingSchema).describe('Hallazgos de aseguramiento (NIA/ISA + Ley 43/1990)'),
   opinionType: AuditOpinionTypeEnum.describe('Tipo de opinion conforme a NIA 700-706'),
   dictamen: z
     .string()

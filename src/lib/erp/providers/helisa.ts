@@ -4,6 +4,15 @@
 // Docs: Helisa Kansas Web Services API.
 
 import { BaseERPConnector } from '../connector';
+import { resolveERPPeriod } from '../period';
+import { buildClosingTrialBalance } from '../trial-balance-builders';
+import {
+  accountLevelFromCode,
+  deriveParentCode,
+  markLeafAccounts,
+  pucClassFromCode,
+  pucTypeFromCode,
+} from '../puc';
 import type {
   ERPCredentials,
   ERPAccount,
@@ -161,24 +170,28 @@ export class HelisaConnector extends BaseERPConnector {
     const url = await this.buildSignedUrl(credentials, '/get/accountList');
     const raw = await this.fetchJSON<HelisaAccount[]>(url);
 
-    return (raw ?? []).map((a) => this.mapAccount(a));
+    return markLeafAccounts(
+      (raw ?? []).filter((a) => Boolean(a.codigo)).map((a) => this.mapAccount(a)),
+    );
   }
 
   /**
-   * Build a trial balance by combining balanceSheet + incomeStatement.
-   * @param period - ISO month string, e.g. "2026-03"
+   * Build a trial balance by combining balanceSheet + incomeStatement (closing
+   * balances at the cutoff date). Leaves are decided by the real hierarchy of
+   * the report: a summary that lists 110505 together with 11050501/11050502
+   * must not add the parent and its children.
+   * @param period - "AAAA", "AAAA-MM", "AAAA-Qn" or "AAAA-MM-DD..AAAA-MM-DD"
    */
   async getTrialBalance(
     credentials: ERPCredentials,
     period: string,
   ): Promise<ERPTrialBalance> {
-    const [year, month] = period.split('-').map(Number);
-    const lastDay = new Date(year, month, 0).getDate();
+    const resolved = resolveERPPeriod(period);
 
     const periodParams = {
-      anio: String(year),
-      mes: String(month),
-      fechaCorte: `${period}-${String(lastDay).padStart(2, '0')}`,
+      anio: String(resolved.cutoffYear),
+      mes: String(resolved.cutoffMonth),
+      fechaCorte: resolved.to,
     };
 
     const [bsUrl, isUrl] = await Promise.all([
@@ -197,32 +210,19 @@ export class HelisaConnector extends BaseERPConnector {
       ...(incomeStatement.items ?? []),
     ];
 
-    const accounts: ERPAccount[] = allItems.map((item) => ({
-      code: item.codigo,
-      name: item.nombre,
-      type: mapPUCType(item.codigo),
-      pucClass: pucClassFromCode(item.codigo),
-      balance: item.saldo,
-      debit: item.debitos,
-      credit: item.creditos,
-      level: accountLevel(item.codigo),
-      parentCode: deriveParentCode(item.codigo),
-      isAuxiliary: item.codigo.length >= 6,
-    }));
-
-    const totalDebit = accounts.reduce((s, a) => s + a.debit, 0);
-    const totalCredit = accounts.reduce((s, a) => s + a.credit, 0);
-
-    return {
-      period,
+    return buildClosingTrialBalance({
+      period: resolved,
+      rows: allItems.map((item) => ({
+        code: item.codigo,
+        name: item.nombre,
+        debit: item.debitos,
+        credit: item.creditos,
+        closing: item.saldo,
+      })),
       companyName: balanceSheet.empresa ?? '',
       companyNit: balanceSheet.nit,
       currency: 'COP',
-      accounts,
-      totalDebit,
-      totalCredit,
-      generatedAt: new Date().toISOString(),
-    };
+    });
   }
 
   /**
@@ -300,14 +300,14 @@ export class HelisaConnector extends BaseERPConnector {
     return {
       code: a.codigo,
       name: a.nombre,
-      type: mapPUCType(a.codigo),
+      type: pucTypeFromCode(a.codigo),
       pucClass: pucClassFromCode(a.codigo),
       balance: 0,
       debit: 0,
       credit: 0,
-      level: a.nivel ?? accountLevel(a.codigo),
+      level: a.nivel ?? accountLevelFromCode(a.codigo),
       parentCode: a.cuentaPadre ?? deriveParentCode(a.codigo),
-      isAuxiliary: a.codigo.length >= 6,
+      isAuxiliary: false,
     };
   }
 
@@ -323,41 +323,4 @@ export class HelisaConnector extends BaseERPConnector {
         return 'customer';
     }
   }
-}
-
-// ─── Shared PUC helpers ──────────────────────────────────────────────────────
-
-function mapPUCType(code: string): ERPAccount['type'] {
-  const first = code.charAt(0);
-  switch (first) {
-    case '1': return 'asset';
-    case '2': return 'liability';
-    case '3': return 'equity';
-    case '4': return 'revenue';
-    case '5': return 'cost';
-    case '6': return 'expense';
-    case '7': return 'cost';
-    default: return 'asset';
-  }
-}
-
-function pucClassFromCode(code: string): number {
-  const n = parseInt(code.charAt(0), 10);
-  return isNaN(n) ? 0 : n;
-}
-
-function accountLevel(code: string): number {
-  if (code.length <= 1) return 1;
-  if (code.length <= 2) return 2;
-  if (code.length <= 4) return 3;
-  if (code.length <= 6) return 4;
-  return 5;
-}
-
-function deriveParentCode(code: string): string | undefined {
-  if (code.length > 6) return code.slice(0, 6);
-  if (code.length > 4) return code.slice(0, 4);
-  if (code.length > 2) return code.slice(0, 2);
-  if (code.length > 1) return code.slice(0, 1);
-  return undefined;
 }

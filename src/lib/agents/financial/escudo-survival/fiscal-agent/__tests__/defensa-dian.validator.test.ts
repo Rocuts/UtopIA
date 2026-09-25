@@ -11,6 +11,7 @@ import {
   validateDefensaDianL3,
 } from '../validators/defensa-dian.validator';
 import type { Modulo5DefensaDian } from '../validators/types';
+import { classificationFromKind } from '../tools/dian-letter-builder';
 import {
   RESP_DEFENSA_DIAN_REQUERIMIENTO,
   RESP_DEFENSA_DIAN_USA_1352,
@@ -24,7 +25,7 @@ function findCheck(checks: ReturnType<typeof validateDefensaDian>, name: string)
 }
 
 describe('Defensa DIAN Validator — L1 Sintaxis estructural', () => {
-  it('M5.L1.1: detecta las 6 secciones obligatorias en carta canónica', () => {
+  it('M5.L1.1: detecta las secciones del esqueleto en carta canónica', () => {
     const checks = validateDefensaDianL1(M5_OK);
     const c = findCheck(checks, 'M5.L1.1_secciones_presentes');
     expect(c?.passed).toBe(true);
@@ -45,30 +46,50 @@ describe('Defensa DIAN Validator — L1 Sintaxis estructural', () => {
     // Swap: pongo Firmas antes de Antecedentes
     const bad: Modulo5DefensaDian = {
       ...M5_OK,
-      cartaTexto: `## Firmas\nRepresentante legal\n\n## Antecedentes\nReq. ordinario Art. 752 plazo 15 días hábiles\n\n## Posición Jurídica\nDef.\n\n## Soporte Documental\nDocs.\n\n## Defensa Art. 647\nArt. 647 par.\n\n## Petición\nArchivar.`,
+      cartaTexto: `## Firmas\nRepresentante legal\n\n## Antecedentes\nReq. ordinario Art. 686\n\n## Posición Jurídica\nDef.\n\n## Soporte Documental\nDocs.\n\n## Defensa Art. 647\nArt. 647 par.\n\n## Petición\nArchivar.`,
     };
     const checks = validateDefensaDianL1(bad);
     const cOrden = findCheck(checks, 'M5.L1.1b_secciones_ordenadas');
     expect(cOrden?.passed).toBe(false);
   });
+
+  it('M5.L1.1: sin diferencia de criterio la sección del Art. 647 no se exige', () => {
+    const sin647: Modulo5DefensaDian = {
+      ...M5_OK,
+      defensaArt647: null,
+      cartaTexto: M5_OK.cartaTexto.replace(/## Defensa Art\. 647 E\.T\.[\s\S]*?(?=## Petición)/, ''),
+    };
+    expect(findCheck(validateDefensaDianL1(sin647), 'M5.L1.1_secciones_presentes')?.passed).toBe(true);
+    const con647 = { ...sin647, defensaArt647: 'Parágrafo Art. 647 E.T.' };
+    expect(findCheck(validateDefensaDianL1(con647), 'M5.L1.1_secciones_presentes')?.passed).toBe(false);
+  });
 });
 
-describe('Defensa DIAN Validator — L2 Lógica de negocio', () => {
-  it('M5.L2.1: requerimiento Art. 752 con plazo 15 días hábiles citado pasa', () => {
-    const checks = validateDefensaDianL2(M5_OK);
-    const c = findCheck(checks, 'M5.L2.1_plazo_y_cita_correctos');
-    expect(c?.passed).toBe(true);
+describe('Defensa DIAN Validator — L2 Plazos, citas y reducciones', () => {
+  it('M5.L2.1: plazo y norma publicados = clasificación determinista del tipo', () => {
+    expect(findCheck(validateDefensaDianL2(M5_OK), 'M5.L2.1_plazo_y_norma_deterministas')?.passed).toBe(true);
   });
 
-  it('M5.L2.1: requerimiento 685 sin "1 mes" falla', () => {
+  it('M5.L2.1: pliego de cargos publicado con «3 meses» (plazo del requerimiento especial) falla', () => {
+    // tributario-modulos-13: el traslado de cargos es de 1 mes; los 3 meses
+    // del Art. 707 son del requerimiento especial.
     const bad: Modulo5DefensaDian = {
       ...M5_OK,
-      tipoRequerimiento: 'requerimiento_especial_685',
-      // texto no menciona "1 mes"
+      tipoRequerimiento: 'pliego_cargos',
+      plazoRespuesta: '3 meses (Art. 707 E.T.)',
+      normaPlazo: 'Art. 707 E.T.',
     };
-    const checks = validateDefensaDianL2(bad);
-    const c = findCheck(checks, 'M5.L2.1_plazo_y_cita_correctos');
+    const c = findCheck(validateDefensaDianL2(bad), 'M5.L2.1_plazo_y_norma_deterministas');
     expect(c?.passed).toBe(false);
+    expect(c?.detail).toContain('1 mes');
+  });
+
+  it('M5.L2.1b: carta que no cita la norma del plazo deja aviso (no bloqueo)', () => {
+    const bad: Modulo5DefensaDian = { ...M5_OK, cartaTexto: M5_OK.cartaTexto.replace(/\(Arts\. 684 y 686 E\.T\.\)/, '') };
+    const c = findCheck(validateDefensaDianL2(bad), 'M5.L2.1b_carta_cita_norma_del_plazo');
+    expect(c?.passed).toBe(false);
+    expect(c?.severity).toBe('warning');
+    expect(findCheck(validateDefensaDianL2(M5_OK), 'M5.L2.1b_carta_cita_norma_del_plazo')?.passed).toBe(true);
   });
 
   it('M5.L2.2: invoca diferencia de criterio → cita parágrafo Art. 647', () => {
@@ -87,24 +108,24 @@ describe('Defensa DIAN Validator — L2 Lógica de negocio', () => {
   it('M5.L2.4: mención de reducción sin cita de norma falla', () => {
     const bad: Modulo5DefensaDian = {
       ...M5_OK,
-      mencionaReduccion: true,
       cartaTexto: M5_OK.cartaTexto + '\n\nSolicitamos reducción de sanción.',
     };
-    const checks = validateDefensaDianL2(bad);
-    const c = findCheck(checks, 'M5.L2.4_reduccion_cita_norma');
+    const c = findCheck(validateDefensaDianL2(bad), 'M5.L2.4_reduccion_cita_norma');
     expect(c?.passed).toBe(false);
   });
 
-  it('M5.L2.4: mención de reducción con cita Art. 713 pasa', () => {
-    const ok: Modulo5DefensaDian = {
+  it('M5.L2.4: la reducción debe citar una norma disponible para el tipo de actuación', () => {
+    const liquidacion = classificationFromKind('liquidacion_oficial_revision');
+    const base: Modulo5DefensaDian = {
       ...M5_OK,
-      mencionaReduccion: true,
-      cartaTexto:
-        M5_OK.cartaTexto + '\n\nSolicitamos reducción del 50% conforme al Art. 713 E.T.',
+      tipoRequerimiento: 'liquidacion_oficial_revision',
+      plazoRespuesta: liquidacion.plazoRespuesta,
+      normaPlazo: liquidacion.normaPlazo,
     };
-    const checks = validateDefensaDianL2(ok);
-    const c = findCheck(checks, 'M5.L2.4_reduccion_cita_norma');
-    expect(c?.passed).toBe(true);
+    const ok = { ...base, cartaTexto: base.cartaTexto + '\n\nSolicitamos la reducción a la mitad conforme al Art. 713 E.T.' };
+    expect(findCheck(validateDefensaDianL2(ok), 'M5.L2.4_reduccion_cita_norma')?.passed).toBe(true);
+    const bad = { ...base, cartaTexto: base.cartaTexto + '\n\nSolicitamos la reducción conforme al Art. 644 E.T.' };
+    expect(findCheck(validateDefensaDianL2(bad), 'M5.L2.4_reduccion_cita_norma')?.passed).toBe(false);
   });
 });
 
@@ -125,9 +146,20 @@ describe('Defensa DIAN Validator — L3 Defensa tributaria', () => {
     expect(c?.passed).toBe(false);
   });
 
-  it('M5.L3.2: carta cita Art. 647 E.T. (norma raíz)', () => {
-    const checks = validateDefensaDianL3(M5_OK);
-    const c = findCheck(checks, 'M5.L3.2_cita_art_647');
-    expect(c?.passed).toBe(true);
+  it('M5.L3.2: requerimiento especial sin cita del Art. 647 deja aviso', () => {
+    const especial = classificationFromKind('requerimiento_especial');
+    const bad: Modulo5DefensaDian = {
+      ...M5_OK,
+      tipoRequerimiento: 'requerimiento_especial',
+      plazoRespuesta: especial.plazoRespuesta,
+      normaPlazo: especial.normaPlazo,
+      defensaArt647: null,
+      cartaTexto: 'Antecedentes: requerimiento especial (Art. 703 E.T.).',
+    };
+    const c = findCheck(validateDefensaDianL3(bad), 'M5.L3.2_cita_art_647');
+    expect(c?.passed).toBe(false);
+    expect(c?.severity).toBe('warning');
+    // En un requerimiento ordinario de información no se exige.
+    expect(findCheck(validateDefensaDianL3(M5_OK), 'M5.L3.2_cita_art_647')).toBeUndefined();
   });
 });

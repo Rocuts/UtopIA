@@ -9,6 +9,25 @@
 import type { CompanyInfo } from '../../types';
 import { buildAntiHallucinationGuardrail } from '../../prompts/anti-hallucination';
 import { buildColombia2026Context } from '../../prompts/colombia-2026-context';
+import { MIN_SANCTION } from '@/lib/tools/sanction-calculator';
+import { EXCEPCIONES_TTD_PAR6 } from '../../tax-planning/prompts/tax-optimizer.prompt';
+
+/** Sanción mínima 2026 (10 UVT aproximado por el Art. 868 E.T.) — fuente única. */
+const MIN_SANCTION_COP = `$${new Intl.NumberFormat('es-CO').format(MIN_SANCTION)}`;
+
+export type RegimenRentaAuditoria = 'ordinario' | 'simple' | null;
+
+/**
+ * Régimen de renta del intake, leído de forma defensiva (como
+ * `regimenTributarioParaGate`): cualquier valor distinto de 'simple' u
+ * 'ordinario' es «sin dato» y se audita como régimen ordinario.
+ */
+export function regimenRentaDeEmpresa(company: unknown): RegimenRentaAuditoria {
+  const raw = (company as { regimenTributario?: unknown } | null | undefined)?.regimenTributario;
+  if (typeof raw !== 'string') return null;
+  const v = raw.trim().toLowerCase();
+  return v === 'simple' || v === 'ordinario' ? v : null;
+}
 
 export function buildTaxAuditorPrompt(company: CompanyInfo, language: 'es' | 'en'): string {
   const guardrail = buildAntiHallucinationGuardrail(language);
@@ -22,6 +41,15 @@ export function buildTaxAuditorPrompt(company: CompanyInfo, language: 'es' | 'en
   const taxpayerType = company.entityType?.toUpperCase().includes('NATURAL')
     ? 'Persona Natural'
     : 'Persona Juridica';
+
+  // Régimen de renta del intake (re-auditoría 2026-09-24, NT-02).
+  const regimen = regimenRentaDeEmpresa(company);
+  const regimenLabel =
+    regimen === 'simple'
+      ? 'SIMPLE — Regimen Simple de Tributacion (Arts. 903-916 E.T.)'
+      : regimen === 'ordinario'
+        ? 'Ordinario (Art. 240 E.T.)'
+        : 'No informado (se audita como regimen ordinario)';
 
   return `${guardrail}
 
@@ -38,18 +66,18 @@ Producir un reporte JSON con score 0-100, resumen ejecutivo, hallazgos tributari
 <success_criteria>
 - complianceScore: ejemplar (90-100, riesgo DIAN minimo), bueno (75-89), parcial (60-74), exposicion significativa (40-59), riesgo critico (0-39).
 - Cada finding cita el articulo exacto del E.T. o el decreto/resolucion aplicable.
-- Tarifa de renta personas juridicas 2026: 35% (Art. 240 E.T.). Para zona franca: 20% (Art. 240-1 E.T.).
-- TMT (Tasa Minima de Tributacion 15%, paragrafo 6 Art. 240 E.T.): comparar contra renta ordinaria para TODO contribuyente de los Arts. 240 / 240-1 E.T. — la norma NO tiene umbral de activos ni de patrimonio. Solo quedan por fuera las excepciones legales del paragrafo 6 (RTE Art. 19, SIMPLE, ZESE, hoteles parag. 5, FNCER).
+- Tarifa de renta personas juridicas 2026: 35% (Art. 240 E.T.). Zona franca: 20% solo sobre la renta de exportacion del usuario industrial con plan de internacionalizacion (Art. 240-1 E.T., mod. Ley 2277/2022); 35% sobre el resto de su renta liquida gravable.
+- Tasa de Tributacion Depurada (TTD 15%, paragrafo 6 Art. 240 E.T.): TTD = ID / UD, con ID (impuesto depurado) y UD (utilidad depurada) segun la formula del paragrafo; aplica a todo contribuyente de los Arts. 240 / 240-1 E.T. sin umbral de activos ni de patrimonio, salvo las exclusiones del texto del paragrafo 6 (${EXCEPCIONES_TTD_PAR6.join('; ')}). El RTE (Art. 19) y el SIMPLE (Arts. 903-916) no son excepciones del paragrafo: no son contribuyentes del Art. 240, por eso la TTD no les aplica. El impuesto contable / UAI NO es la TTD.
 - Renta presuntiva: 0% desde 2021 — si aparece en el reporte como gasto, hallazgo alto.
-- UVT 2026: $52.374 COP (Res. DIAN 000238 del 15-dic-2025). Sancion minima: 10 UVT = $523.740.
+- UVT 2026: $52.374 COP (Res. DIAN 000238 del 15-dic-2025). Sancion minima: 10 UVT = ${MIN_SANCTION_COP} (10 x $52.374 = $523.740, aproximado al multiplo de mil segun Art. 868 E.T.).
 - Signo del impuesto en P&L: la cuenta de impuesto a las ganancias (PUC 5405 / 540505 con sus auxiliares 17/26) va con signo DEBITO (gasto). Si aparece como ingreso o reductor del gasto, hallazgo alto bajo NIIF for SMEs §29.27 + E.T. Art. 850.
 - impactCop es centavos COP cuando el hallazgo sea cuantificable; null en caso contrario.
 - totalFiscalExposureCop = suma de impactCop cuantificables, o null si ninguno lo es.
 - finding.period: "${company.fiscalPeriod}" para periodo unico, "YYYY → YYYY" para inter-periodo.
-- rentaAnalysis (analisis 2): tarifaGeneralPct=35; calcula provisionTeorica = utilidadAntesImpuestos * 0.35 en centavos; identifica impuestoRegistrado desde Clase 54 o Cta.1805; brecha = provisionTeorica - impuestoRegistrado; evaluacion=coherente cuando |brecha|/provisionTeorica < 10%, observacion entre 10-30%, incoherente si > 30%; reference="Art. 240 E.T.; Ley 2277 de 2022; NIIF PYMES Sec. 29".
-- retencionesAnalysis (analisis 3): identifica saldos Cta.1355 (anticipos), Cta.1805 (impuesto diferido activo), Cta.24 (impuestos por pagar); posicionFiscalNeta = (1355 + 1805) - 24; evaluacion describe si la posicion es saldo a favor o saldo a pagar y su materialidad; reference cita Art. 850 E.T. o decreto reglamentario aplicable.
+- rentaAnalysis (analisis 2): tarifaGeneralPct=35; utilidadAntesImpuestosCop copiada del reporte; impuestoRegistradoCop = gasto por impuesto de renta CORRIENTE del periodo (PUC 5405), sin el impuesto diferido; el impuesto teorico a tarifa nominal y la diferencia de conciliacion los recalcula el sistema (son una referencia de conciliacion contable NIC 12 par. 81(c) / Sec. 29, no renta liquida gravable ni impuesto a pagar); evaluacion describe si la diferencia se explica por partidas conciliatorias identificadas en el reporte; reference="Art. 240 E.T.; NIC 12 par. 81(c) / NIIF PYMES Sec. 29".
+- retencionesAnalysis (analisis 3): posicion fiscal DE RENTA. saldo1355Cop = solo anticipos y retenciones de renta (135505, 135515; 135595 si su nombre es de renta), nunca IVA/ICA (135510, 135517, 135518, ...); saldo1805Cop solo si el nombre de la cuenta indica impuesto, anticipo, retencion o saldo a favor (en el PUC la 1805 es "Bienes de arte y cultura"); saldo24Cop = Cta.2404 (renta por pagar), no el grupo 24 completo; el impuesto diferido no entra. El sistema recalcula estas cifras desde el preprocesador; evaluacion describe la naturaleza de la posicion; reference cita Art. 850 E.T.
 - ivaIcaAnalysis (analisis 4): pasivoIvaNeto = saldo neto Cta.2408 - IVA descontable; regimenIva inferido por estructura de cuentas (responsable / no_responsable / no_aplica); icaComment menciona municipio y actividad gravada cuando esten disponibles, sino "Informacion insuficiente"; reference cita Art. 437-1 E.T. y acuerdos municipales aplicables.
-- tmtAnalysis (analisis 5): tasaMinimaExigidaPct=15; tasaEfectiva = impuestoRegistrado / utilidadAntesImpuestos * 100; status=cumple cuando tasaEfectiva >= 15, no_cumple cuando < 15 (aplica sin umbral de tamano), no_aplica SOLO si la entidad esta en una excepcion legal del paragrafo 6 Art. 240 (RTE, SIMPLE, ZESE, hoteles parag. 5, FNCER) o la utilidad depurada es negativa; reference="Art. 240 E.T. parag. 6; Ley 2277/2022".
+- tmtAnalysis (analisis 5): tasaMinimaExigidaPct=15; tasaEfectivaPct=null y status="no_determinable": un balance de prueba no trae impuesto depurado (ID) ni utilidad depurada (UD) ni la verificacion del ambito; el sistema lo fija de forma determinista; reference="Art. 240 E.T. parag. 6; Ley 2277/2022".
 - riesgosTributarios (analisis 6): lista priorizada de riesgos con descripcion, probabilidad (alta/media/baja), exposicion en centavos cuando se cuantifique y reference normativa. Cuando aplique Art. 647 E.T. (diferencia de criterio razonable), incluyelo como recommendation en el riesgo correspondiente.
 - calendario2026 (analisis 7): vencimientos DIAN aplicables al contribuyente: renta persona juridica, declaraciones bimestrales IVA, retenciones en la fuente, informacion exogena, etc. Cuando no se conoce fecha exacta, fechaLimite="Por confirmar segun ultimo digito NIT". reference cita la Resolucion DIAN vigente.
 - auditOpinion (analisis 8): type=sin_hallazgos cuando complianceScore >= 90 y no hay riesgos altos; con_observaciones cuando 75-89 o hay riesgos medios; con_hallazgos_criticos cuando < 75 o hay riesgos altos cuantificados. text es el parrafo completo de opinion. exposicionTotalCop = suma de todas las exposiciones cuantificadas (= totalFiscalExposureCop).
@@ -57,10 +85,12 @@ Producir un reporte JSON con score 0-100, resumen ejecutivo, hallazgos tributari
 </success_criteria>
 
 <judgment_rules>
-- If el reporte aplica solo tarifa 35% sin verificar TMT y la entidad NO esta en una excepcion legal del paragrafo 6 Art. 240, Then hallazgo alto "Falta verificar TMT — paragrafo 6 Art. 240 E.T."; Otherwise omite.
+- If el reporte aplica solo tarifa 35% sin documentar la depuracion de la TTD (ID / UD) y la entidad NO esta en una excepcion legal del paragrafo 6 Art. 240, Then hallazgo alto "Documentar la TTD con ID y UD depurados — paragrafo 6 Art. 240 E.T." sin cuantificar un impuesto a adicionar; Otherwise omite.
+- NEVER calcules la TTD como impuesto contable / UAI ni declares cumplimiento o incumplimiento de la tasa minima sin ID y UD depurados.
 - If la provision de renta del periodo varia >50% vs comparativo sin justificacion, Then hallazgo alto "Justificar variacion atipica de provision (Art. 772-1 E.T.)"; Otherwise no comentar.
 - If el preprocesador reporto reclasificaciones por no-compensacion (§2.52 NIIF PYMES) y el reporte sigue mostrando saldos netos, Then hallazgo alto "Reclasificar a saldos brutos — §2.52 + NIC 32 par. 42"; Otherwise omite.
-- If una clasificacion contable parece divergir de la posicion DIAN (ej. IVA exento vs gravado, costos procedentes), Then EXAMINA si aplica Art. 647 E.T. (diferencia de criterio razonable y demostrable). If aplica, indica en recommendation "Sustentar diferencia de criterio razonable — Art. 647 E.T. anula sancion por inexactitud"; Otherwise no menciones Art. 647.
+- If una clasificacion contable parece divergir de la posicion DIAN (ej. IVA exento vs gravado, costos procedentes), Then EXAMINA si aplica Art. 647 E.T. (diferencia de criterio razonable y demostrable). If aplica, indica en recommendation "Documentar la interpretacion razonable del derecho aplicable (Art. 647 E.T.): excluye la inexactitud en la declaracion solo si los hechos y cifras declarados son completos y verdaderos"; Otherwise no menciones Art. 647. NEVER afirmes que el Art. 647 "anula" la sancion.
+- If <empresa_auditada> declara Regimen de renta SIMPLE, Then tmtAnalysis.status="no_aplica" (Art. 903 E.T.: el impuesto unificado sustituye el impuesto sobre la renta) y no presentes el impuesto teorico a la tarifa del Art. 240 E.T. como impuesto de la entidad (el sistema deja esa cascada en N/D); Otherwise aplica las reglas de renta ordinaria.
 - If la entidad esta en regimen SIMPLE y aparecen retenciones de renta en cabeza propia, Then hallazgo alto bajo Arts. 903-916 E.T.; Otherwise solo informativo.
 - If el reporte tiene ICA pero no identifica el municipio o la actividad gravada, Then hallazgo medio "Sustento de ICA insuficiente"; Otherwise no comentar.
 - If no hay datos suficientes para auditar un impuesto (ej. ausencia de detalle de IVA descontable), Then finding informativo "Informacion insuficiente"; no inventes cifras.
@@ -81,6 +111,7 @@ Producir un reporte JSON con score 0-100, resumen ejecutivo, hallazgos tributari
 - Razon Social: ${company.name}
 - NIT: ${company.nit}
 - Tipo de Contribuyente: ${taxpayerType}
+- Regimen de renta (intake): ${regimenLabel}
 - Periodo Auditado: ${company.fiscalPeriod}
 ${company.comparativePeriod ? `- Periodo Comparativo: ${company.comparativePeriod}` : ''}
 </empresa_auditada>

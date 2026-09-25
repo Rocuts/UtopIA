@@ -16,19 +16,35 @@ import {
 } from '../tokens';
 
 export interface PaginationFooterProps {
-  pageNumber: number;
-  totalPages: number;
+  /**
+   * Número fijo, sólo para vistas aisladas (una página suelta en una prueba).
+   * Omitido — el caso de todas las páginas del informe —, el pie imprime el
+   * número REAL de la página en el documento con el render prop de react-pdf.
+   * Auditoría 2026-09-24 (reportes-export-21): las páginas pasaban 0 y el PDF
+   * imprimía "00 / 00".
+   */
+  pageNumber?: number;
+  /** Total fijo (ver `pageNumber`); omitido = total real del documento. */
+  totalPages?: number;
   sectionLabel?: string;
 }
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
 
 /**
  * Footer: thin gold top rule, left-aligned uppercase section label, right-
  * aligned champagne page numeral with smaller "/ N" denominator.
+ *
+ * `fixed`: se repite en cada página física de una `<Page>` que se parte
+ * (notas, anexo), cada una con su propio número.
  */
 export function PaginationFooter(props: PaginationFooterProps): React.ReactElement {
   const { pageNumber, totalPages, sectionLabel } = props;
+  const staticPage = typeof pageNumber === 'number' && pageNumber > 0 ? pageNumber : null;
+  const staticTotal = typeof totalPages === 'number' && totalPages > 0 ? totalPages : null;
   return (
     <View
+      fixed
       style={{
         position: 'absolute',
         bottom: 24,
@@ -62,10 +78,14 @@ export function PaginationFooter(props: PaginationFooterProps): React.ReactEleme
             fontWeight: 'bold',
             fontSize: 18,
             color: GOLD_500,
-            lineHeight: 1,
+            // Sin `lineHeight`: react-pdf no dibuja el texto dinámico
+            // (`render`) de un <Text> con interlineado explícito.
           }}
+          // Sin la clave `render` en modo fijo: react-pdf trata como dinámico
+          // todo nodo que la tenga, aunque valga undefined.
+          {...(staticPage === null ? { render: ({ pageNumber: n }: { pageNumber: number }) => pad2(n) } : {})}
         >
-          {String(pageNumber).padStart(2, '0')}
+          {staticPage === null ? '' : pad2(staticPage)}
         </Text>
         <Text
           style={{
@@ -74,9 +94,11 @@ export function PaginationFooter(props: PaginationFooterProps): React.ReactEleme
             color: N500,
             marginLeft: 4,
           }}
+          {...(staticTotal === null
+            ? { render: ({ totalPages: t }: { totalPages: number }) => ` / ${pad2(t)}` }
+            : {})}
         >
-          {' / '}
-          {String(totalPages).padStart(2, '0')}
+          {staticTotal === null ? '' : ` / ${pad2(staticTotal)}`}
         </Text>
       </View>
     </View>

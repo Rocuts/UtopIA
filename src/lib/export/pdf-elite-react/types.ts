@@ -8,7 +8,11 @@
 
 export type AreaKey = 'escudo' | 'valor' | 'verdad' | 'futuro';
 
-export type WatermarkKind = 'BORRADOR' | 'BLOQUEADO';
+/**
+ * BORRADOR: provisional / comparativos impracticables. BLOQUEADO: gate de
+ * emitibilidad. INCOMPLETO: faltan las Partes II/III (pipeline-flujo-14).
+ */
+export type WatermarkKind = 'BORRADOR' | 'BLOQUEADO' | 'INCOMPLETO';
 
 export interface NormCitation {
   /** Texto del chip ("NIIF Secc. 17", "Art. 240 ET", "Decreto 2420/2015"). */
@@ -27,14 +31,23 @@ export interface PortraitSpec {
   areaAccent: AreaKey;
 }
 
+/**
+ * Categoría de un KPI por su NATURALEZA (reportes-export-18): la página agrupa
+ * por este campo, nunca por la posición en el array.
+ */
+export type KpiCategory = 'estructura' | 'resultados' | 'rentabilidad' | 'liquidez';
+
 export interface KpiCell {
   label: string;
-  /** Cifra ya formateada en COP ($1.234.567,89) o ratio (12,3%). */
+  /** Cifra ya formateada en COP ($1.234.567,89) o ratio (12,3%). "N/D" si no hay base verificada. */
   value: string;
   unit?: string;
   /** Variación porcentual vs comparativo (firmada). */
   deltaPct?: number;
   status?: 'positive' | 'warning' | 'critical' | 'neutral';
+  category?: KpiCategory;
+  /** Nota visible bajo el KPI (p. ej. "△ sobre patrimonio de cierre", motivo del N/D). */
+  note?: string;
 }
 
 export interface WaterfallItem {
@@ -46,7 +59,18 @@ export interface WaterfallItem {
 
 export interface DialGaugeSpec {
   label: string;
+  /** Posición de la AGUJA, recortada a [min, max]. No es la cifra que se imprime. */
   value: number;
+  /**
+   * Cifra real que se imprime (es-CO, sin recorte), p. ej. "10,00" o "10,0%".
+   * "N/D" cuando no hay base (reportes-export-05). Sin este campo el componente
+   * formatea `value` (compat con fixtures antiguos).
+   */
+  displayValue?: string;
+  /** Sin dato: no se dibuja aguja y se imprime `displayValue` ("N/D"). */
+  noData?: boolean;
+  /** La cifra real cae fuera de [min, max]: la aguja está recortada y se rotula. */
+  outOfScale?: boolean;
   min: number;
   max: number;
   /** [low, mid, high] — define las 3 zonas de color del arco. */
@@ -85,6 +109,17 @@ export interface ParsedTable {
   /** Encabezados de columna (primera = "Cuenta", restantes = periodos / variaciones). */
   headers: string[];
   rows: ParsedTableRow[];
+  /**
+   * Fecha de corte (ESF) o periodo cubierto (ERI/EFE/ECP) derivada de los datos
+   * — NIIF para las PYMES 3.23. Nunca supone el 31-dic sin evidencia.
+   */
+  subtitle?: string;
+  /** Moneda de presentación y grado de redondeo. */
+  currencyNote?: string;
+  /** Leyendas visibles (p. ej. comparativo no presentado en este estado). */
+  legends?: string[];
+  /** Notas estructuradas del estado (`*.notes` del JSON validado). */
+  footnotes?: string[];
 }
 
 export interface FinancialStatementsSpec {
@@ -137,7 +172,25 @@ export interface ShareholderMinutesSpec {
 
 export type AuditFindingSeverity = 'critico' | 'alto' | 'medio' | 'bajo' | 'informativo';
 export type AuditFindingDomain = 'niif' | 'tributario' | 'legal' | 'revisoria';
-export type AuditOpinionKind = 'favorable' | 'con_salvedades' | 'desfavorable' | 'abstension';
+/**
+ * `no_emitida`: sin dictamen del Revisor Fiscal (su auditor falló o no hubo
+ * opinión). Una opinión ausente NO es una abstención (NIA 705 exige evidencia
+ * para abstenerse) — auditoria-calidad-04.
+ */
+export type AuditOpinionKind =
+  | 'favorable'
+  | 'con_salvedades'
+  | 'desfavorable'
+  | 'abstension'
+  | 'no_emitida';
+
+/** Cobertura de los 4 dominios de la auditoría especializada. */
+export interface AuditCoverageSpec {
+  completed: number;
+  total: 4;
+  /** true cuando algún auditor no completó su revisión: el score es PARCIAL. */
+  partial: boolean;
+}
 
 export interface AuditFindingRow {
   code: string;
@@ -165,7 +218,8 @@ export interface AuditorScoreCard {
  * activó `outputOptions.auditPipeline` o la corrida falló.
  */
 export interface AuditFindingsSpec {
-  overallScore: number;
+  /** `null` = sin puntaje entregado → "N/D" (nunca 0). */
+  overallScore: number | null;
   opinionType: AuditOpinionKind;
   opinionText: string;
   auditorCards: AuditorScoreCard[];
@@ -173,6 +227,12 @@ export interface AuditFindingsSpec {
   topFindings: AuditFindingRow[];
   findingCounts: Record<AuditFindingSeverity, number>;
   executiveSummary: string;
+  /**
+   * Cobertura de dominios (auditoria-calidad-21). Con `partial` el score es un
+   * promedio de los dominios completados y se rotula "PARCIAL (n/4)"; con 0
+   * dominios completados es N/D. Ausente = informe previo sin el dato.
+   */
+  coverage?: AuditCoverageSpec;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -190,25 +250,44 @@ export interface QualityDimensionBar {
  * `QualityAssessment` (single-agent meta-auditor `/api/financial-quality`).
  * Renderizado por `QualityMetaAuditPage`. Si undefined, la página se omite.
  */
+/** `null` = el meta-auditor no entregó la cifra → la página imprime "N/D" (nunca 0 / 'F'). */
+/**
+ * Sello de calidad v2.1 (Spec v2.1 Parte V): veredicto que se muestra en la
+ * PDF. El `grade` A+..F es interno y se rotula como tal (auditoria-calidad-10).
+ */
+export interface QualitySelloSpec {
+  type: 'certificada' | 'con_observaciones' | 'requiere_correccion' | 'no_evaluable';
+  title: string;
+  /** Score global v2.1 (0-10, un decimal); null = N/D. */
+  score10: number | null;
+  approvedCount: number;
+  evaluatedCount: number;
+  bottomLine: string;
+}
+
 export interface QualityScoresSpec {
-  overallScore: number;
-  grade: string;
+  /** Score interno 0-100 derivado del score global v2.1 (no el del LLM). */
+  overallScore: number | null;
+  /** Grade interno (cortes A+ ≥ 95 … F < 60) derivado de `overallScore`. */
+  grade: string | null;
+  /** Sello v2.1 recalculado de las dimensiones (ausente en IR previos). */
+  sello?: QualitySelloSpec | null;
   dimensions: QualityDimensionBar[];
-  ifrs18Ready: boolean;
-  ifrs18Score: number;
+  ifrs18Ready: boolean | null;
+  ifrs18Score: number | null;
   ifrs18Gaps: string[];
   dataQuality: {
-    completeness: number;
-    accuracy: number;
-    consistency: number;
-    timeliness: number;
-    validity: number;
+    completeness: number | null;
+    accuracy: number | null;
+    consistency: number | null;
+    timeliness: number | null;
+    validity: number | null;
   };
   aiGovernance: {
-    traceability: number;
-    explainability: number;
-    antiHallucination: number;
-    humanOversight: number;
+    traceability: number | null;
+    explainability: number | null;
+    antiHallucination: number | null;
+    humanOversight: number | null;
   };
   executiveSummary: string;
 }
@@ -233,9 +312,14 @@ export interface ReportMeta {
   entityType?: string;
   fiscalPeriod: string;
   comparativePeriod?: string;
+  /**
+   * Grupo NIIF declarado en el JSON validado (1 plenas, 2 PYMES, 3 micro).
+   * Decide las citas normativas de los estados; null = no declarado.
+   */
+  niifGroup?: 1 | 2 | 3 | null;
   generatedAt: string;
   language: 'es' | 'en';
-  /** Si presente, modifica el CoverPage (BORRADOR amarillo, BLOQUEADO bordeaux). */
+  /** Si presente, modifica el CoverPage (BORRADOR / INCOMPLETO amarillo, BLOQUEADO bordeaux). */
   watermark?: WatermarkKind;
   /**
    * Subtitulo del watermark — se renderiza debajo del titulo en CoverPage cuando
@@ -254,11 +338,45 @@ export interface CoverSpec {
   accentArea: AreaKey;
 }
 
+/**
+ * Sección del informe que la tabla de contenido puede numerar. Cada página que
+ * abre una sección lleva un `<TocAnchor id=…>` (reportes-export-21).
+ */
+export type TocAnchorId =
+  | 'director'
+  | 'kpi'
+  | 'statements'
+  | 'waterfall'
+  | 'dials'
+  | 'breakEven'
+  | 'projectedCashFlow'
+  | 'pillars'
+  | 'notes'
+  | 'recommendations'
+  | 'minutes'
+  | 'audit'
+  | 'quality'
+  | 'appendix';
+
+/**
+ * Recolector de anclas de la tabla de contenido (reportes-export-21): recibe
+ * la página real en la que cayó cada `<TocAnchor>` durante la pasada de
+ * medición de `render.ts`. Sólo existe en tiempo de ejecución.
+ */
+export type TocAnchorCollector = (anchor: TocAnchorId, pageNumber: number) => void;
+
 export interface TocEntry {
   label: string;
+  /**
+   * Página real en el PDF. La fija `render.ts` tras una pasada de medición
+   * (`resolveTocEntries`); `<= 1` = sin número (la página 1 es la portada) y
+   * la tabla imprime '—'.
+   */
   page: number;
   /** TEMA N: ... va uppercase, secciones de front-matter no. */
   uppercase: boolean;
+  /** Página que abre la sección; sin ancla la entrada no se puede numerar. */
+  anchor?: TocAnchorId;
 }
 
 export interface TocSpec {
@@ -276,7 +394,7 @@ export interface DirectorLetterSpec {
 }
 
 export interface KpiGridSpec {
-  /** Máx 12 KPIs (4×3). */
+  /** Hasta 13 KPIs agrupados por `category` (4 grupos de 3-4). Nunca se recortan en silencio. */
   kpis: KpiCell[];
 }
 
@@ -348,6 +466,14 @@ export interface OutputOptionsToggle {
 // ───────────────────────────────────────────────────────────────────────────
 export interface EditorialReport {
   meta: ReportMeta;
+  /**
+   * Sólo en tiempo de ejecución (no forma parte del IR serializable): el
+   * recolector de la pasada de medición de la tabla de contenido. Viaja en el
+   * IR y no en un contexto de React porque las rutas de Next empaquetan React
+   * con la condición `react-server`, que no expone `createContext` (el build
+   * fallaba en /api/financial-report/export).
+   */
+  tocCollector?: TocAnchorCollector | null;
   /**
    * Toggle del intake — si undefined, EditorialReportDoc renderiza el set
    * completo (default histórico). Si presente, cada página se gatea contra

@@ -13,6 +13,7 @@ import { callFinancialAgent } from '../../agents/runtime';
 import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
 import { buildTetCalculatorPrompt } from '../prompts/tet-calculator.prompt';
 import { extractSurvivalAnchors, buildAnchorBlock } from '../lib/extract-totals';
+import { computeTetContable, enforceTet } from '../lib/deterministic-survival';
 import { TetReportSchema } from '../../contracts/escudo-survival';
 import type { SurvivalAgentInput, TetCalculatorResult } from '../types';
 
@@ -27,10 +28,15 @@ export async function runTetCalculator(
     ? `${company.name ?? 'empresa'} (NIT ${company.nit}, sector ${company.sector ?? 'no especificado'}, CIIU ${company.ciiu ?? 'no especificado'})`
     : undefined;
 
+  const tetContable = computeTetContable(anchors);
   const userContent = [
-    'Calcula la TET, la TTD (parag. 6 Art. 240 E.T.) y nivel de alerta sobre los siguientes totales vinculantes:',
+    'Redacta el análisis de la tasa efectiva contable sobre los totales vinculantes. Las cifras de data las fija el sistema:',
     '',
     anchorBlock,
+    '',
+    `TET contable (impuesto causado / UAI): ${tetContable.tet === null ? 'N/D (UAI ≤ 0)' : `${(tetContable.tet * 100).toFixed(2)}%`}`,
+    `Nivel de alerta (heurística interna): ${tetContable.nivelAlerta ?? 'N/D'}`,
+    'TTD (parág. 6 Art. 240 E.T.): N/D — faltan impuesto depurado (ID) y utilidad depurada (UD).',
     '',
     input.instructions ? `INSTRUCCIONES ADICIONALES:\n${input.instructions}` : '',
   ]
@@ -46,9 +52,7 @@ export async function runTetCalculator(
     ...MODELS_CONFIG.tetCalculator,
   });
 
-  // El shape de TetReportSchema coincide con TetCalculatorResult (extensions de
-  // AgentResultBase). La aseveracion `as TetCalculatorResult` evita un mapeo
-  // identidad ruidoso — Zod ya garantizo el shape, y los tests del validator
-  // confirman compatibilidad.
-  return json as TetCalculatorResult;
+  // TET contable, nivel, UAI e impuesto causado: deterministas; TTD = null
+  // (auditoría 2026-09, tributario-modulos-06). El LLM sólo narra y sugiere.
+  return enforceTet(json as TetCalculatorResult, anchors);
 }

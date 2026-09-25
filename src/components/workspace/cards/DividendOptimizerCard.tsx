@@ -3,7 +3,8 @@
 /**
  * DividendOptimizerCard — Optimización de Dividendos.
  * Shows three scenarios: distribute fully, capitalize fully, 50/50 hybrid.
- * Covers Art. 242 E.T. (dividend tax rate) and Art. 36-3 E.T. (capitalization).
+ * Covers Art. 242 E.T. (dividend tax). Art. 36-3 E.T. was repealed by Ley
+ * 2277/2022 art. 96: capitalizing profits is taxed like distributing them.
  */
 
 import { TrendingUp } from 'lucide-react';

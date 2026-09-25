@@ -48,13 +48,14 @@ const TOGGLES: Metric[] = ['ebitda', 'fcf', 'ingresos'];
 
 // ─── Helper: valor de una métrica en un punto ────────────────────────────────
 
-function getValue(point: ValorBarSeries, metric: Metric): number {
-  if (metric === 'fcf') return point.fcf ?? 0;
+// `null` = métrica no calculable en ese periodo (FCF sin comparativo, EBITDA sin
+// grupo 41). Nunca se pinta como 0: la barra se omite y el tooltip dice N/D.
+function getValue(point: ValorBarSeries, metric: Metric): number | null {
   return point[metric];
 }
 
-function isFcfNull(point: ValorBarSeries, metric: Metric): boolean {
-  return metric === 'fcf' && point.fcf === null;
+function isNullPoint(point: ValorBarSeries, metric: Metric): boolean {
+  return getValue(point, metric) === null;
 }
 
 // ─── Componente principal ────────────────────────────────────────────────────
@@ -81,12 +82,12 @@ export function ValorTrendBars({ series, language, density }: ValorTrendBarsProp
     const labels = series.map((p) => p.label);
     const values = series.map((p) => {
       const v = getValue(p, metric);
-      const nullFcf = isFcfNull(p, metric);
+      const nullPoint = isNullPoint(p, metric);
       return {
         value: v,
         itemStyle: {
-          color: nullFcf ? tokens.textSecondary : baseColor[metric],
-          opacity: nullFcf ? 0.3 : p.isInterpolated ? 0.65 : 1,
+          color: nullPoint ? tokens.textSecondary : baseColor[metric],
+          opacity: nullPoint ? 0.3 : p.isInterpolated ? 0.65 : 1,
           borderRadius: [3, 3, 0, 0],
         },
       };
@@ -102,12 +103,14 @@ export function ValorTrendBars({ series, language, density }: ValorTrendBarsProp
           if (!first) return '';
           const point = series[first.dataIndex];
           if (!point) return '';
-          const nullFcf = isFcfNull(point, metric);
           const v = getValue(point, metric);
           const metricLabel = METRIC_LABELS[metric][isEs ? 'es' : 'en'];
-          const valueStr = nullFcf
-            ? (isEs ? '— (sin comparativo)' : '— (no comparative period)')
-            : formatCop(v);
+          const valueStr =
+            v === null
+              ? metric === 'fcf'
+                ? (isEs ? 'N/D (sin comparativo)' : 'N/A (no comparative period)')
+                : (isEs ? 'N/D (sin base verificable)' : 'N/A (no verifiable basis)')
+              : formatCop(v, language);
           const provisional = point.isInterpolated
             ? `<br/><span style="font-size:10px;opacity:0.6">${isEs ? 'Estimado (interpolación lineal)' : 'Estimated (linear interpolation)'}</span>`
             : '';
@@ -127,7 +130,8 @@ export function ValorTrendBars({ series, language, density }: ValorTrendBarsProp
         axisLabel: {
           color: tokens.textSecondary,
           fontSize: 10,
-          formatter: (v: number) => formatBigCop(v),
+          // ratios-kpis-27: escala del idioma ('$2,4 mil M' / '$2.4B').
+          formatter: (v: number) => formatBigCop(v, language),
         },
         splitLine: { lineStyle: { color: tokens.textSecondary + '22', type: 'dashed' } },
       },
@@ -145,7 +149,7 @@ export function ValorTrendBars({ series, language, density }: ValorTrendBarsProp
             fontSize: 9,
             formatter: (p: { dataIndex: number }) => {
               const v = getValue(series[p.dataIndex], metric);
-              return isFcfNull(series[p.dataIndex], metric) ? '?' : formatBigCop(v);
+              return v === null ? (isEs ? 'N/D' : 'N/A') : formatBigCop(v, language);
             },
           },
           animationDelay: (idx: number) => idx * 60,
@@ -153,7 +157,7 @@ export function ValorTrendBars({ series, language, density }: ValorTrendBarsProp
         },
       ],
     };
-  }, [series, metric, tokens, baseColor, isEs]);
+  }, [series, metric, tokens, baseColor, isEs, language]);
 
   const subtitle = hasInterpolated
     ? (isEs
@@ -232,11 +236,15 @@ export function ValorTrendBars({ series, language, density }: ValorTrendBarsProp
       </ChartContainer>
 
       {/* Leyenda FCF null */}
-      {metric === 'fcf' && series.some((p) => p.fcf === null) && (
-        <p className="text-xs text-n-500 text-right">
-          {isEs
-            ? 'Barras atenuadas: FCF no disponible (sin período comparativo)'
-            : 'Faded bars: FCF unavailable (no comparative period)'}
+      {series.some((p) => isNullPoint(p, metric)) && (
+        <p className="text-xs text-n-600 text-right">
+          {metric === 'fcf'
+            ? (isEs
+                ? 'N/D: FCF no disponible (sin período comparativo)'
+                : 'N/A: FCF unavailable (no comparative period)')
+            : (isEs
+                ? 'N/D: métrica no calculable en algunos períodos (sin base verificable)'
+                : 'N/A: metric not computable for some periods (no verifiable basis)')}
         </p>
       )}
     </div>

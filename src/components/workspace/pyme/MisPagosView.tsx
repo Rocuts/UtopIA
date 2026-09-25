@@ -9,7 +9,10 @@
  * - Estado de pagos: próximos vencimientos del calendario oficial verificado
  *   (GET /api/calendar/verified) con rango por dígito de NIT
  * - Balanza "¿Estoy pagando el impuesto correcto?": slider que recalcula
- *   RST vs Ordinario en vivo (useTaxCalculator; tarifas de referencia)
+ *   RST vs Ordinario en vivo (useTaxCalculator). La cifra ordinaria exige el
+ *   margen y la tarifa de ICA del usuario; sin ellos se muestra N/D con el
+ *   motivo (auditoría 2026-09, tributario-calc-11) y se rotula la tarifa de
+ *   renta aplicada (Art. 241 PN / Art. 240 PJ)
  * - Formularios 300/350/260: marcados "Próximamente" — aún no se generan
  *   borradores con datos reales
  */
@@ -28,7 +31,14 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/context/LanguageContext';
 import { useTaxCalculator } from '@/hooks/useTaxCalculator';
+import type { TipoContribuyenteRenta } from '@/lib/tax/taxCalculator';
+import {
+  faltantesOrdinario,
+  parseIcaPorMilInput,
+  parseMarginInput,
+} from '@/components/workspace/pyme/regimen-display';
 import { PymeSubpageShell } from '@/components/workspace/pyme/PymeSubpageShell';
 import { usePymeDeadlines } from '@/components/workspace/pyme/usePymeData';
 
@@ -77,10 +87,15 @@ function BalanzaCard({
   title,
   value,
   win,
+  note,
+  nd = false,
 }: {
   title: string;
   value: string;
   win: boolean;
+  /** Rótulo de la tarifa aplicada o motivo del N/D. */
+  note?: string;
+  nd?: boolean;
 }) {
   return (
     <div
@@ -96,10 +111,16 @@ function BalanzaCard({
         </span>
       )}
       <div className="text-sm font-bold text-n-1000">{title}</div>
-      <div className="mb-1 mt-2 font-mono text-2xl font-semibold tabular-nums text-n-1000">
+      <div
+        className={cn(
+          'mb-1 mt-2 font-mono text-2xl font-semibold tabular-nums',
+          nd ? 'text-n-700' : 'text-n-1000',
+        )}
+      >
         {value}
       </div>
       <div className="text-xs text-n-600">Impuesto estimado en el año</div>
+      {note && <div className="mt-1.5 text-xs leading-snug text-n-700">{note}</div>}
     </div>
   );
 }
@@ -107,16 +128,36 @@ function BalanzaCard({
 // ─── View ────────────────────────────────────────────────────────────────────
 
 export function MisPagosView() {
+  const { t } = useLanguage();
+  const pt = t.pyme.pagos;
   const [open, setOpen] = useState(false);
   const [monthly, setMonthly] = useState(8_166_000);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  // Datos del usuario para la cifra ordinaria (sin ellos: N/D).
+  const [tipo, setTipo] = useState<TipoContribuyenteRenta>('persona_natural');
+  const [marginPct, setMarginPct] = useState('');
+  const [icaPorMil, setIcaPorMil] = useState('');
+  const margin = parseMarginInput(marginPct);
+  const icaRate = parseIcaPorMilInput(icaPorMil);
 
   const annual = monthly * 12;
-  const { rst, ordinario, recommended, comparable, savings, semaforo } = useTaxCalculator(
-    annual,
-    { group: 'tiendas' },
-  );
+  const {
+    rst,
+    ordinario,
+    recommended,
+    comparable,
+    savings,
+    semaforo,
+    ordinarioDisponible,
+    advertencias,
+  } = useTaxCalculator(annual, { group: 'tiendas', margin, icaRate, tipoContribuyente: tipo });
+  const faltantes = faltantesOrdinario({ margin, icaRate }, pt);
+  const ordinarioNote = ordinarioDisponible
+    ? tipo === 'persona_juridica'
+      ? pt.baseLegalPJ
+      : pt.baseLegalPN
+    : pt.ordinarioND.replace('{faltantes}', faltantes ?? '');
   // `recommended` es null cuando falta un insumo territorial verificado —la
   // tarifa de ICA la fija cada concejo municipal (Ley 14 de 1983, arts. 32-33)—.
   // Optar por el SIMPLE es IRREVOCABLE durante el año gravable (Art. 909 E.T.),
@@ -307,6 +348,44 @@ export function MisPagosView() {
               Al año: <span className="font-mono tabular-nums">{pesos(annual)}</span>
             </div>
 
+            {/* Datos del usuario para el régimen ordinario */}
+            <div className="mt-4 grid grid-cols-1 gap-3 min-[521px]:grid-cols-3">
+              <label className="flex flex-col gap-1 text-xs font-semibold text-n-700">
+                {pt.tipoContribuyente}
+                <select
+                  value={tipo}
+                  onChange={(e) => setTipo(e.target.value as TipoContribuyenteRenta)}
+                  className="h-10 rounded-md border border-n-200 bg-n-0 px-3 text-sm font-normal text-n-900 focus:border-area-pyme focus:outline-none focus:ring-2 focus:ring-area-pyme/15"
+                >
+                  <option value="persona_natural">{pt.personaNatural}</option>
+                  <option value="persona_juridica">{pt.personaJuridica}</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-semibold text-n-700">
+                {pt.margen}
+                <input
+                  inputMode="decimal"
+                  value={marginPct}
+                  onChange={(e) => setMarginPct(e.target.value)}
+                  placeholder={pt.margenPlaceholder}
+                  aria-invalid={marginPct.trim() !== '' && margin === undefined}
+                  className="h-10 rounded-md border border-n-200 bg-n-0 px-3 text-sm font-normal text-n-900 placeholder:text-n-400 focus:border-area-pyme focus:outline-none focus:ring-2 focus:ring-area-pyme/15"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-semibold text-n-700">
+                {pt.ica}
+                <input
+                  inputMode="decimal"
+                  value={icaPorMil}
+                  onChange={(e) => setIcaPorMil(e.target.value)}
+                  placeholder={pt.icaPlaceholder}
+                  aria-invalid={icaPorMil.trim() !== '' && icaRate === undefined}
+                  className="h-10 rounded-md border border-n-200 bg-n-0 px-3 text-sm font-normal text-n-900 placeholder:text-n-400 focus:border-area-pyme focus:outline-none focus:ring-2 focus:ring-area-pyme/15"
+                />
+              </label>
+            </div>
+            <p className="mt-2 text-xs text-n-600">{pt.inputsHelp}</p>
+
             {/* Semáforo */}
             <div className="mt-4">
               <div className="h-2.5 overflow-hidden rounded-full bg-n-100">
@@ -334,7 +413,9 @@ export function MisPagosView() {
             />
             <BalanzaCard
               title="Régimen Ordinario"
-              value={fmtM(ordinario)}
+              value={ordinarioDisponible ? fmtM(ordinario) : pt.notAvailable}
+              nd={!ordinarioDisponible}
+              note={ordinarioNote}
               win={comparable && !rstWin}
             />
           </div>
@@ -357,16 +438,26 @@ export function MisPagosView() {
             <div className="mt-3.5 flex items-center gap-3.5 rounded-xl border border-n-300 bg-n-100 px-5 py-4">
               <PiggyBank className="h-6 w-6 shrink-0 text-n-600" strokeWidth={1.75} aria-hidden="true" />
               <div>
-                <div className="text-[17px] font-bold text-n-1000">
-                  Comparación de referencia, no una recomendación
-                </div>
+                <div className="text-[17px] font-bold text-n-1000">{pt.noRecomendacion}</div>
                 <div className="mt-0.5 text-sm text-n-700">
-                  Falta su tarifa de ICA municipal, que fija cada concejo (Ley 14 de 1983,
-                  arts. 32-33). Como optar por el Régimen Simple es irrevocable durante todo
-                  el año gravable (Art. 909 E.T.), no le señalamos un ganador sin ese dato.
-                  Consúltelo con su contador.
+                  {faltantes
+                    ? pt.noRecomendacionBody.replace('{faltantes}', faltantes)
+                    : pt.noRecomendacionPension}
                 </div>
               </div>
+            </div>
+          )}
+
+          {advertencias.length > 0 && (
+            <div className="mt-3.5 rounded-xl border border-n-200 bg-n-0 px-5 py-3.5">
+              <div className="text-xs font-bold uppercase tracking-wide text-n-600">
+                {pt.advertencias}
+              </div>
+              <ul className="mt-1.5 list-disc space-y-1 pl-5 text-xs leading-snug text-n-700">
+                {advertencias.map((a) => (
+                  <li key={a}>{a}</li>
+                ))}
+              </ul>
             </div>
           )}
 
@@ -375,12 +466,13 @@ export function MisPagosView() {
             <button
               type="button"
               onClick={saveCalculation}
-              disabled={saving}
+              disabled={saving || !comparable}
               className="inline-flex h-10 items-center gap-2 rounded-md border border-area-pyme/40 px-4 text-sm font-semibold text-[#2A5E1F] transition-colors hover:bg-area-pyme/10 disabled:cursor-not-allowed disabled:opacity-60 dark:text-area-pyme focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-area-pyme"
             >
               <Save className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
               {saving ? 'Guardando…' : 'Guardar cálculo'}
             </button>
+            {!comparable && <span className="text-xs text-n-600">{pt.saveDisabled}</span>}
             {savedAt && (
               <span className="text-xs text-n-500">
                 Último guardado:{' '}

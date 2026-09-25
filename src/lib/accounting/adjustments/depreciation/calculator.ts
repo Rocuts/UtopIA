@@ -9,9 +9,24 @@
 // Precisión: todos los intermedios en BigInt centavos.
 // Salida: NUMERIC string "XXXXXXX.XX" para Postgres.
 //
-// Métodos diferidos (stub):
-//   - units_of_production: requiere unidades producidas por mes (input externo).
-//   - accelerated:         requiere tabla de porcentajes anuales decrecientes.
+// Métodos NO implementados (auditoría contab-nomina-14): units_of_production
+// y accelerated se OMITEN con motivo `method_not_supported` — antes se
+// calculaban en línea recta y se etiquetaban 'straight_line' sin aviso. La
+// API ya no acepta esos métodos al crear/editar activos.
+//
+// Inicio de la depreciación (NIC 16 ¶55 / Sección 17.20: cuando el activo
+// está disponible para su uso) — política explícita:
+//   - acquisition_date posterior al cierre del período → `not_yet_in_use`.
+//   - Mes de adquisición: se prorratea por días en uso dentro del período
+//     (días desde acquisition_date hasta fin de mes / días del mes). La
+//     fracción no depreciada se recupera al final de la vida útil porque el
+//     cálculo continúa hasta agotar el valor depreciable.
+//   - Meses no corridos entre `last_depreciated_period` y el período actual
+//     se recuperan en este período (monthly × meses transcurridos), siempre
+//     acotado al valor depreciable pendiente. Un activo que nunca se ha
+//     depreciado en el sistema arranca en el período actual: los activos
+//     preexistentes deben registrarse con su depreciación acumulada.
+//   - El período 13 (ajustes de cierre anual) no genera depreciación.
 //
 // Referencia: Art. 137 E.T. (vidas útiles para efectos fiscales); NIC 16 para
 // NIIF (vida útil estimada por la entidad — puede diferir del fiscal).
@@ -68,6 +83,29 @@ function comparePeriods(
   return a.year * 12 + a.month - (b.year * 12 + b.month);
 }
 
+const MS_PER_DAY = 86_400_000;
+
+function utcDayStart(d: Date): number {
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
+/**
+ * Días en uso del activo dentro del mes de adquisición y días del mes.
+ * `null` si la adquisición no cae dentro del período.
+ */
+function firstMonthFraction(
+  acquisitionDate: Date,
+  period: { startsAt: Date; endsAt: Date },
+): { daysInUse: number; daysInMonth: number } | null {
+  const acq = utcDayStart(acquisitionDate);
+  const start = utcDayStart(new Date(period.startsAt));
+  const end = utcDayStart(new Date(period.endsAt));
+  if (acq <= start || acq > end) return null;
+  const daysInMonth = Math.round((end - start) / MS_PER_DAY) + 1;
+  const daysInUse = Math.round((end - acq) / MS_PER_DAY) + 1;
+  return { daysInUse, daysInMonth };
+}
+
 // ---------------------------------------------------------------------------
 // previewDepreciation — puro, sin escrituras a DB
 // ---------------------------------------------------------------------------
@@ -95,8 +133,30 @@ export function calculateDepreciation(
   for (const asset of assets) {
     // ── Skip conditions ──────────────────────────────────────────────────────
 
+    if (period.month === 13) {
+      skipped.push({ fixedAssetId: asset.id, reason: 'closing_period' });
+      continue;
+    }
+
     if (asset.disposedAt !== null && asset.disposedAt !== undefined) {
       skipped.push({ fixedAssetId: asset.id, reason: 'disposed' });
+      continue;
+    }
+
+    const method = asset.depreciationMethod ?? 'straight_line';
+    if (method !== 'straight_line') {
+      skipped.push({ fixedAssetId: asset.id, reason: 'method_not_supported' });
+      continue;
+    }
+
+    const acquisitionDate = asset.acquisitionDate
+      ? new Date(asset.acquisitionDate)
+      : null;
+    if (
+      acquisitionDate &&
+      acquisitionDate.getTime() > new Date(period.endsAt).getTime()
+    ) {
+      skipped.push({ fixedAssetId: asset.id, reason: 'not_yet_in_use' });
       continue;
     }
 
@@ -117,6 +177,8 @@ export function calculateDepreciation(
     }
 
     // Skip if this period has already been processed for this asset.
+    // Meses a cargar: 1, o los transcurridos desde la última depreciación.
+    let monthsToCharge = 1;
     if (asset.lastDepreciatedPeriod) {
       const cmp = comparePeriods(
         { year: period.year, month: period.month },
@@ -129,6 +191,7 @@ export function calculateDepreciation(
         });
         continue;
       }
+      monthsToCharge = cmp;
     }
 
     // ── Straight-line calculation ────────────────────────────────────────────
@@ -144,7 +207,18 @@ export function calculateDepreciation(
     // Subsequent months use monthlyBase only.
     const remainder = accumulated === ZERO ? depreciable % usefulLifeMonths : ZERO;
     const remaining = depreciable - accumulated;
-    const thisMonth = minBigInt(monthlyBase + remainder, remaining);
+    let charge = monthlyBase * BigInt(monthsToCharge) + remainder;
+    // Mes de adquisición: prorrateo por días en uso (sólo si el activo nunca
+    // se ha depreciado; la fracción restante se recupera al final de la vida).
+    const partial =
+      accumulated === ZERO && !asset.lastDepreciatedPeriod && acquisitionDate
+        ? firstMonthFraction(acquisitionDate, period)
+        : null;
+    if (partial) {
+      charge =
+        (charge * BigInt(partial.daysInUse)) / BigInt(partial.daysInMonth);
+    }
+    const thisMonth = minBigInt(charge, remaining);
 
     if (thisMonth <= ZERO) {
       skipped.push({ fixedAssetId: asset.id, reason: 'zero_amount' });

@@ -9,7 +9,7 @@
 //   Test 5 — R17 proveedores Cta 22 saldo débito dispara finding informativo.
 //   Test 6 — periodoTipo='parcial' produce NOTA EXPLICATIVA (no OBLIGATORIA).
 //   Test 7 — 14 KPIs determinísticos presentes en controlTotals.
-//   Test 8 — renderSnapshotLines emite ingresos BRUTO y NETO de devoluciones.
+//   Test 8 — renderSnapshotLines emite ingresos operacionales y NETOS de devoluciones (W5-2).
 //
 // Sin OpenAI key — fixtures CSV determinísticos; sin mocks de LLM.
 // Refs: docs/spec/financial-pipeline-v2.md — Partes 1.3, 2, 3, 5, 6.
@@ -77,10 +77,14 @@ function makeMinimalReport(overrides: Partial<NiifReportJson> = {}): NiifReportJ
       modeBanner: null,
     },
     cashFlow: {
+      netChangeComparative: null,
+      cashOpeningComparative: null,
+      cashClosingComparative: null,
+      comparativeNote: null,
       sections: [
-        { section: 'operating', lines: [], netFlow: '150000' },
-        { section: 'investing', lines: [], netFlow: '-50000' },
-        { section: 'financing', lines: [], netFlow: '-30000' },
+        { section: 'operating', lines: [], netFlow: '150000', netFlowComparative: null },
+        { section: 'investing', lines: [], netFlow: '-50000', netFlowComparative: null },
+        { section: 'financing', lines: [], netFlow: '-30000', netFlowComparative: null },
       ],
       netChange: '70000',
       cashOpening: '100000',
@@ -89,6 +93,8 @@ function makeMinimalReport(overrides: Partial<NiifReportJson> = {}): NiifReportJ
       degeneracyFlag: null,
     },
     equityChanges: {
+      comparativeRows: null,
+      comparativeNote: null,
       rows: [
         {
           kind: 'opening_balance',
@@ -421,26 +427,25 @@ describe('Wave 2.F7 — Test 3 — R18 patrimonio negativo', () => {
     expect(r18Finding!.normReference).toMatch(/NIA 570/);
   });
 
-  it('patrimonio = -$150M con capital suscrito $100M → cita Art. 459 C.Co. (causal de disolución)', () => {
-    // Art. 459 C.Co.: pérdidas > 50% del capital suscrito activan la obligación
-    // de convocar asamblea. R18 es la regla de negocio que detecta esta condición.
-    // Usamos runR18 directamente (mismo patrón de wave2-f4.test.ts) para aislar
-    // la lógica de la regla sin que R5 interfiera en el patrimonio del snapshot.
+  it('patrimonio = -$150M con capital suscrito $100M → negocio en marcha (Ley 2069/2020 art. 4), sin Art. 459 C.Co.', () => {
+    // Auditoría 2026-09 (niif-preproceso-14): el Art. 459 C.Co. (causal de
+    // disolución por pérdidas) fue derogado por la Ley 2069 de 2020 (art. 4
+    // par. 2) y su par. 1 remite esa causal a la de negocio en marcha. R18
+    // alerta y pide la evaluación de la administración; no configura la
+    // causal automáticamente.
     const snap = buildSnapshot({
       patrimonio: -150_000_000,
       capitalSuscritoPagado: 100_000_000,
     });
 
-    // Usar runR18 directamente: evalúa la regla pura sin el pipeline completo.
-    // |patrimonio| = 150M > 100M * 0.5 = 50M → triggers Art. 459 C.Co.
     const r18Out = runR18(snap);
     expect(r18Out.patrimonioNegativo).toBe(true);
     expect(r18Out.findings.length).toBe(1);
     expect(r18Out.findings[0].code).toBe('CUR-R18');
     expect(r18Out.findings[0].severity).toBe('critico');
-    // La descripción debe mencionar Art. 459 C.Co. cuando |patrimonio| > 50% capital.
-    expect(r18Out.findings[0].description).toContain('Art. 459 C.Co.');
-    expect(r18Out.findings[0].normReference).toContain('Art. 459');
+    expect(r18Out.findings[0].description).not.toMatch(/459/);
+    expect(r18Out.findings[0].normReference).not.toMatch(/459/);
+    expect(r18Out.findings[0].normReference).toContain('Ley 2069 de 2020 art. 4');
   });
 
   it('patrimonio positivo → R18 no dispara', () => {
@@ -667,9 +672,13 @@ describe('Wave 2.F7 — Test 7 — 14 KPIs determinísticos en controlTotals', (
       '210505,Bancos nacionales CP,Auxiliar,30000000',
       '220505,Proveedores nacionales,Auxiliar,30000000',
       '240405,Renta por pagar,Auxiliar,20000000',
-      // Patrimonio (no cuadra con PUC pero R8 ajusta la utilidad vía virtual close)
+      // Patrimonio. Auditoría 2026-09: el fixture anterior (3705 +$20M a nivel
+      // Cuenta, sin auxiliares) no cumplía A = P + K + utilidad y R8 escondía
+      // −$100M en 3710VC; ahora R8 no absorbe residuales. Con pérdidas
+      // acumuladas de $100M el balance cuadra y el patrimonio post-cierre
+      // sigue siendo $120M (100 − 100 + 120).
       '311505,Capital suscrito,Auxiliar,100000000',
-      '3705,Utilidades acumuladas,Cuenta,20000000',
+      '371005,Perdidas acumuladas,Auxiliar,-100000000',
       // P&L
       '410505,Ventas,Auxiliar,300000000',
       '510505,Sueldos admin,Auxiliar,20000000',
@@ -779,12 +788,12 @@ describe('Wave 2.F7 — Test 7 — 14 KPIs determinísticos en controlTotals', (
 });
 
 // ---------------------------------------------------------------------------
-// Test 8 — renderSnapshotLines emite ingresos BRUTO y NETO de devoluciones
+// Test 8 — renderSnapshotLines emite ingresos operacionales y NETOS de devoluciones (W5-2)
 // Spec v2.0 Parte 1.3 — Devoluciones 4175 deben salir explícitamente en el
 // bloque de totales vinculantes para que el LLM no confunda qué cifra usar.
 // ---------------------------------------------------------------------------
-describe('Wave 2.F7 — Test 8 — renderSnapshotLines emite ingresos bruto + neto', () => {
-  it('preprocessed con devoluciones → bloque contiene etiqueta bruto Y etiqueta neto 4175', () => {
+describe('Wave 2.F7 — Test 8 — renderSnapshotLines emite ingresos operacionales + neto', () => {
+  it('preprocessed con devoluciones → bloque contiene ingresos operacionales netos Y etiqueta neto 4175', () => {
     // El bloque de totales vinculantes que el orchestrator inyecta a los agentes
     // (via renderSnapshotLines) DEBE emitir AMBAS cifras con etiquetas inequívocas.
     // Spec Parte 1.3: el LLM debe usar ingresosNetos para el P&L, pero siempre
@@ -806,8 +815,10 @@ describe('Wave 2.F7 — Test 8 — renderSnapshotLines emite ingresos bruto + ne
     const lines = renderSnapshotLines(snap);
     const block = lines.join('\n');
 
-    // Debe contener la línea de ingresos BRUTOS (Clase 4).
-    expect(block).toMatch(/Total Ingresos \(bruto Clase 4\)/);
+    // W5-2 (recalculo-final-01): ya no se publica la Σ firmada de la clase 4
+    // como «bruto»; los ingresos operacionales netos (41 − 4175) van aparte.
+    expect(block).not.toMatch(/Total Ingresos \(bruto Clase 4\)/);
+    expect(block).toMatch(/Ingresos operacionales netos \(grupo 41 − devoluciones 4175\): \$185\.000\.000,00/);
 
     // Debe contener la línea de ingresos NETOS con la etiqueta 4175.
     expect(block).toMatch(/Total Ingresos Netos \(neto de devoluciones 4175\)/);
@@ -816,7 +827,7 @@ describe('Wave 2.F7 — Test 8 — renderSnapshotLines emite ingresos bruto + ne
     expect(block).toMatch(/devoluciones 4175 detectadas/);
   });
 
-  it('preprocessed sin devoluciones → brutos presentes, línea neta muestra $0 en devoluciones', () => {
+  it('preprocessed sin devoluciones → operacionales presentes, línea neta muestra $0 en devoluciones', () => {
     // Sin cuentas 4175, ingresosNetos = ingresos brutos y totalDevoluciones = 0.
     // renderSnapshotLines emite la línea neta siempre que ingresosNetos esté
     // definido (sea igual al bruto o menor); en este caso muestra "$0,00" como
@@ -833,8 +844,9 @@ describe('Wave 2.F7 — Test 8 — renderSnapshotLines emite ingresos bruto + ne
     const lines = renderSnapshotLines(pre.primary);
     const block = lines.join('\n');
 
-    // Brutos siempre presentes.
-    expect(block).toMatch(/Total Ingresos \(bruto Clase 4\)/);
+    // Ingresos operacionales netos siempre presentes (W5-2: sin la Σ firmada «bruto»).
+    expect(block).not.toMatch(/Total Ingresos \(bruto Clase 4\)/);
+    expect(block).toMatch(/Ingresos operacionales netos \(grupo 41 − devoluciones 4175\): \$50\.000\.000,00/);
     // La línea neta se emite con devoluciones = $0.
     expect(block).toMatch(/Total Ingresos Netos \(neto de devoluciones 4175\)/);
     // La cantidad de devoluciones detectadas debe ser $0,00.

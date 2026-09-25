@@ -336,3 +336,32 @@ describe('formatCop — convención NIIF única (paréntesis)', () => {
     expect(out.appendix.bindingTotalsBlock).toContain('($1.234,56)');
   });
 });
+
+// ─── 6. Montos por encima de 2^53 centavos (niif-contrato-22, integración I2) ──
+
+describe('formatCop — conversión exacta de pesos a centavos (sin RangeError)', () => {
+  // Desde niif-contrato-22, formatCopFromCents(number) exige un entero seguro.
+  // compose pasaba Math.round(n * 100): por encima de ~$90 billones (2^53
+  // centavos) el PDF entero lanzaba RangeError en vez de imprimir la cifra.
+  it('un activo de $100 billones se imprime al centavo, sin lanzar', () => {
+    const out = compose(stubControlTotals({ activo: 100_000_000_000_000 }));
+    expect(kpiValue(out, 'Activo Total')).toBe('$100.000.000.000.000,00');
+    expect(out.appendix.bindingTotalsBlock).toContain('$100.000.000.000.000,00');
+  });
+
+  it('un negativo grande conserva los paréntesis y los centavos del texto decimal', () => {
+    const out = compose(stubControlTotals({ utilidadNeta: -123_456_789_012_345.67 }));
+    expect(out.appendix.bindingTotalsBlock).toContain('($123.456.789.012.345,67)');
+  });
+
+  it('una magnitud sin notación decimal fija (≥ 1e21) sale N/D, no una cifra inventada', () => {
+    const out = compose(stubControlTotals({ activo: 1e21 }));
+    expect(kpiValue(out, 'Activo Total')).toBe('N/D');
+  });
+
+  it('las cifras corrientes no cambian (redondeo al centavo)', () => {
+    const out = compose(stubControlTotals({ patrimonio: 1_234_567.894, utilidadNeta: -0.004 }));
+    expect(kpiValue(out, 'Patrimonio')).toBe('$1.234.567,89');
+    expect(kpiValue(out, 'Utilidad Neta')).toBe('$0,00');
+  });
+});

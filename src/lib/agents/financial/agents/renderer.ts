@@ -36,6 +36,16 @@
 // ---------------------------------------------------------------------------
 
 import { formatCopFromCents, parseMoneyCop } from '../contracts/money';
+import {
+  cashFlowHasComparativeColumn,
+  comparativeStatementLegend,
+  incomeStatementPresentationRows,
+  normalizeNiifStatementLabels,
+  numberStatementNotes,
+  openingPygNotPresented,
+  presentedLineCents,
+} from '@/lib/export/statement-presentation';
+import type { EquityChangeRowJson } from '../contracts/niif-report';
 import type { NiifReportJson } from '../contracts/niif-report';
 import type { StatementLineJson, StatementNoteJson } from '../contracts/base';
 import type { NiifAnalysisResult } from '../types';
@@ -139,6 +149,13 @@ const fmtTotal = (value: string): string =>
 const fmtMagnitude = (cents: bigint): string => formatCopFromCents(cents, true);
 
 /**
+ * Marcador visible cuando el informe declara comparativo pero el renglón no
+ * trae cifra del periodo anterior — el mismo "n/c" del PDF y del Excel. Una
+ * celda vacía ocultaba el hueco y hacía que las superficies difirieran.
+ */
+const NO_COMPARATIVE_PLACEHOLDER = 'n/c';
+
+/**
  * Convierte una línea de estado financiero en una row de tabla Markdown.
  *
  * Reglas:
@@ -147,20 +164,30 @@ const fmtMagnitude = (cents: bigint): string => formatCopFromCents(cents, true);
  *   - `level >= 2` se indenta con 2 espacios (sub-líneas de detalle/subgrupo).
  *     Level 0/1 son secciones — sin indent.
  *   - El label se prefija con el código PUC si existe (`11 — Efectivo`).
- *   - Las cifras se formatean con `formatCopFromCents(parseMoneyCop(...))` —
- *     SIEMPRE produce `$X.XXX.XXX,XX` (es-CO). Negativos entre paréntesis
- *     cuando `isAbsolute === false`.
+ *   - Cifras SIEMPRE firmadas (paréntesis NIIF), igual que el PDF Élite y el
+ *     Excel (reportes-export-01/-17). Antes se formateaban con `isAbsolute`,
+ *     que borraba el signo de un renglón negativo marcado como absoluto e
+ *     imprimía la depreciación acumulada (1592) en positivo: la columna no
+ *     sumaba el total. En el ESF/ERI las correctoras en magnitud absoluta se
+ *     presentan restando (`presentedLineCents`); en el EFE (`contraAware =
+ *     false`) el importe ya viaja firmado como flujo — una depreciación que se
+ *     suma en el método indirecto no se invierte.
  */
 function lineToTableRow(
   line: StatementLineJson,
   hasComparative: boolean,
+  contraAware = true,
 ): MarkdownTableRow {
-  const cents = parseMoneyCop(line.amountPrimary);
-  const primary = formatCopFromCents(cents, line.isAbsolute);
+  const fmt = (value: string): string => {
+    const cents = parseMoneyCop(value);
+    return formatCopFromCents(
+      contraAware ? presentedLineCents(line.account, cents, line.isAbsolute) : cents,
+      false,
+    );
+  };
+  const primary = fmt(line.amountPrimary);
   const comparative =
-    line.amountComparative !== null
-      ? formatCopFromCents(parseMoneyCop(line.amountComparative), line.isAbsolute)
-      : '';
+    line.amountComparative !== null ? fmt(line.amountComparative) : NO_COMPARATIVE_PLACEHOLDER;
 
   const baseLabel = line.account ? `${line.account} — ${line.label}` : line.label;
   // Indentación: 2 espacios para subgrupos/detalle (level 2), sin indent para
@@ -224,7 +251,7 @@ export function renderBalanceSheet(json: NiifReportJson): string {
           fmtTotal(b.totalAssetsPrimary),
           b.totalAssetsComparative !== null
             ? fmtTotal(b.totalAssetsComparative)
-            : '',
+            : NO_COMPARATIVE_PLACEHOLDER,
         ]
       : [fmtTotal(b.totalAssetsPrimary)],
     bold: true,
@@ -242,7 +269,7 @@ export function renderBalanceSheet(json: NiifReportJson): string {
           fmtTotal(b.totalLiabilitiesPrimary),
           b.totalLiabilitiesComparative !== null
             ? fmtTotal(b.totalLiabilitiesComparative)
-            : '',
+            : NO_COMPARATIVE_PLACEHOLDER,
         ]
       : [fmtTotal(b.totalLiabilitiesPrimary)],
     bold: true,
@@ -260,7 +287,7 @@ export function renderBalanceSheet(json: NiifReportJson): string {
           fmtTotal(b.totalEquityPrimary),
           b.totalEquityComparative !== null
             ? fmtTotal(b.totalEquityComparative)
-            : '',
+            : NO_COMPARATIVE_PLACEHOLDER,
         ]
       : [fmtTotal(b.totalEquityPrimary)],
     bold: true,
@@ -280,14 +307,16 @@ export function renderBalanceSheet(json: NiifReportJson): string {
   const absDiffPrimary = diffPrimary < BigInt(0) ? -diffPrimary : diffPrimary;
   const cuadraPrimary = absDiffPrimary <= TOLERANCE_CENTS;
 
+  // P + C con signo (igual que el Excel): la magnitud se reserva a la brecha.
+  const fmtSigned = (cents: bigint): string => formatCopFromCents(cents, false);
   let cuadraComparative = true;
-  let comparativeCell = '';
+  let comparativeCell = NO_COMPARATIVE_PLACEHOLDER;
   if (hasComparative) {
     if (b.totalLiabilitiesComparative !== null && b.totalEquityComparative !== null) {
       const liabComp = parseMoneyCop(b.totalLiabilitiesComparative);
       const eqComp = parseMoneyCop(b.totalEquityComparative);
       const sumComp = liabComp + eqComp;
-      const sumCompStr = fmtMagnitude(sumComp);
+      const sumCompStr = fmtSigned(sumComp);
       if (b.totalAssetsComparative !== null) {
         const assetsComp = parseMoneyCop(b.totalAssetsComparative);
         const diffComp = sumComp - assetsComp;
@@ -302,7 +331,7 @@ export function renderBalanceSheet(json: NiifReportJson): string {
     }
   }
 
-  const sumPrimaryStr = fmtMagnitude(sumPrimary);
+  const sumPrimaryStr = fmtSigned(sumPrimary);
   const primaryCell = cuadraPrimary
     ? sumPrimaryStr
     : `${sumPrimaryStr} (DESCUADRE: ${fmtMagnitude(absDiffPrimary)})`;
@@ -354,47 +383,40 @@ export function renderIncomeStatement(json: NiifReportJson): string {
     '',
   ].join('\n');
 
+  // Comparativo de saldos de apertura (ingesta-09): sin P&G del periodo
+  // anterior la columna comparativa del ERI es N/D, como en el PDF y el Excel.
+  const pygNd = hasComparative && openingPygNotPresented(p);
   const rows: MarkdownTableRow[] = [];
-  for (const line of p.lines) {
-    rows.push(lineToTableRow(line, hasComparative));
-  }
-
-  // Totales canónicos del P&L — siempre en negrita
-  const totals: { label: string; primary: string; comparative: string | null }[] = [
-    {
-      label: 'UTILIDAD BRUTA',
-      primary: p.grossProfitPrimary,
-      comparative: p.grossProfitComparative,
-    },
-    {
-      label: 'UTILIDAD OPERATIVA (EBIT)',
-      primary: p.operatingProfitPrimary,
-      comparative: p.operatingProfitComparative,
-    },
-    {
-      label: 'UTILIDAD NETA DEL PERÍODO',
-      primary: p.netIncomePrimary,
-      comparative: p.netIncomeComparative,
-    },
-    {
-      label: 'OTRO RESULTADO INTEGRAL (ORI)',
-      primary: p.oriPrimary,
-      comparative: p.oriComparative,
-    },
-  ];
-  for (const t of totals) {
-    rows.push({
-      label: t.label,
-      values: hasComparative
-        ? [
-            fmtTotal(t.primary),
-            t.comparative !== null
-              ? fmtTotal(t.comparative)
-              : '',
-          ]
-        : [fmtTotal(t.primary)],
-      bold: true,
-    });
+  // Misma regla que el PDF Élite y el Excel (`incomeStatementPresentationRows`,
+  // auditoría 2026-09-24 e2e-niif-01): los escalones de la cascada se imprimen
+  // SIEMPRE desde los campos anclados del JSON (PÉRDIDA cuando el total es
+  // negativo, ORI y RESULTADO INTEGRAL TOTAL = neto + ORI); un renglón del
+  // analista con rótulo de total no los sustituye ni se duplica.
+  for (const r of incomeStatementPresentationRows(p)) {
+    const row = r.total
+      ? {
+          label: r.label,
+          values: hasComparative
+            ? [
+                fmtTotal(r.amountPrimary),
+                r.amountComparative !== null ? fmtTotal(r.amountComparative) : NO_COMPARATIVE_PLACEHOLDER,
+              ]
+            : [fmtTotal(r.amountPrimary)],
+          bold: true,
+        }
+      : lineToTableRow(
+          {
+            account: r.account,
+            label: r.label,
+            amountPrimary: r.amountPrimary,
+            amountComparative: r.amountComparative,
+            level: r.level as StatementLineJson['level'],
+            isAbsolute: r.isAbsolute,
+          },
+          hasComparative,
+        );
+    if (pygNd) row.values[1] = 'N/D';
+    rows.push(row);
   }
 
   const headers = hasComparative
@@ -405,8 +427,12 @@ export function renderIncomeStatement(json: NiifReportJson): string {
     : ['left', 'right'];
 
   const table = buildMarkdownTable({ headers, alignment, rows });
+  const legend = pygNd
+    ? `\n> Resultados comparativos ${comparativeLabel}: N/D — la columna ${comparativeLabel} es un saldo ` +
+      'de apertura, no un cierre del periodo anterior; no hay estado de resultados de ese periodo.'
+    : '';
 
-  return [header, table, renderNotes(p.notes)].join('\n');
+  return [header, table, legend, renderNotes(p.notes)].filter((s, i) => i !== 2 || s).join('\n');
 }
 
 export function renderCashFlowStatement(json: NiifReportJson): string {
@@ -418,27 +444,37 @@ export function renderCashFlowStatement(json: NiifReportJson): string {
   };
 
   const periodLabel = company.fiscalPeriod;
+  // Columna comparativa del EFE (auditoría 2026-09-24, pendiente #3): sólo
+  // cuando el informe la trae completa — la calcula el código desde el corte
+  // anterior al comparativo. Si no, la nota determinista de comparativo no presentado.
+  const comparativeLabel = company.comparativePeriod ?? '';
+  const hasComparative = company.comparativePeriod !== null && cashFlowHasComparativeColumn(cf);
 
   const header = [
     `### Estado de Flujos de Efectivo (Método Indirecto — NIC 7 / Sec. 7 PYMES)`,
     `**${company.name}** — NIT ${company.nit}`,
-    `Por el año terminado el 31 de diciembre de ${periodLabel}`,
+    `Por el año terminado el 31 de diciembre de ${periodLabel}${hasComparative ? ` (comparativo ${comparativeLabel})` : ''}`,
     `(Cifras en pesos colombianos)`,
     '',
   ].join('\n');
 
-  // Tabla principal: una sola tabla con 3 secciones agrupadas por categoría.
-  // Cada sección tiene un row de categoría (en bold) + sus líneas + flujo neto.
-  // El EFE no usa comparativo en este pipeline (cf.sections solo expone primary).
+  const flow = (value: string): string => formatCopFromCents(parseMoneyCop(value), false);
+  const pair = (primary: string, comparative: string | null | undefined, fmt: (v: string) => string) =>
+    hasComparative
+      ? [fmt(primary), comparative !== null && comparative !== undefined ? fmt(comparative) : NO_COMPARATIVE_PLACEHOLDER]
+      : [fmt(primary)];
+
+  // Una sola tabla con 3 secciones agrupadas por categoría: fila de categoría
+  // (en bold) + renglones + flujo neto.
   const rows: MarkdownTableRow[] = [];
   for (const s of cf.sections) {
-    rows.push({ label: `**${sectionTitle[s.section]}**`, values: [''] });
+    rows.push({ label: `**${sectionTitle[s.section]}**`, values: hasComparative ? ['', ''] : [''] });
     for (const line of s.lines) {
-      rows.push(lineToTableRow(line, false));
+      rows.push(lineToTableRow(line, hasComparative, false));
     }
     rows.push({
       label: `FLUJO NETO ${sectionTitle[s.section]}`,
-      values: [formatCopFromCents(parseMoneyCop(s.netFlow), false)],
+      values: pair(s.netFlow, s.netFlowComparative, flow),
       bold: true,
     });
   }
@@ -446,34 +482,37 @@ export function renderCashFlowStatement(json: NiifReportJson): string {
   // Closure: aumento neto + saldo apertura + saldo cierre
   rows.push({
     label: 'AUMENTO (DISMINUCIÓN) NETO EN EFECTIVO',
-    values: [formatCopFromCents(parseMoneyCop(cf.netChange), false)],
+    values: pair(cf.netChange, cf.netChangeComparative, flow),
     bold: true,
   });
   rows.push({
     label: 'Efectivo al inicio del período',
-    values: [fmtTotal(cf.cashOpening)],
+    values: pair(cf.cashOpening, cf.cashOpeningComparative, fmtTotal),
   });
   rows.push({
     label: 'EFECTIVO AL FINAL DEL PERÍODO',
-    values: [fmtTotal(cf.cashClosing)],
+    values: pair(cf.cashClosing, cf.cashClosingComparative, fmtTotal),
     bold: true,
   });
 
   const table = buildMarkdownTable({
-    headers: ['Rubro', periodLabel],
-    alignment: ['left', 'right'],
+    headers: hasComparative ? ['Rubro', periodLabel, comparativeLabel] : ['Rubro', periodLabel],
+    alignment: hasComparative ? ['left', 'right', 'right'] : ['left', 'right'],
     rows,
   });
 
-  return [header, table].join('\n');
+  const legend = comparativeStatementLegend('cashFlow', json);
+  return [header, table, ...(legend ? [`\n> ${legend}`] : [])].join('\n');
 }
 
 export function renderEquityChanges(json: NiifReportJson): string {
   const { equityChanges: ec, company } = json;
+  const comparativeRows = company.comparativePeriod !== null ? (ec.comparativeRows ?? []) : [];
+  const hasComparative = comparativeRows.length > 0;
   const header = [
     `### Estado de Cambios en el Patrimonio`,
     `**${company.name}** — NIT ${company.nit}`,
-    `Por el año terminado el 31 de diciembre de ${company.fiscalPeriod}`,
+    `Por el año terminado el 31 de diciembre de ${company.fiscalPeriod}${hasComparative ? ` (comparativo ${company.comparativePeriod})` : ''}`,
     `(Cifras en pesos colombianos)`,
     '',
   ].join('\n');
@@ -507,7 +546,7 @@ export function renderEquityChanges(json: NiifReportJson): string {
   // paréntesis). Aplica a la fila prior_period_result_cancellation que lleva
   // resultadoEjercicio negativo, dividend_distribution con dividendos pagados,
   // y resultadosAcumulados negativos (pérdidas acumuladas).
-  const rows: MarkdownTableRow[] = ec.rows.map((r) => {
+  const toRow = (r: EquityChangeRowJson): MarkdownTableRow => {
     const values = [
       formatCopFromCents(parseMoneyCop(r.capitalSocial)),
       formatCopFromCents(parseMoneyCop(r.primaColocacion)),
@@ -520,7 +559,22 @@ export function renderEquityChanges(json: NiifReportJson): string {
     ];
     const bold = r.kind === 'opening_balance' || r.kind === 'closing_balance';
     return { label: r.label, values, bold };
+  };
+  // Con comparativo (NIIF para las PYMES 3.14 / 6.3) los dos periodos se
+  // presentan apilados en orden cronológico: el cierre del comparativo es la
+  // apertura del periodo actual.
+  const periodRow = (label: string): MarkdownTableRow => ({
+    label: `**${label}**`,
+    values: Array.from({ length: ecpHeaders.length - 1 }, () => ''),
   });
+  const rows: MarkdownTableRow[] = hasComparative
+    ? [
+        periodRow(`Periodo ${company.comparativePeriod}`),
+        ...comparativeRows.map(toRow),
+        periodRow(`Periodo ${company.fiscalPeriod}`),
+        ...ec.rows.map(toRow),
+      ]
+    : ec.rows.map(toRow);
 
   const table = buildMarkdownTable({
     headers: ecpHeaders,
@@ -528,7 +582,8 @@ export function renderEquityChanges(json: NiifReportJson): string {
     rows,
   });
 
-  return [header, table, renderNotes(ec.notes)].join('\n');
+  const legend = comparativeStatementLegend('equity', json);
+  return [header, table, ...(legend ? [`\n> ${legend}`] : []), renderNotes(ec.notes)].join('\n');
 }
 
 export function renderTechnicalNotes(json: NiifReportJson): string {
@@ -545,7 +600,23 @@ export function renderTechnicalNotes(json: NiifReportJson): string {
  * que consumen Strategy Director, Governance Specialist, PDF Élite y Excel
  * mientras se completan las Fases 2 y 3. Adapter puro.
  */
-export function toNiifAnalysisResult(json: NiifReportJson): NiifAnalysisResult {
+export function toNiifAnalysisResult(
+  source: NiifReportJson,
+  /**
+   * Idioma del informe (I5-niif 4): hoy sólo gobierna el sufijo de porción de
+   * un grupo partido por plazo. Sin él se conserva el que ya traiga el JSON.
+   */
+  opts: { language?: 'es' | 'en' } = {},
+): NiifAnalysisResult {
+  // Rótulos deterministas (auditoría 2026-09-24, e2e-niif-09), los mismos que
+  // imprimen el PDF y el Excel. Sin tipo de periodo conocido se respetan las
+  // fechas canónicas que ya fijó el orquestador. Las notas se numeran de forma
+  // global y secuencial (spec v2.1 Corrección 6, niif-contrato-19); el JSON
+  // devuelto las lleva numeradas, así el PDF y el Excel imprimen los mismos
+  // números.
+  const json = numberStatementNotes(
+    normalizeNiifStatementLabels(source, opts.language ? { language: opts.language } : {}).json,
+  ).json;
   const balanceSheet = renderBalanceSheet(json);
   const incomeStatement = renderIncomeStatement(json);
   const cashFlowStatement = renderCashFlowStatement(json);

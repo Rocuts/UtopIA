@@ -45,10 +45,14 @@ function makeReport(overrides: Partial<NiifReportJson> = {}): NiifReportJson {
       modeBanner: null,
     },
     cashFlow: {
+      netChangeComparative: null,
+      cashOpeningComparative: null,
+      cashClosingComparative: null,
+      comparativeNote: null,
       sections: [
-        { section: 'operating', lines: [], netFlow: '150000' },
-        { section: 'investing', lines: [], netFlow: '-50000' },
-        { section: 'financing', lines: [], netFlow: '-30000' },
+        { section: 'operating', lines: [], netFlow: '150000', netFlowComparative: null },
+        { section: 'investing', lines: [], netFlow: '-50000', netFlowComparative: null },
+        { section: 'financing', lines: [], netFlow: '-30000', netFlowComparative: null },
       ],
       netChange: '70000',
       cashOpening: '100000',
@@ -57,6 +61,8 @@ function makeReport(overrides: Partial<NiifReportJson> = {}): NiifReportJson {
       degeneracyFlag: null,
     },
     equityChanges: {
+      comparativeRows: null,
+      comparativeNote: null,
       rows: [
         {
           kind: 'opening_balance',
@@ -122,10 +128,14 @@ describe('validateNiifReportJson — Capa 1 Integridad Aritmética', () => {
   it('E2: detects EFE cashClosing inconsistency', () => {
     const broken = makeReport({
       cashFlow: {
+        netChangeComparative: null,
+        cashOpeningComparative: null,
+        cashClosingComparative: null,
+        comparativeNote: null,
         sections: [
-          { section: 'operating', lines: [], netFlow: '100000' },
-          { section: 'investing', lines: [], netFlow: '0' },
-          { section: 'financing', lines: [], netFlow: '0' },
+          { section: 'operating', lines: [], netFlow: '100000', netFlowComparative: null },
+          { section: 'investing', lines: [], netFlow: '0', netFlowComparative: null },
+          { section: 'financing', lines: [], netFlow: '0', netFlowComparative: null },
         ],
         netChange: '100000',
         cashOpening: '100000',
@@ -210,13 +220,15 @@ describe('validateNiifReportJson — E7 Utilidad Neta P&L vs Variacion 3605 ECP'
     expect(result.errors.some((e) => e.includes('E7'))).toBe(true);
   });
 
-  it('E7: pasa con diferencia dentro del 0.5% de tolerancia', () => {
+  // Auditoría 2026-09 (niif-contrato-10): la holgura del 0,5% + $100 dejaba
+  // que el ECP mostrara un resultado distinto del P&G. Las cifras viajan en
+  // centavos exactos: la tolerancia es $0 y esta prueba se invierte.
+  it('E7: rechaza una diferencia de $100 que antes cabía en la tolerancia del 0.5%', () => {
     const report = makeReport();
-    // netIncomePrimary = 200000. Tolerancia = 200000/200 + 10000 = 11000.
-    // Delta ECP = 200000 + 10000 = 210000. Diferencia = 10000 <= 11000 => pasa.
+    // netIncomePrimary = 200000. Delta ECP = 210000. Diferencia = 10000 cents.
     report.equityChanges.rows[1].resultadoEjercicio = '210000';
     const result = validateNiifReportJson(report);
-    expect(result.errors.some((e) => e.includes('E7'))).toBe(false);
+    expect(result.errors.some((e) => e.includes('E7'))).toBe(true);
   });
 
   it('E7: reporta error cuando falta opening_balance', () => {
@@ -267,6 +279,53 @@ describe('validateNiifReportJson — E9 comparativo completo (Wave 5 2026-05-14)
         oriComparative: '0',
         notes: [],
         modeBanner: null,
+      },
+      // Auditoría 2026-09 (niif-contrato-11a, regla E19): el saldo inicial del
+      // ECP es el patrimonio comparativo (450000). La fixture abría en 400000
+      // contra un patrimonio 2024 de 450000; se corrige con la distribución
+      // que explica el paso de 450000 + 200000 a 600000.
+      equityChanges: {
+        comparativeRows: null,
+        comparativeNote: null,
+        rows: [
+          {
+            kind: 'opening_balance',
+            label: 'Saldo al 1 ene 2025',
+            capitalSocial: '300000',
+            primaColocacion: '0',
+            reservaLegal: '50000',
+            otrasReservas: '0',
+            resultadosAcumulados: '100000',
+            resultadoEjercicio: '0',
+            ori: '0',
+            total: '450000',
+          },
+          {
+            kind: 'dividend_distribution',
+            label: 'Dividendos decretados y pagados',
+            capitalSocial: '0',
+            primaColocacion: '0',
+            reservaLegal: '0',
+            otrasReservas: '0',
+            resultadosAcumulados: '-50000',
+            resultadoEjercicio: '0',
+            ori: '0',
+            total: '-50000',
+          },
+          {
+            kind: 'closing_balance',
+            label: 'Saldo al 31 dic 2025',
+            capitalSocial: '300000',
+            primaColocacion: '0',
+            reservaLegal: '50000',
+            otrasReservas: '0',
+            resultadosAcumulados: '50000',
+            resultadoEjercicio: '200000',
+            ori: '0',
+            total: '600000',
+          },
+        ],
+        notes: [],
       },
     });
   }
@@ -525,6 +584,8 @@ describe('validateNiifReportJson — E5 hard (Wave v2.2 corr #3, EBIT ≠ Utilid
         netIncomePrimary: '200000000',
       },
       equityChanges: {
+        comparativeRows: null,
+        comparativeNote: null,
         rows: [
           {
             kind: 'opening_balance',
@@ -585,6 +646,10 @@ describe('validateNiifReportJson — E11 EFE primer item = netIncomePrimary (Wav
         netIncomePrimary: '222800000', // $2.228 COP
       },
       cashFlow: {
+        netChangeComparative: null,
+        cashOpeningComparative: null,
+        cashClosingComparative: null,
+        comparativeNote: null,
         sections: [
           {
             section: 'operating',
@@ -601,9 +666,10 @@ describe('validateNiifReportJson — E11 EFE primer item = netIncomePrimary (Wav
               },
             ],
             netFlow: '65500000',
+            netFlowComparative: null,
           },
-          { section: 'investing', lines: [], netFlow: '0' },
-          { section: 'financing', lines: [], netFlow: '4500000' },
+          { section: 'investing', lines: [], netFlow: '0', netFlowComparative: null },
+          { section: 'financing', lines: [], netFlow: '4500000', netFlowComparative: null },
         ],
         netChange: '70000000',
         cashOpening: '100000',
@@ -612,6 +678,8 @@ describe('validateNiifReportJson — E11 EFE primer item = netIncomePrimary (Wav
         degeneracyFlag: null,
       },
       equityChanges: {
+        comparativeRows: null,
+        comparativeNote: null,
         rows: [
           {
             kind: 'opening_balance',
@@ -648,6 +716,10 @@ describe('validateNiifReportJson — E11 EFE primer item = netIncomePrimary (Wav
   it('E11: pasa cuando primer item operating == netIncomePrimary', () => {
     const ok = makeReport({
       cashFlow: {
+        netChangeComparative: null,
+        cashOpeningComparative: null,
+        cashClosingComparative: null,
+        comparativeNote: null,
         sections: [
           {
             section: 'operating',
@@ -664,9 +736,10 @@ describe('validateNiifReportJson — E11 EFE primer item = netIncomePrimary (Wav
               },
             ],
             netFlow: '150000',
+            netFlowComparative: null,
           },
-          { section: 'investing', lines: [], netFlow: '-50000' },
-          { section: 'financing', lines: [], netFlow: '-30000' },
+          { section: 'investing', lines: [], netFlow: '-50000', netFlowComparative: null },
+          { section: 'financing', lines: [], netFlow: '-30000', netFlowComparative: null },
         ],
         netChange: '70000',
         cashOpening: '100000',
@@ -682,10 +755,14 @@ describe('validateNiifReportJson — E11 EFE primer item = netIncomePrimary (Wav
   it('E11: no dispara cuando operating section esta vacia (degeneracy)', () => {
     const degen = makeReport({
       cashFlow: {
+        netChangeComparative: null,
+        cashOpeningComparative: null,
+        cashClosingComparative: null,
+        comparativeNote: null,
         sections: [
-          { section: 'operating', lines: [], netFlow: '150000' },
-          { section: 'investing', lines: [], netFlow: '-50000' },
-          { section: 'financing', lines: [], netFlow: '-30000' },
+          { section: 'operating', lines: [], netFlow: '150000', netFlowComparative: null },
+          { section: 'investing', lines: [], netFlow: '-50000', netFlowComparative: null },
+          { section: 'financing', lines: [], netFlow: '-30000', netFlowComparative: null },
         ],
         netChange: '70000',
         cashOpening: '100000',

@@ -13,6 +13,7 @@ import { callFinancialAgent } from '../../agents/runtime';
 import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
 import { buildAntiDianAuditorPrompt } from '../prompts/anti-dian-auditor.prompt';
 import { extractSurvivalAnchors, buildAnchorBlock } from '../lib/extract-totals';
+import { BANCARIZACION_ND_MOTIVO, enforceAntiDian } from '../lib/deterministic-survival';
 import { AntiDianAuditReportSchema } from '../../contracts/escudo-survival';
 import type { SurvivalAgentInput, AntiDianResult } from '../types';
 
@@ -32,6 +33,8 @@ export async function runAntiDianAuditor(
     '',
     anchorBlock,
     '',
+    `BANCARIZACIÓN: ${BANCARIZACION_ND_MOTIVO}`,
+    '',
     input.instructions ? `INSTRUCCIONES ADICIONALES:\n${input.instructions}` : '',
   ]
     .filter(Boolean)
@@ -46,5 +49,6 @@ export async function runAntiDianAuditor(
     ...MODELS_CONFIG.antiDianAuditor,
   });
 
-  return json as AntiDianResult;
+  // Montos de bancarización N/D sin flujo de pagos (tributario-modulos-07).
+  return enforceAntiDian(json as AntiDianResult);
 }

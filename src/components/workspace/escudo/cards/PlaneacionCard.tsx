@@ -105,17 +105,19 @@ function ScenarioCard({ escenario, isRecommended, language }: ScenarioCardProps)
           {language === 'es' ? 'Ahorro estimado' : 'Est. savings'}
         </span>
         <span className="font-serif-elite text-2xl font-bold num text-success">
-          {fmtCop(escenario.ahorroEstimado)}
+          {escenario.ahorroEstimado === null ? (language === 'es' ? 'N/D' : 'N/A') : fmtCop(escenario.ahorroEstimado)}
         </span>
-        <span className="ml-1.5 text-xs text-success tabular-nums">
-          ({escenario.ahorroPct.toFixed(1)}%)
-        </span>
+        {escenario.ahorroPct !== null && (
+          <span className="ml-1.5 text-xs text-success tabular-nums">
+            ({escenario.ahorroPct.toFixed(1)}%)
+          </span>
+        )}
       </div>
 
       {/* Impuesto escenario */}
       <div className="flex items-center justify-between text-xs">
-        <span className="text-n-500">{language === 'es' ? 'Impuesto final' : 'Final tax'}</span>
-        <span className="font-medium text-n-800 tabular-nums">{fmtCop(escenario.impuestoEscenario)}</span>
+        <span className="text-n-600">{language === 'es' ? 'Impuesto estimado (referencia F02)' : 'Estimated tax (F02 reference)'}</span>
+        <span className="font-medium text-n-800 tabular-nums">{escenario.impuestoEscenario === null ? (language === 'es' ? 'N/D' : 'N/A') : fmtCop(escenario.impuestoEscenario)}</span>
       </div>
 
       {/* Riesgo badge */}

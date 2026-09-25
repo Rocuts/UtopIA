@@ -3,17 +3,18 @@
 // Body: { periodId: uuid, entryDate?: ISO-8601, post?: boolean }
 //
 // Si post=false (default): retorna AmortizationPreview sin tocar la DB.
-// Si post=true: crea y postea el asiento, actualiza amortized_amount.
+// Si post=true: postAmortization (adjustments/posting.ts) — asiento y
+//   amortized_amount/last_amortized_period_id en la MISMA transacción;
+//   idempotente por período.
 
 import { NextResponse } from 'next/server';
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
 import {
   isAutoAdjustmentsEnabled,
   adjustmentsPort,
-  updateAfterAmortization,
   getPeriod,
 } from '@/lib/accounting/adjustments';
-import { createEntry } from '@/lib/accounting/double-entry';
+import { postAmortization } from '@/lib/accounting/adjustments/posting';
 import {
   errorResponse,
   ok,
@@ -62,22 +63,17 @@ export async function POST(req: Request) {
       });
     }
 
-    const { entry } = await createEntry({
-      ...preview.proposedEntry,
-      status: 'posted',
-    });
-
-    await updateAfterAmortization(
-      preview.lines.map((l) => ({
-        deferredAssetId: l.deferredAssetId,
-        newAmortizedAmount: l.newAmortizedCop,
-        periodId: period.id,
-      })),
-    );
+    const posted = await postAmortization(preview, period.id);
 
     return ok(
-      { ...preview, posted: true, entryId: entry.id, entryNumber: entry.entryNumber },
-      201,
+      {
+        ...preview,
+        posted: !posted.alreadyPosted,
+        alreadyPosted: posted.alreadyPosted,
+        entryId: posted.entryId,
+        entryNumber: posted.entryNumber,
+      },
+      posted.alreadyPosted ? 200 : 201,
     );
   } catch (err) {
     return errorResponse(err);

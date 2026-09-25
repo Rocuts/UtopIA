@@ -5,8 +5,16 @@
  *
  * Dashboard reutilizable. Encapsula:
  *  - Narrativa Instrument Serif
- *  - KPI dual (TEF + vencimientos próximos)
- *  - Grid 2x2 de submódulos navegables
+ *  - KPI: tasa efectiva CONTABLE (F09 = gasto 54 / UAI) con su periodo
+ *  - Grid de submódulos navegables
+ *
+ * Auditoría ratios-kpis-02: el héroe rotulaba "Tasa Efectiva de Tributación" el
+ * F10 (cobertura de retenciones = F03 / F02), heredaba la tendencia simulada
+ * "↓ 3,1 pts vs. trimestre anterior" y pintaba "Saldos a favor $1.240M",
+ * "Riesgo DIAN: Medio" y un sparkline fijos aunque hubiera datos reales. Sin
+ * datos mostraba 28,4 %. Ahora: F09 con periodo, N/D si UAI ≤ 0 o falta; sin
+ * tendencia (no hay comparativo real); saldo a favor N/D (requiere liquidación
+ * fiscal verificada: F02 es UAI × 35 %, heurístico); riesgo desde el score real.
  *
  * Se consume desde `/workspace/escudo/page.tsx` y puede reusarse como preview
  * mini en cualquier lugar (ExecutiveDashboard, etc.) pasando `compact`.
@@ -29,8 +37,6 @@ import {
   HeartPulse,
   Bot,
   ArrowRight,
-  ArrowDown,
-  ArrowUp,
   FileText,
 } from 'lucide-react';
 import { useMemo } from 'react';
@@ -40,7 +46,6 @@ import { useWorkspace } from '@/context/WorkspaceContext';
 import { useAncoraView } from '@/hooks/useAncoraView';
 import { cn } from '@/lib/utils';
 import { EliteButton } from '@/components/ui/EliteButton';
-import type { KpiResult } from '@/types/kpis';
 import type { FiscalAnchorBlock } from '@/lib/agents/financial/escudo-survival/fiscal-anchor/types';
 import type { FiscalRiskScore } from '@/lib/agents/financial/types';
 import { FiscalAlertsPanel } from '@/components/workspace/escudo/FiscalAlertsPanel';
@@ -69,7 +74,6 @@ import type { AlertView } from '@/lib/sentinel/alert-view';
 export type { AlertView };
 
 export interface EscudoAreaProps {
-  kpi?: KpiResult;
   upcomingDeadlines?: EscudoDeadline[];
   /** Bloque Âncora Fiscal — Capa 1. Cuando presente, sustituye mocks. */
   fiscalAnchor?: FiscalAnchorBlock;
@@ -96,70 +100,20 @@ interface SubmoduleDef {
   key: SubmoduleKey;
   href: string;
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
-  statusLabel: { es: string; en: string };
-  statusColor: string;
+  /** true = la subpágina aún no está conectada a datos de la empresa. */
+  inPreparation: boolean;
 }
 
+// Sin estados inventados ("2 en curso", "1 radicada", "Al día"…): las seis
+// subpáginas todavía no leen datos de la empresa (V7a-extra-01).
 const SUBMODULES: SubmoduleDef[] = [
-  {
-    key: 'agenteFiscal',
-    href: '/workspace/escudo/agente-fiscal',
-    icon: Bot,
-    statusLabel: { es: 'Activo', en: 'Active' },
-    statusColor: '#22C55E',
-  },
-  {
-    key: 'defensaDian',
-    href: '/workspace/escudo/defensa-dian',
-    icon: Gavel,
-    statusLabel: { es: '2 en curso', en: '2 active' },
-    statusColor: '#E8B42C',
-  },
-  {
-    key: 'devoluciones',
-    href: '/workspace/escudo/devoluciones',
-    icon: Banknote,
-    statusLabel: { es: '1 radicada', en: '1 filed' },
-    statusColor: '#22C55E',
-  },
-  {
-    key: 'planeacionTributaria',
-    href: '/workspace/escudo/planeacion-tributaria',
-    icon: Route,
-    statusLabel: { es: 'Al día', en: 'Up to date' },
-    statusColor: '#22C55E',
-  },
-  {
-    key: 'preciosTransferencia',
-    href: '/workspace/escudo/precios-transferencia',
-    icon: ArrowLeftRight,
-    statusLabel: { es: 'Revisión', en: 'Review' },
-    statusColor: '#E8B42C',
-  },
-  {
-    key: 'supervivencia',
-    href: '/workspace/escudo/supervivencia',
-    icon: HeartPulse,
-    statusLabel: { es: 'Monitor', en: 'Monitor' },
-    statusColor: '#A83838',
-  },
+  { key: 'agenteFiscal', href: '/workspace/escudo/agente-fiscal', icon: Bot, inPreparation: true },
+  { key: 'defensaDian', href: '/workspace/escudo/defensa-dian', icon: Gavel, inPreparation: true },
+  { key: 'devoluciones', href: '/workspace/escudo/devoluciones', icon: Banknote, inPreparation: true },
+  { key: 'planeacionTributaria', href: '/workspace/escudo/planeacion-tributaria', icon: Route, inPreparation: true },
+  { key: 'preciosTransferencia', href: '/workspace/escudo/precios-transferencia', icon: ArrowLeftRight, inPreparation: true },
+  { key: 'supervivencia', href: '/workspace/escudo/supervivencia', icon: HeartPulse, inPreparation: true },
 ];
-
-// ─── Mock KPI (fallback si no llega kpi prop) ────────────────────────────────
-
-function buildMockTef(): KpiResult {
-  return {
-    kind: 'tef',
-    value: 28.4,
-    formatted: '28,4%',
-    unit: '%',
-    label: 'Tasa Efectiva de Tributación',
-    severity: 'good',
-    trend: { direction: 'down', delta: -3.1, periodLabel: 'vs. trimestre anterior' },
-    calculatedAt: new Date().toISOString(),
-    confidence: 'medium',
-  };
-}
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -193,7 +147,6 @@ function deadlinesFromAnchor(
 }
 
 export function EscudoArea({
-  kpi,
   upcomingDeadlines,
   fiscalAnchor: propFiscalAnchor,
   riskScore: propRiskScore,
@@ -203,6 +156,7 @@ export function EscudoArea({
 }: EscudoAreaProps) {
   const { t, language } = useLanguage();
   const escudo = t.elite.areas.escudo;
+  const ds = t.elite.dataStatus;
   const reduced = useReducedMotion();
   const router = useRouter();
   const { setActiveCaseType, setActiveMode } = useWorkspace();
@@ -238,22 +192,41 @@ export function EscudoArea({
   const zones = useMemo(() => getEscudoZones(language), [language]);
   const sourceLabels = useMemo(() => getSourceLabels(language), [language]);
 
-  const kpiData = useMemo<KpiResult>(() => {
-    if (kpi) return kpi;
-    // F10 real — preferimos el del anchor; si solo hay AncoraView, usamos view.fiscal.f10.
-    const f10 =
-      fiscalAnchor?.f10 ??
-      (view.hasData && view.fiscal.f10 != null ? view.fiscal.f10 : null);
-    if (f10 != null) {
-      const mock = buildMockTef();
-      return {
-        ...mock,
-        value: Number(f10.toFixed(2)),
-        formatted: `${f10.toFixed(1)}%`,
-      };
-    }
-    return buildMockTef();
-  }, [kpi, fiscalAnchor, view]);
+  // Tasa efectiva CONTABLE = F09 (gasto 54 / F01 UAI). Sólo con UAI > 0: el
+  // calculador devuelve 0 cuando F01 ≤ 0 y eso no es una tasa.
+  const effectiveRate = useMemo<number | null>(() => {
+    const f01 = fiscalAnchor
+      ? Number(fiscalAnchor.f01)
+      : view.hasData
+        ? view.fiscal.f01
+        : null;
+    const f09 = fiscalAnchor?.f09 ?? (view.hasData ? view.fiscal.f09 : null);
+    if (f01 == null || !Number.isFinite(f01) || f01 <= 0) return null;
+    if (f09 == null || !Number.isFinite(f09)) return null;
+    return f09;
+  }, [fiscalAnchor, view]);
+  const effectiveRateStr =
+    effectiveRate == null
+      ? ds.notAvailable
+      : `${effectiveRate.toFixed(1).replace('.', language === 'es' ? ',' : '.')}%`;
+  const periodLabel =
+    fiscalAnchor?.fuente?.periodo || (view.hasData ? view.meta.periodoActual : '') || null;
+  // Score sin base gravable (F01 = $0) ⇒ «No determinable», nunca «BAJO»
+  // (tributario-modulos-05).
+  const scoreNotDeterminable = riskScore ? scoreNoPublicable(riskScore) : null;
+  const riskLabel = riskScore
+    ? scoreNotDeterminable
+      ? ds.escudo.riskNotDeterminable
+      : NIVEL_LABEL[riskScore.nivel][language]
+    : ds.notAvailable;
+  const notDeterminableCopy = {
+    label: ds.escudo.riskNotDeterminable,
+    // El motivo del calculador viene en español; en inglés se usa el del diccionario.
+    reason:
+      language === 'es' && scoreNotDeterminable?.motivo
+        ? scoreNotDeterminable.motivo
+        : ds.escudo.riskNotDeterminableReason,
+  };
 
   // Sin anchor ni prop no hay vencimientos reales que contar — nunca inventarlos.
   const deadlines = useMemo<EscudoDeadline[]>(() => {
@@ -349,36 +322,25 @@ export function EscudoArea({
                   className="uppercase font-semibold"
                   style={{ fontSize: '0.7rem', letterSpacing: '0.12em', color: 'rgba(255,255,255,.82)' }}
                 >
-                  {language === 'es' ? 'Tasa Efectiva de Tributación' : 'Effective Tax Rate'}
+                  {ds.escudo.effectiveRateLabel}
                 </p>
 
                 <div
                   className="font-serif-elite font-medium num"
                   style={{ fontSize: 'clamp(2.6rem, 5vw, 3.8rem)', color: '#fff', lineHeight: 1, margin: '10px 0 6px' }}
                 >
-                  {kpiData.formatted}
+                  {effectiveRateStr}
                 </div>
 
-                <div
-                  className="inline-flex items-center gap-1"
-                  style={{ fontSize: '0.875rem', fontWeight: 600, color: '#fff' }}
-                >
-                  {kpiData.trend?.direction === 'up'
-                    ? <ArrowUp className="h-[15px] w-[15px]" strokeWidth={2} />
-                    : <ArrowDown className="h-[15px] w-[15px]" strokeWidth={2} />}
-                  {kpiData.trend
-                    ? `${Math.abs(kpiData.trend.delta).toFixed(1).replace('.', language === 'es' ? ',' : '.')} pts.`
-                    : '3,1 pts.'}
-                  {' '}
-                  {kpiData.trend?.periodLabel ?? (language === 'es' ? 'vs. trimestre anterior' : 'vs. prior quarter')}
-                </div>
+                <p style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,.86)' }}>
+                  {effectiveRate == null && (hasRealData || view.hasData)
+                    ? `${ds.reason}: ${ds.escudo.effectiveRateReason}`
+                    : periodLabel
+                      ? `${ds.escudo.period}: ${periodLabel}`
+                      : null}
+                </p>
 
-                {/* Sparkline */}
-                <div style={{ marginTop: 20, height: 70 }}>
-                  <TefSparkline />
-                </div>
-
-                {/* Sub-KPIs */}
+                {/* Sub-KPIs — sólo datos reales; lo demás N/D con motivo */}
                 <div
                   style={{
                     display: 'grid',
@@ -390,25 +352,30 @@ export function EscudoArea({
                   }}
                 >
                   <div>
-                    <div className="font-serif-elite num" style={{ color: '#fff', fontSize: '1.1rem', fontWeight: 500 }}>$1.240M</div>
-                    <div style={{ color: 'rgba(255,255,255,.70)', fontSize: '0.68rem', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-                      {language === 'es' ? 'Saldos a favor' : 'Tax credits'}
+                    <div className="font-serif-elite num" style={{ color: '#fff', fontSize: '1.1rem', fontWeight: 500 }}>
+                      {ds.notAvailable}
+                    </div>
+                    <div style={{ color: 'rgba(255,255,255,.8)', fontSize: '0.68rem', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                      {ds.escudo.taxCreditsLabel}
+                    </div>
+                    <div style={{ color: 'rgba(255,255,255,.8)', fontSize: '0.62rem', marginTop: 2 }}>
+                      {ds.escudo.taxCreditsReason}
                     </div>
                   </div>
                   <div>
                     <div className="font-serif-elite num" style={{ color: '#fff', fontSize: '1.1rem', fontWeight: 500 }}>
-                      {hasRealData ? deadlines.length : '—'}
+                      {hasRealData ? deadlines.length : ds.notAvailable}
                     </div>
-                    <div style={{ color: 'rgba(255,255,255,.70)', fontSize: '0.68rem', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-                      {language === 'es' ? 'Casos abiertos' : 'Open cases'}
+                    <div style={{ color: 'rgba(255,255,255,.8)', fontSize: '0.68rem', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                      {ds.escudo.upcomingDeadlinesLabel}
                     </div>
                   </div>
                   <div>
-                    <div className="font-serif-elite num" style={{ color: '#E8B42C', fontSize: '1.1rem', fontWeight: 500 }}>
-                      {language === 'es' ? 'Medio' : 'Medium'}
+                    <div className="font-serif-elite num" style={{ color: '#fff', fontSize: '1.1rem', fontWeight: 500 }}>
+                      {riskLabel}
                     </div>
-                    <div style={{ color: 'rgba(255,255,255,.70)', fontSize: '0.68rem', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-                      {language === 'es' ? 'Riesgo DIAN' : 'DIAN Risk'}
+                    <div style={{ color: 'rgba(255,255,255,.8)', fontSize: '0.68rem', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                      {ds.escudo.dianRiskLabel}
                     </div>
                   </div>
                 </div>
@@ -430,12 +397,10 @@ export function EscudoArea({
             <FileText className="h-4 w-4" strokeWidth={1.75} />
           </span>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-n-900">
-              {language === 'es' ? 'Datos demo — genera un Informe NIIF para cifras reales.' : 'Demo data — generate an IFRS Report for real figures.'}
-            </p>
+            <p className="text-sm font-medium text-n-900">{ds.noCompanyData}</p>
           </div>
           <EliteButton variant="primary" size="sm" rightIcon={<ArrowRight className="h-3.5 w-3.5" strokeWidth={2} />} onClick={handleGenerarNiif}>
-            {language === 'es' ? 'Generar Informe' : 'Generate Report'}
+            {ds.generateReport}
           </EliteButton>
         </motion.div>
       )}
@@ -445,8 +410,16 @@ export function EscudoArea({
         <motion.div {...fadeItem(3)} className="mb-10 flex flex-col gap-5">
           {riskScore && (
             <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] gap-5 items-stretch">
-              <GaugeDIAN score={riskScore.score} language={language} />
-              <RiskScoreKpiRow riskScore={riskScore} language={language} />
+              <GaugeDIAN
+                score={riskScore.score}
+                language={language}
+                notDeterminable={scoreNotDeterminable ? notDeterminableCopy : null}
+              />
+              <RiskScoreKpiRow
+                riskScore={riskScore}
+                language={language}
+                notDeterminable={scoreNotDeterminable ? notDeterminableCopy : null}
+              />
             </div>
           )}
           {alertas && alertas.length > 0 && (
@@ -465,7 +438,7 @@ export function EscudoArea({
             {language === 'es' ? 'Submódulos' : 'Submodules'}
           </h2>
           <span className="text-sm text-n-500">
-            {language === 'es' ? '6 frentes de defensa · actualizado hoy' : '6 defense areas · updated today'}
+            {language === 'es' ? '6 frentes de defensa' : '6 defense areas'}
           </span>
         </div>
 
@@ -479,7 +452,7 @@ export function EscudoArea({
               submodule={sub}
               title={escudo.submodules[sub.key].title}
               description={escudo.submodules[sub.key].description}
-              language={language}
+              statusLabel={sub.inPreparation ? ds.moduleInPreparation : ds.openModule}
               delay={i}
               reduced={reduced}
             />
@@ -520,38 +493,19 @@ export function EscudoArea({
   );
 }
 
-// ─── Sparkline for TEF trend ─────────────────────────────────────────────────
-
-function TefSparkline() {
-  const pts = [78, 74, 70, 66, 62, 58, 55, 52];
-  const W = 100, H = 70;
-  const min = Math.min(...pts), max = Math.max(...pts);
-  const rng = max - min || 1;
-  const xs = pts.map((_, i) => (i / (pts.length - 1)) * W);
-  const ys = pts.map(v => H - ((v - min) / rng) * H * 0.78 - H * 0.11);
-  const d = xs.map((x, i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${ys[i].toFixed(1)}`).join(' ');
-
-  return (
-    <svg width="100%" height="70" viewBox="0 0 100 70" preserveAspectRatio="none" aria-hidden="true">
-      <path d={d} fill="none" stroke="rgba(255,255,255,.65)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={xs[xs.length - 1].toFixed(1)} cy={ys[ys.length - 1].toFixed(1)} r="2.5" fill="rgba(255,255,255,.8)" />
-    </svg>
-  );
-}
-
 // ─── Submódulo card — matches handoff .subcard style ─────────────────────────
 
 interface SubmoduleCardProps {
   submodule: SubmoduleDef;
   title: string;
   description: string;
-  language: 'es' | 'en';
+  statusLabel: string;
   delay: number;
   reduced: boolean | null;
 }
 
-function SubmoduleCard({ submodule, title, description, language, delay, reduced }: SubmoduleCardProps) {
-  const { icon: Icon, href, statusLabel, statusColor } = submodule;
+function SubmoduleCard({ submodule, title, description, statusLabel, delay, reduced }: SubmoduleCardProps) {
+  const { icon: Icon, href } = submodule;
 
   const motionProps = reduced
     ? {}
@@ -602,9 +556,9 @@ function SubmoduleCard({ submodule, title, description, language, delay, reduced
 
         {/* Footer */}
         <div className="flex items-center justify-between mt-4">
-          <span className="inline-flex items-center gap-1.5 text-xs font-semibold" style={{ color: statusColor }}>
-            <span aria-hidden="true" className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: statusColor }} />
-            {statusLabel[language]}
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-n-600">
+            <span aria-hidden="true" className="inline-block h-1.5 w-1.5 rounded-full bg-current" />
+            {statusLabel}
           </span>
           <span aria-hidden="true" style={{ color: '#A83838' }}>
             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" strokeWidth={1.75} />
@@ -643,17 +597,37 @@ const NIVEL_LABEL: Record<RiskNivel, { es: string; en: string }> = {
   critico: { es: 'ALTO', en: 'HIGH' },
 };
 
+/**
+ * El calculador (`computeRiskScore`) marca `publicable: false` cuando F01 = $0:
+ * los seis factores son razones sobre la base gravable y el 0/100 resultante
+ * no es "riesgo bajo". El `FiscalRiskScore` público aún no declara el campo
+ * (llega por JSON), de ahí la lectura estructural.
+ */
+function scoreNoPublicable(riskScore: FiscalRiskScore): { motivo: string | null } | null {
+  const meta = riskScore as { publicable?: unknown; noPublicableMotivo?: unknown };
+  if (meta.publicable !== false) return null;
+  return { motivo: typeof meta.noPublicableMotivo === 'string' ? meta.noPublicableMotivo : null };
+}
+
+interface NotDeterminableCopy {
+  label: string;
+  reason: string;
+}
+
 interface RiskScoreKpiRowProps {
   riskScore: FiscalRiskScore;
   language: 'es' | 'en';
+  /** Presente cuando el score no es publicable: se muestra en lugar de la cifra. */
+  notDeterminable?: NotDeterminableCopy | null;
 }
 
-function RiskScoreKpiRow({ riskScore, language }: RiskScoreKpiRowProps) {
+function RiskScoreKpiRow({ riskScore, language, notDeterminable }: RiskScoreKpiRowProps) {
   const { score, nivel, factores } = riskScore;
   const levelLabel = NIVEL_LABEL[nivel][language];
   const colorClass = NIVEL_COLOR[nivel];
   const bgClass = NIVEL_BG[nivel];
-  const topFactores = factores.slice(0, 3);
+  // Sin score publicable los puntos por factor tampoco significan nada.
+  const topFactores = notDeterminable ? [] : factores.slice(0, 3);
 
   return (
     <div
@@ -674,24 +648,33 @@ function RiskScoreKpiRow({ riskScore, language }: RiskScoreKpiRowProps) {
             <p className="uppercase tracking-eyebrow text-xs font-medium text-n-500">
               {language === 'es' ? 'Score de Riesgo DIAN' : 'DIAN Risk Score'}
             </p>
-            <div className="flex items-baseline gap-2 mt-0.5">
-              <span
-                className={cn('font-serif-elite text-3xl font-normal leading-none num', colorClass)}
-                aria-label={`${score} de 100`}
-              >
-                {score}
-              </span>
-              <span className="text-sm text-n-500">/100</span>
-              <span
-                className={cn(
-                  'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold uppercase tracking-label border',
-                  bgClass,
-                  colorClass,
-                )}
-              >
-                {levelLabel}
-              </span>
-            </div>
+            {notDeterminable ? (
+              <div className="mt-0.5" role="status">
+                <span className="font-serif-elite text-2xl font-normal leading-none text-n-1000">
+                  {notDeterminable.label}
+                </span>
+                <p className="mt-1 text-xs text-n-700 max-w-md">{notDeterminable.reason}</p>
+              </div>
+            ) : (
+              <div className="flex items-baseline gap-2 mt-0.5">
+                <span
+                  className={cn('font-serif-elite text-3xl font-normal leading-none num', colorClass)}
+                  aria-label={language === 'es' ? `${score} de 100` : `${score} of 100`}
+                >
+                  {score}
+                </span>
+                <span className="text-sm text-n-500">/100</span>
+                <span
+                  className={cn(
+                    'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold uppercase tracking-label border',
+                    bgClass,
+                    colorClass,
+                  )}
+                >
+                  {levelLabel}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -723,9 +706,38 @@ function RiskScoreKpiRow({ riskScore, language }: RiskScoreKpiRowProps) {
 interface GaugeDIANProps {
   score: number;
   language: 'es' | 'en';
+  /** Presente cuando el score no es publicable: sin arco, cifra ni nivel. */
+  notDeterminable?: NotDeterminableCopy | null;
 }
 
-function GaugeDIAN({ score, language }: GaugeDIANProps) {
+function GaugeDIAN({ score, language, notDeterminable }: GaugeDIANProps) {
+  const title = language === 'es' ? 'Score de Riesgo DIAN' : 'DIAN Risk Score';
+  if (notDeterminable) {
+    return (
+      <div
+        role="img"
+        aria-label={`${title} — ${notDeterminable.label}`}
+        className="relative flex flex-col items-center justify-center gap-1 p-6 rounded-xl glass-elite-elevated min-w-[200px]"
+        style={{ boxShadow: 'inset 0 0 0 1px rgb(168 56 56 / 0.32)' }}
+      >
+        <span className="uppercase tracking-eyebrow text-xs font-medium text-n-500 text-center">
+          {title}
+        </span>
+        <svg viewBox="0 0 140 80" width="150" height="86" aria-hidden="true">
+          <path
+            d="M 14 72 A 56 56 0 0 1 126 72"
+            fill="none"
+            className="stroke-n-300"
+            strokeWidth="10"
+            strokeLinecap="round"
+          />
+        </svg>
+        <span className="font-serif-elite text-xl font-normal leading-none -mt-2 text-n-1000 text-center">
+          {notDeterminable.label}
+        </span>
+      </div>
+    );
+  }
   const safe = Math.max(0, Math.min(100, Math.round(score)));
   // Color por nivel de riesgo (rol → token). currentColor pinta arco + número.
   const colorClass =

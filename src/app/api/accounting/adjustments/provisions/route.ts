@@ -3,7 +3,8 @@
 // Body: { periodId: uuid, entryDate?: ISO-8601, post?: boolean }
 //
 // Si post=false: retorna ProvisionsPreview (N proposed entries, uno por tipo).
-// Si post=true: crea y postea cada entry individualmente (1 entry por provision_type).
+// Si post=true: postProvisions (adjustments/posting.ts) — 1 asiento por
+//   provision_type, idempotente por período; errores por tipo en `errors`.
 
 import { NextResponse } from 'next/server';
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
@@ -12,7 +13,7 @@ import {
   adjustmentsPort,
   getPeriod,
 } from '@/lib/accounting/adjustments';
-import { createEntry } from '@/lib/accounting/double-entry';
+import { postProvisions } from '@/lib/accounting/adjustments/posting';
 import {
   errorResponse,
   ok,
@@ -62,16 +63,20 @@ export async function POST(req: Request) {
       });
     }
 
-    // Post each proposed entry sequentially (each is independent, 1 per provision_type).
-    const postedEntryIds: string[] = [];
-    for (const proposed of preview.proposedEntries) {
-      const { entry } = await createEntry({ ...proposed, status: 'posted' });
-      postedEntryIds.push(entry.id);
-    }
+    // Un asiento por provision_type, idempotente por período y tipo; las
+    // fallas se reportan (antes una falla a mitad dejaba el resto sin postear
+    // y sin detalle).
+    const posted = await postProvisions(preview);
 
     return ok(
-      { ...preview, posted: true, postedEntryIds },
-      201,
+      {
+        ...preview,
+        posted: posted.postedEntryIds.length > 0,
+        postedEntryIds: posted.postedEntryIds,
+        alreadyPosted: posted.alreadyPosted,
+        errors: posted.errors,
+      },
+      posted.errors.length > 0 ? 207 : posted.postedEntryIds.length > 0 ? 201 : 200,
     );
   } catch (err) {
     return errorResponse(err);

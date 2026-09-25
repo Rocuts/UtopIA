@@ -9,7 +9,12 @@
 // Capas:
 //   L1 — Aritmética: tolerancia 1 centavo, aritmética de enteros exacta.
 //   L2 — Lógica de negocio: tolerancia 5%, contexto contable.
-//   L3 — Defensa tributaria: Art. 647 E.T. — sanción 100% mayor valor impuesto.
+//   L3 — Defensa tributaria: tarifa, crédito de renta imputable y plazos DIAN
+//        con su fuente (Art. 240, Arts. 373/484-1 E.T.; Decreto 2229/2023).
+//
+// Producción: `validateSurvivalReport` (survival-validators.ts) corre
+// `validateFiscalAnchorAll` sobre el ancla que publica /api/escudo-survival
+// (auditoría 2026-09, integración W3-B; tributario-modulos-03).
 //
 // Por qué número entero (no BigInt literal):
 //   El tsconfig del proyecto apunta a ES2017 donde los BigInt literals (n suffix)
@@ -19,6 +24,11 @@
 //   comparamos como enteros con Math.round() donde aplica.
 // ---------------------------------------------------------------------------
 
+import {
+  digitToBusinessDay,
+  nthBusinessDay,
+  tieneFestivosVerificados,
+} from '@/lib/scrapers/dian-scraper';
 import { extractCalendarDigit } from '../fiscal-anchor/dian-calendar';
 import type { FiscalAnchorBlock, FiscalAlerta, VencimientoDian } from '../fiscal-anchor/types';
 
@@ -35,13 +45,22 @@ const TOLERANCE_CENTS = 1;
 /** Tarifa renta PJ 2026 = 35%. Art. 240 E.T. */
 const TARIFA_RENTA_PCT = 35;
 
-/** Rango defensivo retefuente mensual (días 8–17 del mes siguiente). Art. 376 E.T. */
-const RETEFUENTE_DIA_MIN = 8;
-const RETEFUENTE_DIA_MAX = 17;
-
-/** Rango defensivo renta jurídica 2025: 9–22 de abril de 2026. Resolución DIAN 2026. */
-const RENTA_JURIDICA_2025_MIN = '2026-04-09';
-const RENTA_JURIDICA_2025_MAX = '2026-04-22';
+/**
+ * Plazos DIAN: del 7º al 16º día hábil del mes según el último dígito del NIT
+ * sin DV (dígito 1 = 7º … dígito 0 = 16º). Decreto 2229 de 2023, compilado en
+ * el DUR 1625/2016: art. 1.6.1.13.2.33 (retención en la fuente mensual) y art.
+ * 1.6.1.13.2.12 (renta de personas jurídicas: declaración y 1ª cuota en mayo,
+ * 2ª cuota en julio). El cómputo de días hábiles es el del calendario del
+ * ancla (`@/lib/scrapers/dian-scraper`); aquí no se reimplementa. Antes este
+ * módulo usaba un rango «días 8–17» sin fuente y «9–22 de abril» para la renta
+ * PJ del AG 2025, que contradecían el calendario publicado.
+ */
+const NORMA_RETEFUENTE =
+  'Decreto 2229 de 2023 (DUR 1625/2016 art. 1.6.1.13.2.33) — retención mensual del 7º al 16º día hábil según el último dígito del NIT sin DV; Arts. 376 y 382 E.T.';
+const NORMA_RENTA_PJ =
+  'Decreto 2229 de 2023 (DUR 1625/2016 art. 1.6.1.13.2.12) — renta PJ: declaración y 1ª cuota en mayo, 2ª cuota en julio, del 7º al 16º día hábil según el último dígito del NIT sin DV';
+const MES_RENTA_PJ_PRIMERA_CUOTA = 5;
+const MES_RENTA_PJ_SEGUNDA_CUOTA = 7;
 
 /**
  * Frase obligatoria que el bloque builder debe producir para defensa Art. 240 E.T.
@@ -109,6 +128,21 @@ function extractUltimoDigitoNit(nit: string): number | null {
 }
 
 /**
+ * Fecha ISO del día hábil que le corresponde al dígito en ese año/mes, o `null`
+ * si no hay festivos verificados para ese periodo (no se inventa la fecha).
+ */
+function fechaHabilDelDigito(year: number, month: number, digito: number): string | null {
+  if (!tieneFestivosVerificados(year, month)) return null;
+  return nthBusinessDay(year, month, digitToBusinessDay(digito));
+}
+
+function parseIsoDate(iso: string): { year: number; month: number } | null {
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  return { year: parseInt(m[1], 10), month: parseInt(m[2], 10) };
+}
+
+/**
  * Formatea centavos a COP legible para mensajes de error.
  * Ej: 222849678973 → "$2.228.496.789,73"
  */
@@ -164,7 +198,9 @@ export function validateFiscalAnchorL1(block: FiscalAnchorBlock): ValidationChec
 
   // -------------------------------------------------------------------
   // L1.2 — F04 = F02 − F03 (firma incluida — puede ser negativo)
-  // Art. 850 E.T. — saldo a favor devolución/compensación
+  // Identidad aritmética de una ESTIMACIÓN contable: F04 no es la
+  // liquidación del Formulario 110 ni el saldo a favor que regulan los
+  // Arts. 815 y 850 E.T. (esos salen de la declaración).
   // -------------------------------------------------------------------
   {
     const f04Esperado = f02 - f03;
@@ -173,7 +209,7 @@ export function validateFiscalAnchorL1(block: FiscalAnchorBlock): ValidationChec
       name: 'L1.2_f04_neto_pagar',
       passed: diff <= TOLERANCE_CENTS,
       severity: 'error',
-      norma: 'Art. 850 E.T. — neto a pagar / saldo a favor renta',
+      norma: 'INTERNAL — identidad F04 = F02 − F03 de la estimación contable (no es la liquidación del Formulario 110)',
       detail: diff <= TOLERANCE_CENTS
         ? `F04 ${formatCentsCop(f04)} = F02 − F03 correcto (diff ${diff}cts ≤ ${TOLERANCE_CENTS}ct).`
         : `F04 ${formatCentsCop(f04)} ≠ F02 ${formatCentsCop(f02)} − F03 ${formatCentsCop(f03)} = ${formatCentsCop(f04Esperado)} (diff ${diff}cts; tolerancia ${TOLERANCE_CENTS}ct).`,
@@ -181,29 +217,21 @@ export function validateFiscalAnchorL1(block: FiscalAnchorBlock): ValidationChec
   }
 
   // -------------------------------------------------------------------
-  // L1.3 — F08 ≥ F06 + F07 (pasivos fiscales contienen al menos ICA + predial)
-  // NIIF para PYMES §29 — presentación pasivos fiscales
-  //
-  // Why F06+F07 y no F05+F06+F07: en balances colombianos reales el saldo
-  // del Grupo 24 puede ser menor que la Cta.2408 (IVA) cuando hay movimientos
-  // débito en subcuentas del grupo (anticipos a favor de IVA) o cuando el
-  // balance tiene errores de suma entre auxiliares y resumen. Exigir
-  // F08 ≥ F05 genera falsos positivos en datos válidos. La garantía mínima
-  // comprobable es que el grupo contiene al menos ICA + predial (componentes
-  // más pequeños). Severidad 'warning' porque es señal de calidad, no error
-  // aritmético. Documentado en MEMORY.md — edge case real Grupo 2 Tres SAS.
+  // L1.3 — F08 frente a F06 + F07: NO hay relación de contenido.
+  // F06 (|Cta.2365| retención en la fuente) y F07 (|Cta.2368|) son del
+  // grupo 23 del PUC (Decreto 2650/1993) y F08 es |grupo 24|: el grupo 24
+  // no las contiene. La regla anterior («F08 ≥ F06 + F07») advertía sobre
+  // balances correctos cada vez que la retención por pagar superaba los
+  // impuestos del grupo 24. Se conserva el nombre del check (contrato) y se
+  // declara no aplicable (auditoría 2026-09, integración W3-B).
   // -------------------------------------------------------------------
   {
-    const minimoEsperado = f06 + f07;
-    const ok = f08 >= minimoEsperado;
     checks.push({
       name: 'L1.3_f08_contiene_f06_f07',
-      passed: ok,
+      passed: true,
       severity: 'warning',
-      norma: 'NIIF para PYMES §29 — pasivos por impuestos corrientes',
-      detail: ok
-        ? `F08 ${formatCentsCop(f08)} ≥ F06 + F07 = ${formatCentsCop(minimoEsperado)}. Correcto.`
-        : `F08 ${formatCentsCop(f08)} < F06 ${formatCentsCop(f06)} + F07 ${formatCentsCop(f07)} = ${formatCentsCop(minimoEsperado)}. Grupo 24 subtotalizado respecto a ICA+predial. Verificar auxiliares vs resumen de la cuenta 24.`,
+      norma: 'PUC Decreto 2650/1993 — 2365 y 2368 pertenecen al grupo 23, no al 24',
+      detail: `No aplica: F06 ${formatCentsCop(f06)} (Cta.2365) y F07 ${formatCentsCop(f07)} (Cta.2368) son del grupo 23; F08 ${formatCentsCop(f08)} es el grupo 24 y no las contiene.`,
     });
   }
 
@@ -233,16 +261,22 @@ export function validateFiscalAnchorL1(block: FiscalAnchorBlock): ValidationChec
   // L1.5 — F09 ∈ [0, 100] y F10 ≥ 0
   // F10 puede superar 100% (retenciones > impuesto) — eso se captura en L2.3
   // -------------------------------------------------------------------
+  // F09 (Clase 54 / UAI) puede superar el 100 % —gastos no deducibles,
+  // impuesto mayor que la utilidad contable— o ser negativo con un ingreso
+  // por impuesto: es una señal para revisar, no un error aritmético.
   {
-    const f09ok = block.f09 >= 0 && block.f09 <= 100;
+    const f09Finito = Number.isFinite(block.f09);
+    const f09ok = f09Finito && block.f09 >= 0 && block.f09 <= 100;
     checks.push({
       name: 'L1.5_f09_rango',
       passed: f09ok,
-      severity: 'error',
-      norma: 'INTERNAL — porcentaje debe ser [0, 100]',
+      severity: f09Finito ? 'warning' : 'error',
+      norma: 'INTERNAL — tasa contable de impuesto (Clase 54 / UAI)',
       detail: f09ok
         ? `F09 = ${block.f09}% en rango [0, 100]. OK.`
-        : `F09 = ${block.f09}% fuera de rango [0, 100]. El porcentaje de Clase 54 sobre UAI no puede ser negativo ni > 100%.`,
+        : f09Finito
+          ? `F09 = ${block.f09}% fuera de [0, 100]: el impuesto contable (Clase 54) es negativo o mayor que la UAI. Revisar gastos no deducibles, impuesto diferido o la causación del periodo.`
+          : `F09 no es un número finito (${block.f09}).`,
     });
     const f10ok = block.f10 >= 0;
     checks.push({
@@ -257,8 +291,8 @@ export function validateFiscalAnchorL1(block: FiscalAnchorBlock): ValidationChec
   }
 
   // -------------------------------------------------------------------
-  // L1.6 — Si F04 < 0, debe existir alerta SALDO_A_FAVOR
-  // Art. 850 E.T. — devolución de saldos a favor
+  // L1.6 — Si F04 < 0, debe existir alerta SALDO_A_FAVOR (posible saldo a
+  // favor como estimación contable; no liquidación ni acción de devolución)
   // -------------------------------------------------------------------
   {
     if (f04 < 0) {
@@ -269,10 +303,10 @@ export function validateFiscalAnchorL1(block: FiscalAnchorBlock): ValidationChec
         name: 'L1.6_saldo_favor_alerta',
         passed: tieneAlerta,
         severity: 'error',
-        norma: 'Art. 850 E.T. — devolución / compensación saldo a favor renta',
+        norma: 'Estimación contable F04 — posible saldo a favor (no liquidación)',
         detail: tieneAlerta
-          ? `F04 ${formatCentsCop(f04)} < 0 y alerta SALDO_A_FAVOR presente. Correcto.`
-          : `F04 ${formatCentsCop(f04)} < 0 (saldo a favor) pero NO existe alerta SALDO_A_FAVOR en alertas[]. Art. 850 E.T. exige reportarlo explícitamente.`,
+          ? `F04 ${formatCentsCop(f04)} < 0 y alerta SALDO_A_FAVOR (estimación contable) presente. Correcto.`
+          : `F04 ${formatCentsCop(f04)} < 0 (posible saldo a favor, estimación contable) pero NO existe alerta SALDO_A_FAVOR en alertas[]. Debe advertirse que requiere verificación contra la declaración.`,
       });
     } else {
       checks.push({
@@ -290,13 +324,25 @@ export function validateFiscalAnchorL1(block: FiscalAnchorBlock): ValidationChec
   // Art. 563 E.T. — NIT como identificador tributario
   // -------------------------------------------------------------------
   {
+    // `null` sin NIT o con NIT sin separador de DV (ambiguo).
     const digitoNit = extractUltimoDigitoNit(block.calendarioDian.nit);
     const digitoCalendario = block.calendarioDian.ultimoDigito;
 
-    const enRango = digitoCalendario >= 0 && digitoCalendario <= 9;
-    const coincide = digitoNit !== null && digitoNit === digitoCalendario;
-
-    if (!enRango) {
+    if (digitoNit === null) {
+      // Sin NIT, o NIT sin separador de DV: el calendario del ancla ya marca
+      // todas las fechas «verificar». No hay dígito cierto contra el cual
+      // comparar, así que el check es N/D y no un error.
+      checks.push({
+        name: 'L1.7_calendario_digito_nit',
+        passed: true,
+        severity: 'error',
+        norma: 'Art. 563 E.T.; Decreto 2229 de 2023 — último dígito del NIT sin DV',
+        detail:
+          block.calendarioDian.nit.trim() === ''
+            ? 'N/D — no se recibió el NIT; el calendario sale con estado «verificar».'
+            : `N/D — el NIT "${block.calendarioDian.nit}" no permite separar el dígito de verificación; el calendario sale con estado «verificar».`,
+      });
+    } else if (digitoCalendario < 0 || digitoCalendario > 9) {
       checks.push({
         name: 'L1.7_calendario_digito_nit',
         passed: false,
@@ -304,15 +350,8 @@ export function validateFiscalAnchorL1(block: FiscalAnchorBlock): ValidationChec
         norma: 'Art. 563 E.T. — NIT como identificador tributario',
         detail: `calendarioDian.ultimoDigito = ${digitoCalendario} fuera de rango [0..9].`,
       });
-    } else if (digitoNit === null) {
-      checks.push({
-        name: 'L1.7_calendario_digito_nit',
-        passed: false,
-        severity: 'error',
-        norma: 'Art. 563 E.T.',
-        detail: `No se pudo extraer el último dígito del NIT "${block.calendarioDian.nit}". Formato esperado: 9 o 10 dígitos con o sin guión.`,
-      });
     } else {
+      const coincide = digitoNit === digitoCalendario;
       checks.push({
         name: 'L1.7_calendario_digito_nit',
         passed: coincide,
@@ -429,7 +468,7 @@ export function validateFiscalAnchorL2(
         passed: false,
         severity: 'warning',
         norma: 'INTERNAL — retenciones vs impuesto referencia',
-        detail: `F10 = ${block.f10}% > 100%: las retenciones acumuladas (F03 ${formatCentsCop(f03)}) superan el impuesto referencia (F02 ${formatCentsCop(f02)}). Posible doble conteo de subcuentas 1355. Verificar que 135505 + 135510 + 135515 no se sumen junto con el total de 1355.`,
+        detail: `F10 = ${block.f10}% > 100%: las retenciones acumuladas (F03 ${formatCentsCop(f03)}) superan el impuesto referencia (F02 ${formatCentsCop(f02)}). Puede ser legítimo (UAI baja frente a las retenciones) o un doble conteo: verificar que no se sumen subcuentas junto con su cuenta total (p. ej. 135515 y 1355).`,
       });
     } else {
       checks.push({
@@ -447,16 +486,19 @@ export function validateFiscalAnchorL2(
   // Art. 563 E.T. — NIT como identificador tributario
   // -------------------------------------------------------------------
   {
+    const nit = block.calendarioDian.nit.replace(/\s/g, '');
     const nitRegex = /^\d{9,10}-?\d?$/;
-    const ok = nitRegex.test(block.calendarioDian.nit.replace(/\s/g, ''));
+    const ok = nit === '' || nitRegex.test(nit);
     checks.push({
       name: 'L2.4_nit_formato',
       passed: ok,
       severity: 'warning',
       norma: 'Art. 563 E.T. — NIT como identificador tributario',
-      detail: ok
-        ? `NIT "${block.calendarioDian.nit}" cumple formato canónico. OK.`
-        : `NIT "${block.calendarioDian.nit}" no cumple formato canónico (9-10 dígitos con dígito de verificación opcional).`,
+      detail: nit === ''
+        ? 'N/D — no se recibió el NIT.'
+        : ok
+          ? `NIT "${block.calendarioDian.nit}" cumple formato canónico. OK.`
+          : `NIT "${block.calendarioDian.nit}" no cumple formato canónico (9-10 dígitos con dígito de verificación opcional).`,
     });
   }
 
@@ -501,28 +543,31 @@ export interface L3Context {
    */
   markdownBlock: string;
   /**
-   * Desagregación del 1355/1805 del balance, en centavos. Cuando viene, L3.7
-   * ancla F03 al centavo: F03 = Σ(1355+1805) − ReteIVA(135517) − ReteICA(135518).
+   * Composición de 1355/1805 del balance con la regla ÚNICA de crédito de
+   * renta (`@/lib/accounting/renta-credit`, vía `componerActivosImpuesto`), en
+   * centavos. Cuando viene, L3.7 ancla F03 al centavo: F03 = crédito de renta.
    * Ausente ⇒ el check se declara no aplicable (no se inventa un veredicto).
    */
   creditoRenta?: {
-    /** Σ de TODAS las hojas 1355 + 1805, sin excluir nada. */
-    total1355y1805Cents: number;
-    /** Σ(135517) — IVA retenido. */
-    reteIva135517Cents: number;
-    /** Σ(135518) — ICA retenido / anticipo de ICA. */
-    reteIca135518Cents: number;
+    /** Crédito imputable a renta: 135505/135515 y 135595/1805 con nombre de renta. */
+    creditoRentaCents: number;
+    /** ReteIVA (135517 o nombre de IVA) — va contra IVA (Art. 484-1 E.T.). */
+    reteIvaCents: number;
+    /** ReteICA / anticipo de ICA (135510, 135518 o nombre de ICA). */
+    reteIcaCents: number;
+    /** Resto de 1355/1805 que no es crédito de renta (p. ej. 135530, obras de arte). */
+    otrosNoRentaCents: number;
   };
 }
 
 /**
- * L3: defensa Art. 647 E.T. — sanción por inexactitud = 100% del mayor valor
- * del impuesto determinado sobre la declaración privada.
+ * L3: defensa tributaria — cada cifra del ancla con su norma, fuente y
+ * vigencia: tarifa (Art. 240 E.T.), crédito imputable a renta (Arts. 373 y
+ * 484-1 E.T.) y plazos (Decreto 2229/2023).
  *
- * Why: toda recomendación que reduzca el impuesto pagado debe poder sostenerse
- * en una controversia con la DIAN. Si el dictamen dice "F02 = $X" sin citar
- * el Art. 240 E.T., el contribuyente no tiene soporte para una diferencia
- * de criterio ante la sanción por inexactitud.
+ * Why: F02 es una referencia contable (UAI × tarifa), no la liquidación. Si el
+ * dictamen la presenta como impuesto, o acredita en renta lo que no es de
+ * renta, el contribuyente queda expuesto a la inexactitud del Art. 647 E.T.
  */
 export function validateFiscalAnchorL3(
   block: FiscalAnchorBlock,
@@ -538,13 +583,15 @@ export function validateFiscalAnchorL3(
   // -------------------------------------------------------------------
   // L3.7 — F03 sólo con crédito imputable a RENTA (Art. 373 E.T.)
   //
-  // Auditoría 2026-08, superficie 2: el extractor sumaba a F03 el ReteIVA
-  // (135517) y el ReteICA (135518). El Art. 484-1 E.T. manda acreditar el
-  // ReteIVA en la DECLARACIÓN DE IVA y el ICA retenido se acredita en la
-  // declaración municipal; ninguno de los dos se imputa al impuesto de renta,
-  // que es lo que el Art. 373 E.T. permite para lo retenido a título de renta.
-  // Inflarlo baja el «neto a pagar» F04 y empuja a subdeclarar: Art. 647 E.T.
-  // (sanción 100% del mayor impuesto) y, si media devolución, Art. 670 E.T.
+  // F03 debe ser exactamente el crédito de renta de la lista blanca única
+  // (`@/lib/accounting/renta-credit`): 135505/135515 salvo nombre de otro
+  // tributo, y 135595/1805 sólo con nombre de renta. El ancla anterior
+  // (Σ 1355+1805 − 135517 − 135518) aceptaba una obra de arte (1805), un
+  // anticipo de ICA (135510) o los impuestos descontables (135530) como
+  // crédito de renta (auditoría 2026-09, integración W3-B). Acreditar en
+  // renta lo que no es de renta baja F04 y empuja a subdeclarar: Art. 647
+  // num. 3 E.T. (retenciones o anticipos inexistentes o inexactos) y, si
+  // media devolución, Art. 670 E.T.
   //
   // Tolerancia CERO: es un ancla, no una estimación.
   // -------------------------------------------------------------------
@@ -560,31 +607,33 @@ export function validateFiscalAnchorL3(
           'Sin desagregación de 1355/1805 en el contexto — el ancla de F03 no se puede evaluar. Provea `creditoRenta` para activarla.',
       });
     } else {
-      const esperado = cr.total1355y1805Cents - cr.reteIva135517Cents - cr.reteIca135518Cents;
+      const esperado = cr.creditoRentaCents;
       const diff = Math.abs(f03 - esperado);
       const ok = diff === 0;
-      const noRenta = cr.reteIva135517Cents + cr.reteIca135518Cents;
+      const noRenta = cr.reteIvaCents + cr.reteIcaCents + cr.otrosNoRentaCents;
       checks.push({
         name: 'L3.7_f03_solo_credito_renta',
         passed: ok,
         severity: 'error',
-        norma: 'Arts. 373 y 484-1 E.T. — ReteIVA y ReteICA no acreditan renta',
+        norma: 'Arts. 373 y 484-1 E.T. — sólo lo retenido o anticipado a título de renta se imputa a renta',
         detail: ok
-          ? `F03 ${formatCentsCop(f03)} = Σ(1355+1805) ${formatCentsCop(cr.total1355y1805Cents)} − ReteIVA ${formatCentsCop(cr.reteIva135517Cents)} − ReteICA ${formatCentsCop(cr.reteIca135518Cents)}. Defensa: sólo se imputa a renta lo retenido a título de renta (Art. 373 E.T.).`
-          : `F03 ${formatCentsCop(f03)} ≠ ${formatCentsCop(esperado)} (Σ 1355+1805 menos ReteIVA y ReteICA). Diferencia ${formatCentsCop(diff)}; crédito ajeno a renta detectado en el balance: ${formatCentsCop(noRenta)}. El ReteIVA se acredita en la declaración de IVA (Art. 484-1 E.T.) y el ICA retenido en la declaración municipal; acreditarlos en renta configura inexactitud (Art. 647 E.T.) y, si origina devolución, sanción del Art. 670 E.T.`,
+          ? `F03 ${formatCentsCop(f03)} = crédito de renta de la lista blanca ${formatCentsCop(esperado)}. Quedan fuera ReteIVA ${formatCentsCop(cr.reteIvaCents)}, ReteICA/anticipo ICA ${formatCentsCop(cr.reteIcaCents)} y otros activos por impuestos ${formatCentsCop(cr.otrosNoRentaCents)}.`
+          : `F03 ${formatCentsCop(f03)} ≠ crédito de renta de la lista blanca ${formatCentsCop(esperado)} (135505/135515 y 135595/1805 con nombre de renta). Diferencia ${formatCentsCop(diff)}; activos por impuestos que no son crédito de renta en el balance: ${formatCentsCop(noRenta)}. El ReteIVA se acredita en la declaración de IVA (Art. 484-1 E.T.), el ICA en la declaración municipal y la 1805 del PUC son bienes de arte y cultura; acreditarlos en renta configura inexactitud (Art. 647 E.T.) y, si origina devolución, sanción del Art. 670 E.T.`,
       });
     }
   }
 
   // -------------------------------------------------------------------
-  // L3.1 — Sin provisión renta (Art. 647 E.T. + NIIF para PYMES §29)
-  // Si F01 > 0 y Clase 54 = 0 y NO hay alerta A5_SIN_PROVISION → ERROR
+  // L3.1 — Utilidad sin gasto por impuesto de renta reconocido
+  // Si F01 > 0 y Clase 54 = 0 y NO hay alerta A5_SIN_PROVISION → ERROR.
   //
-  // Evidencia adversarial DIAN: "La utilidad antes de impuestos es positiva
-  // pero la declaración no muestra gasto por impuesto ni provisión contable.
-  // La DIAN aplicaría Art. 647 por la diferencia entre impuesto referencia
-  // y cero declarado." Evidencia defensa: alerta A5_SIN_PROVISION documenta
-  // que el contribuyente reconoció la omisión y la reportó explícitamente.
+  // Es una exigencia contable (NIIF para las PYMES Sección 29 / NIC 12:
+  // reconocer el impuesto corriente del periodo), no una «diferencia de
+  // criterio» del Art. 647 E.T.: ésta sólo excluye la inexactitud cuando el
+  // menor impuesto proviene de una interpretación razonable del derecho
+  // aplicable y los hechos y cifras declarados son completos y verdaderos.
+  // Tampoco se ordena provisionar F02: UAI × 35 % no es base fiscal; la
+  // provisión sale de la renta líquida depurada (Art. 26 E.T.).
   // -------------------------------------------------------------------
   {
     if (f01 > 0 && ctx.clase54Cents === 0) {
@@ -595,20 +644,20 @@ export function validateFiscalAnchorL3(
         name: 'L3.1_sin_provision_renta',
         passed: tieneAlerta,
         severity: 'error',
-        norma: 'Art. 647 E.T. — sanción por inexactitud 100% mayor valor impuesto',
+        norma: 'NIIF para las PYMES Sección 29 / NIC 12 — reconocimiento del impuesto corriente',
         detail: tieneAlerta
-          ? `Clase 54 = $0 y F01 ${formatCentsCop(f01)} > 0, pero alerta A5_SIN_PROVISION presente. Defensa: diferencia de criterio documentada. Evidencia: mensaje = "${block.alertas.find((a) => a.codigo === 'A5_SIN_PROVISION')?.mensaje ?? ''}".`
-          : `Clase 54 = $0 y F01 ${formatCentsCop(f01)} > 0 y NO hay alerta A5_SIN_PROVISION. Provisionar impuesto renta: ${formatCentsCop(f02)}. Defensa Art. 647 E.T. — diferencia de criterio.`,
+          ? `Clase 54 = $0 con F01 ${formatCentsCop(f01)} > 0 y alerta A5_SIN_PROVISION presente: el dictamen advierte que no hay gasto por impuesto de renta reconocido.`
+          : `Clase 54 = $0 con F01 ${formatCentsCop(f01)} > 0 y SIN alerta A5_SIN_PROVISION: el dictamen debe advertir que no hay gasto por impuesto de renta reconocido. F02 (${formatCentsCop(f02)}) es una referencia UAI × 35 %, no la provisión: ésta se determina con la renta líquida depurada (Art. 26 E.T.).`,
       });
     } else {
       checks.push({
         name: 'L3.1_sin_provision_renta',
         passed: true,
         severity: 'error',
-        norma: 'Art. 647 E.T.',
+        norma: 'NIIF para las PYMES Sección 29 / NIC 12',
         detail: f01 <= 0
           ? 'F01 ≤ 0 (pérdida o UAI nulo) — check provisión no aplica.'
-          : `Clase 54 = ${formatCentsCop(ctx.clase54Cents)} > 0. Provisión de renta registrada. OK.`,
+          : `Clase 54 = ${formatCentsCop(ctx.clase54Cents)} ≠ 0. Gasto por impuesto de renta registrado.`,
       });
     }
   }
@@ -660,12 +709,11 @@ export function validateFiscalAnchorL3(
   }
 
   // -------------------------------------------------------------------
-  // L3.4 — Saldo a favor sin alerta SALDO_A_FAVOR (Art. 850 E.T.)
-  // Si F04 < 0 y no hay alerta → el dictamen omite un derecho del contribuyente
-  //
-  // Evidencia adversarial DIAN: "El contribuyente no solicitó devolución
-  // del saldo a favor en tiempo oportuno por omisión del dictamen."
-  // Evidencia defensa: alerta SALDO_A_FAVOR documenta el derecho a devolución.
+  // L3.4 — Posible saldo a favor sin alerta SALDO_A_FAVOR
+  // Si F04 < 0 y no hay alerta → el dictamen omite advertir que la estimación
+  // contable sugiere revisar la declaración. F04 no es el saldo a favor del
+  // Formulario 110 (no depura renta, descuentos ni anticipo Art. 807 E.T.): la
+  // alerta es informativa y no recomienda devolución (Art. 670 E.T.).
   // -------------------------------------------------------------------
   {
     if (f04 < 0) {
@@ -676,10 +724,10 @@ export function validateFiscalAnchorL3(
         name: 'L3.4_saldo_favor_art850',
         passed: tieneAlerta,
         severity: 'error',
-        norma: 'Art. 850 E.T. — devolución saldos a favor renta',
+        norma: 'Arts. 26, 807 y 850 E.T. — el saldo a favor sale de la declaración',
         detail: tieneAlerta
-          ? `F04 ${formatCentsCop(f04)} < 0 y alerta SALDO_A_FAVOR presente. Defensa: derecho devolución Art. 850 E.T. documentado.`
-          : `F04 ${formatCentsCop(f04)} < 0 pero sin alerta SALDO_A_FAVOR. Art. 850 E.T. reconoce el derecho a devolución; omitirlo en el dictamen perjudica al contribuyente.`,
+          ? `F04 ${formatCentsCop(f04)} < 0 y alerta SALDO_A_FAVOR (estimación contable, no liquidación) presente.`
+          : `F04 ${formatCentsCop(f04)} < 0 pero sin alerta SALDO_A_FAVOR. El dictamen debe advertir que la estimación contable sugiere verificar un posible saldo a favor en la declaración.`,
       });
     } else {
       checks.push({
@@ -693,13 +741,16 @@ export function validateFiscalAnchorL3(
   }
 
   // -------------------------------------------------------------------
-  // L3.5 — Retefuente mensual en rango días 8–17 (Art. 376 E.T.)
-  // Tabla de vencimientos por último dígito NIT. El rango 8–17 cubre
-  // todos los dígitos (0 = día 8, 9 = día 17 aprox según resolución DIAN).
+  // L3.5 — Retención en la fuente mensual en el día hábil del dígito
+  // (Decreto 2229/2023, DUR 1625/2016 art. 1.6.1.13.2.33). Cada fecha debe
+  // ser el día hábil que le corresponde al último dígito del NIT en su mes.
+  // N/D (sin veredicto) cuando no hay NIT inequívoco, la fecha ya está
+  // marcada «verificar» o no hay festivos verificados para ese mes.
   //
-  // Evidencia adversarial DIAN: "El dictamen indica vencimiento fuera del
-  // plazo legal, generando intereses de mora Art. 635 E.T."
+  // Evidencia adversarial DIAN: presentar tarde la retención genera sanción
+  // por extemporaneidad (Art. 641 E.T.) e intereses (Art. 635 E.T.).
   // -------------------------------------------------------------------
+  const digitoPlazos = extractUltimoDigitoNit(block.calendarioDian.nit);
   {
     const retefuenteVencimientos = block.calendarioDian.vencimientos.filter(
       (v: VencimientoDian) =>
@@ -708,15 +759,26 @@ export function validateFiscalAnchorL3(
     );
 
     const fuera: string[] = [];
+    let verificadas = 0;
+    let sinVerificar = 0;
     for (const v of retefuenteVencimientos) {
-      const match = v.proximoVencimiento.match(/^\d{4}-(\d{2})-(\d{2})$/);
-      if (!match) {
+      if (digitoPlazos === null || v.estado === 'verificar') {
+        sinVerificar++;
+        continue;
+      }
+      const fecha = parseIsoDate(v.proximoVencimiento);
+      if (!fecha) {
         fuera.push(`${v.proximoVencimiento} (formato inválido)`);
         continue;
       }
-      const dia = parseInt(match[2], 10);
-      if (dia < RETEFUENTE_DIA_MIN || dia > RETEFUENTE_DIA_MAX) {
-        fuera.push(`${v.proximoVencimiento} (día ${dia} fuera de [${RETEFUENTE_DIA_MIN}..${RETEFUENTE_DIA_MAX}])`);
+      const esperado = fechaHabilDelDigito(fecha.year, fecha.month, digitoPlazos);
+      if (esperado === null) {
+        sinVerificar++;
+        continue;
+      }
+      verificadas++;
+      if (v.proximoVencimiento !== esperado) {
+        fuera.push(`${v.proximoVencimiento} (le corresponde ${esperado} al dígito ${digitoPlazos})`);
       }
     }
 
@@ -725,61 +787,77 @@ export function validateFiscalAnchorL3(
       name: 'L3.5_retefuente_rango_dias',
       passed: ok,
       severity: 'error',
-      norma: 'Art. 376 E.T. — plazos de consignación retenciones en la fuente',
-      detail: ok
-        ? retefuenteVencimientos.length === 0
-          ? 'Sin vencimientos de retefuente mensual en el calendario. Check no aplica.'
-          : `${retefuenteVencimientos.length} vencimiento(s) retefuente en rango [${RETEFUENTE_DIA_MIN}..${RETEFUENTE_DIA_MAX}]. Defensa: fechas conforme Art. 376 E.T.`
-        : `${fuera.length} fecha(s) de retefuente fuera del rango [${RETEFUENTE_DIA_MIN}..${RETEFUENTE_DIA_MAX}] del mes siguiente: ${fuera.join('; ')}. Art. 376 E.T. expone al contribuyente a intereses de mora Art. 635 E.T.`,
+      norma: NORMA_RETEFUENTE,
+      detail: !ok
+        ? `${fuera.length} fecha(s) de retención en la fuente fuera del día hábil del dígito: ${fuera.join('; ')}. Presentarla tarde expone a la sanción por extemporaneidad (Art. 641 E.T.).`
+        : retefuenteVencimientos.length === 0
+          ? 'Sin vencimientos de retención mensual en el calendario. Check no aplica.'
+          : verificadas === 0
+            ? `N/D — ${sinVerificar} vencimiento(s) de retención sin NIT inequívoco, marcados «verificar» o sin festivos verificados: no se emite veredicto.`
+            : `${verificadas} vencimiento(s) de retención en el día hábil del dígito ${digitoPlazos}${sinVerificar > 0 ? `; ${sinVerificar} N/D` : ''}.`,
     });
   }
 
   // -------------------------------------------------------------------
-  // L3.6 — Renta jurídica 2025: 9–22 de abril 2026 (Resolución DIAN 2026)
-  // El rango es defensivo — la fecha exacta depende del decreto vigente.
+  // L3.6 — Renta de personas jurídicas (Decreto 2229/2023, DUR 1625/2016
+  // art. 1.6.1.13.2.12): declaración y 1ª cuota en mayo; 2ª cuota en julio;
+  // del 7º al 16º día hábil según el último dígito del NIT. Es el calendario
+  // que publica el ancla. El check anterior exigía el 9–22 de abril de 2026
+  // «Resolución DIAN 2026» y marcaba como extemporáneas las fechas correctas.
+  // Mismo tratamiento N/D que L3.5. (Grandes contribuyentes tienen otro
+  // calendario —tres cuotas—, que el ancla no modela.)
   //
-  // Evidencia adversarial DIAN: "Vencimiento de renta fuera del plazo
-  // legal → declaración extemporánea, sanción Art. 641 E.T."
-  // Evidencia defensa: rango 9–22 abr 2026 cubre cualquier decreto DIAN 2026.
+  // Evidencia adversarial DIAN: vencimiento fuera del plazo legal →
+  // declaración extemporánea, sanción Art. 641 E.T.
   // -------------------------------------------------------------------
   {
     const rentaVencimientos = block.calendarioDian.vencimientos.filter(
       (v: VencimientoDian) =>
-        (v.obligacion.toLowerCase().includes('renta') ||
-         v.obligacion.toLowerCase().includes('impuesto de renta')) &&
-        v.frecuencia === 'anual' &&
-        v.proximoVencimiento.startsWith('2026'),
+        v.obligacion.toLowerCase().includes('renta') && v.frecuencia === 'anual',
     );
 
-    if (block.calendarioDian.periodo === '2025' && rentaVencimientos.length > 0) {
-      const fuera: string[] = [];
-      for (const v of rentaVencimientos) {
-        const fecha = v.proximoVencimiento;
-        if (fecha < RENTA_JURIDICA_2025_MIN || fecha > RENTA_JURIDICA_2025_MAX) {
-          fuera.push(`${fecha} (fuera de [${RENTA_JURIDICA_2025_MIN}..${RENTA_JURIDICA_2025_MAX}])`);
-        }
+    const fuera: string[] = [];
+    let verificadas = 0;
+    let sinVerificar = 0;
+    for (const v of rentaVencimientos) {
+      if (digitoPlazos === null || v.estado === 'verificar') {
+        sinVerificar++;
+        continue;
       }
-      const ok = fuera.length === 0;
-      checks.push({
-        name: 'L3.6_renta_juridica_2025_fecha',
-        passed: ok,
-        severity: 'error',
-        norma: 'Resolución DIAN 2026 — plazos declaración renta PJ 2025',
-        detail: ok
-          ? `Fecha(s) renta jurídica 2025: ${rentaVencimientos.map((v) => v.proximoVencimiento).join(', ')} en rango [${RENTA_JURIDICA_2025_MIN}..${RENTA_JURIDICA_2025_MAX}]. Defensa: cumple Resolución DIAN 2026.`
-          : `Fecha(s) fuera del rango defensivo abril 2026: ${fuera.join('; ')}. Riesgo Art. 641 E.T. (declaración extemporánea).`,
-      });
-    } else {
-      checks.push({
-        name: 'L3.6_renta_juridica_2025_fecha',
-        passed: true,
-        severity: 'error',
-        norma: 'Resolución DIAN 2026',
-        detail: block.calendarioDian.periodo !== '2025'
-          ? `Período ${block.calendarioDian.periodo} ≠ 2025. Check renta jurídica 2025 no aplica.`
-          : 'Sin vencimientos de renta anual 2026 en el calendario. Check no aplica.',
-      });
+      const fecha = parseIsoDate(v.proximoVencimiento);
+      if (!fecha) {
+        fuera.push(`${v.proximoVencimiento} (formato inválido)`);
+        continue;
+      }
+      const segundaCuota = /2ª|2a cuota|segunda/i.test(v.obligacion);
+      const mes = segundaCuota ? MES_RENTA_PJ_SEGUNDA_CUOTA : MES_RENTA_PJ_PRIMERA_CUOTA;
+      const esperado = fechaHabilDelDigito(fecha.year, mes, digitoPlazos);
+      if (esperado === null) {
+        sinVerificar++;
+        continue;
+      }
+      verificadas++;
+      if (v.proximoVencimiento !== esperado) {
+        fuera.push(
+          `"${v.obligacion}" ${v.proximoVencimiento} (le corresponde ${esperado}: ${segundaCuota ? '2ª cuota en julio' : 'declaración y 1ª cuota en mayo'})`,
+        );
+      }
     }
+
+    const ok = fuera.length === 0;
+    checks.push({
+      name: 'L3.6_renta_juridica_2025_fecha',
+      passed: ok,
+      severity: 'error',
+      norma: NORMA_RENTA_PJ,
+      detail: !ok
+        ? `${fuera.length} fecha(s) de renta PJ fuera del plazo del dígito: ${fuera.join('; ')}. Riesgo Art. 641 E.T. (declaración extemporánea).`
+        : rentaVencimientos.length === 0
+          ? 'Sin vencimientos de renta anual en el calendario. Check no aplica.'
+          : verificadas === 0
+            ? `N/D — ${sinVerificar} vencimiento(s) de renta sin NIT inequívoco, marcados «verificar» o sin festivos verificados: no se emite veredicto.`
+            : `${verificadas} vencimiento(s) de renta PJ en el día hábil del dígito ${digitoPlazos} (mayo / julio)${sinVerificar > 0 ? `; ${sinVerificar} N/D` : ''}.`,
+    });
   }
 
   return checks;

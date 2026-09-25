@@ -21,6 +21,12 @@ import type {
   ComparableAnalysisResult,
   TPProgressEvent,
 } from '../types';
+import {
+  computeTpRangeCheck,
+  enforceComparableAnalysis,
+  tpMotivoRango,
+  type TpRangeCheck,
+} from '../lib/deterministic';
 
 /**
  * Toma el output del TP Analyst y produce el estudio de comparabilidad +
@@ -57,7 +63,10 @@ export async function runComparableAnalyst(
     signal,
   });
 
-  return toComparableAnalysisResult(json, language);
+  // Rango intercuartil, «dentro del rango» y conclusión: recalculados en código
+  // desde selectedComparables (DUR 1625/2016 art. 1.2.2.2.5). El LLM no decide.
+  const check = computeTpRangeCheck(json);
+  return toComparableAnalysisResult(enforceComparableAnalysis(json, check, language), check, language);
 }
 
 // ---------------------------------------------------------------------------
@@ -114,22 +123,39 @@ function renderSelectedComparables(json: ComparableAnalysisReportJson, lang: 'es
   return [header, rows.join('\n'), '', `**${lang === 'en' ? 'Rationale by comparable' : 'Justificación por comparable'}:**`, rationales].join('\n');
 }
 
-function renderInterquartileRange(json: ComparableAnalysisReportJson, lang: 'es' | 'en'): string {
+function renderInterquartileRange(
+  json: ComparableAnalysisReportJson,
+  check: TpRangeCheck,
+  lang: 'es' | 'en',
+): string {
   const r = json.interquartileRange;
-  const pli = r.observedPliPercent !== null ? `${r.observedPliPercent.toFixed(2)}%` : 'N/D';
+  const nd = 'N/D';
+  const pct = (v: number) => `${v.toFixed(2)}%`;
+  const s = check.stats;
+  const pli = r.observedPliPercent !== null ? `${r.observedPliPercent.toFixed(2)}%` : nd;
+  const within =
+    check.isWithinRange === null
+      ? nd
+      : check.isWithinRange
+        ? (lang === 'en' ? 'Yes' : 'Sí')
+        : 'No';
   return [
     lang === 'en'
       ? '| Statistic | Value |\n|---|---:|'
       : '| Estadístico | Valor |\n|---|---:|',
-    `| Min (P0) | ${r.min.toFixed(2)}% |`,
-    `| Q1 (P25) | ${r.q1.toFixed(2)}% |`,
-    `| ${lang === 'en' ? 'Median' : 'Mediana'} (P50) | ${r.median.toFixed(2)}% |`,
-    `| Q3 (P75) | ${r.q3.toFixed(2)}% |`,
-    `| Max (P100) | ${r.max.toFixed(2)}% |`,
+    `| Min (P0) | ${s ? pct(s.min) : nd} |`,
+    `| Q1 (P25) | ${s ? pct(s.q1) : nd} |`,
+    `| ${lang === 'en' ? 'Median' : 'Mediana'} (P50) | ${s ? pct(s.median) : nd} |`,
+    `| Q3 (P75) | ${s ? pct(s.q3) : nd} |`,
+    `| Max (P100) | ${s ? pct(s.max) : nd} |`,
     '',
+    `_${lang === 'en' ? 'Computed in code from' : 'Calculado en código desde'} ${s?.n ?? 0} ${lang === 'en' ? 'comparables (DUR 1625/2016 art. 1.2.2.2.5)' : 'comparables (DUR 1625/2016 art. 1.2.2.2.5)'}._`,
     `**${lang === 'en' ? 'Observed PLI' : 'PLI observado'}:** ${pli}`,
-    `**${lang === 'en' ? 'Within Q1-Q3?' : '¿Dentro de Q1-Q3?'}** ${r.isWithinRange ? (lang === 'en' ? 'Yes' : 'Sí') : 'No'}`,
-  ].join('\n');
+    `**${lang === 'en' ? 'Within Q1-Q3?' : '¿Dentro de Q1-Q3?'}** ${within}`,
+    check.reason ? `\n> **${lang === 'en' ? 'ILLUSTRATIVE SCENARIO' : 'ESCENARIO ILUSTRATIVO'}:** ${tpMotivoRango(check, lang)}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 function renderAdjustments(json: ComparableAnalysisReportJson, lang: 'es' | 'en'): string {
@@ -146,12 +172,28 @@ function renderAdjustments(json: ComparableAnalysisReportJson, lang: 'es' | 'en'
     .join('\n');
 }
 
-function renderArmLengthConclusion(json: ComparableAnalysisReportJson, lang: 'es' | 'en'): string {
+function renderArmLengthConclusion(
+  json: ComparableAnalysisReportJson,
+  check: TpRangeCheck,
+  lang: 'es' | 'en',
+): string {
   const c = json.armLengthConclusion;
-  const adj = formatCopFromCents(parseMoneyCop(c.requiredAdjustmentCop), true);
+  const status = !check.conclusive
+    ? (lang === 'en' ? 'NOT CONCLUSIVE (illustrative scenario)' : 'NO CONCLUYENTE (escenario ilustrativo)')
+    : c.complies
+      ? (lang === 'en' ? 'COMPLIES' : 'CUMPLE')
+      : (lang === 'en' ? 'DOES NOT COMPLY' : 'NO CUMPLE');
+  const adjPct = check.requiredAdjustmentPercent === null ? 'N/D' : `${check.requiredAdjustmentPercent.toFixed(2)} pp`;
+  // Fase 2 de la auditoría 2026-09-24 (pendiente #8): el ajuste en COP sólo
+  // se publica si el código lo determinó; nunca la cifra del modelo.
+  const adjCop =
+    c.requiredAdjustmentCop === null
+      ? (lang === 'en' ? 'N/A in COP (no verified PLI base)' : 'N/D en COP (sin base del PLI verificada)')
+      : formatCopFromCents(parseMoneyCop(c.requiredAdjustmentCop), true);
   return [
-    `**${lang === 'en' ? 'Arm\'s length compliance' : 'Cumplimiento plena competencia'}:** ${c.complies ? (lang === 'en' ? 'COMPLIES' : 'CUMPLE') : (lang === 'en' ? 'DOES NOT COMPLY' : 'NO CUMPLE')}`,
-    `**${lang === 'en' ? 'Required adjustment to median' : 'Ajuste requerido a la mediana'}:** ${adj} (${c.requiredAdjustmentPercent.toFixed(2)}%)`,
+    `**${lang === 'en' ? 'Arm\'s length compliance' : 'Cumplimiento plena competencia'}:** ${status}`,
+    `**${lang === 'en' ? 'Required adjustment to median' : 'Ajuste requerido a la mediana'}:** ${adjPct} — ${adjCop}`,
+    check.reason ? `**${lang === 'en' ? 'Reason' : 'Motivo'}:** ${tpMotivoRango(check, lang)}` : '',
     c.taxImpactNote ? `**${lang === 'en' ? 'Tax impact' : 'Impacto fiscal'}:** ${c.taxImpactNote}` : '',
     '',
     c.rationale,
@@ -160,16 +202,17 @@ function renderArmLengthConclusion(json: ComparableAnalysisReportJson, lang: 'es
     .join('\n');
 }
 
-function toComparableAnalysisResult(
+export function toComparableAnalysisResult(
   json: ComparableAnalysisReportJson,
+  check: TpRangeCheck,
   lang: 'es' | 'en',
 ): ComparableAnalysisResult {
   const searchStrategy = renderSearchStrategy(json, lang);
   const comparabilityCriteria = renderComparabilityCriteria(json, lang);
   const selectedComparables = renderSelectedComparables(json, lang);
-  const interquartileRange = renderInterquartileRange(json, lang);
+  const interquartileRange = renderInterquartileRange(json, check, lang);
   const adjustmentsApplied = renderAdjustments(json, lang);
-  const armLengthConclusion = renderArmLengthConclusion(json, lang);
+  const armLengthConclusion = renderArmLengthConclusion(json, check, lang);
 
   const fullContent = [
     '## 1. ESTRATEGIA DE BÚSQUEDA DE COMPARABLES',
@@ -201,6 +244,7 @@ function toComparableAnalysisResult(
     .join('\n');
 
   return {
+    rangeCheck: check,
     searchStrategy,
     comparabilityCriteria,
     selectedComparables,

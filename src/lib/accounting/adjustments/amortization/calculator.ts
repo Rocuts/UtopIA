@@ -1,12 +1,17 @@
 // ─── WS4 — Amortización lineal de diferidos con prorateo por días ─────────────
 //
-// Algoritmo:
-//   total_days       = días entre amortization_start y amortization_end (inclusive)
-//   days_in_period   = días del diferido que caen dentro del período (min con rangos)
-//   fraction         = days_in_period / total_days
-//   monthly_amount   = total_amount × fraction                (BigInt-centavos)
-//   remaining        = total_amount - amortized_amount
-//   this_period      = min(monthly_amount, remaining)
+// Algoritmo por ACUMULADO ESPERADO (auditoría contab-nomina-15):
+//   total_days     = días entre amortization_start y amortization_end (inclusive)
+//   elapsed_days   = días desde amortization_start hasta min(fin del período, end)
+//   expected       = total_amount × elapsed_days / total_days   (BigInt-centavos)
+//                    = total_amount si el período llega a amortization_end
+//   this_period    = expected − amortized_amount   (≥ 0)
+//
+// Antes cada período amortizaba sólo su propia fracción y, pasada la fecha
+// final, el diferido quedaba `period_out_of_range`: el residuo de redondeo y
+// cualquier mes no corrido quedaban para siempre en el activo. Con el
+// acumulado esperado, un mes omitido se recupera en el siguiente y el período
+// que contiene (o sigue a) amortization_end lleva el saldo a cero exacto.
 //
 // Casos de meses parciales (inicio o fin del diferido):
 //   - Inicio: si amortization_start cae dentro del período, se cuenta desde ese día.
@@ -116,6 +121,11 @@ export function calculateAmortization(
   for (const asset of deferredAssets) {
     // ── Skip conditions ──────────────────────────────────────────────────────
 
+    if (period.month === 13) {
+      skipped.push({ deferredAssetId: asset.id, reason: 'closing_period' });
+      continue;
+    }
+
     if (!asset.active) {
       skipped.push({ deferredAssetId: asset.id, reason: 'inactive' });
       continue;
@@ -144,14 +154,13 @@ export function calculateAmortization(
       }
     }
 
-    // Skip if the differential period doesn't overlap with this accounting period.
     const amortStart = new Date(asset.amortizationStart);
     const amortEnd = new Date(asset.amortizationEnd);
     const periodStart = new Date(period.startsAt);
     const periodEnd = new Date(period.endsAt);
 
-    const daysInPeriod = daysOverlap(amortStart, amortEnd, periodStart, periodEnd);
-    if (daysInPeriod <= 0) {
+    // Aún no empieza: nada que amortizar en este período.
+    if (utcDay(periodEnd).getTime() < utcDay(amortStart).getTime()) {
       skipped.push({
         deferredAssetId: asset.id,
         reason: 'period_out_of_range',
@@ -159,7 +168,7 @@ export function calculateAmortization(
       continue;
     }
 
-    // ── Prorated calculation ─────────────────────────────────────────────────
+    // ── Prorated calculation (acumulado esperado) ────────────────────────────
 
     const totalDays = daysBetweenInclusive(amortStart, amortEnd);
     if (totalDays <= 0) {
@@ -167,12 +176,14 @@ export function calculateAmortization(
       continue;
     }
 
-    // fraction = daysInPeriod / totalDays — computed in BigInt to avoid float drift.
-    // amount = totalAmount * daysInPeriod / totalDays (integer division, BigInt)
-    const monthlyAmount =
-      (totalAmount * BigInt(daysInPeriod)) / BigInt(totalDays);
+    const daysInPeriod = daysOverlap(amortStart, amortEnd, periodStart, periodEnd);
+    const reachedEnd = utcDay(periodEnd).getTime() >= utcDay(amortEnd).getTime();
+    const elapsedDays = daysOverlap(amortStart, amortEnd, amortStart, periodEnd);
+    const expected = reachedEnd
+      ? totalAmount
+      : (totalAmount * BigInt(elapsedDays)) / BigInt(totalDays);
     const remaining = totalAmount - amortized;
-    const thisPeriod = minBigInt(monthlyAmount, remaining);
+    const thisPeriod = minBigInt(expected - amortized, remaining);
 
     if (thisPeriod <= ZERO) {
       skipped.push({ deferredAssetId: asset.id, reason: 'zero_amount' });
@@ -221,7 +232,8 @@ export function calculateAmortization(
           entryDate,
           description: `Amortización diferidos período ${period.year}-${String(period.month).padStart(2, '0')}`,
           sourceType: 'adjustment',
-          sourceRef: `period:${period.id}`,
+          // Llave de idempotencia por período (createEntry idempotentBySource).
+          sourceRef: `period:${period.id}:amortization`,
           status: 'draft',
           lines: entryLines,
           metadata: {

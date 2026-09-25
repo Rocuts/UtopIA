@@ -26,6 +26,32 @@ import { FuturoTrendBars } from './FuturoTrendBars';
 import { FuturoExecutiveCards } from './FuturoExecutiveCards';
 import { MonteCarloHistogram } from './MonteCarloHistogram';
 import type { MonteCarloResult } from '@/lib/pillars/types';
+import { RUNWAY_ESCENARIOS } from '@/lib/kpis/runway';
+
+/** Variación de ingresos del escenario en puntos (0.85 → −15, 1.1 → +10). */
+function variacionIngresos(factor: number): string {
+  const pts = Math.round((factor - 1) * 100);
+  return pts < 0 ? `\u2212${Math.abs(pts)}%` : `+${pts}%`;
+}
+
+/**
+ * Subtítulo del runway (valoracion-24): los supuestos salen de
+ * `RUNWAY_ESCENARIOS` (src/lib/kpis/runway.ts), los mismos factores con que
+ * `buildRunway` calcula las series, en vez de un texto fijo que podía
+ * divergir. En español se citan sus rótulos; en inglés se derivan de los
+ * mismos factores.
+ */
+export function runwayScenarioSubtitle(language: 'es' | 'en'): string {
+  const { conservador, agresivo } = RUNWAY_ESCENARIOS;
+  if (language === 'es') {
+    return `Base · Conservador: ${conservador.rotulo} · Agresivo: ${agresivo.rotulo}`;
+  }
+  return (
+    `Base · Conservative: sensitivity assumption, revenue ${variacionIngresos(conservador.factorIngresos)}, ` +
+    `expenses unchanged (not a forecast) · Aggressive: sensitivity assumption, revenue ` +
+    `${variacionIngresos(agresivo.factorIngresos)}, expenses unchanged (not a forecast)`
+  );
+}
 
 interface Props {
   metrics: PillarMetrics;
@@ -94,7 +120,13 @@ export function FuturoMicroDashboard({
       )}
 
       {runway && runway.length > 0 && (
-        <RunwayProjection months={runway} density={density} />
+        <RunwayProjection
+          months={runway}
+          density={density}
+          language={language}
+          title={isEs ? 'Runway de Caja · 36 meses' : 'Cash Runway · 36 months'}
+          subtitle={runwayScenarioSubtitle(language)}
+        />
       )}
 
       {futuroTrend && futuroTrend.length > 0 && (

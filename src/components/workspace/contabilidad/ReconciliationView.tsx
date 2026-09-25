@@ -21,11 +21,13 @@ import {
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/context/LanguageContext';
 import type { BankAccountRow } from '@/lib/accounting/banking/types';
 import type { ReconciliationStatus } from '@/lib/accounting/banking/types';
 import type { AccountingPeriodRow } from '@/lib/db/schema';
 import { BankAccountForm, type BankAccountFormData } from './BankAccountForm';
 import { ImportStatementDialog } from './ImportStatementDialog';
+import { diffColor, isNotReconcilable } from './recon-display';
 
 // ---------------------------------------------------------------------------
 // Helpers de formato
@@ -42,13 +44,6 @@ function formatCOP(value: string | null | undefined): string {
   const n = Number(value);
   if (Number.isNaN(n)) return '—';
   return COP.format(n);
-}
-
-function diffColor(blocking: boolean, differenceCop: string): string {
-  const diff = Math.abs(Number(differenceCop));
-  if (diff === 0) return 'text-emerald-400';
-  if (blocking) return 'text-red-400';
-  return 'text-amber-400';
 }
 
 const STATUS_CONFIG: Record<
@@ -87,6 +82,8 @@ export function ReconciliationView({
   periodId,
   onRefreshNeeded,
 }: ReconciliationViewProps) {
+  const { t } = useLanguage();
+  const rt = t.accounting.reconciliation;
   const [status, setStatus] = useState<ReconciliationStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [reconciling, setReconciling] = useState(false);
@@ -233,8 +230,18 @@ export function ReconciliationView({
                   diffColor(status.blocking, status.differenceCop),
                 )}
               >
-                {formatCOP(status.differenceCop)}
+                {isNotReconcilable(status) ? rt.notAvailable : formatCOP(status.differenceCop)}
               </p>
+              {isNotReconcilable(status) && (
+                <div role="status" className="mt-1 space-y-0.5">
+                  <p className="text-xs text-red-500 font-semibold">{rt.notReconcilable}</p>
+                  {status.reason && (
+                    <p className="text-xs text-zinc-400">
+                      {rt.reason}: {status.reason}
+                    </p>
+                  )}
+                </div>
+              )}
               {status.blocking && (
                 <p className="mt-1 text-xs text-red-500 font-medium">
                   Bloqueante — cierre suspendido

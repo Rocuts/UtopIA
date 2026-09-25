@@ -2,8 +2,11 @@
 // L3.7 — F03 anclado al crédito imputable a RENTA
 // ---------------------------------------------------------------------------
 // Contrapartida de defensa (Capa 3) del arreglo del extractor: dado el balance
-// desagregado, F03 tiene que ser exactamente Σ(1355+1805) menos el ReteIVA
-// (135517) y el ReteICA (135518). Tolerancia CERO — es un ancla.
+// desagregado, F03 tiene que ser exactamente el crédito de renta de la lista
+// blanca única (`@/lib/accounting/renta-credit`). Tolerancia CERO — es un ancla.
+// Integración W3-B (auditoría 2026-09): el contexto ya no es Σ(1355+1805) −
+// 135517 − 135518 (aceptaba 1805 «Bienes de arte y cultura» o 135510 como
+// crédito de renta) sino la composición de `componerActivosImpuesto`.
 //
 // Art. 373 E.T.: sólo lo retenido a título de renta se imputa a ese impuesto.
 // Art. 484-1 E.T.: el ReteIVA se acredita en la declaración de IVA.
@@ -55,9 +58,10 @@ function ctx(creditoRenta?: L3Context['creditoRenta']): L3Context {
 }
 
 const DESAGREGADO = {
-  total1355y1805Cents: TOTAL_1355_1805,
-  reteIva135517Cents: RETE_IVA,
-  reteIca135518Cents: RETE_ICA,
+  creditoRentaCents: TOTAL_1355_1805 - RETE_IVA - RETE_ICA,
+  reteIvaCents: RETE_IVA,
+  reteIcaCents: RETE_ICA,
+  otrosNoRentaCents: 0,
 };
 
 const l37 = (block: FiscalAnchorBlock, c: L3Context) =>

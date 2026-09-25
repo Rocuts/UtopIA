@@ -211,3 +211,36 @@ describe('Wave 4 F0 — computeReportHash (Slide 12 verificación)', () => {
     expect(h1).not.toBe(h2);
   });
 });
+
+// niif-preproceso-30: "Auxiliares procesados" del Slide 12 cuenta las hojas
+// del ARCHIVO; las cuentas virtuales del curador (R1 `…ZZ-…`, R8 3605VC /
+// 3710VC) no son auxiliares procesados.
+import { parseTrialBalanceCSVWithMeta, preprocessTrialBalance } from '../trial-balance';
+
+describe('niif-preproceso-30 — summarizeCoverage no cuenta cuentas virtuales', () => {
+  it('R1 (sobregiro reclasificado) y R8 (3605 del año anterior + traslado): conteo de hojas del archivo', () => {
+    const csv = [
+      'codigo,nombre,nivel,Saldo 2025',
+      '110505,Caja,Auxiliar,500000',
+      '111005,Bancos (sobregiro),Auxiliar,-100000',
+      '220505,Proveedores,Auxiliar,100000',
+      '310505,Capital,Auxiliar,150000',
+      '360505,Utilidad 2024 sin trasladar,Auxiliar,50000',
+      '413505,Ventas,Auxiliar,300000',
+      '510506,Sueldos,Auxiliar,200000',
+    ].join('\n');
+    const pp = preprocessTrialBalance(parseTrialBalanceCSVWithMeta(csv).rows);
+    const codes = (cls: number) => pp.primary.classes.find((c) => c.code === cls)!.accounts.map((a) => a.code);
+    // Precondición: el curador sí inyectó virtuales en las clases 2 y 3.
+    expect(codes(2).some((c) => !/^\d+$/.test(c))).toBe(true);
+    expect(codes(3).some((c) => !/^\d+$/.test(c))).toBe(true);
+
+    const cov = summarizeCoverage(pp);
+    const count = (k: string) => cov.find((c) => c.classCode === k)!.auxiliariesCount;
+    expect(count('1')).toBe(2);
+    expect(count('2')).toBe(1);
+    expect(count('3')).toBe(2);
+    expect(count('4')).toBe(1);
+    expect(count('5')).toBe(1);
+  });
+});

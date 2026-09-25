@@ -10,7 +10,8 @@
  * desconocido a 'medio' / 50. Esa coaccion silenciosa es peor que fallar: un
  * output truncado por `length` se presentaba en el RiskGauge como una
  * evaluacion de riesgo medio legitima, sin decirle a nadie que estaba
- * incompleta.
+ * incompleta. Desde la fase 2 (2026-09-24) tampoco el error se coacciona:
+ * `assessRisk` lanza RiskAssessmentUnavailableError con el motivo.
  */
 
 import { z } from 'zod';
@@ -87,7 +88,25 @@ const RISK_SYSTEM_PROMPT = `Eres un experto evaluador de riesgos tributarios col
 <success_criteria>El score cae dentro de la banda que corresponde al level reportado.</success_criteria>`;
 
 /**
+ * Evaluación no disponible. Fase 2 de la auditoría 2026-09-24
+ * (tributario-calc-22): antes un fallo devolvía level 'medio' / score 50 y el
+ * RiskGauge lo mostraba como una evaluación legítima. Ahora se lanza con el
+ * motivo: la tool del chat lo entrega al modelo como error (tool-error del AI
+ * SDK) y no se publica nivel ni score.
+ */
+export class RiskAssessmentUnavailableError extends Error {
+  constructor(motivo: string) {
+    super(
+      `Evaluación de riesgo no disponible (N/D): ${motivo}. No se publica nivel ni score; ` +
+        'recomiende una evaluación manual con un Contador Público o abogado tributarista.',
+    );
+    this.name = 'RiskAssessmentUnavailableError';
+  }
+}
+
+/**
  * Assess the risk of a tax case based on the conversation context.
+ * Lanza RiskAssessmentUnavailableError si la evaluación no se completa.
  */
 export async function assessRisk(caseDescription: string): Promise<RiskAssessment> {
   try {
@@ -111,27 +130,8 @@ export async function assessRisk(caseDescription: string): Promise<RiskAssessmen
     };
   } catch (error) {
     console.error('Risk assessment failed:', error);
-    return fallbackRiskAssessment(
-      `Error en la evaluacion de riesgo: ${error instanceof Error ? error.message : 'Error desconocido'}`
+    throw new RiskAssessmentUnavailableError(
+      error instanceof Error ? error.message : 'Error desconocido',
     );
   }
-}
-
-function fallbackRiskAssessment(reason: string): RiskAssessment {
-  return {
-    level: 'medio',
-    score: 50,
-    factors: [
-      {
-        description: reason,
-        severity: 'medio',
-        category: 'sistema',
-      },
-    ],
-    recommendations: [
-      'No fue posible completar la evaluacion automatica de riesgo.',
-      'Consulte con un Contador Publico o abogado tributarista para una evaluacion manual.',
-      'Recopile toda la documentacion relevante del caso para un analisis detallado.',
-    ],
-  };
 }

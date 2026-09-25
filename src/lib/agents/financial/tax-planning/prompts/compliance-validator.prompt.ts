@@ -10,6 +10,7 @@
 import type { CompanyInfo } from '../../types';
 import { buildAntiHallucinationGuardrail } from '../../prompts/anti-hallucination';
 import { buildColombia2026Context } from '../../prompts/colombia-2026-context';
+import { SMMLV_2026 } from '@/lib/tax/taxCalculator';
 
 export function buildComplianceValidatorPrompt(
   company: CompanyInfo,
@@ -41,10 +42,10 @@ Validar que cada estrategia de optimización tributaria propuesta cumpla con la 
 - Cada recomendación del Agente 1 tiene exactamente una entrada en riskAssessments (referenciada por recommendationId).
 - Riesgo clasificado: BAJO (práctica habitual aceptada por DIAN), MEDIO (zona gris con doctrina mixta — requiere soporte documental robusto), ALTO (riesgo significativo de recaracterización o sanción).
 - Test de propósito comercial Art. 869 E.T. evaluado explícitamente con businessPurposeTestPasses por estrategia. Si falla y riskLevel="alto", la estrategia entra en blockers.
-- Defensa Art. 647 E.T. (Diferencia de Criterio) construida para TODA estrategia con riskLevel ∈ {medio, alto} cuando exista doctrina DIAN, jurisprudencia del Consejo de Estado o concepto CTCP que sustente posición razonable del contribuyente. Esta defensa anula la sanción por inexactitud (100%) — es el escudo del contribuyente frente al requerimiento.
+- Soporte de interpretación razonable (Art. 647 E.T.) documentado para TODA estrategia con riskLevel ∈ {medio, alto} que se refleje en una declaración tributaria, cuando exista doctrina DIAN, jurisprudencia del Consejo de Estado o concepto CTCP que sustente la posición del contribuyente. El Art. 647 excluye la inexactitud sólo si el menor valor proviene de una interpretación razonable del derecho aplicable y los hechos y cifras declarados son completos y verdaderos; no "anula" la sanción ni sustituye la corrección de cifras.
 - Checklist por estrategia DEBE incluir mínimo: propósito comercial, formalidad del régimen invocado, sustancia económica vs forma jurídica, soporte documental, Art. 118-1 (subcapitalización si aplica), Arts. 260-1..11 (precios de transferencia si aplica), Art. 631-5 (RUB), Art. 869 (anti-abuso).
-- Sanciones citadas con cuantía EXACTA: Art. 647 (inexactitud 100%, reducible al 50% si corrige); Art. 641 (extemporaneidad 5%/mes, máximo 100%); Art. 651 (no reportar exógena hasta 5% montos); RUB Arts. 631-5/631-6 con sanciones del Art. 658-3 E.T. (1 UVT por día de retraso; 100 UVT si información errónea o incompleta); Art. 869 (recaracterización + 200% si dolo); Art. 434A C.P. (prisión 48-108 meses si omisión de activos / pasivos inexistentes > 1.000 SMLMV, Ley 2277/2022).
-- UVT 2026 = $52.374 COP. Salario mínimo 2026 = $1.750.905 COP referencial (Decreto 1469/2025).
+- Sanciones citadas con cuantía EXACTA: Arts. 647 y 648 (inexactitud 100% del mayor valor; reducible a la cuarta parte si se acepta en la respuesta al requerimiento especial — Art. 709 — o a la mitad si se acepta en el recurso contra la liquidación de revisión — Art. 713 —, además de la gradualidad del Art. 640); Art. 641 (extemporaneidad 5% por mes o fracción, máximo 100% del impuesto); Art. 651 (información no suministrada 1%, con errores 0,7%, extemporánea 0,5% de las sumas; tope 7.500 UVT, con las reducciones del mismo artículo); RUB Arts. 631-5/631-6 con sanciones del Art. 658-3 E.T. (1 UVT por día de retraso; 100 UVT si información errónea o incompleta); Art. 869 (recaracterización + 200% si dolo); Art. 434A C.P. (prisión 48-108 meses si omisión de activos / pasivos inexistentes > 1.000 SMLMV, Ley 2277/2022).
+- UVT del año gravable analizado (2026 = $52.374 COP; 2025 = $49.799 COP). Salario mínimo 2026 = $${SMMLV_2026.toLocaleString('es-CO')} COP referencial (Decreto 1469/2025, suspendido provisionalmente por el Consejo de Estado; cifra ratificada por el Decreto transitorio 0159 del 19-feb-2026).
 - blockers contiene solo recomendaciones con (riskLevel="alto" AND businessPurposeTestPasses=false). Estrategias con riesgo alto que pasan el test de propósito comercial NO bloquean — entran en "con_salvedades".
 - overallVerdict consolidado: "favorable" si no hay blockers y ninguna alta; "con_salvedades" si hay altas sin blockers o medias múltiples; "desfavorable" si hay blockers no resolubles.
 </success_criteria>
@@ -52,8 +53,8 @@ Validar que cada estrategia de optimización tributaria propuesta cumpla con la 
 <constraints>
 - MUST: ser conservador — preferir advertir un riesgo que no existe a omitir uno que sí. La asimetría de costo es a favor del contribuyente.
 - MUST: priorizar la SUSTANCIA SOBRE LA FORMA — Art. 12-1 E.T. (sede efectiva administración) y Art. 20-2 E.T. (establecimiento permanente). Si la forma jurídica es desproporcionada a la sustancia económica, marcar riesgo alto.
-- MUST: invocar la defensa Art. 647 E.T. (Diferencia de Criterio) en riesgos medio/alto SIEMPRE que haya base normativa razonable. Citar doctrina específica cuando exista, declarar "soporte doctrinal a confirmar" cuando no.
-- MUST: cuando una recomendación involucre vinculados económicos, validar el umbral Art. 118-1 (deuda/patrimonio líquido año anterior ≤ 2:1) y Arts. 260-1 a 260-11 (declaración 45.000 UVT; documentación 100.000 UVT patrimonio o 61.000 UVT ingresos; CbC 81.000.000 UVT consolidado).
+- MUST: en riesgos medio/alto con base normativa razonable, documentar la interpretación razonable respecto de la declaración afectada (Art. 647 E.T., con hechos y cifras completos y verdaderos). Citar doctrina específica cuando exista, declarar "soporte doctrinal a confirmar" cuando no. NEVER afirmar que una diferencia de criterio "anula" la sanción o no es sancionable.
+- MUST: cuando una recomendación involucre vinculados económicos, validar el umbral Art. 118-1 (deuda/patrimonio líquido año anterior ≤ 2:1) y Arts. 260-5 y 260-9 (declaración informativa y documentación: patrimonio bruto ≥ 100.000 UVT o ingresos brutos ≥ 61.000 UVT del año gravable; informe local por tipo de operación > 45.000 UVT, 10.000 UVT con paraísos fiscales; CbC 81.000.000 UVT consolidado).
 - NEVER presentar evasión fiscal como opción válida. Diferencia elusión (legal) vs evasión (Art. 434A C.P. — delito penal).
 - NEVER invocar Art. 869 E.T. (anti-abuso) como bloqueo automático — la DIAN debe demostrar que el propósito PRINCIPAL es el beneficio fiscal sin razón comercial. Si hay propósito comercial concurrente, el Art. 869 no aplica.
 - If grossRevenue O patrimonio_liquido_año_anterior está disponible then aplicar chequeo Art. 118-1 con cifra concreta otherwise marcar checklist item como "passes=false, gapAction='Validar ratio deuda/patrimonio con balance al 31-dic-año-anterior'".
@@ -76,7 +77,7 @@ ${detectedPeriods && detectedPeriods.length > 0 ? `- Períodos detectados: ${det
 ${
   isMultiPeriod
     ? `<multiperiod_context>
-Datos con múltiples periodos. Evaluar la TRAYECTORIA de la tasa efectiva entre periodos: una caída abrupta sin sustento técnico es bandera roja Art. 869 E.T. Verificar patrimonio líquido al cierre del año anterior para Art. 118-1 (subcapitalización 2:1). Verificar umbrales recurrentes (RUB Art. 631-5, precios de transferencia Art. 260-1, exógena Art. 631) sobre la serie histórica.
+Datos con múltiples periodos. Evaluar la TRAYECTORIA de la tasa efectiva entre periodos: una caída abrupta sin sustento técnico es bandera roja Art. 869 E.T. Verificar patrimonio líquido al cierre del año anterior para Art. 118-1 (subcapitalización 2:1). Verificar umbrales recurrentes (RUB Art. 631-5, precios de transferencia Arts. 260-5 y 260-9, exógena Art. 631) sobre la serie histórica.
 </multiperiod_context>`
     : `<multiperiod_context>
 Datos de un solo periodo. Declarar en preparerNotes que la verificación de subcapitalización (Art. 118-1 E.T.) requiere patrimonio líquido al 31-dic del año anterior; sin el comparativo este chequeo queda condicionado.

@@ -48,11 +48,20 @@ export interface ForensicScanResult {
   scanDurationMs: number;
   totalAnomalies: number;
   bySeverity: { low: number; medium: number; high: number };
-  /** Score 0-100. 100 = limpio, 0 = altamente sospechoso. */
+  /**
+   * Score 0-100 sobre las reglas EVALUADAS. 100 = sin anomalías en esas
+   * reglas; sólo equivale a "limpio" cuando `coverage === 'completa'`.
+   */
   score: number;
   anomalies: Anomaly[];
   /** Advertencias no bloqueantes (ej. datos insuficientes para Benford). */
   warnings: string[];
+  /** Reglas que corrieron sin error. */
+  rulesEvaluated: AnomalyKind[];
+  /** Reglas que lanzaron: sus pruebas NO están cubiertas por el score. */
+  rulesFailed: AnomalyKind[];
+  /** 'parcial' si alguna regla falló u omitió; el score no es un "limpio" total. */
+  coverage: 'completa' | 'parcial';
 }
 
 // ─── Contrato interno de cada regla ──────────────────────────────────────────

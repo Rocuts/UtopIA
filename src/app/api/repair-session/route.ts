@@ -18,26 +18,15 @@ import {
 } from '@/lib/agents/repair/persistence';
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
 import { requireAuthSession } from '@/lib/auth/require-session';
+import { adjustmentSchema } from '@/lib/reports/adjustment-ledger';
 
 // ─── Schemas ────────────────────────────────────────────────────────────────
 //
 // Mismo shape que `/api/repair-chat` pero con campos extra (status,
-// provisional). Se mantienen sincronizados a mano: si se cambia un límite en
-// repair-chat, replicarlo aquí.
-
-const adjustmentSchema = z.object({
-  id: z.string().min(1).max(100),
-  accountCode: z.string().min(1).max(10),
-  accountName: z.string().min(1).max(200),
-  amount: z
-    .number()
-    .refine((n) => Number.isFinite(n), 'amount debe ser finito'),
-  rationale: z.string().min(1).max(2_000),
-  status: z.enum(['proposed', 'applied', 'rejected']),
-  proposedAt: z.string().min(1).max(40),
-  appliedAt: z.string().min(1).max(40).optional(),
-  rejectedAt: z.string().min(1).max(40).optional(),
-});
+// provisional). El ajuste usa el esquema ÚNICO del ledger
+// (src/lib/reports/adjustment-ledger.ts): la copia local no declaraba
+// `period`, Zod lo quitaba en el autosave y la sesión rehidratada perdía el
+// periodo del ajuste aunque `persistence.ts` sí lo guarda (cross-dep I1-4).
 
 const provisionalSchema = z
   .object({

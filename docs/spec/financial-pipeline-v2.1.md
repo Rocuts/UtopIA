@@ -4,6 +4,42 @@
 
 > Northstar Wave 6. Auditora externa identificó 9 correcciones tras revisar un informe real generado por el pipeline. Cada corrección lleva ejemplo correcto/incorrecto y mapeo a archivos del codebase.
 
+> **Enmiendas del 2026-09-24 (auditoría de exactitud NIIF, paquete WP04).** Prevalecen sobre el texto original donde lo contradigan; el resto del documento no cambia.
+>
+> 1. **Corrección 4 — impuesto de renta sin grupo 54 (sustituida).** El gasto por impuesto de renta del P&G es exclusivamente el saldo del grupo PUC 54. Sin grupo 54 el impuesto queda **no reconocido en libros**: no se presenta renglón de impuesto con monto, la Utilidad Neta es la UAI vinculante y el P&G lleva una nota que remite a la conciliación fiscal del contador (NIC 12 / NIIF para las PYMES, Sección 29). Quedan derogados el uso de la cuenta 1805 como gasto (en el PUC del Decreto 2650/1993 la 1805 es "Bienes de arte y cultura"; sólo se trata como impuesto si su nombre en el balance de prueba lo indica), la "provisión teórica al 35% × utilidad operativa" y la nota que la presentaba como dato. La UAI no es base fiscal; la Tasa de Tributación Depurada (Art. 240 par. 6 E.T.) sólo se calcula con impuesto depurado y utilidad depurada verificados.
+> 2. **Presentación del grupo PUC 42 (ingresos no operacionales).** Decisión del coordinador: el grupo 42 (4210 financieros, 4245 utilidad en venta de PPE, 4250 recuperaciones…) va **debajo de la utilidad operacional**, igual que el grupo 53. Cascada vinculante: Utilidad Bruta = ingresos operacionales netos (grupo 41 − devoluciones 4175) − costo de ventas y producción (clases 6 y 7); EBIT = Utilidad Bruta − grupos 51 y 52; UAI = EBIT + otros ingresos (42) − gastos no operacionales (53 y resto de la clase 5 salvo 54); Utilidad Neta = UAI − grupo 54. Sustituye la lectura de la spec v2 (Partes 1 y 4.1) que rotulaba el grupo 42 como "otros ingresos operacionales" y la definición de "ingresos operacionales = Clase 4 completa". La cobertura de intereses usa sólo la cuenta 5305 (sin 5305, N/D). Implementado en `trial-balance.ts` (EBIT), `contracts/anchors.ts` (anclas UB/EBIT), validadores E14/E16 y el prompt del Analista NIIF.
+>
+> **Enmiendas del 2026-09-24 (resto de la auditoría integral; ver `docs/reviews/auditoria-integral-niif-2026-09-24.md`).**
+>
+> 3. **Correcciones 2, 3 y 5 — balance testigo.** El comparativo 2024 del balance testigo no se cerró y el P&G 2025 publicado ($2.228.496.789,73; ROE 117,3 %) es acumulado. El resultado del ejercicio coherente con la variación del patrimonio y con la Corrección 5 es $655.775.316,77. Las cifras de ejemplo de las correcciones 2 y 3 no son referencia de exactitud. El preprocesador detecta el P&G posiblemente acumulado, bloquea la emisión (V12) y ofrece la cifra alternativa sin transformar datos sin confirmación del usuario.
+> 4. **Cierre Virtual (R8), anclaje de patrimonio (R5) y libros no cerrados (R12).** R8 sólo traslada el resultado de las clases 4-7 al grupo 36 y reclasifica a 3710VC un resultado anterior que siga en el 36; cualquier otro residual A − P − K distinto de cero al centavo es **bloqueante** con su monto y nunca se absorbe. R5 no reescribe el patrimonio (patrimonio = Σ clase 3). R12 no sella como no emitibles los cortes parciales.
+> 5. **EFE.** La única fuente vinculante es el EFE determinista; el EFE del LLM se cruza contra él por actividad, efectivo inicial y final con tolerancia $0 (E18). Apropiaciones de reservas, capitalizaciones y el traslado 3605→37 son no monetarios (NIC 7 ¶43); una disminución del patrimonio no explicada por el resultado va en financiación como distribución pendiente de soporte (NIC 7 ¶34 / Sección 7), nunca se afirma "no hubo distribución" sólo porque la 2360 cerró en cero.
+> 6. **ECP.** Saldo inicial = patrimonio comparativo del ESF (E19); columnas del cierre = renglones de patrimonio del ESF (E20); tolerancia $0 en E7. La fila de traslado del resultado anterior suma $0.
+> 7. **Capital (PUC).** Capital suscrito y pagado = grupo 31 (3105 neto de 310510/310515, 3115, 3120…); 310505 capital autorizado es informativo. El grupo 31 nunca es ORI.
+> 8. **KPIs.** EBITDA canónico = utilidad operacional + depreciaciones y amortizaciones PUC (5160, 5165, 5260, 5265, 7360, 7365); márgenes, rotaciones y días sobre ingresos operacionales netos (41 − 4175), base 365, anualizados según los meses del periodo o N/D con motivo; ROE y apalancamiento N/D con patrimonio ≤ 0. La clasificación corriente/no corriente por grupo PUC se revela como supuesto. Métricas fiscales heurísticas (35 % de la utilidad neta, grupo 24 completo) no se publican.
+> 9. **Auditoría (Parte IV) y meta-auditoría (Parte V).** La opinión y el sello quedan condicionados a la integridad aritmética determinista; sin dictamen del Revisor Fiscal la opinión es "no emitida" (nunca derivada del score de otros dominios). TTD = ID/UD o N/D. Reserva legal: obligatoria en S.A. (Art. 452 C.Co.) y Ltda. (Art. 371); en SAS sólo por estatutos. Capitalización: Art. 29 Ley 1258/2008 y tratamiento de los Arts. 30, 48-49 y 242 E.T.; el Art. 36-3 E.T. está derogado (Ley 2277/2022 art. 96). Empresa en marcha según Ley 2069/2020 art. 4 (los Arts. 457 num. 2, 458 y 459 C.Co. fueron derogados). Parte V: dimensiones sin fuente N/D fuera del promedio, umbrales sin redondeo previo, Exactitud bloqueante.
+> 10. **Defensa Art. 647 (Corrección 9).** Una sola nota de criterios contables y soporte; el Art. 647 sólo se menciona respecto de declaraciones tributarias (interpretación razonable con hechos y cifras completos y verdaderos), sin afirmar que "anula la sanción".
+> 11. **Exportación y emisión.** Excel, PDF y HTML se construyen desde el mismo JSON validado y el mismo balance preprocesado que usó /niif; informe sin balance verificado, con Partes II/III vacías o con salvedades en el acta o la Estrategia no se descarga. NIIF 18 no se cita como base (no incorporada al marco colombiano vigente).
+>
+> **Enmienda del 2026-09-24 (fase 2 de la auditoría integral; integraciones P2, I2 e I4).**
+>
+> 12. **Comparativos del EFE/ECP y ORI del periodo.**
+>     - *Comparativos deterministas (NIIF para las PYMES 3.14).* El EFE y el ECP llevan el periodo comparativo cuando el balance trae el corte de cierre anterior al comparativo (tres cortes): los calcula el código con la misma proyección del periodo actual (`buildComparativeStatementsBasis` / `attachComparativeStatements`, `contracts/deterministic-breakdown.ts`) y el modelo no los redacta (en el Pass-2 `amountComparative = null`; lo que escriba se descarta). El validador cruza la columna comparativa del EFE (E2/E3/E11, E18/E23) y las filas del ECP comparativo (E17, E7, E4, E20c, E19 entre periodos, E24 idénticas al determinista). Presentarlos sin base determinista es error.
+>     - *Comparativo no presentado.* Con dos cortes, saldos de apertura como comparativo, un corte anterior parcial o que no es el cierre inmediatamente anterior, un EFE que no concilia o grupos patrimoniales sin columna, el estado comparativo no se presenta y el código redacta una nota (es/en según el idioma del informe) que dice qué falta y lo pide ("suministre ese corte"). No declara impracticabilidad (10.21): un insumo que no llegó a la herramienta no es impracticable; eso sólo lo acreditan el preprocesador o la entidad (Regla R1, sin periodo comparativo). Nunca se sustituye por cifras estimadas.
+>     - *ORI del periodo = Δ grupo 38 (NIIF para las PYMES, Secciones 5 y 6 — 6.3(c)).* El ORI que presenta el estado del resultado integral es el cambio de la columna ORI del ECP. En el PUC (Decreto 2650/1993) esa columna es el grupo 38, "superávit por valorizaciones" / ORI (el grupo 31 es capital, nunca ORI). Regla única: **ORI del periodo = saldo del grupo 38 al cierre − saldo al corte de apertura**, calculado por el código (`buildOriAnchors`, `oriOfPeriodCents`). Se aplica igual en: (a) el ancla del ERI (bloque "CASCADA VINCULANTE DEL P&G" del Pass-1 → `oriPrimary` / `oriComparative`); (b) el ECP: la fila `other_comprehensive_income` lleva Δ38 en la columna ORI — el del periodo comparativo lo calcula el código (`buildDeterministicEquityChanges`) y el del periodo actual, que redacta el Pass-2, queda anclado por E24 (columnas = saldos de cada grupo en cada corte) y E6; (c) el validador: E6 (Δ columna ORI del ECP = ORI del ERI, ambos periodos) y E6b (ORI del ERI = Δ38 del balance de prueba, ambos periodos), tolerancia $0. Sustituye la regla anterior de E6b ("sin componentes ORI mapeados, ORI $0"), que contradecía al ECP determinista: con un grupo 38 que se movió en el año, ninguna cifra del ERI satisfacía E6 y E6b a la vez y el informe honesto salía sellado. Sin corte de apertura: en el periodo actual (un solo corte) el ORI se presenta en $0 con la limitación revelada (el contrato no admite N/D en `oriPrimary`); en el comparativo, N/D (`null`) si el grupo 38 tiene saldo al cierre del comparativo, y $0 o N/D si no lo tiene. Con saldos de apertura como comparativo el ERI comparativo es N/D y no se exige. El PUC no distingue las partidas reclasificables de las que no (ORI_COMPONENT_MAP sigue vacío): el ORI se presenta en una sola línea. Limitación: un traslado del superávit a resultados acumulados (realización) no se distingue en un balance de saldos; el código presenta Δ38 como ORI y el contador revela el traslado.
+>
+> **Enmienda del 2026-09-24 (fase 2 de la auditoría integral; integración I1).** Numerada 13 para no chocar con la enmienda de otro paquete de la misma fase.
+>
+> 13. **Parte V — Transparencia (dimensión v2.1 #6).** En la tabla "MAPEO 14 → 12 DIMENSIONES", la fuente de la fila 6 es la **ponderación 90/10** que fija su nota: `round(0,9 × D9 Anti-alucinación + 0,1 × D6 Análisis estratégico)`, no el promedio simple `promedio(D9, D6)`. Si falta una de las dos, se usa la otra con aviso de mapeo de respaldo; si faltan ambas, las métricas `aiGovernance.antiHallucination` / `explainability` con la misma ponderación, o N/D fuera del promedio. Implementado en `quality/v21-mapping.ts` (`resolveTransparencyComposite`). El mapeo de D5, D7 y D13 (hoy sin dimensión v2.1) no cambia con esta enmienda.
+>
+> **Enmienda del 2026-09-24 (fase 2 de la auditoría integral; P4, integraciones I2, I4 e I5 y ronda final tras la re-auditoría final).** Registra criterios que el código ya aplica en `54802609`.
+>
+> 14. **Plazo corriente / no corriente, un código por renglón, revaluación en el EFE y ORI no medible.**
+>     - *Clasificación corriente / no corriente (precisa la enmienda 8).* El supuesto sigue siendo el grupo PUC, revelado, con excepciones de vencimiento que el usuario declara por cuenta (`maturityOverrides` en `/niif` y en el intake; `maturity_overrides` en el API v1): el código más específico prevalece y cada excepción se revela con su monto. El saldo contrario de un activo que R1 reclasifica es pasivo del grupo 28, en el bloque corriente si la cuenta de origen es de los grupos 11 a 14 y en el no corriente si es de los grupos 15 a 19, salvo una excepción de vencimiento declarada para la cuenta de origen (NIC 1, párrafos 32 y 69-71; NIIF para las PYMES, Sección 4.4). El ESF determinista parte un grupo en dos renglones cuando sus cuentas quedan en plazos distintos (`buildDeterministicBreakdownByTerm`). E27 contrasta con `controlTotals`, al centavo y en los dos periodos, los subtotales corriente / no corriente y la suma de un bloque encabezado sin subtotal; si un ESF redactado por el modelo no pasa E27, el código sustituye esa sección por la proyección determinista por plazo (`realignEsfTermsFromSnapshot`) y el validador sella sólo si el error persiste.
+>     - *E21: un código por renglón.* Cada renglón con código del ESF y del ERI se ancla sólo a la suma de sus cuentas (cada hoja va al código listado más específico: "15" y "1592" cuadran por separado). Un renglón con códigos de grupos distintos ("13 15", "41 61", "51/52") es error; una cuenta con subcuentas suyas ("41 − 4175") se ancla a la cuenta que las contiene. Un código repetido sólo se admite en las dos porciones corriente / no corriente de un grupo partido por plazo, cada una en su bloque y con el importe de su plazo. En el ERI, un renglón con importe y un código que no es de resultados ni de patrimonio es error; en el ESF, también lo es un renglón con el código de una clase que absorbe grupos con saldo. El prompt del Pass-1 y el `describe` de `StatementLineSchema.account` lo piden.
+>     - *Revaluación en el EFE (NIC 7 ¶43 / NIIF para las PYMES, Sección 7).* La parte de Δ38 que Δ19 no explica es revaluación registrada en el propio activo (modelo de revaluación, NIC 16 / Sección 17): no es flujo de operación; se descuenta de la variación del único grupo de inversión que la registra o, si hay varios o ninguno, va en un renglón propio de inversión. El bloque EFE VINCULANTE la revela como transacción no monetaria (`oriRevaluation`) para que `methodNote` la divulgue. Sin ORI en el periodo (Δ38 = 0) no hay revaluación que descontar. Limitación: un balance de saldos no distingue un traslado del superávit a resultados acumulados; rige la misma lectura del ORI que la enmienda 12.
+>     - *ORI no medible (precisa la enmienda 12).* Cuando el ancla del ORI del periodo actual no es medible (saldo en el grupo 38 sin un corte de apertura utilizable), la limitación la revela una nota determinista del código en `incomeStatement.notes` (`oriNotMeasurableNote`, es/en; también cuando el comparativo es impracticable), no el modelo. La cifra se presenta en $0 porque `oriPrimary` no admite N/D, y la nota dice que no es una medición.
+
 ---
 
 ## CORRECCIÓN 1 — FORMATO DE ESTADOS FINANCIEROS (Error crítico)
@@ -81,6 +117,29 @@ Sin embargo, verificar que el EFE cuadre:
 Si el EFE no cuadra, revisar los ajustes de capital de trabajo hasta que cuadre.
 NUNCA incluir el asiento 3605 para "hacer cuadrar" el EFE.
 
+> **Nota de enmienda (auditoría integral 2026-09-24, niif-contrato-18).** La regla
+> de esta corrección (el traslado a 3605 no es flujo de efectivo) sigue vigente;
+> el ejemplo y la nota sobre proveedores no deben seguirse literalmente:
+>
+> 1. El ejemplo "CORRECTO" no es aritméticamente consistente: sus cinco renglones
+>    suman $1.996.192.335,63 (no ≈ $995.769.354,31) y, con inversión y
+>    financiación en $0, el flujo de operación tendría que ser igual a la
+>    variación del efectivo, $850.192.334,63. El EFE determinista del mismo
+>    balance (`buildDeterministicCashFlow`, contracts/deterministic-breakdown.ts)
+>    da operación $853.109.000,63, inversión −$2.916.666,00 y financiación $0,00,
+>    que sí suman $850.192.334,63.
+> 2. La nota sobre proveedores manda medir la variación con el Pasivo TOTAL, que
+>    incluye obligaciones financieras (grupo 21): sus flujos son de financiación
+>    (NIC 7 ¶17(c)-(d) / NIIF para las PYMES 7.6). El capital de trabajo se
+>    mide sólo con los pasivos operativos (grupos 22 a 28) y el grupo 21 va a
+>    financiación, que es la clasificación por grupo PUC que aplica el código.
+> 3. El EFE no "se revisa hasta que cuadre": lo calcula el código desde el
+>    balance de prueba y el modelo lo copia; E18/E23 contrastan lo emitido al
+>    centavo. Desde la misma auditoría (pendiente #3) el EFE y el ECP también
+>    llevan la columna del periodo comparativo cuando el balance trae el corte
+>    anterior (NIIF para las PYMES 3.14), o la nota de comparativo no
+>    presentado que pide ese corte cuando no (enmienda 12).
+
 ---
 
 ## CORRECCIÓN 3 — ROE: FÓRMULA CONSISTENTE (Error moderado)
@@ -107,6 +166,8 @@ NUNCA incluir el asiento 3605 para "hacer cuadrar" el EFE.
 ---
 
 ## CORRECCIÓN 4 — IMPUESTO DE RENTA CUANDO NO HAY CLASE 54 (Error moderado)
+
+> **Enmendada el 2026-09-24:** el árbol de decisión de abajo (Cta.1805 como gasto y provisión teórica del 35%) quedó sustituido. Ver la enmienda 1 al inicio de este documento.
 
 ### Si no existe gasto de renta (Clase 54), deducir la Cta.1805
 
@@ -843,6 +904,8 @@ La subvista v2.1 expone 12 dimensiones agrupadas en bloques A/B/C, derivadas det
 | 12 | C · IASB 2018 | Comparabilidad (Comparability) | D14 (Cobertura multiperiodo) + D12 (IFRS 18) |
 
 \* "Transparencia" es D9 dominante con D6 como ponderación secundaria (90/10) porque la transparencia del informe se evalúa principalmente como ausencia de alucinaciones + divulgación de supuestos del análisis.
+
+> **Enmendada el 2026-09-24:** la fila 6 de la tabla se lee con la ponderación 90/10 de esta nota, no como promedio simple. Ver la enmienda 13 al inicio de este documento.
 
 **Escala de score:** las dimensiones internas D1..D14 puntúan 0-100; la subvista v2.1 las normaliza a 0-10 (`scoreV21 = Math.round(scoreInterno / 10)`).
 

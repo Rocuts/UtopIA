@@ -1,12 +1,12 @@
 'use client';
 
 /**
- * MonteCarloHistogram — ROI Probabilístico (Monte Carlo · 9.600 escenarios).
+ * MonteCarloHistogram — escenario simulado: utilidad 12m / PPE neto.
  *
- * Visualiza la distribución del ROI usando una curva normal aproximada (PDF)
- * centrada en `mean` con desviación `stdev` (20 bins en [mean−3σ, mean+3σ]).
- * Si `roiProbabilistico === null` (sin inversión PPE) muestra un callout
- * sin el histograma.
+ * Auditoría valoracion-22: grafica el histograma EMPÍRICO de los ROI simulados
+ * (`result.roiHistograma`), no una PDF normal teórica; el título usa el N real
+ * (`result.iterations`) y la UI muestra los supuestos (distribución, σ,
+ * horizonte, N, semilla y exclusiones). Sin PPE (grupo 15) el ROI es N/D.
  */
 
 import { useMemo } from 'react';
@@ -16,6 +16,7 @@ import { echarts } from '@/lib/charts/setup';
 import { getTokens } from '@/lib/charts/echarts-theme';
 import { useChartTheme } from '@/lib/charts/use-theme';
 import { ChartContainer } from '@/components/charts/ChartContainer';
+import { formatPct } from '@/lib/charts/format';
 import type { MonteCarloResult } from '@/lib/pillars/types';
 
 // ─── Props ───────────────────────────────────────────────────────────────────
@@ -32,45 +33,14 @@ const COLOR_BAR = '#8b5cf6';       // violet-500
 const COLOR_MEAN = '#ef4444';      // red-500 (dashed vertical)
 const COLOR_MEDIAN = '#10b981';    // emerald-500
 
-const N_BINS = 20;
-
-// ─── PDF normal ──────────────────────────────────────────────────────────────
-
-/** PDF de la distribución normal N(mean, stdev). */
-function normalPdf(x: number, mean: number, stdev: number): number {
-  if (stdev === 0) return 0;
-  const z = (x - mean) / stdev;
-  return (1 / (stdev * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * z * z);
-}
-
-// ─── Generación de bins ──────────────────────────────────────────────────────
-
-interface Bin {
-  x: number;   // centro del bin (ROI fracción)
-  pdf: number; // altura sin normalizar
-}
-
-function buildBins(mean: number, stdev: number): Bin[] {
-  // Fallback: si stdev es 0 usamos un rango artificial de ±10% del mean.
-  const spread = stdev > 0 ? stdev : Math.max(Math.abs(mean) * 0.1, 0.01);
-  const lo = mean - 3 * spread;
-  const hi = mean + 3 * spread;
-  const step = (hi - lo) / N_BINS;
-
-  const bins: Bin[] = [];
-  for (let i = 0; i < N_BINS; i++) {
-    const x = lo + step * (i + 0.5);
-    bins.push({ x, pdf: normalPdf(x, mean, spread) });
-  }
-  // Normalizar para que el bin más alto = 1.0.
-  const maxPdf = Math.max(...bins.map((b) => b.pdf), Number.EPSILON);
-  return bins.map((b) => ({ x: b.x, pdf: b.pdf / maxPdf }));
-}
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function pctStr(v: number): string {
-  return `${(v * 100).toFixed(1)}%`;
+/**
+ * Porcentaje con el separador decimal del idioma (`12,5%` / `12.5%`), no
+ * `toFixed(1)`, que en español mostraba punto decimal (ratios-kpis-27).
+ */
+export function monteCarloPct(v: number, language: 'es' | 'en'): string {
+  return formatPct(v, 1, language);
 }
 
 function quiebreColor(prob: number): string {
@@ -122,20 +92,17 @@ export function MonteCarloHistogram({ result, language, density }: MonteCarloHis
   const roi = result.roiProbabilistico;
   const prob = result.probabilidadQuiebre12m;
 
-  const bins = useMemo(() => {
-    if (!roi) return [];
-    return buildBins(roi.mean, roi.stdev);
-  }, [roi]);
+  const bins = useMemo(() => result.roiHistograma ?? [], [result.roiHistograma]);
 
   const option = useMemo(() => {
     if (!roi || bins.length === 0) return null;
 
-    const labels = bins.map((b) => pctStr(b.x));
-    const heights = bins.map((b) => parseFloat(b.pdf.toFixed(4)));
-
-    // Encontrar el índice más cercano a p50 para la línea verde.
-    const p50Pct = roi.p50 * 100;
-    const meanPct = roi.mean * 100;
+    const labels = bins.map((b) => monteCarloPct((b.from + b.to) / 2, language));
+    const heights = bins.map((b) => b.count);
+    const binLabelOf = (v: number) => {
+      const idx = bins.findIndex((b) => v >= b.from && v <= b.to);
+      return labels[idx === -1 ? (v < bins[0].from ? 0 : bins.length - 1) : idx];
+    };
 
     return {
       tooltip: {
@@ -148,8 +115,8 @@ export function MonteCarloHistogram({ result, language, density }: MonteCarloHis
           const bin = bins[idx];
           if (!bin) return '';
           return [
-            `<strong>ROI: ${pctStr(bin.x)}</strong>`,
-            `<span style="font-size:10px;color:${tokens.textSecondary}">${isEs ? 'Densidad relativa' : 'Relative density'}: ${(bin.pdf * 100).toFixed(0)}%</span>`,
+            `<strong>ROI: ${monteCarloPct(bin.from, language)} – ${monteCarloPct(bin.to, language)}</strong>`,
+            `<span style="font-size:10px;color:${tokens.textSecondary}">${isEs ? 'Simulaciones' : 'Simulations'}: ${bin.count} (${monteCarloPct(bin.count / result.iterations, language)})</span>`,
           ].join('<br/>');
         },
       },
@@ -179,7 +146,7 @@ export function MonteCarloHistogram({ result, language, density }: MonteCarloHis
       series: [
         {
           type: 'bar',
-          data: heights.map((h, i) => ({
+          data: heights.map((h) => ({
             value: h,
             itemStyle: {
               color: {
@@ -203,27 +170,27 @@ export function MonteCarloHistogram({ result, language, density }: MonteCarloHis
               // Línea roja punteada en mean
               {
                 name: isEs ? 'Media' : 'Mean',
-                xAxis: pctStr(roi.mean),
+                xAxis: binLabelOf(roi.mean),
                 lineStyle: { color: COLOR_MEAN, type: 'dashed', width: 1.5 },
                 label: {
                   show: true,
                   position: 'insideEndTop',
                   color: COLOR_MEAN,
                   fontSize: 9,
-                  formatter: `μ ${meanPct.toFixed(1)}%`,
+                  formatter: `μ ${monteCarloPct(roi.mean, language)}`,
                 },
               },
               // Línea verde sólida en p50
               {
                 name: isEs ? 'Mediana' : 'Median',
-                xAxis: pctStr(roi.p50),
+                xAxis: binLabelOf(roi.p50),
                 lineStyle: { color: COLOR_MEDIAN, type: 'solid', width: 1.5 },
                 label: {
                   show: true,
                   position: 'insideEndBottom',
                   color: COLOR_MEDIAN,
                   fontSize: 9,
-                  formatter: `P50 ${p50Pct.toFixed(1)}%`,
+                  formatter: `P50 ${monteCarloPct(roi.p50, language)}`,
                 },
               },
             ],
@@ -233,20 +200,25 @@ export function MonteCarloHistogram({ result, language, density }: MonteCarloHis
         },
       ],
     };
-  }, [roi, bins, tokens, isEs]);
+  }, [roi, bins, tokens, isEs, language, result.iterations]);
 
   // ── Textos ───────────────────────────────────────────────────────────────────
+  const nFmt = result.iterations.toLocaleString(isEs ? 'es-CO' : 'en-US');
   const title = isEs
-    ? 'ROI Probabilístico (Monte Carlo · 9.600 escenarios)'
-    : 'Probabilistic ROI (Monte Carlo · 9,600 scenarios)';
+    ? `Escenario simulado · utilidad 12m / PPE neto (Monte Carlo · ${nFmt} iteraciones)`
+    : `Simulated scenario · 12m profit / net PPE (Monte Carlo · ${nFmt} iterations)`;
+  const sup = result.supuestos;
+  const supuestosLabel = isEs
+    ? `Supuestos: ingresos normales i.i.d. mensuales, σ ${(sup.ingresoSigmaMensual * 100).toFixed(0)} %, horizonte ${sup.horizonteMeses} meses, N = ${nFmt}, semilla ${sup.semilla}. ${sup.exclusionesEs}`
+    : `Assumptions: i.i.d. normal monthly revenue, σ ${(sup.ingresoSigmaMensual * 100).toFixed(0)}%, ${sup.horizonteMeses}-month horizon, N = ${nFmt}, seed ${sup.semilla}. ${sup.exclusionesEn}`;
 
   const quiebreLabel = isEs
-    ? `Probabilidad de quiebre en 12m: ${pctStr(prob)}`
-    : `Break probability in 12m: ${pctStr(prob)}`;
+    ? `Probabilidad de quiebre en 12m: ${monteCarloPct(prob, language)}`
+    : `Break probability in 12m: ${monteCarloPct(prob, language)}`;
 
   const noPpeLabel = isEs
-    ? 'Sin inversión PPE — ROI no calculable'
-    : 'No PPE investment — ROI not computable';
+    ? 'N/D — sin propiedad, planta y equipo (grupo 15) para medir el retorno.'
+    : 'N/A — no property, plant and equipment (group 15) to measure the return.';
 
   return (
     <div className="flex flex-col gap-3">
@@ -258,6 +230,9 @@ export function MonteCarloHistogram({ result, language, density }: MonteCarloHis
         <h3 className="font-serif-elite text-base font-normal text-n-1000 tracking-tight">
           {title}
         </h3>
+        <p className="text-[11px] leading-snug text-n-700" data-testid="montecarlo-assumptions">
+          {supuestosLabel}
+        </p>
 
         {/* Probabilidad de quiebre */}
         <div
@@ -278,7 +253,7 @@ export function MonteCarloHistogram({ result, language, density }: MonteCarloHis
       {roi === null ? (
         /* Callout sin PPE */
         <div className="rounded-lg border border-n-200 bg-n-50 px-4 py-3">
-          <p className="text-xs text-n-600 italic">{noPpeLabel}</p>
+          <p className="text-xs text-n-700">{noPpeLabel}</p>
         </div>
       ) : (
         <>
@@ -286,17 +261,17 @@ export function MonteCarloHistogram({ result, language, density }: MonteCarloHis
           <div className="flex flex-wrap gap-2">
             <MiniCard
               label="P10"
-              value={pctStr(roi.p10)}
+              value={monteCarloPct(roi.p10, language)}
               color="#ef4444"
             />
             <MiniCard
               label={isEs ? 'P50 (Mediana)' : 'P50 (Median)'}
-              value={pctStr(roi.p50)}
+              value={monteCarloPct(roi.p50, language)}
               color={COLOR_MEDIAN}
             />
             <MiniCard
               label="P90"
-              value={pctStr(roi.p90)}
+              value={monteCarloPct(roi.p90, language)}
               color="#8b5cf6"
             />
           </div>
@@ -305,7 +280,7 @@ export function MonteCarloHistogram({ result, language, density }: MonteCarloHis
           {option && (
             <ChartContainer
               title=""
-              subtitle={isEs ? 'Densidad relativa de la distribución normal aproximada (PDF)' : 'Relative density of approximated normal distribution (PDF)'}
+              subtitle={isEs ? 'Frecuencia de los ROI simulados (histograma empírico)' : 'Frequency of simulated ROI (empirical histogram)'}
               height={chartHeight}
               density={density}
               empty={bins.length === 0}

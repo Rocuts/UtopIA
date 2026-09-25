@@ -15,20 +15,30 @@ import type {
   AuditRequest,
   AuditReport,
   AuditorResult,
+  AuditCoverage,
+  AuditDomain,
   AuditFinding,
+  AuditIntegrity,
   AuditOpinionType,
   AuditProgressEvent,
   FindingSeverity,
 } from './types';
+import { deriveReportIntegrity, describeIntegrity } from './integrity';
 
 export interface AuditOrchestrateOptions {
   onProgress?: (event: AuditProgressEvent) => void;
   /**
    * Balance preprocesado (multiperiodo). Si se provee, los auditores reciben
    * contexto numerico vinculante (controlTotals + equityBreakdown del periodo
-   * primario y comparativo) para validar coherencia inter-periodo.
+   * primario y comparativo) para validar coherencia inter-periodo, y los
+   * dictámenes 2-4 usan sus cifras deterministas.
    */
   preprocessed?: PreprocessedBalance;
+  /**
+   * Señales de integridad conocidas por el llamador (p. ej. banderas del
+   * cuerpo crudo de la petición). Sólo pueden degradar la opinión.
+   */
+  integrity?: AuditIntegrity;
 }
 
 const SEVERITY_ORDER: FindingSeverity[] = ['critico', 'alto', 'medio', 'bajo', 'informativo'];
@@ -47,8 +57,12 @@ export async function orchestrateAudit(
   request: AuditRequest,
   options: AuditOrchestrateOptions = {},
 ): Promise<AuditReport> {
-  const { report, language } = request;
+  const { report, language, auditFocus } = request;
   const { onProgress, preprocessed } = options;
+
+  // Integridad aritmética determinista: condiciona la opinión del Revisor
+  // Fiscal y el Dictamen 1 (auditoria-calidad-03).
+  const integrity = deriveReportIntegrity(report, preprocessed, options.integrity);
 
   const auditorNames = [
     'Auditor NIIF/Contable',
@@ -65,14 +79,18 @@ export async function orchestrateAudit(
   // Lee el contrato canonico T1: preprocessed.primary, preprocessed.comparative,
   // preprocessed.periods[]. Antes vivia en preprocessed.summary/.controlTotals
   // top-level — esa forma fue eliminada.
-  const periodContext = buildPeriodContext(preprocessed);
+  const periodContext = safeBuildPeriodContext(preprocessed);
 
   // ---------------------------------------------------------------------------
   // Launch all 4 auditors in parallel
   // ---------------------------------------------------------------------------
-  const reportContent = periodContext
-    ? `${report.consolidatedReport}\n\n${periodContext}`
-    : report.consolidatedReport;
+  const focusBlock = auditFocus && auditFocus.trim().length > 0
+    ? `---\n## ENFOQUE DE AUDITORIA SOLICITADO POR EL USUARIO\n${auditFocus.trim()}`
+    : '';
+  const integrityBlock = `---\n## INTEGRIDAD ARITMETICA DETERMINISTA\n${describeIntegrity(integrity)}`;
+  const reportContent = [report.consolidatedReport, periodContext, integrityBlock, focusBlock]
+    .filter((s) => s && s.length > 0)
+    .join('\n\n');
 
   onProgress?.({ type: 'auditor_start', domain: 'niif', name: 'Auditor NIIF/Contable' });
   onProgress?.({ type: 'auditor_start', domain: 'tributario', name: 'Auditor Tributario' });
@@ -82,17 +100,22 @@ export async function orchestrateAudit(
   const primaryPeriod = preprocessed?.primary.period ?? report.company.fiscalPeriod;
 
   const results = await Promise.allSettled([
-    runNiifAuditor(reportContent, report.company, language, onProgress, primaryPeriod),
-    runTaxAuditor(reportContent, report.company, language, onProgress, primaryPeriod),
-    runLegalAuditor(reportContent, report.company, language, onProgress, primaryPeriod),
-    runFiscalReviewer(reportContent, report.company, language, onProgress, primaryPeriod),
+    runNiifAuditor(reportContent, report.company, language, onProgress, primaryPeriod, integrity),
+    runTaxAuditor(reportContent, report.company, language, onProgress, primaryPeriod, preprocessed),
+    runLegalAuditor(reportContent, report.company, language, onProgress, primaryPeriod, preprocessed),
+    runFiscalReviewer(reportContent, report.company, language, onProgress, primaryPeriod, {
+      preprocessed,
+      integrity,
+    }),
   ]);
 
   // ---------------------------------------------------------------------------
   // Collect results (handle individual failures gracefully)
   // ---------------------------------------------------------------------------
   const auditorResults: AuditorResult[] = [];
-  let fiscalOpinionType: AuditOpinionType = 'con_salvedades';
+  // Sin dictamen del Revisor Fiscal no hay opinión formal: el valor inicial es
+  // 'no_emitida' y sólo el Revisor Fiscal lo reemplaza (auditoria-calidad-04).
+  let fiscalOpinionType: AuditOpinionType = 'no_emitida';
   let fiscalDictamen = '';
 
   const domains: Array<'niif' | 'tributario' | 'legal' | 'revisoria'> = ['niif', 'tributario', 'legal', 'revisoria'];
@@ -161,7 +184,8 @@ export async function orchestrateAudit(
     findingCounts[f.severity]++;
   }
 
-  // Weighted overall score
+  // Weighted overall score — sobre los dominios completados; si falta alguno
+  // el score es PARCIAL y así se declara (auditoria-calidad-21).
   const successfulResults = auditorResults.filter((r) => !r.failed);
   let overallScore = 0;
   if (successfulResults.length > 0) {
@@ -173,13 +197,20 @@ export async function orchestrateAudit(
     }
     overallScore = Math.round(overallScore / totalWeight);
   }
+  const failedDomains: AuditDomain[] = auditorResults.filter((r) => r.failed).map((r) => r.domain);
+  const coverage: AuditCoverage = {
+    completed: successfulResults.length,
+    total: 4,
+    failedDomains,
+    partial: failedDomains.length > 0,
+  };
 
-  // Determine opinion type from overall score if fiscal reviewer failed
+  // Sin Revisor Fiscal NO se deriva una opinión del score de los otros
+  // auditores: la opinión la forma quien audita (NIA 700) y la abstención
+  // depende de la evidencia, no de un score (NIA 705). Queda 'no_emitida'.
   if (auditorResults.find((r) => r.domain === 'revisoria')?.failed) {
-    if (overallScore >= 90) fiscalOpinionType = 'favorable';
-    else if (overallScore >= 75) fiscalOpinionType = 'con_salvedades';
-    else if (overallScore >= 40) fiscalOpinionType = 'desfavorable';
-    else fiscalOpinionType = 'abstension';
+    fiscalOpinionType = 'no_emitida';
+    fiscalDictamen = '';
   }
 
   // Executive summary
@@ -190,6 +221,8 @@ export async function orchestrateAudit(
     overallScore,
     fiscalOpinionType,
     language,
+    coverage,
+    integrity,
   );
 
   // Build consolidated Markdown report
@@ -203,6 +236,7 @@ export async function orchestrateAudit(
     fiscalDictamen,
     executiveSummary,
     language,
+    coverage,
   );
 
   const auditReport: AuditReport = {
@@ -216,6 +250,8 @@ export async function orchestrateAudit(
     executiveSummary,
     consolidatedReport,
     generatedAt: new Date().toISOString(),
+    coverage,
+    integrity,
   };
 
   onProgress?.({ type: 'done' });
@@ -236,6 +272,16 @@ export async function orchestrateAudit(
  * tablas comparativas de control totals + equity breakdown que los auditores
  * usan para validar coherencia inter-periodo.
  */
+/** El contexto multiperiodo es auxiliar: un snapshot malformado no tumba la auditoría. */
+function safeBuildPeriodContext(preprocessed: PreprocessedBalance | undefined): string {
+  try {
+    return buildPeriodContext(preprocessed);
+  } catch (err) {
+    console.warn('[audit] contexto multiperiodo no disponible:', err instanceof Error ? err.message : err);
+    return '';
+  }
+}
+
 function buildPeriodContext(preprocessed: PreprocessedBalance | undefined): string {
   if (!preprocessed) return '';
 
@@ -329,6 +375,13 @@ function fmtCOP(amount: number): string {
   return amount < 0 ? `-$${formatted}` : `$${formatted}`;
 }
 
+/** Score global con su cobertura: nunca se presenta un promedio parcial como total. */
+export function formatScoreWithCoverage(score: number, coverage?: AuditCoverage): string {
+  if (!coverage || !coverage.partial) return `${score}/100`;
+  if (coverage.completed === 0) return 'N/D (ningun auditor completo su revision)';
+  return `${score}/100 — PARCIAL (${coverage.completed}/${coverage.total} dominios)`;
+}
+
 function buildExecutiveSummary(
   results: AuditorResult[],
   findings: AuditFinding[],
@@ -336,17 +389,37 @@ function buildExecutiveSummary(
   score: number,
   opinion: AuditOpinionType,
   language: 'es' | 'en',
+  coverage?: AuditCoverage,
+  integrity?: AuditIntegrity,
 ): string {
   const successful = results.filter((r) => !r.failed);
   const failed = results.filter((r) => r.failed);
 
   const opinionLabels: Record<AuditOpinionType, string> = language === 'es'
-    ? { favorable: 'Favorable (sin salvedades)', con_salvedades: 'Con Salvedades', desfavorable: 'Desfavorable', abstension: 'Abstencion de Opinion' }
-    : { favorable: 'Unqualified (Clean)', con_salvedades: 'Qualified', desfavorable: 'Adverse', abstension: 'Disclaimer of Opinion' };
+    ? {
+        favorable: 'Favorable (sin salvedades)',
+        con_salvedades: 'Con Salvedades',
+        desfavorable: 'Desfavorable',
+        abstension: 'Abstencion de Opinion',
+        no_emitida: 'No emitida (sin dictamen del Revisor Fiscal)',
+      }
+    : {
+        favorable: 'Unqualified (Clean)',
+        con_salvedades: 'Qualified',
+        desfavorable: 'Adverse',
+        abstension: 'Disclaimer of Opinion',
+        no_emitida: 'Not issued (no statutory auditor report)',
+      };
 
   const lines: string[] = [];
-  lines.push(`**Score Global de Cumplimiento: ${score}/100** — Opinion: **${opinionLabels[opinion]}**`);
+  lines.push(
+    `**Score Global de Cumplimiento: ${formatScoreWithCoverage(score, coverage)}** — Opinion: **${opinionLabels[opinion]}**`,
+  );
   lines.push('');
+  if (integrity) {
+    lines.push(`**${describeIntegrity(integrity)}**`);
+    lines.push('');
+  }
 
   if (successful.length > 0) {
     const scoreTable = successful
@@ -412,6 +485,7 @@ function buildConsolidatedAuditReport(
   dictamen: string,
   executiveSummary: string,
   language: 'es' | 'en',
+  coverage?: AuditCoverage,
 ): string {
   const date = new Date().toLocaleDateString(
     language === 'es' ? 'es-CO' : 'en-US',
@@ -423,7 +497,9 @@ function buildConsolidatedAuditReport(
     con_salvedades: 'CON SALVEDADES',
     desfavorable: 'DESFAVORABLE',
     abstension: 'ABSTENCION DE OPINION',
+    no_emitida: 'NO EMITIDA — sin dictamen del Revisor Fiscal',
   };
+  const scoreLabel = formatScoreWithCoverage(score, coverage);
 
   // --- v2.1 top banner -----------------------------------------------------
   const headerBanner = [
@@ -443,7 +519,7 @@ function buildConsolidatedAuditReport(
     `| **NIT** | ${company.nit} |`,
     `| **Periodo Auditado** | ${company.fiscalPeriod} |`,
     `| **Fecha de Auditoria** | ${date} |`,
-    `| **Score Global** | **${score}/100** |`,
+    `| **Score Global** | **${scoreLabel}** |`,
     `| **Opinion** | **${opinionLabels[opinion]}** |`,
     `| **Total Hallazgos** | ${findings.length} (Criticos: ${counts.critico}, Altos: ${counts.alto}, Medios: ${counts.medio}) |`,
     `| **Sistema** | 1+1 — Audit Pipeline (4 Auditores Especializados en Paralelo) |`,
@@ -490,7 +566,7 @@ function buildConsolidatedAuditReport(
   const closingBanner = [
     AUDIT_FRAME_TOP,
     centerInAuditFrame('FIN DEL INFORME DE AUDITORÍA INTEGRAL'),
-    centerInAuditFrame(`Score Global ${score}/100 · Opinión: ${opinionLabels[opinion]}`),
+    centerInAuditFrame(`Score Global ${scoreLabel} · Opinión: ${opinionLabels[opinion]}`),
     AUDIT_FRAME_BOT,
   ].join('\n');
 
@@ -515,7 +591,7 @@ ${executiveSummary}
 
 **Tipo de Opinion:** ${opinionLabels[opinion]}
 
-${dictamen || '*Opinion no disponible — el auditor de revisoria fiscal no pudo completar la evaluacion.*'}
+${dictamen || '*Opinion no emitida (N/D) — el auditor de revisoria fiscal no pudo completar la evaluacion; sin su dictamen no se emite opinion formal ni se deriva del score de los demas auditores.*'}
 
 ---
 

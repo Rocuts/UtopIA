@@ -71,17 +71,21 @@ function makeSnapshot(
   };
 }
 
-/** Crea una PUCClass mínima con cuentas de balance dado. */
-function makeClass15(balance: number): PUCClass {
+/**
+ * Clase 1 con PPE (grupo 15). ratios-kpis-21: el helper anterior fabricaba una
+ * "clase 15" que nunca existe en un snapshot real (las clases son 1-9), así
+ * que el motor siempre caía al activo no corriente.
+ */
+function makeClass1WithPpe(balance: number): PUCClass {
   return {
-    code: 15,
-    name: 'Propiedades Planta y Equipo',
+    code: 1,
+    name: 'Activo',
     auxiliaryTotal: balance,
     reportedTotal: balance,
     discrepancy: 0,
     accounts: [
       {
-        code: '1516',
+        code: '152005',
         name: 'Maquinaria',
         level: 'Auxiliar',
         balance,
@@ -258,8 +262,7 @@ describe('runMonteCarlo — probabilidad de quiebre', () => {
 });
 
 describe('runMonteCarlo — ROI probabilístico', () => {
-  it('inversionPPE=0 → roiProbabilistico=null', () => {
-    // Sin clase 15 y activoNoCorriente=0
+  it('sin grupo 15 → roiProbabilistico=null', () => {
     const snap = makeSnapshot(
       makeControlTotals({
         ingresos: 600_000_000,
@@ -278,27 +281,27 @@ describe('runMonteCarlo — ROI probabilístico', () => {
         gastos: 600_000_000,
         activoNoCorriente: 500_000_000,
       }),
-      [makeClass15(500_000_000)],
+      [makeClass1WithPpe(500_000_000)],
     );
     const r = runMonteCarlo(snap);
     expect(r.roiProbabilistico).not.toBeNull();
     expect(r.roiProbabilistico!.mean).toBeGreaterThan(0);
   });
 
-  it('inversionPPE viene de clase 15 cuando existe', () => {
+  it('inversionPPE viene del grupo 15 de la clase 1 (ignora el activo no corriente)', () => {
     const snap = makeSnapshot(
       makeControlTotals({
         ingresos: 600_000_000,
         gastos: 400_000_000,
         activoNoCorriente: 999_000_000, // debe ignorarse cuando hay clase 15
       }),
-      [makeClass15(200_000_000)],
+      [makeClass1WithPpe(200_000_000)],
     );
     const r = runMonteCarlo(snap);
     expect(r.inversionPPE).toBe(200_000_000);
   });
 
-  it('fallback activoNoCorriente cuando no hay clase 15', () => {
+  it('sin grupo 15 NO cae al activo no corriente: PPE y ROI N/D', () => {
     const snap = makeSnapshot(
       makeControlTotals({
         ingresos: 600_000_000,
@@ -308,7 +311,8 @@ describe('runMonteCarlo — ROI probabilístico', () => {
       // sin clase 15
     );
     const r = runMonteCarlo(snap);
-    expect(r.inversionPPE).toBe(300_000_000);
+    expect(r.inversionPPE).toBeNull();
+    expect(r.roiProbabilistico).toBeNull();
   });
 });
 

@@ -14,6 +14,7 @@ import {
   workspaces,
 } from '@/lib/db/schema';
 import type { JournalEntryRow, JournalLineRow, MonthlyCloseRunRow } from '@/lib/db/schema';
+import { centsToNumeric, numericToCents } from '@/lib/accounting/double-entry/ledger';
 
 // ---------------------------------------------------------------------------
 // Período
@@ -152,7 +153,14 @@ export async function getUnbalancedPostedEntriesCount(
         eq(journalEntries.workspaceId, workspaceId),
         eq(journalEntries.periodId, periodId),
         eq(journalEntries.status, 'posted'),
-        sql`${journalEntries.totalDebit} != ${journalEntries.totalCredit}`,
+        // Cabecera descuadrada, o LÍNEAS que no suman la cabecera (auditoría
+        // contab-nomina-12: el CHECK de cabecera siempre se cumplía aunque las
+        // líneas persistidas sumaran otra cosa).
+        sql`(
+          ${journalEntries.totalDebit} != ${journalEntries.totalCredit}
+          OR ${journalEntries.totalDebit} != (SELECT COALESCE(SUM(jl.debit), 0) FROM journal_lines jl WHERE jl.entry_id = ${journalEntries.id})
+          OR ${journalEntries.totalCredit} != (SELECT COALESCE(SUM(jl.credit), 0) FROM journal_lines jl WHERE jl.entry_id = ${journalEntries.id})
+        )`,
       ),
     );
   return parseInt(result[0]?.cnt ?? '0', 10);
@@ -201,8 +209,100 @@ export async function getAccountPeriodBalance(
     );
 
   const { totalDebit, totalCredit } = result[0] ?? { totalDebit: '0', totalCredit: '0' };
-  const balance = parseFloat(totalDebit) - parseFloat(totalCredit);
-  return balance.toFixed(2);
+  // MoneyCop (contab-nomina-25): la resta en float perdía centavos por encima
+  // de ~9×10^13 y el cierre (exacto en BigInt) podía rechazar el asiento.
+  return centsToNumeric(numericToCents(totalDebit) - numericToCents(totalCredit));
+}
+
+/**
+ * Saldos netos (débito − crédito, NUMERIC string) de las cuentas de resultado
+ * (INGRESO / GASTO / COSTO) agrupados por (cuenta, centro de costo, tercero),
+ * sobre los asientos POSTEADOS de los períodos indicados, excluyendo asientos
+ * de cierre (el traslado a patrimonio no es resultado del período).
+ */
+export interface ResultBalanceRow {
+  accountId: string;
+  code: string;
+  name: string;
+  type: 'INGRESO' | 'GASTO' | 'COSTO';
+  costCenterId: string | null;
+  thirdPartyId: string | null;
+  /** débito − crédito (positivo = saldo deudor). */
+  balance: string;
+}
+
+export async function getResultBalances(
+  workspaceId: string,
+  scope: { periodId: string } | { year: number },
+): Promise<ResultBalanceRow[]> {
+  const db = getDb();
+  const scopeSql =
+    'periodId' in scope
+      ? sql`je.period_id = ${scope.periodId}`
+      : sql`je.period_id IN (SELECT ap.id FROM accounting_periods ap WHERE ap.workspace_id = ${workspaceId} AND ap.year = ${scope.year})`;
+  const result = await db.execute(sql`
+    SELECT
+      coa.id AS account_id,
+      coa.code,
+      coa.name,
+      coa.type::text AS type,
+      jl.cost_center_id::text AS cost_center_id,
+      jl.third_party_id::text AS third_party_id,
+      (COALESCE(SUM(jl.functional_debit), 0) - COALESCE(SUM(jl.functional_credit), 0))::numeric(20,2)::text AS balance
+    FROM journal_lines jl
+    JOIN journal_entries je ON je.id = jl.entry_id
+    JOIN chart_of_accounts coa ON coa.id = jl.account_id
+    WHERE je.workspace_id = ${workspaceId}
+      AND je.status = 'posted'
+      AND je.source_type <> 'closing'
+      -- El reverso de un asiento de cierre tampoco es resultado del período.
+      AND NOT EXISTS (
+        SELECT 1 FROM journal_entries o
+        WHERE o.id = je.reversal_of_entry_id AND o.source_type = 'closing'
+      )
+      AND coa.type IN ('INGRESO', 'GASTO', 'COSTO')
+      AND ${scopeSql}
+    GROUP BY coa.id, coa.code, coa.name, coa.type, jl.cost_center_id, jl.third_party_id
+    ORDER BY coa.code
+  `);
+  const rows = (result as unknown as {
+    rows?: Array<{
+      account_id: string;
+      code: string;
+      name: string;
+      type: ResultBalanceRow['type'];
+      cost_center_id: string | null;
+      third_party_id: string | null;
+      balance: string;
+    }>;
+  }).rows ?? [];
+  return rows.map((r) => ({
+    accountId: r.account_id,
+    code: r.code,
+    name: r.name,
+    type: r.type,
+    costCenterId: r.cost_center_id ?? null,
+    thirdPartyId: r.third_party_id ?? null,
+    balance: r.balance,
+  }));
+}
+
+/** Cuenta activa y postable por código (null si no existe o no es postable). */
+export async function getPostableAccountByCode(workspaceId: string, code: string) {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(chartOfAccounts)
+    .where(
+      and(
+        eq(chartOfAccounts.workspaceId, workspaceId),
+        eq(chartOfAccounts.code, code),
+        eq(chartOfAccounts.active, true),
+        eq(chartOfAccounts.isPostable, true),
+      ),
+    )
+    .limit(1);
+  return rows[0] ?? null;
 }
 
 // ---------------------------------------------------------------------------

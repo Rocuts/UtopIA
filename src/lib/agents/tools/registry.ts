@@ -18,7 +18,13 @@ import { tool, type Tool, type ToolCallOptions } from 'ai';
 import { z } from 'zod';
 import { searchDocuments } from '@/lib/rag/vectorstore';
 import { searchWeb, formatSearchResultsForLLM } from '@/lib/search/web-search';
-import { calculateSanction, type SanctionResult, type SanctionCalculation } from '@/lib/tools/sanction-calculator';
+import {
+  calculateSanction,
+  SanctionInputError,
+  type SanctionResult,
+  type SanctionCalculationInput,
+} from '@/lib/tools/sanction-calculator';
+import { SANCTION_TOOL_DESCRIPTION, sanctionToolInputSchema } from '@/lib/tools/sanction-contract';
 import { analyzeDocument } from '@/lib/tools/document-analyzer';
 import { generateDianResponse, type DianResponseRequest } from '@/lib/tools/dian-response-generator';
 import { assessRisk, type RiskAssessment } from '@/lib/tools/risk-assessor';
@@ -118,42 +124,11 @@ const SEARCH_WEB = tool({
 });
 
 const CALCULATE_SANCTION = tool({
-  description:
-    'Calcula sanciones e intereses tributarios colombianos. Tipos: ' +
-    'extemporaneidad (Art. 641 ET), correccion (Art. 644 ET), inexactitud (Art. 647 ET con reducciones Arts. 640/709/713), intereses_moratorios (Arts. 634-635 ET con INTERÉS SIMPLE diario, mod. Ley 1819/2016). ' +
-    'UVT 2026 = $52.374 COP. Sanción mínima = 10 UVT = $523.740 COP.',
-  inputSchema: z.object({
-    type: z
-      .enum(['extemporaneidad', 'correccion', 'inexactitud', 'intereses_moratorios'])
-      .describe('Tipo de sanción.'),
-    taxDue: z.number().optional().describe('Impuesto a cargo (COP). Para extemporaneidad.'),
-    grossIncome: z
-      .number()
-      .optional()
-      .describe('Ingresos brutos (COP). Para extemporaneidad cuando taxDue = 0.'),
-    difference: z.number().optional().describe('Diferencia (COP). Para correccion e inexactitud.'),
-    delayMonths: z.number().optional().describe('Meses de retraso. Para extemporaneidad.'),
-    isVoluntary: z
-      .boolean()
-      .optional()
-      .describe(
-        'SOLO para "correccion": voluntaria (10%) antes de requerimiento especial vs. provocada (20%). Default: true.',
-      ),
-    inexactitudReduction: z
-      .enum(['none', 'art_713_half', 'art_709_quarter', 'art_640_50', 'art_640_75'])
-      .optional()
-      .describe(
-        'SOLO para "inexactitud". Reducción aplicable sobre la base del 100%: none (plena), art_713_half (a la mitad por aceptación frente a la liquidación de revisión, Art. 713 ET), art_709_quarter (a la cuarta parte por aceptación en respuesta al requerimiento especial, Art. 709 ET), art_640_50 (sanción reducida AL 50%, sin antecedentes 4 años), art_640_75 (sanción reducida AL 75%, sin antecedentes 2 años). Default: none.',
-      ),
-    principal: z.number().optional().describe('Capital (COP). Para intereses_moratorios.'),
-    annualRate: z
-      .number()
-      .optional()
-      .describe(
-        'Tasa efectiva anual (%): tasa de usura vigente del mes de mora MENOS 2 pp (Art. 635 ET). Obtener de certificación Superfinanciera. Si no se provee, usa fallback solo para estimación.',
-      ),
-    days: z.number().optional().describe('Días de mora. Para intereses_moratorios.'),
-  }),
+  // Descripción y schema compartidos con la API REST y la voz Realtime
+  // (src/lib/tools/sanction-contract.ts): los tres contratos transmiten todos
+  // los campos que usa `calculateSanction`.
+  description: SANCTION_TOOL_DESCRIPTION,
+  inputSchema: sanctionToolInputSchema,
   execute: async (args, options) => {
     const bag = readBag(options);
     const result = await executeTool('calculate_sanction', args, bag.ctx);
@@ -226,7 +201,9 @@ const ASSESS_RISK = tool({
 const GET_TAX_CALENDAR = tool({
   description:
     'Get the Colombian tax filing calendar personalized for a specific NIT. ' +
-    'Returns national and municipal obligations filtered for the NIT last digit.',
+    'Returns national and municipal obligations filtered by the NIT last digit (without the check digit) ' +
+    'and by taxpayer type, plus the national obligations it does NOT cover. Follow the returned ' +
+    '`instruction`: dates not verified against the official table must be presented as estimates.',
   inputSchema: z.object({
     nitLastDigit: z.number().describe('Last digit of the NIT (0-9), BEFORE the check digit.'),
     year: z.number().describe('Year for the tax calendar (e.g., 2026).'),
@@ -248,7 +225,10 @@ const QUERY_ERP = tool({
     'Consulta datos contables en tiempo real desde el ERP conectado del usuario. ' +
     'Usa esta herramienta cuando el usuario pregunte sobre datos financieros reales de su empresa: ' +
     'balances, facturas, movimientos contables, terceros, o plan de cuentas. ' +
-    'NO la uses para preguntas teoricas o normativas — solo para datos reales de la empresa.',
+    'NO la uses para preguntas teoricas o normativas — solo para datos reales de la empresa. ' +
+    'Para algunos ERP `trial_balance` devuelve solo los movimientos del periodo (no son saldos ' +
+    'finales ni un balance de prueba): la respuesta lo indica y en ese caso no presentes esas ' +
+    'cifras como saldos.',
   inputSchema: z.object({
     type: z
       .enum(['trial_balance', 'invoices', 'journal_entries', 'contacts', 'chart_of_accounts'])
@@ -261,8 +241,9 @@ const QUERY_ERP = tool({
       .string()
       .optional()
       .describe(
-        'Periodo fiscal: "2025" (año completo), "2025-Q1" (trimestre), "2025-06" (mes). ' +
-          'Usar para trial_balance y chart_of_accounts.',
+        'Periodo fiscal: AAAA ("2025", año completo), AAAA-Qn ("2025-Q1", trimestre) o ' +
+          'AAAA-MM ("2025-06", mes); alternativamente dateFrom/dateTo. Otros formatos se ' +
+          'rechazan. Usar para trial_balance y chart_of_accounts.',
       ),
     dateFrom: z
       .string()
@@ -417,11 +398,20 @@ export async function executeTool(
     }
 
     case 'calculate_sanction': {
-      const result = calculateSanction(args as unknown as SanctionCalculation);
-      return {
-        content: JSON.stringify(result, null, 2),
-        meta: { sanctionCalculation: result },
-      };
+      try {
+        const result = calculateSanction(args as unknown as SanctionCalculationInput);
+        return {
+          content: JSON.stringify(result, null, 2),
+          meta: { sanctionCalculation: result },
+        };
+      } catch (err) {
+        // Entrada contradictoria: se devuelve al modelo para que la corrija o
+        // pregunte al usuario, en lugar de inventar una cifra.
+        if (err instanceof SanctionInputError) {
+          return { content: JSON.stringify({ error: err.message }) };
+        }
+        throw err;
+      }
     }
 
     case 'analyze_document': {

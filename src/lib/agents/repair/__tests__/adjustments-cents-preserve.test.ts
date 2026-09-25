@@ -184,16 +184,33 @@ describe('applyAdjustments — preserva cents/raw tras recomputar (regresión bl
     const balance = buildBalance();
     // Inyecta marcadores en los campos que el bug descartaba.
     const marker = { applied: true, gapCents: '12345' };
-    // @ts-expect-error — campo opcional poblado por el preprocessor/curator.
-    balance.primary.virtualCloseAdjustment = marker;
+    // @ts-expect-error — campo opcional poblado por el curator (R2).
+    balance.primary.cashFlowIndirecto = marker;
     balance.primary.periodoTipo = 'cerrado';
 
     const { balance: adjusted } = applyAdjustments(balance, [mkAdjustment({})]);
 
     // Sobrevive al clon + recompute (el bug lo descartaba).
-    expect((adjusted.primary as { virtualCloseAdjustment?: unknown }).virtualCloseAdjustment)
-      .toEqual(marker);
+    expect((adjusted.primary as { cashFlowIndirecto?: unknown }).cashFlowIndirecto).toEqual(marker);
     expect(adjusted.primary.periodoTipo).toBe('cerrado');
+  });
+
+  it('virtualCloseAdjustment no se descarta: R8 se re-ejecuta sobre el balance ajustado', () => {
+    // Sin `virtualCloseAdjustment` el Bridge de Cuadratura se desactivaba tras
+    // cualquier ajuste. Desde la auditoría 2026-09 R8 ya no absorbe residuales
+    // y `applyAdjustments` lo re-ejecuta: el campo refleja el balance AJUSTADO.
+    // Fixture: A 200M − P 80M − K (capital 100M + 3605VC 10M) = 10M sin
+    // explicar; +5M en deudores lo lleva a 15M.
+    const balance = buildBalance();
+    expect(balance.primary.virtualCloseAdjustment?.unexplainedResidualRaw).toBe('10000000.00');
+
+    const { balance: adjusted } = applyAdjustments(balance, [mkAdjustment({})]);
+    const vca = adjusted.primary.virtualCloseAdjustment;
+
+    expect(vca).toBeDefined();
+    expect(vca!.dynamicNetIncome).toBe(adjusted.primary.controlTotals.utilidadNeta);
+    expect(vca!.unexplainedResidualRaw).toBe('15000000.00');
+    expect(adjusted.primary.validation.curatorBlockingReasons?.[0]).toContain('$15.000.000,00');
   });
 
   it('no muta el balance original (clon profundo)', () => {

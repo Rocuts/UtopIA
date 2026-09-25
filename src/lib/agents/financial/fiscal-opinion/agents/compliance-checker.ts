@@ -17,12 +17,20 @@ import type {
   ComplianceResult,
   FiscalOpinionProgressEvent,
 } from '../types';
+import {
+  evaluateSagrilaft,
+  isSagrilaftItem,
+  readSagrilaftInputs,
+  SAGRILAFT_FUENTE,
+  type SagrilaftEvaluation,
+} from '../sagrilaft';
 
 export async function runComplianceChecker(
   reportContent: string,
   company: CompanyInfo,
   language: 'es' | 'en',
   onProgress?: (event: FiscalOpinionProgressEvent) => void,
+  preprocessed?: unknown,
 ): Promise<ComplianceResult> {
   onProgress?.({
     type: 'evaluator_progress',
@@ -30,23 +38,60 @@ export async function runComplianceChecker(
     detail: 'Verificando cumplimiento estatutario (Art. 207 C.Co.)...',
   });
 
+  const sagrilaft = evaluateSagrilaft(readSagrilaftInputs(preprocessed));
+
   const { json } = await callFinancialAgent({
     agentName: 'compliance-checker',
     model: MODELS.FINANCIAL_PIPELINE,
     schema: ComplianceCheckReportSchema,
-    system: buildComplianceCheckerPrompt(company, language),
+    system: buildComplianceCheckerPrompt(company, language, sagrilaft),
     userContent: `ESTADOS FINANCIEROS E INFORMACION A EVALUAR:\n\n${reportContent}`,
     ...MODELS_CONFIG.complianceChecker,
   });
 
-  return toLegacyShape(json);
+  return toLegacyShape(json, sagrilaft);
+}
+
+// ---------------------------------------------------------------------------
+// Override determinista SAGRILAFT (prompts-normativa-02)
+// ---------------------------------------------------------------------------
+
+/**
+ * Sin constancia de vigilancia por Supersociedades la obligatoriedad del
+ * SAGRILAFT no es afirmable: un ítem SAGRILAFT en `no_cumple` pasa a
+ * `no_evaluado` (con la norma y el motivo) y sale de `nonComplianceItems`.
+ */
+export function applySagrilaftOverride(
+  json: ComplianceCheckReportJson,
+  sagrilaft: SagrilaftEvaluation,
+): ComplianceCheckReportJson {
+  if (sagrilaft.obligada !== 'no_determinable') return json;
+  type Item = ComplianceCheckReportJson['regulatoryItems'][number];
+  const fix = (item: Item): Item =>
+    isSagrilaftItem(item) && item.status === 'no_cumple'
+      ? {
+          ...item,
+          status: 'no_evaluado',
+          normReference: SAGRILAFT_FUENTE,
+          observation: `No evaluado: ${sagrilaft.motivo} (antes: ${item.observation})`,
+        }
+      : item;
+  return {
+    ...json,
+    regulatoryItems: json.regulatoryItems.map(fix),
+    nonComplianceItems: json.nonComplianceItems.filter((i) => !(isSagrilaftItem(i) && i.status === 'no_cumple')),
+  };
 }
 
 // ---------------------------------------------------------------------------
 // Adapter local — JSON-strict -> ComplianceResult legacy
 // ---------------------------------------------------------------------------
 
-function toLegacyShape(json: ComplianceCheckReportJson): ComplianceResult {
+export function toLegacyShape(
+  rawJson: ComplianceCheckReportJson,
+  sagrilaft: SagrilaftEvaluation = evaluateSagrilaft({ activosCop: null, ingresosCop: null }),
+): ComplianceResult {
+  const json = applySagrilaftOverride(rawJson, sagrilaft);
   const fullContent = renderComplianceMarkdown(json);
   return {
     statutoryFunctions: json.statutoryFunctions.map((f) => ({ ...f })),

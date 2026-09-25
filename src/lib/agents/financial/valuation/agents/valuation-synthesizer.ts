@@ -3,8 +3,13 @@
 // ---------------------------------------------------------------------------
 //
 // Output contract: `ValuationSynthesisReportSchema` (NIIF 13 + NIC 36/NIIF 3
-// + Art. 90 E.T. + Circular SuperSociedades 115-000011/2008).
-// Renderer LOCAL: produce la estructura legacy `ValuationSynthesisResult`.
+// + Art. 90 E.T.).
+// valoracion-14: recibe los resultados ESTRUCTURADOS y validados de DCF y
+//   Múltiplos (JSON, no Markdown); una metodología no disponible llega como
+//   null con su motivo y pesa 0.
+// valoracion-15: `validateSynthesis` recalcula pesos efectivos, base,
+//   divergencia, bandera roja y acota el rango; la oración de la opinión de
+//   valor la redacta el código con las cifras validadas.
 // ---------------------------------------------------------------------------
 
 import { callFinancialAgent } from '../../agents/runtime';
@@ -16,31 +21,113 @@ import {
 } from '../../contracts/valuation';
 import { formatCopFromCents, parseMoneyCop } from '../../contracts/money';
 import type { CompanyInfo } from '../../types';
-import type { ValuationSynthesisResult, ValuationProgressEvent } from '../types';
+import type {
+  DcfModelResult,
+  MarketComparablesResult,
+  ValuationSynthesisResult,
+  ValuationProgressEvent,
+} from '../types';
+import {
+  validateSynthesis,
+  type MethodKey,
+  type SynthesisComputed,
+  type SynthesisInputs,
+} from '../validators/synthesis-validator';
+import { MULTIPLE_LABELS } from '../validators/comparables-validator';
+import { renderDiscrepancies } from '../validators/render';
+
+/** Resúmenes validados (valor del patrimonio) de cada metodología disponible. */
+export function toSynthesisInputs(dcf: DcfModelResult, comparables: MarketComparablesResult): SynthesisInputs {
+  return {
+    dcf: dcf.status === 'ok' && dcf.computed
+      ? {
+          midpointCop: dcf.computed.equityValueCop,
+          lowCop: dcf.computed.equityRange.lowCop,
+          highCop: dcf.computed.equityRange.highCop,
+        }
+      : null,
+    comparables: comparables.status === 'ok' && comparables.computed
+      ? {
+          midpointCop: comparables.computed.adjustedRange.baseCop,
+          lowCop: comparables.computed.adjustedRange.conservativeCop,
+          highCop: comparables.computed.adjustedRange.optimisticCop,
+        }
+      : null,
+  };
+}
+
+/** Payload JSON estructurado para el Sintetizador (no Markdown). */
+export function buildSynthesizerPayload(dcf: DcfModelResult, comparables: MarketComparablesResult): string {
+  const dcfPayload = dcf.status === 'ok' && dcf.computed
+    ? {
+        estado: 'disponible',
+        waccPercent: dcf.computed.wacc.waccPercent,
+        costoPatrimonioKePercent: dcf.computed.wacc.costOfEquityPercent,
+        crecimientoPerpetuoPercent: dcf.computed.growthPercent,
+        enterpriseValueCop: dcf.computed.enterpriseValueCop,
+        deudaNetaCop: dcf.computed.netDebtCop,
+        patrimonioCasoBaseCop: dcf.computed.equityValueCop,
+        rangoPatrimonioSensibilidad: dcf.computed.equityRange,
+        vpValorTerminalSobreEvPercent: dcf.computed.terminalValuePercentOfEv,
+        precioPorAccionCop: dcf.computed.pricePerShareCop,
+        discrepanciasCorregidasEnCodigo: dcf.discrepancies.length,
+      }
+    : { estado: 'no_disponible', motivos: dcf.blockingReasons };
+  const compsPayload = comparables.status === 'ok' && comparables.computed
+    ? {
+        estado: 'disponible',
+        multiploPrimario: MULTIPLE_LABELS[comparables.computed.primaryMultiple],
+        comparablesUsados: comparables.computed.comparablesUsed,
+        estadisticas: comparables.computed.statistics.map((s) => ({
+          multiplo: MULTIPLE_LABELS[s.multiple],
+          mediana: s.median,
+          minimo: s.min,
+          maximo: s.max,
+          n: s.count,
+          aplica: s.applicable,
+        })),
+        patrimonioImplicito: {
+          minimoCop: comparables.computed.implied.equityValueMinCop,
+          medianaCop: comparables.computed.implied.equityValueMedianCop,
+          maximoCop: comparables.computed.implied.equityValueMaxCop,
+        },
+        factorAjustesColombianos: comparables.computed.adjustmentFactor,
+        rangoPatrimonioAjustado: comparables.computed.adjustedRange,
+        discrepanciasCorregidasEnCodigo: comparables.discrepancies.length,
+      }
+    : { estado: 'no_disponible', motivos: comparables.blockingReasons };
+  return JSON.stringify(
+    { unidad: 'centavos COP (MoneyCop)', dcf: dcfPayload, multiplos: compsPayload },
+    null,
+    2,
+  );
+}
 
 /**
- * Sintetiza DCF + Múltiplos en una opinión de valor consolidada.
+ * Sintetiza DCF + Múltiplos en una opinión de valor consolidada. Precondición:
+ * al menos una metodología con status 'ok' (el orquestador lo garantiza).
  */
 export async function runValuationSynthesizer(
-  dcfContent: string,
-  comparablesContent: string,
+  dcf: DcfModelResult,
+  comparables: MarketComparablesResult,
   company: CompanyInfo,
   language: 'es' | 'en',
   purpose?: string,
   onProgress?: (event: ValuationProgressEvent) => void,
   signal?: AbortSignal,
 ): Promise<ValuationSynthesisResult> {
-  const system = buildValuationSynthesizerPrompt(company, language, purpose);
+  const inputs = toSynthesisInputs(dcf, comparables);
+  const available: MethodKey[] = [];
+  if (inputs.dcf) available.push('dcf');
+  if (inputs.comparables) available.push('market_comparables');
 
-  const userContent = `INFORME DEL MODELADOR DCF:
+  const system = buildValuationSynthesizerPrompt(company, language, purpose, available);
 
-${dcfContent}
-
----
-
-INFORME DEL EXPERTO EN MÚLTIPLOS DE MERCADO:
-
-${comparablesContent}`;
+  const userContent = [
+    'RESULTADOS VALIDADOS DE LAS METODOLOGÍAS (JSON; cifras recalculadas en código):',
+    '',
+    buildSynthesizerPayload(dcf, comparables),
+  ].join('\n');
 
   onProgress?.({
     type: 'agent_progress',
@@ -58,46 +145,61 @@ ${comparablesContent}`;
     signal,
   });
 
-  return toValuationSynthesisResult(json, language);
+  return toValuationSynthesisResult(json, inputs, company, language);
 }
 
 // ---------------------------------------------------------------------------
 // Adapter local: ValuationSynthesisReportJson -> ValuationSynthesisResult
 // ---------------------------------------------------------------------------
 
-function renderMethodologyWeighting(json: ValuationSynthesisReportJson, lang: 'es' | 'en'): string {
-  const labels: Record<typeof json.methodologyWeights[number]['method'], string> = {
+const fmt = (v: string | null) => (v === null ? 'N/D' : formatCopFromCents(parseMoneyCop(v), false));
+
+function methodLabels(lang: 'es' | 'en'): Record<MethodKey, string> {
+  return {
     dcf: 'DCF',
     market_comparables: lang === 'en' ? 'Market Comparables' : 'Múltiplos de Mercado',
   };
-  const rows = json.methodologyWeights
-    .map((w) => `- **${labels[w.method]}** (${w.weightPercent.toFixed(1)}%): ${w.rationale}`)
-    .join('\n');
-  const totalCheck = json.methodologyWeights.reduce((acc, w) => acc + w.weightPercent, 0);
-  const totalNote = Math.abs(totalCheck - 100) < 0.01
-    ? ''
-    : `\n_${lang === 'en' ? 'Warning: weights sum' : 'Advertencia: la suma de pesos'} ${totalCheck.toFixed(1)}% ${lang === 'en' ? 'instead of 100%' : 'en vez de 100%'}._`;
-  return [rows, totalNote].filter(Boolean).join('\n');
 }
 
-function renderValueRange(json: ValuationSynthesisReportJson, lang: 'es' | 'en'): string {
+function renderMethodologyWeighting(json: ValuationSynthesisReportJson, c: SynthesisComputed, lang: 'es' | 'en'): string {
+  const labels = methodLabels(lang);
+  const rationale = new Map(json.methodologyWeights.map((w) => [w.method, w.rationale]));
+  const methods: MethodKey[] = ['dcf', 'market_comparables'];
+  return methods
+    .map((m) => {
+      const available = c.methodologies.includes(m);
+      const why = available
+        ? rationale.get(m) ?? ''
+        : (lang === 'en' ? 'not available — weight 0' : 'no disponible — peso 0');
+      return `- **${labels[m]}** (${c.weights[m].toFixed(1)}%): ${why}`;
+    })
+    .join('\n');
+}
+
+function renderValueRange(json: ValuationSynthesisReportJson, c: SynthesisComputed, lang: 'es' | 'en'): string {
+  const en = lang === 'en';
   const r = json.consolidatedRange;
   const reconc = json.methodologyReconciliation;
+  const divergenceLine = c.divergencePercent === null
+    ? `- ${en ? 'Divergence' : 'Divergencia'}: N/D (${en ? 'single methodology' : 'metodología única'})`
+    : `- ${en ? 'Divergence' : 'Divergencia'}: ${c.divergencePercent.toFixed(1)}%${c.divergenceIsRedFlag ? ` — **${en ? 'RED FLAG' : 'BANDERA ROJA'}**` : ''}`;
   return [
-    `| ${lang === 'en' ? 'Scenario' : 'Escenario'} | ${lang === 'en' ? 'Value' : 'Valor'} |`,
+    `| ${en ? 'Scenario' : 'Escenario'} | ${en ? 'Equity value' : 'Valor del patrimonio'} |`,
     '|---|---:|',
-    `| ${lang === 'en' ? 'Conservative (floor)' : 'Conservador (piso)'} | ${formatCopFromCents(parseMoneyCop(r.conservativeCop), false)} |`,
-    `| **${lang === 'en' ? 'Base (midpoint)' : 'Base (punto medio)'}** | **${formatCopFromCents(parseMoneyCop(r.baseCop), false)}** |`,
-    `| ${lang === 'en' ? 'Optimistic (ceiling)' : 'Optimista (techo)'} | ${formatCopFromCents(parseMoneyCop(r.optimisticCop), false)} |`,
+    `| ${en ? 'Conservative (floor)' : 'Conservador (piso)'} | ${fmt(c.conservativeCop)} |`,
+    `| **${en ? 'Base (weighted midpoint)' : 'Base (punto medio ponderado)'}** | **${fmt(c.baseCop)}** |`,
+    `| ${en ? 'Optimistic (ceiling)' : 'Optimista (techo)'} | ${fmt(c.optimisticCop)} |`,
     '',
-    `**${lang === 'en' ? 'Confidence level' : 'Nivel de confianza'}:** ${r.confidenceLevel}`,
+    `_${en ? 'Range bounded to the available methodologies' : 'Rango acotado a las metodologías disponibles'}: ${fmt(c.boundsLowCop)} – ${fmt(c.boundsHighCop)}._`,
+    '',
+    `**${en ? 'Confidence level' : 'Nivel de confianza'}:** ${r.confidenceLevel}`,
     '',
     r.rationale,
     '',
-    `### ${lang === 'en' ? 'Reconciliation between methodologies' : 'Reconciliación entre metodologías'}`,
-    `- ${lang === 'en' ? 'DCF midpoint' : 'Punto medio DCF'}: ${formatCopFromCents(parseMoneyCop(reconc.dcfMidpointCop), false)}`,
-    `- ${lang === 'en' ? 'Comparables midpoint' : 'Punto medio Múltiplos'}: ${formatCopFromCents(parseMoneyCop(reconc.comparablesMidpointCop), false)}`,
-    `- ${lang === 'en' ? 'Divergence' : 'Divergencia'}: ${reconc.divergencePercent.toFixed(1)}%${reconc.divergenceIsRedFlag ? ` — **${lang === 'en' ? 'RED FLAG' : 'BANDERA ROJA'}**` : ''}`,
+    `### ${en ? 'Reconciliation between methodologies' : 'Reconciliación entre metodologías'}`,
+    `- ${en ? 'DCF midpoint' : 'Punto medio DCF'}: ${fmt(c.dcfMidpointCop)}`,
+    `- ${en ? 'Comparables midpoint' : 'Punto medio Múltiplos'}: ${fmt(c.comparablesMidpointCop)}`,
+    divergenceLine,
     '',
     reconc.rationale,
   ].join('\n');
@@ -117,7 +219,7 @@ function renderLimitations(json: ValuationSynthesisReportJson, lang: 'es' | 'en'
   const regBlock = [
     `**Art. 90 E.T.:** ${reg.art90Et}`,
     reg.nic36OrNiif3 ? `**NIC 36 / NIIF 3:** ${reg.nic36OrNiif3}` : '',
-    reg.superSociedades ? `**SuperSociedades (Circular 115-000011/2008):** ${reg.superSociedades}` : '',
+    reg.superSociedades ? `**${lang === 'en' ? 'Superintendence of Companies' : 'Superintendencia de Sociedades'}:** ${reg.superSociedades}` : '',
   ]
     .filter(Boolean)
     .join('\n');
@@ -133,9 +235,19 @@ function renderLimitations(json: ValuationSynthesisReportJson, lang: 'es' | 'en'
   ].join('\n');
 }
 
-function renderExecutiveSummary(json: ValuationSynthesisReportJson, lang: 'es' | 'en'): string {
+/** Oración formal de la opinión de valor, redactada con cifras validadas. */
+export function buildValueOpinionStatement(c: SynthesisComputed, companyName: string, lang: 'es' | 'en'): string {
+  const single = c.methodologies.length === 1;
+  const labels = methodLabels(lang);
+  if (lang === 'en') {
+    return `In our opinion, the fair value of the equity of ${companyName} lies between ${fmt(c.conservativeCop)} and ${fmt(c.optimisticCop)}, with a midpoint of ${fmt(c.baseCop)}${single ? ` (single methodology: ${labels[c.methodologies[0]]})` : ''}.`;
+  }
+  return `En nuestra opinión, el valor razonable del patrimonio de ${companyName} se encuentra entre ${fmt(c.conservativeCop)} y ${fmt(c.optimisticCop)}, con punto medio ${fmt(c.baseCop)}${single ? ` (metodología única: ${labels[c.methodologies[0]]})` : ''}.`;
+}
+
+function renderExecutiveSummary(json: ValuationSynthesisReportJson, statement: string, lang: 'es' | 'en'): string {
   return [
-    `**${lang === 'en' ? 'Value Opinion' : 'Opinión de Valor'}:** ${json.valueOpinion.statement}`,
+    `**${lang === 'en' ? 'Value Opinion' : 'Opinión de Valor'}:** ${statement}`,
     '',
     `**${lang === 'en' ? 'Purpose' : 'Propósito'}:** ${json.purpose}`,
     '',
@@ -143,15 +255,56 @@ function renderExecutiveSummary(json: ValuationSynthesisReportJson, lang: 'es' |
   ].join('\n');
 }
 
-function toValuationSynthesisResult(
+export function toValuationSynthesisResult(
   json: ValuationSynthesisReportJson,
+  inputs: SynthesisInputs,
+  company: CompanyInfo,
   lang: 'es' | 'en',
 ): ValuationSynthesisResult {
-  const methodologyWeighting = renderMethodologyWeighting(json, lang);
-  const valueRange = renderValueRange(json, lang);
+  const validation = validateSynthesis(json, inputs);
   const keyAssumptions = renderKeyAssumptions(json, lang);
   const limitations = renderLimitations(json, lang);
-  const executiveSummary = renderExecutiveSummary(json, lang);
+
+  if (validation.status === 'blocked') {
+    const reasons = validation.blockingErrors.map((e) => (lang === 'en' ? e.en : e.es));
+    const validationReport = [
+      lang === 'en' ? '**VALUE OPINION NOT ISSUABLE (N/D):**' : '**OPINIÓN DE VALOR NO EMITIBLE (N/D):**',
+      ...reasons.map((r) => `- ${r}`),
+    ].join('\n');
+    const fullContent = [
+      lang === 'en' ? '## VALUE OPINION NOT ISSUABLE' : '## OPINIÓN DE VALOR NO EMITIBLE',
+      validationReport,
+      '',
+      limitations,
+    ].join('\n');
+    return {
+      methodologyWeighting: '',
+      valueRange: '',
+      keyAssumptions,
+      limitations,
+      executiveSummary: '',
+      validationReport,
+      fullContent,
+      status: 'blocked',
+      blockingReasons: reasons,
+      computed: null,
+      discrepancies: validation.discrepancies,
+    };
+  }
+
+  const c = validation.computed;
+  const methodologyWeighting = renderMethodologyWeighting(json, c, lang);
+  const valueRange = renderValueRange(json, c, lang);
+  const statement = buildValueOpinionStatement(c, company.name, lang);
+  const executiveSummary = renderExecutiveSummary(json, statement, lang);
+  const validationReport = [
+    lang === 'en'
+      ? 'Effective weights, weighted midpoint, divergence, red flag and range bounds were recomputed in code from the validated methodologies; the published figure is always the recomputed one.'
+      : 'Pesos efectivos, punto medio ponderado, divergencia, bandera roja y límites del rango se recalcularon en código con las metodologías validadas; la cifra publicada es siempre la recalculada.',
+    '',
+    renderDiscrepancies(validation.discrepancies, lang),
+    ...(validation.notes.length > 0 ? ['', ...validation.notes.map((n) => `- ${lang === 'en' ? n.en : n.es}`)] : []),
+  ].join('\n');
 
   const fullContent = [
     '## 1. PONDERACIÓN DE METODOLOGÍAS',
@@ -169,6 +322,9 @@ function toValuationSynthesisResult(
     '## 5. RESUMEN EJECUTIVO',
     executiveSummary,
     '',
+    '## 6. VALIDACIÓN DETERMINISTA',
+    validationReport,
+    '',
     json.citations.length > 0 ? `_${lang === 'en' ? 'Citations' : 'Citas'}: ${json.citations.join(' · ')}_` : '',
   ]
     .filter(Boolean)
@@ -180,6 +336,11 @@ function toValuationSynthesisResult(
     keyAssumptions,
     limitations,
     executiveSummary,
+    validationReport,
     fullContent,
+    status: 'ok',
+    blockingReasons: [],
+    computed: c,
+    discrepancies: validation.discrepancies,
   };
 }

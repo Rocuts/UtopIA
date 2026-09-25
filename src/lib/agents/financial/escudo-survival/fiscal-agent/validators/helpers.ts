@@ -154,6 +154,63 @@ export function citaArt854(text: string): boolean {
 }
 
 /**
+ * Prefijo de artículo: «Art.», «Arts.», «Artículo(s)» y, en salidas en inglés
+ * que conservan las citas, «Article(s)».
+ */
+const PREFIJO_ARTICULO = 'Art(?:[íi]culos?|icles?|s)?\\.?';
+/**
+ * Separador de una enumeración de artículos: «,», «y», «e» y, en inglés,
+ * «and» (también «, y» / «, and»). Re-auditoría 2026-09-24 (NT-08): «Arts.
+ * 850, 854 and 855 E.T.» no contaba el 855.
+ */
+const SEPARADOR_ARTICULOS = '(?:,\\s*(?:y|e|and)\\b|,|\\by\\b|\\be\\b|\\band\\b)';
+
+/**
+ * True si el texto cita el artículo `numero` (p. ej. "707", "258-1"), también
+ * dentro de una enumeración: "Arts. 703 y 707", "artículos 684, 686 y 707",
+ * "Arts. 850, 854 and 855".
+ */
+export function citaArticulo(text: string, numero: string): boolean {
+  const n = numero.replace(/[-]/g, '\\-');
+  const re = new RegExp(
+    `\\b${PREFIJO_ARTICULO}\\s*(?:\\d{1,4}(?:-\\d+)?\\s*${SEPARADOR_ARTICULOS}\\s*)*${n}(?![\\d-])`,
+    'i',
+  );
+  return re.test(text);
+}
+
+/**
+ * Números de artículo citados en un texto normativo corto ("Art. 686 E.T. y
+ * Art. 261 Ley 223/1995" → ["686", "261"]; "Arts. 651 y 860" → ["651", "860"];
+ * "Arts. 850, 854 and 855" → ["850", "854", "855"]).
+ */
+export function articulosCitados(text: string): string[] {
+  const out: string[] = [];
+  const re = new RegExp(
+    `\\b${PREFIJO_ARTICULO}\\s*((?:\\d{1,4}(?:-\\d+)?\\s*${SEPARADOR_ARTICULOS}\\s*)*\\d{1,4}(?:-\\d+)?)`,
+    'gi',
+  );
+  for (const m of text.matchAll(re)) {
+    for (const n of m[1].split(/\s*(?:,|\band\b|\by\b|\be\b)\s*/i)) if (n) out.push(n);
+  }
+  return [...new Set(out)];
+}
+
+/**
+ * Montos en pesos citados en prosa con formato es-CO ("$37.300.000,00",
+ * "$ 37.300.000", "($37.300.000,00)"), en centavos absolutos.
+ */
+export function montosCopEnTexto(text: string): bigint[] {
+  const out: bigint[] = [];
+  for (const m of text.matchAll(/\$\s?(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d{1,2}))?(?![\d.,]*\d)/g)) {
+    const pesos = m[1].replace(/\./g, '');
+    const cts = (m[2] ?? '0').padEnd(2, '0');
+    out.push(BigInt(pesos) * BigInt(100) + BigInt(cts));
+  }
+  return out;
+}
+
+/**
  * True si el texto cita el rango 854-860 (incorrecto — debe usar 855 puntual).
  */
 export function citaRango854_860(text: string): boolean {

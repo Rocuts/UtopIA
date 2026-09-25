@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
 import { and, desc, eq } from 'drizzle-orm';
 
 import { getCurrentWorkspaceId } from '@/lib/db/workspace';
@@ -14,12 +13,18 @@ import { alertRowToView, type AlertView } from '@/lib/sentinel/alert-view';
 import type { FiscalSnapshot } from '@/lib/agents/financial/types';
 import type { NiifAncora } from '@/lib/agents/financial/ancora/types';
 import { requireAuthSession } from '@/lib/auth/require-session';
+import { resolvePersistedReport } from '@/lib/reports/persisted-report-request';
 
 // ---------------------------------------------------------------------------
 // /api/escudo/fiscal-anchor — persistencia workspace-aware del FiscalSnapshot
 // ---------------------------------------------------------------------------
 // POST: upsert fila `reports` (kind='escudo_fiscal') + mapea las alertas del
 //       anchor a `sentinel_alerts` via upsertAlert (idempotente por dedupKey).
+//       Procedencia servidor (tributario-modulos-24): el cuerpo sólo trae
+//       `reportRef` (la referencia que devuelve /financial-report/consolidate).
+//       El FiscalSnapshot y el Âncora que se guardan son los de ESA versión
+//       persistida del workspace, calculados por el servidor desde el balance
+//       re-derivado; un snapshot enviado por el navegador ya no se persiste.
 // GET:  devuelve el último snapshot del workspace + las alertas Escudo
 //       pendientes/snoozed como AlertView[].
 //
@@ -42,22 +47,6 @@ const ESCUDO_FISCAL_KIND = 'escudo_fiscal';
 // FiscalSnapshot que consumen otros lectores. Devuelto por GET junto al snapshot.
 const ESCUDO_NIIF_ANCORA_KIND = 'escudo_niif_ancora';
 const MAX_JSON_BODY = 1 * 1024 * 1024; // 1MB — el snapshot es ligero
-
-// Validación de forma mínima del body. El FiscalSnapshot es un tipo TS puro
-// (no viaja al LLM) ⇒ no aplica el contrato Zod strict-mode. Validamos lo
-// estructural mínimo (presencia de anchor.alertas + period) y luego persistimos
-// el OBJETO ORIGINAL (no `parsed.data`) porque Zod `.object()` haría strip de
-// las claves no declaradas (f01-f10, calendarioDian, fuente). El validador es
-// solo un gate de forma — el snapshot completo se guarda tal cual.
-const postBodySchema = z.object({
-  fiscalSnapshot: z.object({
-    anchor: z.object({ alertas: z.array(z.unknown()).nullable() }),
-    riskScore: z.unknown(),
-    period: z.string().min(1).max(20),
-    computedAt: z.string().min(1).max(40),
-  }),
-  company: z.unknown(),
-});
 
 export async function POST(req: Request) {
   const gate = await requireAuthSession();
@@ -85,22 +74,30 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'invalid_json' }, { status: 400 });
   }
 
-  const parsed = postBodySchema.safeParse(body);
-  if (!parsed.success) {
+  // Sin referencia a una versión persistida no hay cifras que guardar: el
+  // snapshot que manda el navegador no se persiste ni genera alertas.
+  const persisted = await resolvePersistedReport(body);
+  if (persisted.kind === 'error') return persisted.response;
+  if (persisted.kind === 'absent') {
     return NextResponse.json(
       {
-        error: 'invalid_input',
-        details: parsed.error.issues.map(
-          (i) => `${i.path.join('.')}: ${i.message}`,
-        ),
+        error: 'report_ref_required',
+        detail:
+          'El snapshot fiscal se guarda desde la versión persistida del informe: envíe reportRef.',
       },
-      { status: 400 },
+      { status: 422 },
     );
   }
-
-  // Persistimos el snapshot ORIGINAL (sin strip de Zod) — ver nota del schema.
-  const fiscalSnapshot = (body as { fiscalSnapshot: unknown })
-    .fiscalSnapshot as FiscalSnapshot;
+  const fiscalSnapshot = persisted.report.fiscalSnapshot as FiscalSnapshot | undefined;
+  if (!fiscalSnapshot?.anchor || typeof fiscalSnapshot.period !== 'string') {
+    return NextResponse.json(
+      {
+        error: 'no_fiscal_snapshot',
+        detail: 'La versión persistida no tiene snapshot fiscal (informe sin balance preprocesado).',
+      },
+      { status: 422 },
+    );
+  }
   const { period, anchor } = fiscalSnapshot;
   const generatedAt = fiscalSnapshot.computedAt ?? new Date().toISOString();
 
@@ -166,9 +163,9 @@ export async function POST(req: Request) {
     }
   }
 
-  // --- Persistir el Bloque Âncora NIIF (A01..A19) si vino en el body.
+  // --- Persistir el Bloque Âncora NIIF (A01..A19) de la versión persistida.
   // Fila separada (kind=escudo_niif_ancora) keyed por periodo; upsert idempotente.
-  const ancora = (body as { ancora?: unknown }).ancora;
+  const ancora = persisted.report.ancora;
   if (ancora && typeof ancora === 'object') {
     const ancoraTitle = `Âncora NIIF ${period}`;
     const existingAncora = await db
@@ -198,7 +195,12 @@ export async function POST(req: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, reportId, alertsUpserted });
+  return NextResponse.json({
+    ok: true,
+    reportId,
+    alertsUpserted,
+    sourceReportId: persisted.provenance.reportId,
+  });
 }
 
 export async function GET(req: Request) {

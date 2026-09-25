@@ -1,5 +1,9 @@
 # Especificación técnica v2.0 — Pipeline financiero 1+1
 
+> **Aviso (2026-09-24).** Esta versión está sustituida en lo que contradiga a `financial-pipeline-v2.1.md` y a sus
+> enmiendas del 2026-09-24 (grupo PUC 42/53 debajo de la utilidad operacional, impuesto sin grupo 54, R8 sin absorción,
+> EFE/ECP deterministas, KPIs canónicos). Ver `docs/reviews/auditoria-integral-niif-2026-09-24.md`.
+
 **Sistema:** 1+1 Financial Orchestrator
 **Versión:** 2.0
 **Autor:** Revisión Claude

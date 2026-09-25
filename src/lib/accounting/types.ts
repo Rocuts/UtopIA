@@ -136,6 +136,11 @@ export const ERR = {
   CONCURRENCY: 'CONCURRENCY',
   /** Workspace id does not match the entity's workspace_id. */
   WORKSPACE_MISMATCH: 'WORKSPACE_MISMATCH',
+  /**
+   * A live (posted, not reversed) entry with the same (sourceType, sourceRef)
+   * already exists — raised only when the caller asks for idempotency.
+   */
+  DUPLICATE_SOURCE: 'DUPLICATE_SOURCE',
 } as const;
 
 export type DoubleEntryErrorCode = (typeof ERR)[keyof typeof ERR];

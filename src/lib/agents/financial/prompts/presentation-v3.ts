@@ -6,7 +6,8 @@
 //   Mejora 1 — EFE: linea D&A explicita cuando hay depreciacion, amortizacion
 //              o deterioro material; omision limpia cuando todo es $0.
 //   Mejora 2 — ORI: desglose condicional en sub-partidas reclassifiable /
-//              no-reclassifiable cuando hay componentes; una linea cuando $0.
+//              no-reclassifiable cuando hay componentes; una linea (ancla
+//              Δ grupo 38, enmienda 12 spec v2.1) cuando no los hay.
 //   Mejora 3 — ECP: columnas inteligentes (mostrar solo las que tienen valor
 //              en cualquiera de los dos periodos).
 //
@@ -17,10 +18,11 @@
 //   - Los HELPERS deterministas (detectOriComponents, computeActiveEcpColumns,
 //     mergeDepreciation) viven aqui para que el curator pueda emitirlos como
 //     parte del CuratorResult y los anclen al bloque TOTALES VINCULANTES.
-//   - Los CODIGOS PUC que detectamos siguen la spec del usuario (31XX) pero
-//     incluyen 38XX como fallback porque el PUC colombiano (Decreto 2650/93)
-//     contabiliza ORI bajo NIIF principalmente en 38XX. Los helpers nunca
-//     fuerzan datos: si no hay saldo, devuelven array vacio / booleano false.
+//   - Auditoria 2026-09 (prompts-normativa-11): el grupo 31 del PUC es
+//     CAPITAL, nunca ORI. Sin un mapeo explicito de cuentas ORI por entidad
+//     (medido como movimiento del periodo) no se detectan componentes ORI y la
+//     doctrina opera en modo simple. Los helpers nunca fuerzan datos: si no
+//     hay saldo, devuelven array vacio / booleano false.
 //
 // NOTACION:
 //   Las variables que el LLM debe sustituir se notan con angulos al estilo XML
@@ -161,29 +163,27 @@ export function mergeDepreciation(snapshot: PeriodSnapshot): DepreciationInfo {
 }
 
 /**
- * Mapeo PUC -> (label, reclassifiable). Las claves son prefijos: cualquier
- * cuenta cuyo codigo empieza con la clave se considera del componente.
+ * Mapeo PUC -> componente ORI.
  *
- * Mezclamos la nomenclatura del prompt de usuario (3115/3120/3125/3130/3135/3140)
- * y la convencion PUC colombiana (38XX para ORI bajo NIIF). Si ambos
- * conviven, la deteccion los suma — el LLM ve el componente unificado.
+ * Auditoría 2026-09 (prompts-normativa-11): este mapa trataba como ORI las
+ * cuentas 3115-3140, que en el PUC (Decreto 2650/1993) son CAPITAL (3115
+ * aportes sociales de la Ltda., 3120 capital asignado de sucursales, 3125
+ * inversión suplementaria, 3130 capital de personas naturales, 3135 aportes
+ * del Estado, 3140 fondo social), y la 3805 (valorizaciones COLGAAP) como ORI
+ * reclasificable. Además sumaba SALDOS ACUMULADOS, que no son el ORI del
+ * periodo. En una Ltda. el capital salía como ORI en el ERI.
+ *
+ * El PUC no tiene un grupo de ORI bajo NIIF: sólo un mapeo explícito de las
+ * cuentas ORI de cada entidad, medido como MOVIMIENTO del periodo, permite
+ * desglosarlo. Mientras ese mapeo no exista el mapa queda vacío y la doctrina
+ * opera en modo simple (ORI en una sola línea, anclado por E6b a la variación
+ * del grupo 38 — enmienda 12, spec v2.1).
  */
 const ORI_COMPONENT_MAP: ReadonlyArray<{
   pucPrefix: string;
   label: string;
   reclassifiable: boolean;
-}> = [
-  // Reclassifiable
-  { pucPrefix: '3115', label: 'Coberturas de flujo de efectivo', reclassifiable: true },
-  { pucPrefix: '3120', label: 'Coberturas de flujo de efectivo (alterno)', reclassifiable: true },
-  { pucPrefix: '3125', label: 'Efecto conversion operaciones extranjeras', reclassifiable: true },
-  { pucPrefix: '3805', label: 'Superavit por valorizaciones (ORI 38XX)', reclassifiable: true },
-  // Non-reclassifiable
-  { pucPrefix: '3130', label: 'Ganancias actuariales — planes beneficios definidos', reclassifiable: false },
-  { pucPrefix: '3135', label: 'Variaciones patrimoniales por conversion', reclassifiable: false },
-  { pucPrefix: '3140', label: 'Cambios VR inversiones a FVOCI', reclassifiable: false },
-  { pucPrefix: '3810', label: 'Revaluacion PPE (ORI)', reclassifiable: false },
-];
+}> = [];
 
 /**
  * Detecta componentes ORI con saldo material en el periodo primario, con
@@ -247,14 +247,24 @@ export function computeActiveEcpColumns(
     return false;
   };
 
+  // Reservas distintas de la legal: grupo 33 sin la 3305.
+  const otherReservesMaterial = (snap: PeriodSnapshot | null): boolean =>
+    snap !== null &&
+    Math.abs(sumBalanceForPrefix(snap, '33') - sumBalanceForPrefix(snap, '3305')) >= 100;
+
+  // Grupos completos del PUC (Decreto 2650/1993): el grupo 31 entero es
+  // capital (3105 S.A./SAS, 3115 aportes sociales Ltda., 3120 capital asignado,
+  // 3125-3140), el 32 superávit de capital, el 36 resultado del ejercicio
+  // (3605 utilidad / 3610 pérdida), el 37 resultados anteriores y el 38
+  // superávit por valorizaciones / revaluación (columna ORI).
   return {
-    capital: has(['3105', '3110']),
-    premium: has(['3205']), // Prima en colocacion (Clase 32) — distinta de coberturas 3115.
+    capital: has(['31']),
+    premium: has(['32']),
     legalReserve: has(['3305']),
-    otherReserves: has(['3310', '3315', '3320']),
-    retainedEarnings: has(['3705', '3710']),
-    periodResult: has(['3605']),
-    oci: has(['3115', '3120', '3125', '3130', '3135', '3140', '3805', '3810']),
+    otherReserves: otherReservesMaterial(snapshotPrimary) || otherReservesMaterial(snapshotComparative),
+    retainedEarnings: has(['37']),
+    periodResult: has(['36']),
+    oci: has(['38']),
   };
 }
 
@@ -345,9 +355,9 @@ Resultado neto + D&A + roU amortization + impairment +/- cambios capital trabajo
 Lee \`oriComponents\` del bloque TOTALES VINCULANTES — es un arreglo de objetos \`{ pucCode, label, amountPrimary, amountComparative, reclassifiable }\`.
 
 If \`oriComponents.length === 0\`:
-- MODO SIMPLE — presenta UNA SOLA linea en el P&L:
-  \`| OTRO RESULTADO INTEGRAL (ORI) | $0,00 | $0,00 |\`
-- Sin sub-partidas, sin nota adicional requerida.
+- MODO SIMPLE — presenta UNA SOLA linea en el P&L con el ORI del periodo, que es la cifra del renglon "Otro resultado integral" del bloque "CASCADA VINCULANTE DEL P&G" (variacion del grupo PUC 38, enmienda 12 spec v2.1):
+  \`| OTRO RESULTADO INTEGRAL (ORI) | <ORI del periodo actual> | <ORI del periodo comparativo, o N/D si ese bloque lo declara N/D> |\`
+- Sin sub-partidas. If el ancla es $0,00 then la linea lleva $0,00; otherwise lleva la variacion del grupo 38 al centavo.
 
 Else (uno o mas componentes con saldo material):
 - MODO DETALLADO — presenta la siguiente estructura:
@@ -378,13 +388,13 @@ Reglas:
 **Cuando construyas el Estado de Cambios en el Patrimonio (Pass-2):**
 
 Lee \`ecpColumns\` del bloque TOTALES VINCULANTES — es un objeto con flags booleanos:
-- \`capital\` (PUC 3105/3110)
-- \`premium\` (PUC 3205 prima en colocacion)
+- \`capital\` (grupo PUC 31 completo: 3105 capital suscrito y pagado, 3115 aportes sociales, 3120 capital asignado, 3125-3140)
+- \`premium\` (grupo PUC 32 superávit de capital)
 - \`legalReserve\` (PUC 3305)
-- \`otherReserves\` (PUC 3310/3315/3320)
-- \`retainedEarnings\` (PUC 3705/3710 resultados acumulados)
+- \`otherReserves\` (grupo 33 salvo la 3305)
+- \`retainedEarnings\` (grupo PUC 37 resultados de ejercicios anteriores)
 - \`periodResult\` (PUC 3605 movimiento del periodo)
-- \`oci\` (componentes ORI 31XX / 38XX)
+- \`oci\` (grupo 38: superávit por valorizaciones / revaluación; el grupo 31 es capital, nunca ORI)
 
 REGLA: muestra la columna SI Y SOLO SI su flag es \`true\`. La columna TOTAL es siempre obligatoria (se renderiza al final).
 
@@ -414,7 +424,7 @@ Ejemplo COMPLETO (todas las columnas activas — empresas con capital, reservas,
 | :---                                     | :---                                                |
 | daCop + roU + impairment < 1.000 COP     | Omitir linea D&A en EFE + nota tecnica al pie       |
 | daCop + roU + impairment ≥ 1.000 COP     | Mostrar lineas D&A con subtitulos en EFE            |
-| oriComponents.length === 0               | ORI en una sola linea ($0)                          |
+| oriComponents.length === 0               | ORI en una sola linea (ancla Δ grupo 38)            |
 | oriComponents.length > 0                 | Desgloce reclassifiable / no-reclassifiable en P&L  |
 | ecpColumns.<flag> === true               | Mostrar columna en ECP                              |
 | ecpColumns.<flag> === false              | Omitir columna en ECP                               |

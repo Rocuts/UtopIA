@@ -6,6 +6,37 @@
 // ---------------------------------------------------------------------------
 
 import type { ProjectInfo } from '../types';
+import { SMMLV_2026 } from '@/lib/tax/taxCalculator';
+import { UVT_2026_COP } from '@/lib/accounting/tax-engine/constants';
+
+// valoracion-19: tamaño empresarial por ingresos por actividades ordinarias en
+// UVT según macrosector — Decreto 1074/2015 arts. 2.2.1.13.2.1-2 (adicionados
+// por el Decreto 957/2019, vigentes desde el 5-dic-2019; corpus local
+// src/data/tax_docs/decreto_1074_2015.md). El criterio de activos (Ley 590/2000
+// y 905/2004) ya no es el criterio de clasificación.
+const UVT_2026 = UVT_2026_COP;
+const MIPYME_UVT_CEILINGS: Array<{ sector: string; micro: number; pequena: number; mediana: number }> = [
+  { sector: 'Manufactura', micro: 23_563, pequena: 204_995, mediana: 1_736_565 },
+  { sector: 'Servicios', micro: 32_988, pequena: 131_951, mediana: 483_034 },
+  { sector: 'Comercio', micro: 44_769, pequena: 431_196, mediana: 2_160_692 },
+];
+
+/** Enteros con separador de miles "." (es-CO), sin depender de ICU. */
+function thousands(n: number): string {
+  return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
+export function buildMipymeClassificationBlock(): string {
+  const rows = MIPYME_UVT_CEILINGS.map(
+    (r) =>
+      `  ${r.sector}: micro <= ${thousands(r.micro)} UVT ($${thousands(r.micro * UVT_2026)}); pequena <= ${thousands(r.pequena)} UVT ($${thousands(r.pequena * UVT_2026)}); mediana <= ${thousands(r.mediana)} UVT ($${thousands(r.mediana * UVT_2026)}); grande por encima.`,
+  );
+  return [
+    '- Clasificacion MIPYME (Decreto 957/2019, compilado en el Decreto 1074/2015 arts. 2.2.1.13.2.1-2): criterio exclusivo = ingresos por actividades ordinarias anuales del ano anterior, en UVT, segun macrosector (pesos con UVT 2026 = $' + thousands(UVT_2026) + ', referencial):',
+    ...rows,
+    '  Si la actividad no corresponde exclusivamente a un macrosector se usan los rangos de manufactura; con ingresos de varios sectores, el de mayores ingresos.',
+  ].join('\n');
+}
 
 export function buildMarketAnalystPrompt(
   project: ProjectInfo,
@@ -25,16 +56,16 @@ ALWAYS muestra TAM/SAM/SOM con cifras en COP y CAGR del sector, con la fuente al
 ALWAYS clasifica el proyecto en CIIU Rev. 4 A.C. (DANE) — si no es claro, da las opciones y declara el ranking de probabilidad.`;
 
   const context2026 = `Marco Colombia 2026:
-- Clasificacion MIPYME (Ley 590/2000, Ley 905/2004): Micro <= 500 SMMLV ($711.750.000), Pequena 501-5.000 SMMLV, Mediana 5.001-30.000 SMMLV.
-  SMMLV 2026 = $1.750.905 COP.
+${buildMipymeClassificationBlock()}
+  SMMLV 2026 = $${SMMLV_2026.toLocaleString('es-CO')} COP.
 - Formalizacion: Camara de Comercio (Registro Mercantil), RUT (DIAN), VUE.
 - Ley 2069/2020 (Ley de Emprendimiento): simplificacion de tramites, SAS simplificada.
 - 5 Fuerzas de Porter como marco de competencia.
 - Fuentes habituales: DANE EAM/EAS/EMM/Censo Economico, SuperSociedades SIREM, Banco de la Republica (TRM/IPC/IBR), Confecamaras (dinamica empresarial), DNP MGA.
-- UVT 2026 = $52.374 COP. Moneda en formato es-CO: $1.234.567,89.
+- UVT 2026 = $${UVT_2026.toLocaleString('es-CO')} COP. Moneda en formato es-CO: $1.234.567,89.
 Proyecto: "${project.projectName}" — ${project.description}. Sector: ${project.sector}${project.ciiu ? ` (CIIU ${project.ciiu})` : ''}.${project.city ? ` Ciudad: ${project.city}.` : ''}${project.department ? ` Departamento: ${project.department}.` : ''}${project.estimatedInvestment ? ` Inversion estimada: $${project.estimatedInvestment.toLocaleString('es-CO')} COP.` : ''}${companySize ? ` Clasificacion: ${companySize}.` : ''}
 Horizonte de evaluacion: ${horizon} anos.
-${project.isZomac ? 'Aplica regimen ZOMAC.' : ''}${project.isZonaFranca ? ' Aplica regimen Zona Franca.' : ''}${project.isEconomiaNaranja ? ' Aplica regimen Economia Naranja (verificar derecho adquirido pre-Ley 2277/2022).' : ''}`;
+${project.isZomac ? 'Aplica regimen ZOMAC (para su tarifa el tamano se define por activos totales, Art. 236 Ley 1819/2016, distinto del criterio de ingresos del Decreto 957/2019).' : ''}${project.isZonaFranca ? ' Aplica regimen Zona Franca.' : ''}${project.isEconomiaNaranja ? ' Aplica regimen Economia Naranja (verificar derecho adquirido pre-Ley 2277/2022).' : ''}`;
 
   return `${guardrail}
 
@@ -63,9 +94,9 @@ ${langInstruction}`;
 
 function getCompanySizeLabel(size?: string): string {
   switch (size) {
-    case 'micro': return 'Microempresa (Ley 590/2000)';
-    case 'pequena': return 'Pequena Empresa (Ley 590/2000)';
-    case 'mediana': return 'Mediana Empresa (Ley 590/2000)';
+    case 'micro': return 'Microempresa (Decreto 957/2019)';
+    case 'pequena': return 'Pequena Empresa (Decreto 957/2019)';
+    case 'mediana': return 'Mediana Empresa (Decreto 957/2019)';
     case 'grande': return 'Gran Empresa';
     default: return '';
   }

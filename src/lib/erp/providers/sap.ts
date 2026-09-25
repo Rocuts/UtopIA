@@ -2,6 +2,10 @@
 // Session-based auth via /b1s/v1/Login. OData queries for financial data.
 
 import { BaseERPConnector } from '../connector';
+import { connectionKey } from '../session-store';
+import { resolveERPPeriod } from '../period';
+import { buildMovementsTrialBalance } from '../trial-balance-builders';
+import { markLeafAccounts, pucTypeFromCode } from '../puc';
 import type {
   ERPProvider,
   ERPCredentials,
@@ -17,6 +21,8 @@ import type {
 
 interface SAPB1LoginResponse {
   SessionId: string;
+  /** Minutes. */
+  SessionTimeout?: number;
 }
 
 interface SAPB1ODataResponse<T> {
@@ -87,9 +93,6 @@ interface SAPB1BusinessPartner {
 export class SAPConnector extends BaseERPConnector {
   readonly provider: ERPProvider = 'sap_b1';
 
-  /** Active session ID, cached between calls */
-  private sessionId: string | null = null;
-
   // ─── Helpers ─────────────────────────────────────────────────────────────
 
   /** Resolve the Service Layer base URL from credentials */
@@ -98,22 +101,35 @@ export class SAPConnector extends BaseERPConnector {
     return `${base.replace(/\/+$/, '')}/b1s/v1`;
   }
 
-  /** Authenticate and store the SessionId */
-  private async login(credentials: ERPCredentials): Promise<string> {
-    const url = `${this.getBaseUrl(credentials)}/Login`;
-    const body = {
-      UserName: credentials.username,
-      Password: credentials.password,
-      CompanyDB: credentials.databaseName ?? credentials.companyId,
-    };
-
-    const result = await this.fetchJSON<SAPB1LoginResponse>(url, {
-      method: 'POST',
-      body: JSON.stringify(body),
-    });
-
-    this.sessionId = result.SessionId;
-    return this.sessionId;
+  /**
+   * Service Layer session (B1SESSION) for THESE credentials. Cached per
+   * connection (provider + credential fingerprint), never per instance.
+   */
+  private getSessionId(
+    credentials: ERPCredentials,
+    options: { forceRefresh?: boolean } = {},
+  ): Promise<string> {
+    return this.sessions.resolve(
+      connectionKey(credentials, 'session'),
+      async () => {
+        const url = `${this.getBaseUrl(credentials)}/Login`;
+        const body = {
+          UserName: credentials.username,
+          Password: credentials.password,
+          CompanyDB: credentials.databaseName ?? credentials.companyId,
+        };
+        const result = await this.fetchJSON<SAPB1LoginResponse>(url, {
+          method: 'POST',
+          body: JSON.stringify(body),
+        });
+        if (!result.SessionId) {
+          throw new Error('SAP B1 authentication failed: no SessionId returned.');
+        }
+        // SessionTimeout llega en minutos (30 por defecto en Service Layer).
+        return { value: result.SessionId, ttlMs: (result.SessionTimeout ?? 30) * 60_000 };
+      },
+      { refreshMarginMs: 60_000, forceRefresh: options.forceRefresh },
+    );
   }
 
   /** Make an authenticated request with automatic session refresh on 401 */
@@ -122,25 +138,23 @@ export class SAPConnector extends BaseERPConnector {
     path: string,
     options: RequestInit = {},
   ): Promise<T> {
-    if (!this.sessionId) {
-      await this.login(credentials);
-    }
-
     const url = `${this.getBaseUrl(credentials)}${path}`;
-    const headers: Record<string, string> = {
-      Cookie: `B1SESSION=${this.sessionId}`,
-      ...((options.headers as Record<string, string>) ?? {}),
-    };
+    const request = (sessionId: string) =>
+      this.fetchJSON<T>(url, {
+        ...options,
+        headers: {
+          Cookie: `B1SESSION=${sessionId}`,
+          ...((options.headers as Record<string, string>) ?? {}),
+        },
+      });
 
     try {
-      return await this.fetchJSON<T>(url, { ...options, headers });
+      return await request(await this.getSessionId(credentials));
     } catch (error) {
       // Retry once on 401 — session may have expired
       const msg = error instanceof Error ? error.message : '';
       if (msg.includes('401')) {
-        await this.login(credentials);
-        headers.Cookie = `B1SESSION=${this.sessionId}`;
-        return this.fetchJSON<T>(url, { ...options, headers });
+        return request(await this.getSessionId(credentials, { forceRefresh: true }));
       }
       throw error;
     }
@@ -183,18 +197,9 @@ export class SAPConnector extends BaseERPConnector {
         return code.startsWith('7') ? 'cost' : 'expense';
       case 'at_Revenues':
         return 'revenue';
-      default: {
+      default:
         // Infer from PUC class (Colombian chart of accounts) by first digit
-        const first = code.charAt(0);
-        if (first === '1') return 'asset';
-        if (first === '2') return 'liability';
-        if (first === '3') return 'equity';
-        if (first === '4') return 'revenue';
-        if (first === '5') return 'expense';
-        if (first === '6') return 'cost';
-        if (first === '7') return 'cost';
-        return 'asset';
-      }
+        return pucTypeFromCode(code);
     }
   }
 
@@ -206,106 +211,102 @@ export class SAPConnector extends BaseERPConnector {
 
   // ─── Interface Implementation ────────────────────────────────────────────
 
-  /** Test connection by attempting a login */
+  /** Test connection by attempting a fresh login (never a cached session) */
   async testConnection(credentials: ERPCredentials): Promise<boolean> {
     try {
-      await this.login(credentials);
+      await this.getSessionId(credentials, { forceRefresh: true });
       return true;
     } catch {
       return false;
     }
   }
 
-  /** Fetch the chart of accounts */
+  /**
+   * Fetch the chart of accounts. `Balance` is the CURRENT balance of the
+   * account (not the balance at a period end), so it is exposed only as
+   * chart metadata and never as a period trial balance.
+   */
   async getChartOfAccounts(credentials: ERPCredentials): Promise<ERPAccount[]> {
     const accounts = await this.fetchAllPages<SAPB1Account>(
       credentials,
       '/ChartOfAccounts?$select=Code,Name,Balance,AccountType,ActiveAccount,FatherAccountKey,Levels',
     );
 
-    return accounts
-      .filter((a) => a.ActiveAccount === 'tYES')
-      .map((a) => ({
-        code: a.Code,
-        name: a.Name,
-        type: this.mapAccountType(a.AccountType, a.Code),
-        pucClass: this.inferPUCClass(a.Code),
-        balance: a.Balance,
-        debit: a.Balance > 0 ? a.Balance : 0,
-        credit: a.Balance < 0 ? Math.abs(a.Balance) : 0,
-        level: a.Levels,
-        parentCode: a.FatherAccountKey ?? undefined,
-        isAuxiliary: a.Levels >= 4,
-      }));
+    return markLeafAccounts(
+      accounts
+        .filter((a) => a.ActiveAccount === 'tYES')
+        .map((a) => ({
+          code: a.Code,
+          name: a.Name,
+          type: this.mapAccountType(a.AccountType, a.Code),
+          pucClass: this.inferPUCClass(a.Code),
+          balance: a.Balance,
+          debit: a.Balance > 0 ? a.Balance : 0,
+          credit: a.Balance < 0 ? Math.abs(a.Balance) : 0,
+          level: a.Levels,
+          parentCode: a.FatherAccountKey ?? undefined,
+          isAuxiliary: false,
+        })),
+    );
   }
 
-  /** Fetch trial balance by aggregating journal entries for the given period (YYYY-MM) */
+  /**
+   * Local currency of the company database (AdminInfo.LocalCurrency). Empty
+   * string when it cannot be read, so COP-only consumers fail closed instead
+   * of treating foreign-currency figures as pesos.
+   */
+  private async getLocalCurrency(credentials: ERPCredentials): Promise<string> {
+    try {
+      const info = await this.authenticatedFetch<{ LocalCurrency?: string }>(
+        credentials,
+        '/CompanyService_GetAdminInfo',
+        { method: 'POST' },
+      );
+      return (info.LocalCurrency ?? '').trim().toUpperCase();
+    } catch {
+      return '';
+    }
+  }
+
+  /**
+   * Movements of the period aggregated from journal entries. The Service
+   * Layer calls used here give no opening balance for the period, so the
+   * result is flagged `movements_only` and never presented as a trial balance.
+   * @param period - "AAAA", "AAAA-MM", "AAAA-Qn" or "AAAA-MM-DD..AAAA-MM-DD"
+   */
   async getTrialBalance(
     credentials: ERPCredentials,
     period: string,
   ): Promise<ERPTrialBalance> {
-    // period format: "2025-12" → derive start/end dates
-    const [year, month] = period.split('-').map(Number);
-    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-    const lastDay = new Date(year, month, 0).getDate();
-    const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    const resolved = resolveERPPeriod(period);
 
-    // Get chart of accounts for names/types
-    const accounts = await this.getChartOfAccounts(credentials);
-    const accountMap = new Map(accounts.map((a) => [a.code, a]));
+    const [accounts, currency] = await Promise.all([
+      this.getChartOfAccounts(credentials),
+      this.getLocalCurrency(credentials),
+    ]);
 
-    // Get journal entries for the period
-    const filter = `RefDate ge '${startDate}' and RefDate le '${endDate}'`;
+    const filter = `RefDate ge '${resolved.from}' and RefDate le '${resolved.to}'`;
     const entries = await this.fetchAllPages<SAPB1JournalEntry>(
       credentials,
       `/JournalEntries?$filter=${encodeURIComponent(filter)}`,
     );
 
-    // Aggregate debits/credits by account
-    const aggregated = new Map<string, { debit: number; credit: number }>();
-    for (const entry of entries) {
-      for (const line of entry.JournalEntryLines ?? []) {
-        const existing = aggregated.get(line.AccountCode) ?? { debit: 0, credit: 0 };
-        existing.debit += line.Debit;
-        existing.credit += line.Credit;
-        aggregated.set(line.AccountCode, existing);
-      }
-    }
-
-    // Build trial balance accounts
-    const tbAccounts: ERPAccount[] = [];
-    let totalDebit = 0;
-    let totalCredit = 0;
-
-    for (const [code, totals] of aggregated) {
-      const acct = accountMap.get(code);
-      const balance = totals.debit - totals.credit;
-      totalDebit += totals.debit;
-      totalCredit += totals.credit;
-
-      tbAccounts.push({
-        code,
-        name: acct?.name ?? code,
-        type: acct?.type ?? 'asset',
-        pucClass: this.inferPUCClass(code),
-        balance,
-        debit: totals.debit,
-        credit: totals.credit,
-        level: acct?.level ?? 1,
-        parentCode: acct?.parentCode,
-        isAuxiliary: acct?.isAuxiliary ?? false,
-      });
-    }
-
-    return {
-      period,
-      companyName: credentials.companyId ?? 'SAP B1 Company',
-      currency: 'COP',
-      accounts: tbAccounts.sort((a, b) => a.code.localeCompare(b.code)),
-      totalDebit,
-      totalCredit,
-      generatedAt: new Date().toISOString(),
-    };
+    return buildMovementsTrialBalance({
+      providerName: 'SAP Business One',
+      period: resolved,
+      chart: accounts,
+      lines: entries.flatMap((e) =>
+        (e.JournalEntryLines ?? []).map((l) => ({
+          accountCode: l.AccountCode ?? '',
+          accountName: l.ShortName,
+          debit: l.Debit ?? 0,
+          credit: l.Credit ?? 0,
+        })),
+      ),
+      companyName: credentials.companyId ?? credentials.databaseName ?? '',
+      currency,
+      warnings: currency ? [] : ['Moneda local de la compañía no determinada.'],
+    });
   }
 
   /** Fetch journal entries for a date range */

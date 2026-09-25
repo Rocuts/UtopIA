@@ -6,7 +6,7 @@ entity: Estatuto Tributario
 year: 2026
 normCode: "Decreto 624/1989"
 status: vigente
-lastVerified: 2026-05-02
+lastVerified: 2026-09-24
 tags: [estatuto-tributario, resumen, renta, iva, uvt, procedimiento]
 ---
 
@@ -28,10 +28,10 @@ Mediante la Resolución 000238 del 15 de diciembre de 2025, la DIAN fijó el val
 
 La tarifa general del impuesto sobre la renta para personas jurídicas es del **35%**. Existen tarifas diferenciales:
 
-- **Entidades financieras**: 40% (5 puntos adicionales, vigente hasta 2027 — Art. 240, parágrafo 1).
-- **Generadores de energía hidroeléctrica**: 38% (3 puntos adicionales, vigente hasta 2026 — Art. 240, parágrafo 2).
-- **Zonas francas**: tarifa del 20% (Art. 240-1 E.T.) para usuarios industriales que cumplan requisitos de inversión y empleo.
-- **Hoteles y parques temáticos nuevos**: tarifa del 15% para proyectos que cumplan los requisitos del Art. 240, parágrafo 7.
+- **Entidades financieras**: 40% (5 puntos adicionales en los años gravables 2023 a 2027, sólo con renta gravable ≥ 120.000 UVT — Art. 240, parágrafo 2).
+- **Generadores de energía a través de recursos hídricos**: 38% (3 puntos adicionales en los años gravables 2023 a 2026, sólo con renta gravable ≥ 30.000 UVT — Art. 240, parágrafo 4).
+- **Zonas francas** (Art. 240-1 E.T., mod. Ley 2277 de 2022, art. 11): el usuario industrial aplica el 20% sólo a la renta líquida gravable proporcional a sus ingresos por exportación de bienes y servicios, y la tarifa general del Art. 240 al resto.
+- **Hoteles y parques temáticos de ecoturismo y agroturismo**: tarifa del 15% por diez años para los proyectos que cumplan los requisitos del Art. 240, parágrafo 5.
 
 ### Tarifa — Personas Naturales (Art. 241 E.T.)
 
@@ -55,9 +55,9 @@ La tarifa de renta para personas naturales sin residencia fiscal en Colombia es 
 
 - **Aportes a pensión obligatoria**: exentos hasta el límite legal (Art. 126-1 E.T.).
 - **Aportes a cuentas AFC**: deducibles hasta 3.800 UVT anuales ($199.021.200 en 2026), con el límite del 30% del ingreso.
-- **Dependientes**: deducción del 10% del ingreso bruto hasta 32 UVT mensuales ($1.675.968 en 2026).
-- **Renta exenta del 25%**: sobre los ingresos laborales, con tope de 240 UVT mensuales ($12.569.760 en 2026).
-- **Límite general**: la suma de todas las rentas exentas y deducciones no puede exceder el 40% del ingreso neto ni las 5.040 UVT anuales ($263.964.960 en 2026) — Art. 336 E.T.
+- **Dependientes**: deducción del 10% del ingreso bruto hasta 32 UVT mensuales ($1.675.968 en 2026) — Art. 387 E.T.; además, 72 UVT por dependiente hasta 4 dependientes, por fuera del límite general (Art. 336 num. 3, mod. Ley 2277/2022).
+- **Renta exenta del 25%**: sobre los pagos laborales, limitada a 790 UVT anuales ($41.375.460 en 2026) — Art. 206 num. 10, mod. art. 2 Ley 2277/2022.
+- **Límite general**: la suma de las rentas exentas y deducciones no puede exceder el 40% del ingreso depurado ni 1.340 UVT anuales ($70.181.160 en 2026) — Art. 336 num. 3, mod. art. 7 Ley 2277/2022. (Los topes previos a la Ley 2277 de 2022 ya no rigen.)
 
 ---
 
@@ -112,9 +112,9 @@ La DIAN puede proferirla dentro de los **6 meses** siguientes al vencimiento del
 ### Sanciones Principales
 
 - **Sanción por extemporaneidad** (Art. 641 E.T.): 5% del impuesto a cargo por cada mes o fracción de retardo, sin exceder el 100%.
-- **Sanción por inexactitud** (Art. 647 E.T.): 100% de la diferencia entre el saldo a pagar determinado y el declarado. Reducible al 50% si se corrige en respuesta al requerimiento especial.
+- **Sanción por inexactitud** (Arts. 647 y 648 E.T.): 100% de la diferencia entre el saldo a pagar o saldo a favor determinado en la liquidación oficial y el declarado (Art. 648). Se reduce a la cuarta parte si se aceptan los hechos del requerimiento especial y se corrige (Art. 709 E.T.).
 - **Sanción por no declarar** (Art. 643 E.T.): 20% del valor de las consignaciones bancarias o ingresos brutos del período.
-- **Sanción mínima** (Art. 639 E.T.): 10 UVT ($523.740 en 2026).
+- **Sanción mínima** (Art. 639 E.T.): 10 UVT = $524.000 en 2026 (10 × $52.374 = $523.740, aproximado al múltiplo de mil según el Art. 868 E.T.; ver `resolucion_dian_238_2025_uvt_2026.md`).
 
 ### Recurso de Reconsideración (Art. 720 E.T.)
 
@@ -150,13 +150,14 @@ La retención en la fuente es un mecanismo de recaudo anticipado del impuesto. E
 
 ### Principales Tarifas 2026
 
-| Concepto | Base mínima (UVT) | Tarifa declarantes | Tarifa no declarantes |
+| Concepto | Base mínima (UVT) desde 01-jul-2026 | Tarifa declarantes | Tarifa no declarantes |
 |---|---|---|---|
-| Compras generales | 27 UVT ($1.414.098) | 2,5% | 3,5% |
-| Servicios generales | 4 UVT ($209.496) | 4% | 6% |
-| Servicios profesionales | 4 UVT ($209.496) | 11% | 11% |
-| Arrendamiento inmuebles | 27 UVT ($1.414.098) | 3,5% | 3,5% |
-| Honorarios | 0 UVT | 11% | 11% |
+| Compras generales | 10 UVT ($524.000) | 2,5% | 3,5% |
+| Servicios generales | 2 UVT ($105.000) | 4% | 6% |
+| Arrendamiento de bienes inmuebles | 10 UVT ($524.000) | 3,5% | 3,5% |
+| Honorarios y comisiones | Sin base mínima | 11% personas jurídicas; personas naturales 10% (11% si el contrato o los pagos del año superan 3.300 UVT, DUR 1.2.4.3.1) | ídem |
+
+Bases mínimas del **Decreto 0572 de 2025** (art. 2 → DUR 1625/2016 Art. 1.2.4.4.1: servicios **2 UVT**; art. 6 → Art. 1.2.4.9.1 lit. i: compras y demás otros ingresos **10 UVT**), vigentes desde el 01-jul-2026 tras el auto del Consejo de Estado 30229 del 02-jun-2026. Entre el 08-may y el 30-jun-2026 rigieron las bases anteriores (servicios 4 UVT, compras 27 UVT) por suspensión provisional. Las rentas de trabajo no laborales de personas naturales que no solicitan costos y deducciones se retienen con la tabla del Art. 383 (par. 2 mod. Ley 2277/2022; DUR 1.2.4.1.17 par. 4).
 
 ### Retención sobre Salarios (Art. 383 E.T.)
 

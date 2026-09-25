@@ -48,8 +48,6 @@ const EXCLUIDOS = [
  * Sólo puede encoger.
  */
 const CUARENTENA_DOBLE_INVERSION = [
-  'src/app/workspace/contabilidad/cuentas/page.tsx',
-  'src/app/workspace/verdad/dictamenes/page.tsx',
   'src/components/workspace/AreaCard.tsx',
   'src/components/workspace/areas/SurvivalModePanel.tsx',
   'src/components/workspace/cards/AntiDianCard.tsx',

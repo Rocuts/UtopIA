@@ -42,12 +42,14 @@ interface RetentionShieldCardProps {
 }
 
 export function RetentionShieldCard({ data, loading, error, t, language = 'es' }: RetentionShieldCardProps) {
-  const saldo = data?.data.saldoAFavorProyectado ?? 0;
+  // Sin declaración no hay saldo a favor determinable (null): se muestra el
+  // crédito de renta y N/D, nunca $0 (auditoría 2026-09, tributario-modulos-02).
+  const saldo = data?.data.saldoAFavorProyectado ?? null;
+  const nd = language === 'es' ? 'N/D' : 'N/A';
 
-  // Derive alert level from balance
-  let alertLevel: AlertLevel = 'verde';
-  if (saldo < 0) alertLevel = 'rojo';
-  else if (saldo === 0) alertLevel = 'amarillo';
+  let alertLevel: AlertLevel = 'amarillo';
+  if (saldo !== null && saldo < 0) alertLevel = 'rojo';
+  else if (saldo !== null && saldo > 0) alertLevel = 'verde';
 
   return (
     <SurvivalCard
@@ -55,10 +57,14 @@ export function RetentionShieldCard({ data, loading, error, t, language = 'es' }
       alertLevel={alertLevel}
       primaryMetric={{
         label: t.metric,
-        value: data ? formatCOP(saldo) : '—',
+        value: data ? (saldo === null ? nd : formatCOP(saldo)) : '—',
       }}
       description={
-        saldo > 0
+        saldo === null
+          ? (language === 'es'
+            ? `Crédito de renta en libros: ${data ? formatCOP(data.data.retencionesAcumuladas) : '—'}. El saldo a favor sólo se determina con la declaración de renta.`
+            : `Income-tax credit in the books: ${data ? formatCOP(data.data.retencionesAcumuladas) : '—'}. The credit balance is only determined by the tax return.`)
+          : saldo > 0
           ? (language === 'es'
             ? 'La empresa tiene dinero atrapado en retenciones. Puede recuperarlo mediante las acciones listadas.'
             : 'The company has money trapped in withholdings. It can be recovered through the listed actions.')

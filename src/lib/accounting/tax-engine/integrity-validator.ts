@@ -1,7 +1,18 @@
 // ─── WS1 — Smart-Tax Engine: validador de integridad ────────────────────────
 //
 // validateLines: para líneas que tienen metadata.taxRuleId, verifica que
-//   |tax_amount - base * rate| <= 1 COP (tolerancia ±1 centavo en BigInt).
+//   |tax_amount - base * rate| <= 1 centavo (tolerancia BigInt).
+//
+// Base de cada línea tributaria (fase 2 de la auditoría 2026-09-24,
+// tributario-calc-21):
+//   1. `dimensions.baseAmountCop` — la base que usó el motor al generar la
+//      línea (line-generator la guarda).
+//   2. Sin ella (asientos importados), el lado de la base según la operación:
+//      compras → Σ débitos de las líneas sin taxRuleId (gasto / activo);
+//      ventas  → Σ créditos de las líneas sin taxRuleId (ingreso).
+// Antes se tomaba max(Σ débitos, Σ créditos) de todas las líneas sin
+// taxRuleId: en un asiento completo la CxP / CxC pasaba a ser la base y el
+// IVA y la ReteFuente correctos salían como violaciones.
 //
 // Útil para validar asientos ya construidos antes de persistirlos, y también
 // para re-verificar asientos importados vía OCR.
@@ -15,7 +26,7 @@ import type {
 import { getRules } from './repository';
 
 const SCALE = BigInt(100); // centavos
-const TOLERANCE_CENTAVOS = BigInt(1); // ±1 COP
+const TOLERANCE_CENTAVOS = BigInt(1); // ±1 centavo
 
 function parseCentavos(raw: string): bigint {
   const trimmed = (raw ?? '0').trim();
@@ -48,11 +59,12 @@ function absDiff(a: bigint, b: bigint): bigint {
 
 /**
  * Valida que las líneas con `dimensions.taxRuleId` cumplan:
- *   |tax_amount - base * rate| <= 1 COP
+ *   |tax_amount - base * rate| <= 1 centavo
  *
  * Estrategia:
- *   1. Identificar líneas "base" (sin taxRuleId en dimensions) — representan
- *      el subtotal de la transacción.
+ *   1. Base de la línea: `dimensions.baseAmountCop` o, si falta, la suma del
+ *      lado de la base de las líneas sin taxRuleId (débitos en compras,
+ *      créditos en ventas).
  *   2. Para cada línea con taxRuleId, cargar la regla y recalcular el importe
  *      esperado.
  *   3. Comparar con tolerancia BigInt ±1 centavo.
@@ -79,26 +91,19 @@ export async function validateLines(input: {
     return { ok: true, violations: [] };
   }
 
-  // Líneas de base (sin taxRuleId) — tomamos la suma de sus débitos
-  // para deducir la base gravable. En una compra la base está en el Db;
-  // en una venta en el Cr. Simplificación MVP: usamos el mayor de debit/credit.
+  // Líneas de base (sin taxRuleId). La base inferida va por el lado de la
+  // operación: débitos en compras, créditos en ventas (nunca la CxP / CxC).
   const baseLines = input.lines.filter(
     (l) =>
       !l.dimensions ||
       typeof l.dimensions !== 'object' ||
       !('taxRuleId' in l.dimensions),
   );
-
-  // Base gravable = suma de débitos de líneas base (para compras)
-  // o suma de créditos (para ventas). Tomamos ambas y usamos la mayor.
-  let baseCentavosDb = BigInt(0);
-  let baseCentavosCr = BigInt(0);
+  const esVenta = input.transactionType === 'sale' || input.transactionType === 'service_sale';
+  let baseInferidaCentavos = BigInt(0);
   for (const l of baseLines) {
-    baseCentavosDb += parseCentavos(l.debit);
-    baseCentavosCr += parseCentavos(l.credit);
+    baseInferidaCentavos += parseCentavos(esVenta ? l.credit : l.debit);
   }
-  const baseCentavos =
-    baseCentavosDb >= baseCentavosCr ? baseCentavosDb : baseCentavosCr;
 
   // Cargar todas las reglas (necesitamos el rate por ruleId)
   const allRules = await getRules(input.workspaceId, new Date());
@@ -121,6 +126,12 @@ export async function validateLines(input: {
       });
       continue;
     }
+
+    const baseDeclarada = (line.dimensions as Record<string, unknown>)['baseAmountCop'];
+    const baseCentavos =
+      typeof baseDeclarada === 'string' && /^-?\d+(\.\d+)?$/.test(baseDeclarada.trim())
+        ? parseCentavos(baseDeclarada)
+        : baseInferidaCentavos;
 
     const rateFloat = parseFloat(rule.rate);
     const rateMillionths = BigInt(Math.round(rateFloat * 1_000_000));

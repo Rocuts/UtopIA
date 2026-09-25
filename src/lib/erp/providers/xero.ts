@@ -2,6 +2,9 @@
 // OAuth 2.0 with short-lived access tokens (30 min). Rate limited: 60 req/min.
 
 import { BaseERPConnector } from '../connector';
+import { connectionKey } from '../session-store';
+import { resolveERPPeriod } from '../period';
+import { statusFromWarnings } from '../trial-balance-status';
 import type {
   ERPProvider,
   ERPCredentials,
@@ -130,49 +133,64 @@ class XeroRateLimiter {
 export class XeroConnector extends BaseERPConnector {
   readonly provider: ERPProvider = 'xero';
 
-  private accessToken: string | null = null;
-  private refreshTokenValue: string | null = null;
-  private tokenExpiry = 0;
-  private rateLimiter = new XeroRateLimiter(60, 60_000);
-
   private static readonly TOKEN_URL = 'https://identity.xero.com/connect/token';
   private static readonly API_BASE = 'https://api.xero.com/api.xro/2.0';
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
 
-  /** Refresh the OAuth 2.0 access token */
-  private async ensureToken(credentials: ERPCredentials): Promise<string> {
-    if (this.accessToken && Date.now() < this.tokenExpiry) {
-      return this.accessToken;
-    }
-
-    const refreshToken = this.refreshTokenValue ?? credentials.refreshToken ?? '';
-    const body = new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-    });
-
-    const authHeader = Buffer.from(
-      `${credentials.clientId}:${credentials.clientSecret}`,
-    ).toString('base64');
-
-    const response = await this.fetchJSON<XeroTokenResponse>(
-      XeroConnector.TOKEN_URL,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          Authorization: `Basic ${authHeader}`,
-        },
-        body: body.toString(),
-      },
+  /** Rate limiter of THIS connection (Xero limits per tenant). */
+  private rateLimiterFor(credentials: ERPCredentials): XeroRateLimiter {
+    return this.sessions.getOrCreate(
+      connectionKey(credentials, 'rate-limit'),
+      () => new XeroRateLimiter(60, 60_000),
     );
+  }
 
-    this.accessToken = response.access_token;
-    this.refreshTokenValue = response.refresh_token;
-    // Expire 30 seconds early (Xero tokens last 30 min)
-    this.tokenExpiry = Date.now() + (response.expires_in - 30) * 1000;
-    return this.accessToken;
+  /**
+   * OAuth 2.0 access token for THESE credentials. Xero rotates the refresh
+   * token on every refresh; the rotated value is stored under the same
+   * connection key, never in an instance field shared by other companies.
+   */
+  private ensureToken(
+    credentials: ERPCredentials,
+    options: { forceRefresh?: boolean } = {},
+  ): Promise<string> {
+    const refreshKey = connectionKey(credentials, 'refresh');
+    return this.sessions.resolve(
+      connectionKey(credentials, 'token'),
+      async () => {
+        const refreshToken =
+          this.sessions.get<string>(refreshKey) ?? credentials.refreshToken ?? '';
+        const body = new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: refreshToken,
+        });
+
+        const authHeader = Buffer.from(
+          `${credentials.clientId}:${credentials.clientSecret}`,
+        ).toString('base64');
+
+        const response = await this.fetchJSON<XeroTokenResponse>(
+          XeroConnector.TOKEN_URL,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              Authorization: `Basic ${authHeader}`,
+            },
+            body: body.toString(),
+          },
+        );
+
+        if (response.refresh_token) {
+          // Refresh tokens de Xero caducan a los 60 días sin uso.
+          this.sessions.set(refreshKey, response.refresh_token, 60 * 24 * 60 * 60 * 1000);
+        }
+        // Expire 30 seconds early (Xero tokens last 30 min)
+        return { value: response.access_token, ttlMs: (response.expires_in - 30) * 1000 };
+      },
+      { forceRefresh: options.forceRefresh },
+    );
   }
 
   /**
@@ -183,9 +201,10 @@ export class XeroConnector extends BaseERPConnector {
     credentials: ERPCredentials,
     path: string,
     retryCount = 0,
+    forceRefresh = false,
   ): Promise<T> {
-    await this.rateLimiter.waitForSlot();
-    const token = await this.ensureToken(credentials);
+    await this.rateLimiterFor(credentials).waitForSlot();
+    const token = await this.ensureToken(credentials, { forceRefresh });
     const tenantId = credentials.tenantId ?? '';
     const url = `${XeroConnector.API_BASE}${path}`;
 
@@ -207,11 +226,9 @@ export class XeroConnector extends BaseERPConnector {
         return this.authenticatedFetch<T>(credentials, path, retryCount + 1);
       }
 
-      // Handle 401 — token expired, refresh and retry
+      // Handle 401 — token expired, refresh THIS connection's token and retry
       if (msg.includes('401') && retryCount < 1) {
-        this.accessToken = null;
-        this.tokenExpiry = 0;
-        return this.authenticatedFetch<T>(credentials, path, retryCount + 1);
+        return this.authenticatedFetch<T>(credentials, path, retryCount + 1, true);
       }
 
       throw error;
@@ -289,12 +306,14 @@ export class XeroConnector extends BaseERPConnector {
 
   // ─── Interface Implementation ────────────────────────────────────────────
 
-  /** Test connection by fetching the organisation endpoint */
+  /** Test connection with a freshly refreshed token (never a cached one) */
   async testConnection(credentials: ERPCredentials): Promise<boolean> {
     try {
       await this.authenticatedFetch<{ Accounts: XeroAccount[] }>(
         credentials,
         '/Accounts?where=Status=="ACTIVE"&page=1',
+        0,
+        true,
       );
       return true;
     } catch {
@@ -332,9 +351,9 @@ export class XeroConnector extends BaseERPConnector {
     credentials: ERPCredentials,
     period: string,
   ): Promise<ERPTrialBalance> {
-    const [year, month] = period.split('-').map(Number);
-    const lastDay = new Date(year, month, 0).getDate();
-    const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    // Native report "as at" the cutoff date of the requested period.
+    const resolved = resolveERPPeriod(period);
+    const endDate = resolved.to;
 
     // Fetch chart of accounts for type metadata
     const chartOfAccounts = await this.getChartOfAccounts(credentials);
@@ -350,14 +369,17 @@ export class XeroConnector extends BaseERPConnector {
 
     const reportData = report.Reports?.[0];
     if (!reportData) {
+      const warnings = ['Xero no devolvió el informe de balance de prueba.'];
       return {
-        period,
+        period: resolved.label,
         companyName: 'Xero Company',
         currency: 'USD',
         accounts: [],
         totalDebit: 0,
         totalCredit: 0,
         generatedAt: new Date().toISOString(),
+        ...statusFromWarnings(warnings),
+        warnings,
       };
     }
 
@@ -382,13 +404,16 @@ export class XeroConnector extends BaseERPConnector {
     }
 
     return {
-      period,
+      period: resolved.label,
       companyName: credentials.companyId ?? 'Xero Company',
       currency: 'USD',
       accounts: accounts.sort((a, b) => a.code.localeCompare(b.code)),
       totalDebit,
       totalCredit,
       generatedAt: new Date().toISOString(),
+      // Informe nativo con saldos a la fecha de corte.
+      ...statusFromWarnings([]),
+      warnings: [],
     };
   }
 

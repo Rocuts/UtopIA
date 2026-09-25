@@ -4,9 +4,12 @@
 // Flow:
 //   1. Run heuristicMatcher.findMatches()
 //   2. For each result with confidence ≥ AUTO_MATCH_THRESHOLD → matchTransaction()
-//   3. Re-count matched/unmatched
-//   4. Compute ledger balance vs bank balance
-//   5. Upsert bank_reconciliations row
+//      (1:1: una línea contable concilia a lo sumo un movimiento bancario)
+//   3. Count matched/unmatched transactions POSTED IN THE PERIOD
+//   4. Ledger balance ACCUMULATED to the period cut-off vs the ending balance
+//      of the bank statement of the SAME period (auditoría contab-nomina-09).
+//      No statement for the period → not reconcilable (N/D), never '0'.
+//   5. Insert bank_reconciliations snapshot
 //
 // Returns: { matchedCount, unmatchedCount, ledgerBalance, bankBalance, difference, status }
 // ---------------------------------------------------------------------------
@@ -17,11 +20,18 @@ import {
   matchTransaction,
   getMatchCounts,
   getLedgerBalanceForAccount,
-  getLatestStatementImport,
+  getPeriodBounds,
+  getStatementImportForPeriod,
   upsertReconciliation,
   getBankAccount,
 } from '../repository';
-import { isReconciliationBlocking, BankingError, BANK_ERR, isBankReconEnabled } from '../types';
+import {
+  BankingError,
+  BANK_ERR,
+  isBankReconEnabled,
+  reconciliationFigures,
+  reconciliationStatusFor,
+} from '../types';
 
 export interface ReconcileInput {
   workspaceId: string;
@@ -37,11 +47,21 @@ export interface ReconcileResult {
   autoMatched: number;
   unmatchedCount: number;
   matchedCount: number;
+  /** Saldo en libros acumulado al corte del período. */
   ledgerBalance: string;
-  bankBalance: string;
-  difference: string;
+  /** Saldo final del extracto del período; null si no hay (no conciliable). */
+  bankBalance: string | null;
+  /** libros − extracto; null si no conciliable. */
+  difference: string | null;
+  /** 'balanced' sólo con diferencia 0 y sin movimientos pendientes. */
   status: 'balanced' | 'open';
   blocking: boolean;
+  reconcilable: boolean;
+  reason: string | null;
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  return !!err && typeof err === 'object' && (err as { code?: unknown }).code === '23505';
 }
 
 export async function runReconciliation(input: ReconcileInput): Promise<ReconcileResult> {
@@ -66,6 +86,10 @@ export async function runReconciliation(input: ReconcileInput): Promise<Reconcil
       `Cuenta bancaria ${bankAccountId} no encontrada.`,
     );
   }
+  const period = await getPeriodBounds(workspaceId, periodId);
+  if (!period) {
+    throw new BankingError(BANK_ERR.INVALID_INPUT, `Período ${periodId} no encontrado.`);
+  }
 
   // 1. Run matcher.
   const matchResults = await heuristicMatcher.findMatches({
@@ -75,43 +99,49 @@ export async function runReconciliation(input: ReconcileInput): Promise<Reconcil
     amountToleranceCop,
   });
 
-  // 2. Apply auto-matches.
+  // 2. Apply auto-matches, 1:1 (contab-nomina-10): una línea contable ya usada
+  //    en esta corrida no concilia otro movimiento; el índice único parcial de
+  //    la migración 0022 cubre corridas concurrentes.
   let autoMatched = 0;
+  const usedLineIds = new Set<string>();
   for (const result of matchResults) {
-    if (
-      result.bestCandidate &&
-      result.bestCandidate.confidence >= AUTO_MATCH_THRESHOLD
-    ) {
+    const best = result.bestCandidate;
+    if (!best || best.confidence < AUTO_MATCH_THRESHOLD) continue;
+    if (usedLineIds.has(best.journalLineId)) continue;
+    try {
       await matchTransaction(
         result.bankTransactionId,
-        result.bestCandidate.journalLineId,
-        result.bestCandidate.confidence.toFixed(3),
+        best.journalLineId,
+        best.confidence.toFixed(3),
         'exact',
         reconciledBy,
       );
+      usedLineIds.add(best.journalLineId);
       autoMatched++;
+    } catch (err) {
+      if (isUniqueViolation(err)) continue;
+      throw err;
     }
   }
 
-  // 3. Get final counts.
-  const { matched: matchedCount, unmatched: unmatchedCount } =
-    await getMatchCounts(workspaceId, bankAccountId);
+  // 3. Final counts for the period being reconciled.
+  const { matched: matchedCount, unmatched: unmatchedCount } = await getMatchCounts(
+    workspaceId,
+    bankAccountId,
+    { from: period.startsAt, to: period.endsAt },
+  );
 
-  // 4. Compute balances.
+  // 4. Balances: ledger accumulated to the cut-off vs statement of the period.
   const ledgerBalance = await getLedgerBalanceForAccount(
     workspaceId,
     account.accountId,
     periodId,
   );
+  const statement = await getStatementImportForPeriod(workspaceId, bankAccountId, period);
+  const bankBalance = statement?.endingBalance ?? null;
 
-  // Bank balance: ending balance from last completed import.
-  const latestImport = await getLatestStatementImport(workspaceId, bankAccountId);
-  const bankBalance = latestImport?.endingBalance ?? '0';
-
-  const diff = (parseFloat(ledgerBalance) - parseFloat(bankBalance)).toFixed(2);
-  const blocking = isReconciliationBlocking(diff, ledgerBalance);
-  const status: 'balanced' | 'open' =
-    blocking || unmatchedCount > 0 ? 'open' : 'balanced';
+  const fig = reconciliationFigures(ledgerBalance, bankBalance);
+  const status = reconciliationStatusFor(fig.difference, unmatchedCount);
 
   // 5. Snapshot reconciliation.
   const recon = await upsertReconciliation({
@@ -120,12 +150,13 @@ export async function runReconciliation(input: ReconcileInput): Promise<Reconcil
     periodId,
     ledgerBalance,
     bankBalance,
-    difference: diff,
+    difference: fig.difference,
     matchedCount,
     unmatchedCount,
     status,
     reconciledAt: new Date(),
     reconciledBy: reconciledBy ?? null,
+    notes: fig.reason,
   });
 
   return {
@@ -135,8 +166,10 @@ export async function runReconciliation(input: ReconcileInput): Promise<Reconcil
     unmatchedCount,
     ledgerBalance,
     bankBalance,
-    difference: diff,
+    difference: fig.difference,
     status,
-    blocking,
+    blocking: fig.blocking,
+    reconcilable: fig.reconcilable,
+    reason: fig.reason,
   };
 }

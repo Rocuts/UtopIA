@@ -18,9 +18,10 @@
 // `metadata.partial = true` y sigue. El sintetizador trabaja con lo que tenga.
 // ---------------------------------------------------------------------------
 
-import { parseTrialBalanceCSV, preprocessTrialBalance } from '@/lib/preprocessing/trial-balance';
 import { UVT_2026_COP } from '@/lib/accounting/tax-engine/constants';
+import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { buildFiscalAnchor } from '../fiscal-anchor';
+import { exigirBalanceUtilizable, leerBalanceEscudo } from '../lib/balance-ingesta';
 import type { FiscalAnchorBlock } from '../fiscal-anchor/types';
 import { runCcvFiscalAgent } from './agents/ccv-fiscal.agent';
 import { runConciliacionAgent } from './agents/conciliacion.agent';
@@ -30,6 +31,7 @@ import { runDefensaDianAgent } from './agents/defensa-dian.agent';
 import { runDevolucionesAgent } from './agents/devoluciones.agent';
 import { runSupervivenciaAgent } from './agents/supervivencia.agent';
 import { runSynthesizer } from './agents/synthesizer.agent';
+import { buildFiscalAgentValidation } from './validation';
 import type {
   CcvModuleResult,
   ConciliacionModuleResult,
@@ -103,10 +105,12 @@ function selectModules(mode: FiscalAgentMode): ModulesToRun {
         supervivencia: false,
       };
     case 'devolucion':
+      // riskScore activo: el sintetizador lo exige y el score es determinista
+      // (auditoría 2026-09, tributario-modulos-12 — el modo siempre fallaba).
       return {
         ccv: true,
         conciliacion: false,
-        riskScore: false,
+        riskScore: true,
         planeacion: false,
         defensaDian: false,
         devoluciones: true,
@@ -162,13 +166,28 @@ export async function orchestrateFiscalAgent(
 
   // ── 1. Preprocesamiento ────────────────────────────────────────────────
   callbacks?.onProgress?.({ stage: 'preprocessing', status: 'started' });
-  const preprocessed = inp.preprocessed ?? (() => {
-    const rows = parseTrialBalanceCSV(inp.rawData);
-    if (rows.length === 0) {
-      throw new Error('No se pudieron parsear filas del balance de prueba.');
+  // Misma lectura que /upload y /niif (P4 cross-dep): directivas de ingesta
+  // (unidad confirmada, vencimientos), bloques por hoja del XLSX y bloqueo con
+  // motivo (`EscudoBalanceBloqueadoError`) si no hay filas o si /niif lo
+  // rechazaría (integridad de la lectura, CUR-R8/R5/R12, ecuación descuadrada
+  // que el Bridge no explica — I4-escudo 2). Un preprocesado recibido del
+  // llamador pasa por el mismo bloqueo.
+  let preprocessed: PreprocessedBalance;
+  try {
+    if (inp.preprocessed) {
+      exigirBalanceUtilizable(inp.preprocessed, language);
+      preprocessed = inp.preprocessed;
+    } else {
+      preprocessed = leerBalanceEscudo(inp.rawData, { language, sinFilas: 'bloquear' });
     }
-    return preprocessTrialBalance(rows);
-  })();
+  } catch (err) {
+    callbacks?.onProgress?.({
+      stage: 'preprocessing',
+      status: 'failed',
+      message: err instanceof Error ? err.message : 'parse_error',
+    });
+    throw err;
+  }
   const fiscalAnchor: FiscalAnchorBlock =
     inp.fiscalAnchor ??
     buildFiscalAnchor({
@@ -189,6 +208,7 @@ export async function orchestrateFiscalAgent(
     instructions: inp.instructions,
     dianRequirementText: inp.dianRequirementText,
     dianRequirementKind: inp.dianRequirementKind,
+    saldoAFavorDeclaradoCents: inp.saldoAFavorDeclaradoCents ?? null,
   };
 
   const modules = selectModules(mode);
@@ -303,7 +323,7 @@ export async function orchestrateFiscalAgent(
   const modulesFailed = moduleMetas.filter((m) => !m.ok).map((m) => m.stage);
   const partial = modulesFailed.length > 0;
 
-  return {
+  const reportSinValidar: Omit<FiscalAgentReport, 'validation'> = {
     ccv: ccvForSynth,
     conciliacion: conciliacionR.value,
     riskScore: riskForSynth,
@@ -324,6 +344,27 @@ export async function orchestrateFiscalAgent(
       modulesFailed,
     },
   };
+
+  // ── 7. Validación determinista (auditoría 2026-09, tributario-modulos-03;
+  //    M3/M5/M6 conectados en la fase 2, pendiente #8).
+  callbacks?.onProgress?.({ stage: 'validation', status: 'started' });
+  let validation: FiscalAgentReport['validation'];
+  try {
+    validation = buildFiscalAgentValidation(reportSinValidar, mode, {
+      fiscalAnchor,
+      saldoAFavorDeclaradoCents: sharedInput.saldoAFavorDeclaradoCents ?? null,
+    });
+    callbacks?.onProgress?.({
+      stage: 'validation',
+      status: validation.veredicto === 'bloqueo' ? 'failed' : 'completed',
+      message: `Veredicto ${validation.veredicto}: ${validation.errores} errores, ${validation.advertencias} advertencias`,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'validation_error';
+    validation = { veredicto: 'bloqueo', errores: 1, advertencias: 0, checks: [], modulosSinValidar: [`Validación no ejecutada: ${message}`] };
+    callbacks?.onProgress?.({ stage: 'validation', status: 'failed', message });
+  }
+  return { ...reportSinValidar, validation };
 }
 
 function enabledFor(stage: FiscalAgentStage, modules: ModulesToRun): boolean {

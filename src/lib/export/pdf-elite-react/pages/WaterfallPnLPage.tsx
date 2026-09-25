@@ -6,12 +6,14 @@
 import React from 'react';
 import { Page, View, Text } from '@react-pdf/renderer';
 import type { EditorialReport } from '../types';
+import { statementCitations } from '../../statement-presentation';
 import {
   GoldRule,
   MixedWeightHeadline,
   NormativePill,
   PageNumberBadge,
   TopoOrnament,
+  TocAnchor,
 } from '../primitives';
 import { WaterfallPnL } from '../charts/WaterfallPnL';
 import {
@@ -29,10 +31,9 @@ import {
 
 interface Props {
   doc: EditorialReport;
-  pageNumber?: number;
 }
 
-export function WaterfallPnLPage({ doc, pageNumber = 1 }: Props) {
+export function WaterfallPnLPage({ doc }: Props) {
   const items = doc.waterfall.items;
 
   const total = items.find((it) => it.sign === 'total');
@@ -60,8 +61,9 @@ export function WaterfallPnLPage({ doc, pageNumber = 1 }: Props) {
         position: 'relative',
       }}
     >
+      <TocAnchor id="waterfall" collect={doc.tocCollector} />
       {/* Topo ornament — bottom-left, low opacity (spec §3.7) */}
-      <View style={{ position: 'absolute', bottom: 40, left: 0 }}>
+      <View fixed style={{ position: 'absolute', bottom: 40, left: 0 }}>
         <TopoOrnament variant="corner-bl" opacity={0.12} areaAccent="valor" seed={77} width={180} height={180} />
       </View>
 
@@ -78,8 +80,9 @@ export function WaterfallPnLPage({ doc, pageNumber = 1 }: Props) {
 
       {/* Normative pills */}
       <View style={{ flexDirection: 'row', gap: 6, marginTop: S3, marginBottom: S4 }}>
-        <NormativePill label="IAS 1.81" tone="sage-on-cream" />
-        <NormativePill label="NIIF 5.36" tone="sage-on-cream" />
+        {statementCitations('income', doc.meta.niifGroup).map((label) => (
+          <NormativePill key={label} label={label} tone="sage-on-cream" />
+        ))}
       </View>
 
       {/* Two-column layout: chart (left) + commentary (right) */}
@@ -91,7 +94,6 @@ export function WaterfallPnLPage({ doc, pageNumber = 1 }: Props) {
 
         {/* Right commentary column */}
         <View style={{ width: 180, paddingTop: S4 }}>
-          <NormativePill label="NIIF 1.10" tone="sage-on-cream" />
           <NormativePill label="Art. 26 E.T." tone="sage-on-cream" />
 
           <Text
@@ -109,7 +111,7 @@ export function WaterfallPnLPage({ doc, pageNumber = 1 }: Props) {
       </View>
 
       <GoldRule />
-      <PageNumberBadge pageNumber={pageNumber} />
+      <PageNumberBadge />
     </Page>
   );
 }

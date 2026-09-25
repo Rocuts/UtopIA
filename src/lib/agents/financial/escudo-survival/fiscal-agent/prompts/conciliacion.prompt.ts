@@ -27,10 +27,10 @@ Producir el BORRADOR de la conciliación fiscal del periodo. Partiendo de la UAI
 - \`data.rentaLiquidaGravable\` = UAI + Σ adiciones − Σ deducciones − Σ rentas_exentas − Σ incrgno.
 - \`data.tarifaPct\` = 35 por defecto; ajusta solo si la empresa califica para tarifa especial (zona franca Art. 240-1, hidroeléctricas / financieras Art. 240 par. 2, etc.).
 - \`data.impuestoBruto\` = rentaLiquidaGravable × tarifa.
-- \`data.totalDescuentos\` = Σ descuentos (Arts. 254 / 256 / 257 / 257-1 / 258-1).
+- \`data.totalDescuentos\` = Arts. 254 y 258-1 + min(Σ 255/256/257, 25% del impuesto — Art. 258). Indica en \`norma\` de cada línea de descuento su artículo exacto.
 - \`data.impuestoNeto\` = impuestoBruto − totalDescuentos.
 - \`data.retencionesYAnticipos\` = F03 del Âncora (intocable).
-- \`data.saldoFinal\` = impuestoNeto − retencionesYAnticipos (positivo a pagar, negativo a favor — Art. 850 E.T.).
+- \`data.saldoFinal\` = impuestoNeto − retencionesYAnticipos. Es un borrador: no incluye el anticipo del año siguiente (Art. 807 E.T.); el sistema recalcula todas estas identidades desde \`lineas\` en código.
 - \`data.disclaimer\` cierra con: "Las diferencias amparadas por el parágrafo del Art. 647 E.T. (diferencia de criterio razonable) requieren documentación que sustente la interpretación."
 - El markdown muestra la conciliación como tabla en formato es-CO + cierre del agente.
 </success_criteria>
@@ -44,8 +44,8 @@ ALWAYS cita "Art. 258-1 E.T." cuando incluyas el descuento del 100% del IVA en a
 NEVER cites Art. 158-3 E.T. ni Art. 128/165 como deducciones vigentes (Art. 158-3 derogado por Ley 1819/2016; Arts. 128/165 referencias incorrectas — la depreciación vive en Arts. 134-141 con tasas en Art. 137).
 NEVER apliques tarifa plana 10% a dividendos PN residentes (Ley 2277/2022 los integra a base ordinaria — Arts. 241 + 242).
 If no hay datos sobre rentas exentas en el balance entonces no inventes líneas — emite array sin entradas de tipo "renta_exenta" y declara warning.
-If la empresa es financiera / aseguradora / bolsa / reaseguradora entonces \`tarifaPct\` = 40 (Art. 240 par. 2 E.T., vigente hasta 2027).
-If la empresa es hidroeléctrica / acueducto entonces \`tarifaPct\` = 38 (Art. 240 par. 2 E.T., vigente hasta 2026).
+If la empresa es financiera / aseguradora / reaseguradora / infraestructura del mercado de valores y su renta gravable ≥ 120.000 UVT entonces \`tarifaPct\` = 40 (Art. 240 par. 2 E.T., hasta 2027).
+If la actividad principal es la generación de energía hidroeléctrica y su renta gravable ≥ 30.000 UVT entonces \`tarifaPct\` = 38 (Art. 240 par. 4 E.T., 2023-2026).
 </constraints>
 
 <context>

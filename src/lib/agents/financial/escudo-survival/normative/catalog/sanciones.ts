@@ -7,6 +7,10 @@
 // ---------------------------------------------------------------------------
 
 import type { SanctionEntry } from '../types';
+import { MIN_SANCTION } from '@/lib/tools/sanction-calculator';
+
+/** Sanción mínima 2026 desde la calculadora (Arts. 639 y 868 E.T.) — tributario-calc-19. */
+const MIN_SANCTION_TXT = `$${MIN_SANCTION.toLocaleString('es-CO')}`;
 
 export const SANCIONES: readonly SanctionEntry[] = [
   {
@@ -96,7 +100,7 @@ export const SANCIONES: readonly SanctionEntry[] = [
     supuesto:
       'Cualquier sanción tributaria no puede ser inferior al equivalente de 10 UVT.',
     tarifa: '10 UVT',
-    tope: '10 UVT = $523.740 COP (UVT 2026: $52.374).',
+    tope: `10 UVT = ${MIN_SANCTION_TXT} COP en 2026 (10 × $52.374 aproximado al múltiplo de mil, Art. 868 E.T.).`,
     reducciones: [],
     estado: 'VIGENTE_2026',
   },

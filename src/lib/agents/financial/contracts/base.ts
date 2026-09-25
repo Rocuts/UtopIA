@@ -204,7 +204,7 @@ export const StatementLineSchema = z.object({
   account: z
     .string()
     .nullable()
-    .describe('Código PUC opcional (ej. "1105"). Null si es total/subtotal.'),
+    .describe('Código PUC opcional (ej. "1105"): un solo grupo o cuenta por renglón, sin combinar grupos. Null si es total/subtotal.'),
   label: z.string().min(1).describe('Etiqueta legible. Ej: "Efectivo y equivalentes"'),
   amountPrimary: MoneyCop.describe('Cifra del periodo actual en centavos'),
   amountComparative: MoneyCop.nullable().describe('Cifra del periodo comparativo en centavos. Null si N/A.'),
@@ -339,7 +339,13 @@ export interface ActaArithmeticInput {
   netIncomeCents: bigint;
   /** Pérdidas de ejercicios anteriores pendientes de enjugar, MAGNITUD POSITIVA (Art. 151 C.Co.). */
   accumulatedLossesCents: bigint;
-  /** Capital suscrito y pagado (PUC 3115+3120). `null` si la Clase 3 no lo declara. */
+  /**
+   * Capital suscrito y pagado: Σ de las hojas del PUC grupo 31 (3105 capital
+   * suscrito y pagado, neto de 310510 por suscribir y 310515 suscrito por
+   * cobrar, + 3115 aportes sociales + 3120 capital asignado + 3125 inversión
+   * suplementaria…), como lo calcula `equityBreakdown.capitalSuscritoPagado`
+   * en el preprocesador. `null` si la Clase 3 no lo declara.
+   */
   capitalSuscritoPagadoCents: bigint | null;
   /** Reserva legal ya acumulada (PUC 3305). `null` si no se identifica. */
   reservaLegalAcumuladaCents: bigint | null;
@@ -697,7 +703,21 @@ export function reconcileActaArithmetic(
     }
   }
 
-  // 6. Capitalización: base y monto.
+  // 6. Capitalización: primero el régimen (simétrico a la regla 2). Con
+  //    pérdida o utilidad bajo el umbral el ancla dice que NO aplica, y un acta
+  //    que la propone con base y monto inventados salía limpia (auditoría
+  //    2026-09, pipeline-flujo-12; Art. 151 C.Co.).
+  if (emitted.capitalizationApplies !== expected.capitalizationApplies) {
+    out.push({
+      field: 'shareholderMinutes.capitalizationProposal.applies',
+      label: 'Propuesta de capitalización de utilidades',
+      emitted: emitted.capitalizationApplies ? 'true' : 'false',
+      expected: expected.capitalizationApplies ? 'true' : 'false',
+      gapCents: '0',
+    });
+  }
+
+  // 7. Capitalización: base y monto.
   if (expected.capitalizationApplies) {
     const base = money(emitted.capitalizationBaseCop);
     if (base === null || parseMoneyCop(base) !== parseMoneyCop(expected.capitalizationBaseCop)) {

@@ -10,7 +10,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import React from 'react';
 import { Page, View, Text, Svg, Path } from '@react-pdf/renderer';
-import type { EditorialReport, ParsedTable, ParsedTableRow } from '../types';
+import type { EditorialReport, ParsedTable, ParsedTableRow, TocAnchorCollector } from '../types';
+import { statementCitations, type StatementKind } from '../../statement-presentation';
 import {
   GoldRule,
   MixedWeightHeadline,
@@ -18,6 +19,7 @@ import {
   NumberedSectionHeader,
   PageNumberBadge,
   TopoOrnament,
+  TocAnchor,
 } from '../primitives';
 import {
   CHARCOAL_700,
@@ -29,7 +31,7 @@ import {
   FONT_SANS,
   FOREST_700,
   FOREST_900,
-  PAGE_H,
+  PAGE_BOTTOM_RESERVED,
   PAGE_MARGIN,
   PAGE_W,
   R_PILL,
@@ -50,6 +52,25 @@ import {
 } from '../tokens';
 
 // ─── Layout constants ────────────────────────────────────────────────────────
+// Reserva inferior de las páginas de estados: GoldRule (14pt) + PageNumberBadge
+// (20pt + 24pt de diámetro) caben en PAGE_BOTTOM_RESERVED. Antes se reservaban
+// 104pt y un estado que casi llenaba la hoja dejaba sola su banda de totales (o
+// el total del panel derecho) en una página siguiente casi vacía
+// (reportes-export-21).
+const BOTTOM_PAD = PAGE_BOTTOM_RESERVED + S2;
+/**
+ * Máximo de cifras sueltas en el panel derecho. Con más, el panel muestra sólo
+ * los grupos y sus totales (la tabla de la izquierda tiene todas las cifras):
+ * las cifras sin tope desbordaban el panel a una página casi vacía.
+ */
+const PANEL_ROW_BUDGET = 8;
+/**
+ * La banda inferior de los estados de página completa repite totales que ya
+ * están en la tabla. Con más renglones no cabe en la hoja: se partía entre dos
+ * páginas o quedaba sola en una página casi vacía (reportes-export-21). Se
+ * omite entonces; `wrap={false}` impide que se parta.
+ */
+const BAND_MAX_ROWS = 10;
 // Total content width = PAGE_W (842). We use full-bleed for the forest panel so
 // there is no right margin on the forest side.
 const LEFT_W = Math.round(PAGE_W * 0.60);  // 505pt — cream side
@@ -250,6 +271,55 @@ function LeftTable({
   );
 }
 
+// ─── Statement identification (date / currency) + legends / notes ─────────────
+// NIIF para las PYMES 3.23: fecha de cierre o periodo cubierto, moneda y
+// redondeo, de forma destacada (reportes-export-14). Las leyendas (comparativo
+// no presentado, reportes-export-13) y las notas estructuradas del JSON
+// (reportes-export-11) van al pie del estado.
+function StatementIdentification({ table }: { table: ParsedTable }) {
+  if (!table.subtitle && !table.currencyNote) return null;
+  return (
+    <View style={{ marginTop: S2 }}>
+      {table.subtitle ? (
+        <Text style={{ fontFamily: FONT_SANS, fontWeight: 'bold', fontSize: TYPE_SMALL, color: CHARCOAL_900 }}>
+          {table.subtitle}
+        </Text>
+      ) : null}
+      {table.currencyNote ? (
+        <Text style={{ fontFamily: FONT_SANS, fontSize: TYPE_CAPTION, color: CHARCOAL_700, marginTop: 2 }}>
+          {table.currencyNote}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+function StatementFootnotes({ table }: { table: ParsedTable }) {
+  const legends = table.legends ?? [];
+  const notes = table.footnotes ?? [];
+  if (legends.length === 0 && notes.length === 0) return null;
+  return (
+    <View style={{ marginTop: S3 }}>
+      {legends.map((l, i) => (
+        <Text
+          key={`lg${i}`}
+          style={{ fontFamily: FONT_SANS, fontStyle: 'italic', fontSize: TYPE_CAPTION, color: '#722F37', marginBottom: 2 }}
+        >
+          {l}
+        </Text>
+      ))}
+      {notes.map((n, i) => (
+        <Text
+          key={`fn${i}`}
+          style={{ fontFamily: FONT_SANS, fontSize: TYPE_CAPTION, color: CHARCOAL_700, marginBottom: 2 }}
+        >
+          {n}
+        </Text>
+      ))}
+    </View>
+  );
+}
+
 // ─── Bracket SVG (right panel) ───────────────────────────────────────────────
 // Draws a square-cornered curly brace (} shape) on the right side of the
 // figure column, pointing right toward the group label.
@@ -281,10 +351,24 @@ function BracketSvg({ height, color }: { height: number; color: string }) {
 interface AbstractionGroup {
   groupLabel: string;
   groupTotal: string;
-  rows: string[]; // sign-prefixed figure strings, e.g. "+ 7.407.819.761"
+  rows: string[]; // figure strings exactly as the table prints them
 }
 
-function buildAbstractionGroups(table: ParsedTable): AbstractionGroup[] {
+/**
+ * Cifra del panel derecho: SIEMPRE la del periodo actual (`cells[0]`, el orden
+ * que usan compose-statements-from-json y el renderer Markdown), con el signo
+ * tal cual lo imprime la tabla (paréntesis para negativos).
+ *
+ * Auditoría 2026-09 (reportes-export-04): se tomaba `cells[cells.length - 1]`,
+ * que en informes comparativos es la columna del periodo ANTERIOR, y se
+ * anteponía "+ " a todo lo que no empezara por "-" — de modo que los negativos
+ * entre paréntesis salían "+ ($2.000,00)" y los costos "+ $2.000,00".
+ */
+export function panelFigure(row: ParsedTableRow): string {
+  return row.cells[0] ?? '';
+}
+
+export function buildAbstractionGroups(table: ParsedTable): AbstractionGroup[] {
   const groups: AbstractionGroup[] = [];
   let currentRows: string[] = [];
   let currentLabel = '';
@@ -304,8 +388,7 @@ function buildAbstractionGroups(table: ParsedTable): AbstractionGroup[] {
 
     if (row.emphasis === 'total') {
       // Close current group with this total
-      const val = row.cells[row.cells.length - 1] || '';
-      const signed = val.startsWith('-') ? val : `+ ${val}`;
+      const val = panelFigure(row);
       if (currentRows.length > 0 || currentLabel) {
         groups.push({ groupLabel: currentLabel || row.account, groupTotal: val, rows: currentRows });
         currentRows = [];
@@ -315,7 +398,7 @@ function buildAbstractionGroups(table: ParsedTable): AbstractionGroup[] {
     }
 
     if (row.emphasis === 'subtotal') {
-      const val = row.cells[row.cells.length - 1] || '';
+      const val = panelFigure(row);
       if (currentRows.length > 0 && currentLabel) {
         groups.push({ groupLabel: currentLabel, groupTotal: val, rows: currentRows });
         currentRows = [];
@@ -324,12 +407,10 @@ function buildAbstractionGroups(table: ParsedTable): AbstractionGroup[] {
       continue;
     }
 
-    // Regular row — take the last cell as the figure
-    const val = row.cells[row.cells.length - 1] || '';
-    if (val && val !== '-' && val !== '') {
-      const trimmed = val.replace(/^-/, '').trim();
-      const signed = val.startsWith('-') ? `- ${trimmed}` : `+ ${val}`;
-      currentRows.push(signed);
+    // Regular row — current-period figure, printed exactly as the table does.
+    const val = panelFigure(row);
+    if (val && val !== '-') {
+      currentRows.push(val);
     }
   }
 
@@ -342,8 +423,7 @@ function buildAbstractionGroups(table: ParsedTable): AbstractionGroup[] {
   if (groups.length === 0) {
     const totalRow = table.rows.find(r => r.emphasis === 'total');
     if (totalRow) {
-      const val = totalRow.cells[totalRow.cells.length - 1] || '';
-      groups.push({ groupLabel: totalRow.account, groupTotal: val, rows: [] });
+      groups.push({ groupLabel: totalRow.account, groupTotal: panelFigure(totalRow), rows: [] });
     }
   }
 
@@ -366,23 +446,26 @@ function RightPanel({
   pills: Array<{ label: string }>;
   finalTotal?: string;
 }) {
-  const groups = buildAbstractionGroups(table);
+  const allGroups = buildAbstractionGroups(table);
+  const figureCount = allGroups.reduce((acc, g) => acc + g.rows.length, 0);
+  const groups =
+    figureCount > PANEL_ROW_BUDGET ? allGroups.map((g) => ({ ...g, rows: [] as string[] })) : allGroups;
 
   // Derive finalTotal from last total row if not passed explicitly
   const derivedTotal = finalTotal ?? (() => {
     const r = [...table.rows].reverse().find(r => r.emphasis === 'total');
-    return r ? (r.cells[r.cells.length - 1] || '') : '';
+    return r ? panelFigure(r) : '';
   })();
+  // El panel resume SÓLO el periodo actual: se rotula para que en un informe
+  // comparativo no se lea como la columna del año anterior.
+  const periodLabel = table.headers[1] ? `Cifras del periodo ${table.headers[1]}` : '';
 
   return (
     <View
       style={{
         width: RIGHT_W,
-        minHeight: PAGE_H,
-        backgroundColor: FOREST_900,
         paddingHorizontal: RIGHT_PAD_H,
         paddingTop: PAGE_MARGIN,
-        paddingBottom: PAGE_MARGIN + 48,
         flexDirection: 'column',
       }}
     >
@@ -412,14 +495,27 @@ function RightPanel({
       </Text>
 
       {/* Pills */}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginBottom: S5 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginBottom: periodLabel ? S2 : S5 }}>
         {pills.map((p, i) => (
           <NormativePill key={i} label={p.label} tone="sand-on-forest" />
         ))}
       </View>
+      {periodLabel ? (
+        <Text
+          style={{
+            fontFamily: FONT_SANS,
+            fontSize: TYPE_SMALL,
+            color: SAGE_300,
+            letterSpacing: 0.4,
+            marginBottom: S5,
+          }}
+        >
+          {periodLabel}
+        </Text>
+      ) : null}
 
       {/* Abstraction groups */}
-      <View style={{ flexDirection: 'column', gap: 20, flex: 1 }}>
+      <View style={{ flexDirection: 'column', gap: 20 }}>
         {groups.map((g, gi) => {
           const rowLineH = Math.round(TYPE_BODY * 1.6); // ≈16pt
           const bracketH = Math.max(rowLineH, g.rows.length * rowLineH);
@@ -483,7 +579,7 @@ function RightPanel({
                       marginTop: 3,
                     }}
                   >
-                    {g.groupTotal.startsWith('-') ? g.groupTotal : `+ ${g.groupTotal}`}
+                    {g.groupTotal}
                   </Text>
                 ) : null}
               </View>
@@ -535,26 +631,38 @@ interface SplitPageConfig {
 function SplitStatementPage({
   table,
   cfg,
-  pageNum,
+  opensSection = false,
+  tocCollector = null,
 }: {
   table: ParsedTable;
   cfg: SplitPageConfig;
-  pageNum: number;
+  /** El primer estado abre la sección en la tabla de contenido. */
+  opensSection?: boolean;
+  /** Recolector de la pasada de medición de la tabla de contenido. */
+  tocCollector?: TocAnchorCollector | null;
 }) {
   return (
     <Page
       size="A4"
       orientation="landscape"
-      style={{ backgroundColor: CREAM_0, flexDirection: 'row' }}
+      // Los márgenes superior e inferior van en la página, no en el panel:
+      // con `minHeight: PAGE_H` y el relleno inferior dentro del panel, un
+      // estado que casi llenaba la hoja empujaba ese relleno a una página
+      // nueva en blanco (reportes-export-21). El relleno de la página se
+      // repite bien en cada página física si el estado se parte.
+      style={{
+        backgroundColor: CREAM_0,
+        flexDirection: 'row',
+        paddingTop: PAGE_MARGIN,
+        paddingBottom: BOTTOM_PAD,
+      }}
     >
+      {opensSection ? <TocAnchor id="statements" collect={tocCollector} /> : null}
       {/* ── LEFT PANEL (cream) ───────────────────────────────────────────── */}
       <View
         style={{
           width: LEFT_W,
-          minHeight: PAGE_H,
           paddingLeft: LEFT_MARGIN,
-          paddingTop: PAGE_MARGIN,
-          paddingBottom: PAGE_MARGIN + 56,
           paddingRight: S4,
           flexDirection: 'column',
         }}
@@ -565,15 +673,24 @@ function SplitStatementPage({
           title={cfg.sectionHeaderTitle}
           bannerColor={FOREST_900}
         />
+        <StatementIdentification table={table} />
 
         {/* Table */}
-        <View style={{ flex: 1, marginTop: S3 }} wrap>
+        <View style={{ marginTop: S3 }} wrap>
           <LeftTable table={table} />
+          <StatementFootnotes table={table} />
         </View>
       </View>
 
       {/* ── RIGHT PANEL (forest) — full height ──────────────────────────── */}
-      <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: RIGHT_W }}>
+      {/* Fondo `fixed` a toda la altura y contenido absoluto sin `bottom`: un
+          absoluto que llega al margen inferior hace que react-pdf parta la
+          página y emita otra casi en blanco (reportes-export-21). */}
+      <View
+        fixed
+        style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: RIGHT_W, backgroundColor: FOREST_900 }}
+      />
+      <View style={{ position: 'absolute', top: 0, right: 0, width: RIGHT_W }}>
         <RightPanel
           table={table}
           titleLead={cfg.titleLead}
@@ -585,7 +702,7 @@ function SplitStatementPage({
 
       {/* ── FOOTER (spans full width, over the seam) ────────────────────── */}
       <GoldRule />
-      <PageNumberBadge pageNumber={pageNum} />
+      <PageNumberBadge />
     </Page>
   );
 }
@@ -596,19 +713,50 @@ interface FullPageConfig {
   sectionHeaderTitle: string;
   caption: string;
   pills: Array<{ label: string }>;
+  /**
+   * Celda que resume cada total en la banda inferior: `period` = la del
+   * periodo actual (`cells[0]`, EFE con columna comparativa); `rowTotal` = la
+   * última (columna TOTAL del ECP matricial).
+   */
+  bandCell: 'period' | 'rowTotal';
+}
+
+/**
+ * Totales de la banda inferior: los del periodo actual. En el ECP con
+ * comparativo los dos periodos van apilados bajo encabezados sin cifras; la
+ * banda toma sólo los totales del último bloque (el periodo actual), y en el
+ * EFE la cifra del periodo actual, no la columna comparativa (la misma regla
+ * del panel de los estados divididos, reportes-export-04).
+ */
+export function summaryBandRows(
+  table: ParsedTable,
+  bandCell: FullPageConfig['bandCell'],
+): Array<{ account: string; value: string }> {
+  const isPlainHeader = (r: ParsedTableRow) =>
+    !r.emphasis && (r.cells.length === 0 || r.cells.every((c) => !c || c === '-'));
+  let lastHeader = -1;
+  table.rows.forEach((r, i) => {
+    if (isPlainHeader(r)) lastHeader = i;
+  });
+  return table.rows
+    .slice(lastHeader + 1)
+    .filter((r) => r.emphasis === 'total')
+    .slice(0, 3)
+    .map((r) => ({
+      account: r.account,
+      value: (bandCell === 'period' ? r.cells[0] : r.cells[r.cells.length - 1]) || '—',
+    }));
 }
 
 function FullStatementPage({
   table,
   cfg,
-  pageNum,
 }: {
   table: ParsedTable;
   cfg: FullPageConfig;
-  pageNum: number;
 }) {
-  // Build a forest summary band from total rows
-  const totalRows = table.rows.filter(r => r.emphasis === 'total').slice(0, 3);
+  // Build a forest summary band from the current-period total rows
+  const totalRows = summaryBandRows(table, cfg.bandCell);
 
   // Use the full landscape content width (≈746pt) instead of the split-layout
   // LEFT_CONTENT_W (≈441pt). The Equity statement has 8 columns and was
@@ -624,7 +772,7 @@ function FullStatementPage({
         backgroundColor: CREAM_0,
         paddingHorizontal: PAGE_MARGIN,
         paddingTop: PAGE_MARGIN,
-        paddingBottom: PAGE_MARGIN + 56,
+        paddingBottom: BOTTOM_PAD,
       }}
     >
       {/* Section header */}
@@ -647,20 +795,25 @@ function FullStatementPage({
       >
         {cfg.caption}
       </Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginBottom: S4 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginBottom: S2 }}>
         {cfg.pills.map((p, i) => (
           <NormativePill key={i} label={p.label} tone="sage-on-cream" />
         ))}
       </View>
+      <View style={{ marginBottom: S4 }}>
+        <StatementIdentification table={table} />
+      </View>
 
       {/* Table */}
-      <View wrap style={{ flex: 1 }}>
+      <View wrap>
         <LeftTable table={table} containerWidth={fullContentW} />
+        <StatementFootnotes table={table} />
       </View>
 
       {/* Forest summary band at the bottom */}
-      {totalRows.length > 0 && (
+      {totalRows.length > 0 && table.rows.length <= BAND_MAX_ROWS && (
         <View
+          wrap={false}
           style={{
             marginTop: S4,
             backgroundColor: FOREST_900,
@@ -692,7 +845,7 @@ function FullStatementPage({
                   color: SAND_400,
                 }}
               >
-                {tr.cells[tr.cells.length - 1] || '—'}
+                {tr.value}
               </Text>
             </View>
           ))}
@@ -700,7 +853,7 @@ function FullStatementPage({
       )}
 
       <GoldRule />
-      <PageNumberBadge pageNumber={pageNum} />
+      <PageNumberBadge />
     </Page>
   );
 }
@@ -708,8 +861,6 @@ function FullStatementPage({
 // ─── Public API ──────────────────────────────────────────────────────────────
 interface Props {
   doc: EditorialReport;
-  /** Starting page number for the first statement page. Defaults to 1. */
-  startPage?: number;
 }
 
 /**
@@ -722,15 +873,21 @@ interface Props {
  * Spread into <Document> children:
  *   {StatementsPages({ doc })}
  */
-export function StatementsPages({ doc, startPage = 1 }: Props): React.ReactElement[] {
+export function StatementsPages({ doc }: Props): React.ReactElement[] {
   const { balance, income, cashFlow, equity } = doc.statements;
+  // Citas según el grupo NIIF de la empresa (reportes-export-16): Secciones
+  // 4/5/7/6 de NIIF para las PYMES o NIC 1/NIC 7 para Grupo 1 — nunca NIIF 1,
+  // 5, 6 o 7, que regulan otras materias.
+  const pillsFor = (kind: StatementKind) =>
+    statementCitations(kind, doc.meta.niifGroup).map((label) => ({ label }));
 
   return [
     // ── Balance ──────────────────────────────────────────────────────────────
     <SplitStatementPage
       key="balance"
       table={balance}
-      pageNum={startPage}
+      opensSection
+      tocCollector={doc.tocCollector}
       cfg={{
         statementKey: 'balance',
         pageIndex: '01.',
@@ -738,12 +895,8 @@ export function StatementsPages({ doc, startPage = 1 }: Props): React.ReactEleme
         sectionHeaderTitle: 'ESTADO DE SITUACIÓN FINANCIERA',
         titleLead: 'Estado de',
         titleEmphasis: 'situación financiera',
-        caption: 'Capital invertido en la operación',
-        pills: [
-          { label: 'NIIF 1.10' },
-          { label: 'IAS 1.54' },
-          { label: 'Art. 35 Ley 222/95' },
-        ],
+        caption: 'Activos, pasivos y patrimonio a la fecha de corte',
+        pills: [...pillsFor('balance'), { label: 'Art. 35 Ley 222/95' }],
       }}
     />,
 
@@ -751,7 +904,6 @@ export function StatementsPages({ doc, startPage = 1 }: Props): React.ReactEleme
     <SplitStatementPage
       key="income"
       table={income}
-      pageNum={startPage + 1}
       cfg={{
         statementKey: 'income',
         pageIndex: '02.',
@@ -759,11 +911,8 @@ export function StatementsPages({ doc, startPage = 1 }: Props): React.ReactEleme
         sectionHeaderTitle: 'ESTADO DE RESULTADOS INTEGRALES',
         titleLead: 'Estado de',
         titleEmphasis: 'resultados integrales',
-        caption: 'Utilidad Operativa después de impuestos (UODI)',
-        pills: [
-          { label: 'NIIF 5.36' },
-          { label: 'IAS 1.81' },
-        ],
+        caption: 'Resultado del periodo y otro resultado integral',
+        pills: pillsFor('income'),
       }}
     />,
 
@@ -771,15 +920,12 @@ export function StatementsPages({ doc, startPage = 1 }: Props): React.ReactEleme
     <FullStatementPage
       key="cashflow"
       table={cashFlow}
-      pageNum={startPage + 2}
       cfg={{
         pageIndex: '03.',
         sectionHeaderTitle: 'ESTADO DE FLUJOS DE EFECTIVO',
-        caption: 'Flujo de caja libre del período',
-        pills: [
-          { label: 'NIIF 7' },
-          { label: 'IAS 7.10' },
-        ],
+        caption: 'Entradas y salidas de efectivo por actividades de operación, inversión y financiación',
+        pills: pillsFor('cashFlow'),
+        bandCell: 'period',
       }}
     />,
 
@@ -787,15 +933,12 @@ export function StatementsPages({ doc, startPage = 1 }: Props): React.ReactEleme
     <FullStatementPage
       key="equity"
       table={equity}
-      pageNum={startPage + 3}
       cfg={{
         pageIndex: '04.',
         sectionHeaderTitle: 'CAMBIOS EN EL PATRIMONIO',
         caption: 'Variación en el patrimonio neto',
-        pills: [
-          { label: 'NIIF 6.20' },
-          { label: 'IAS 1.106' },
-        ],
+        pills: pillsFor('equity'),
+        bandCell: 'rowTotal',
       }}
     />,
   ];

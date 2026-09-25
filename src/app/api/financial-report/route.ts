@@ -1,15 +1,13 @@
 import { NextResponse } from 'next/server';
+import { adjustmentLedgerSchema } from '@/lib/reports/adjustment-ledger';
 import { z } from 'zod';
 import { financialReportRequestSchema } from '@/lib/validation/schemas';
 import {
   orchestrateFinancialReport,
   BalanceValidationError,
 } from '@/lib/agents/financial/orchestrator';
-import {
-  parseTrialBalanceCSV,
-  preprocessTrialBalance,
-  type PreprocessedBalance,
-} from '@/lib/preprocessing/trial-balance';
+import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
+import { preprocessUploadedTrialBalanceText } from '@/lib/preprocessing/raw-data';
 import type { FinancialProgressEvent } from '@/lib/agents/financial/types';
 import type {
   AdjustmentLedger,
@@ -17,7 +15,12 @@ import type {
 } from '@/lib/agents/repair/types';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
 import { classifyError, formatErrorAsUserNote } from '@/lib/agents/financial/prompts/resilience-section0';
-import { revivePreprocessedBalance, toJsonSafe } from '@/lib/preprocessing/json-safe';
+import { preprocessedAnchorMismatches, toJsonSafe } from '@/lib/preprocessing/json-safe';
+import {
+  PREPROCESSED_MISMATCH_CODE,
+  resolveClientPreprocessed,
+} from '@/lib/reports/client-preprocessed';
+import { applyRequestConfirmations } from '@/lib/reports/ingest-confirmations';
 import { createSafeSse } from '@/lib/api/sse-safe';
 import { requireAuthSession } from '@/lib/auth/require-session';
 
@@ -30,27 +33,8 @@ const provisionalFlagSchema = z
   })
   .optional();
 
-// ---------------------------------------------------------------------------
-// Adjustment ledger (Phase 2 — Doctor de Datos). Inline en esta ruta porque
-// es un body opcional. La forma se duplica desde repair-chat/route.ts a
-// proposito (ambas son consumers independientes del mismo tipo `Adjustment`).
-// ---------------------------------------------------------------------------
-const adjustmentSchema = z.object({
-  id: z.string().min(1).max(100),
-  accountCode: z.string().min(1).max(10),
-  accountName: z.string().min(1).max(200),
-  amount: z.number().refine((n) => Number.isFinite(n), 'amount debe ser finito'),
-  rationale: z.string().min(1).max(2_000),
-  status: z.enum(['proposed', 'applied', 'rejected']),
-  proposedAt: z.string().min(1).max(40),
-  appliedAt: z.string().min(1).max(40).optional(),
-  rejectedAt: z.string().min(1).max(40).optional(),
-});
-const adjustmentLedgerSchema = z
-  .object({
-    adjustments: z.array(adjustmentSchema).max(50),
-  })
-  .optional();
+// Adjustment ledger (Phase 2 — Doctor de Datos): contrato único de las rutas
+// financieras (`src/lib/reports/adjustment-ledger.ts`, incluye `period`).
 
 // ---------------------------------------------------------------------------
 // POST /api/financial-report
@@ -87,7 +71,11 @@ export async function POST(req: Request) {
       );
     }
 
-    const { rawData, company, language, instructions } = parsed.data;
+    const { company, language, instructions } = parsed.data;
+    // Mismas confirmaciones de ingesta que /niif (unidad, vencimientos).
+    const confirmed = applyRequestConfirmations(body, parsed.data.rawData);
+    if (!confirmed.ok) return confirmed.response;
+    const rawData = confirmed.rawData;
 
     // Override del usuario (repair chat). Validamos opcionalmente — si viene
     // mal formado, devolvemos 400 para que el caller corrija en lugar de
@@ -127,55 +115,68 @@ export async function POST(req: Request) {
     }
     const adjustmentLedger = adjustmentLedgerParsed.data as AdjustmentLedger | undefined;
 
-    // Si el cliente nos paso un PreprocessedBalance completo (desde /api/upload),
-    // lo reusamos. Asi evitamos re-parsear el CSV y garantizamos que los totales
-    // vinculantes que vio el usuario en el upload son exactamente los que
-    // alimentan al orchestrator. Fallback: re-preprocesamos on-the-fly.
-    // Validacion estructural + revival de BigInt (cents) — un shape invalido
-    // es 400, nunca cast ciego que termina en TypeError 500.
-    const bodyPreprocessed = (body as { preprocessed?: unknown }).preprocessed;
-    let preprocessed: PreprocessedBalance | undefined;
-    if (bodyPreprocessed !== undefined && bodyPreprocessed !== null) {
-      const revived = revivePreprocessedBalance(bodyPreprocessed);
-      if (!revived) {
+    // Preprocesado (cross-dep P1, mismo cruce que /export): el balance se lee
+    // de `rawData` con el helper de /upload, /niif y /export (ingesta-01: CSV,
+    // bloques XLSX `[period=…]`, informe de validación antepuesto) y es la
+    // fuente autoritativa. El `preprocessed` que manda el cliente (el del
+    // upload, sin ajustes: el orquestador aplica el ledger después) ya no se
+    // usa tal cual: forma inválida → 400; se RE-DERIVA desde sus filas y, si
+    // hay `rawData` legible, se cruza con él; totales distintos → 422. Sin
+    // filas en ninguno, el orquestador decide (balance tabular ilegible → 422).
+    const read = preprocessUploadedTrialBalanceText(rawData);
+    if (read.kind === 'rejected') {
+      return NextResponse.json(
+        {
+          error: 'El balance de prueba tiene inconsistencias criticas.',
+          code: 'BALANCE_VALIDATION_FAILED',
+          reasons: read.reasons,
+          suggestedAccounts: [],
+        },
+        { status: 422 },
+      );
+    }
+    const client = resolveClientPreprocessed((body as { preprocessed?: unknown }).preprocessed, null);
+    if (!client.ok) return client.response;
+    if (client.preprocessed && read.kind === 'ok') {
+      const mismatches = preprocessedAnchorMismatches(client.preprocessed, read.preprocessed);
+      if (mismatches.length > 0) {
         return NextResponse.json(
-          { error: 'Invalid preprocessed format.' },
-          { status: 400 },
+          {
+            error: 'El balance preprocesado enviado no corresponde al balance de la solicitud.',
+            code: PREPROCESSED_MISMATCH_CODE,
+            details: [
+              'Fuentes incoherentes — el balance preprocesado enviado no corresponde al balance de la ' +
+                'solicitud re-derivado por el servidor.',
+              ...mismatches,
+            ],
+          },
+          { status: 422 },
         );
       }
-      preprocessed = revived;
-    } else {
-      const rows = parseTrialBalanceCSV(rawData);
-      preprocessed = rows.length > 0 ? preprocessTrialBalance(rows) : undefined;
     }
+    const preprocessed: PreprocessedBalance | undefined =
+      read.kind === 'ok' ? read.preprocessed : client.preprocessed;
 
     // Enhance data with validation report and clean auxiliary data
     const enhancedData = preprocessed
       ? `${preprocessed.validationReport}\n\n---\n\nDATOS LIMPIOS (auxiliares validados):\n${preprocessed.cleanData}`
       : rawData;
 
-    // Build binding constraints from pre-computed totals — multiperiodo:
-    // imprimimos las cifras del periodo actual (primary) y, si existe
-    // comparativo, tambien las del periodo anterior + variacion YoY. La idea
-    // es que los agentes vean las dos columnas desde el bloque de
-    // instrucciones, no solo desde el bindingTotalsBlock del orchestrator.
-    let enhancedInstructions = instructions || '';
+    // Las cifras vinculantes (actual + comparativo + variación) viajan SÓLO en
+    // el bindingTotalsBlock del orquestador, construido con los controlTotals
+    // post-curator. Aquí sólo se completan los periodos detectados.
+    const enhancedInstructions = instructions || '';
     let effectiveCompany = company;
     if (preprocessed) {
-      const fmt = (n: number) =>
-        (n < 0 ? '-' : '') +
-        '$' +
-        Math.abs(n).toLocaleString('es-CO', {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        });
-
-      const p = preprocessed.primary;
-      const c = preprocessed.comparative;
-
-      // Autocomplete `comparativePeriod` si el caller no lo declaro pero el
-      // preprocesador detecto >=2 periodos. Tambien hidratamos
-      // `detectedPeriods` para que los prompts y la UI lo vean.
+      // NM-16 (re-auditoría 2026-09-24): aquí se publicaba un segundo bloque
+      // "TOTALES PRE-CALCULADOS (VINCULANTES)" con `summary` PREVIO al curator
+      // (Activo sin la reclasificación R1) y la Σ bruta de la clase 4 como
+      // "Total Ingresos" (+ su YoY). El orquestador ya inyecta el bloque
+      // vinculante único (renderSnapshotLines sobre controlTotals post-curator,
+      // ingresos netos y operacionales, discrepancias y regla multiperiodo):
+      // dos anclas distintas para la misma cifra confundían al modelo.
+      // Autocomplete `comparativePeriod` si el caller no lo declaró pero el
+      // preprocesador detectó >= 2 periodos; `detectedPeriods` para prompts y UI.
       const detected = preprocessed.periods.map((s) => s.period);
       if (
         !effectiveCompany.comparativePeriod &&
@@ -188,55 +189,6 @@ export async function POST(req: Request) {
         };
       } else if (!effectiveCompany.detectedPeriods) {
         effectiveCompany = { ...effectiveCompany, detectedPeriods: detected };
-      }
-
-      enhancedInstructions += `\n\nTOTALES PRE-CALCULADOS (VINCULANTES — precision decimal desde auxiliares).`;
-      enhancedInstructions += `\n\n=== Periodo actual (${p.period}) ===\n`;
-      enhancedInstructions += `- Total Activos (Clase 1): ${fmt(p.summary.totalAssets)}\n`;
-      enhancedInstructions += `- Total Pasivos (Clase 2): ${fmt(p.summary.totalLiabilities)}\n`;
-      enhancedInstructions += `- Total Patrimonio (Clase 3): ${fmt(p.summary.totalEquity)}\n`;
-      enhancedInstructions += `- Total Ingresos (Clase 4): ${fmt(p.summary.totalRevenue)}\n`;
-      enhancedInstructions += `- Total Gastos (Clase 5): ${fmt(p.summary.totalExpenses)}\n`;
-      enhancedInstructions += `- Total Costos de Ventas (Clase 6): ${fmt(p.summary.totalCosts)}\n`;
-      enhancedInstructions += `- Costos de Produccion (Clase 7): ${fmt(p.summary.totalProduction)}\n`;
-      enhancedInstructions += `- Utilidad Neta Calculada: ${fmt(p.summary.netIncome)}\n`;
-      enhancedInstructions += `- Ecuacion Patrimonial: ${p.summary.equationBalanced ? 'CUADRA' : 'NO CUADRA'}`;
-
-      if (c) {
-        enhancedInstructions += `\n\n=== Periodo comparativo (${c.period}) ===\n`;
-        enhancedInstructions += `- Total Activos: ${fmt(c.summary.totalAssets)}\n`;
-        enhancedInstructions += `- Total Pasivos: ${fmt(c.summary.totalLiabilities)}\n`;
-        enhancedInstructions += `- Total Patrimonio: ${fmt(c.summary.totalEquity)}\n`;
-        enhancedInstructions += `- Total Ingresos: ${fmt(c.summary.totalRevenue)}\n`;
-        enhancedInstructions += `- Total Gastos: ${fmt(c.summary.totalExpenses)}\n`;
-        enhancedInstructions += `- Utilidad Neta: ${fmt(c.summary.netIncome)}`;
-
-        const yoy = (cur: number, base: number): string => {
-          if (base === 0) return cur === 0 ? '0,00%' : 'ND';
-          const pct = ((cur - base) / Math.abs(base)) * 100;
-          return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
-        };
-        enhancedInstructions += `\n\n=== Variacion YoY (${p.period} vs ${c.period}) ===\n`;
-        enhancedInstructions += `- Activos: ${fmt(p.summary.totalAssets - c.summary.totalAssets)} (${yoy(p.summary.totalAssets, c.summary.totalAssets)})\n`;
-        enhancedInstructions += `- Pasivos: ${fmt(p.summary.totalLiabilities - c.summary.totalLiabilities)} (${yoy(p.summary.totalLiabilities, c.summary.totalLiabilities)})\n`;
-        enhancedInstructions += `- Patrimonio: ${fmt(p.summary.totalEquity - c.summary.totalEquity)} (${yoy(p.summary.totalEquity, c.summary.totalEquity)})\n`;
-        enhancedInstructions += `- Ingresos: ${fmt(p.summary.totalRevenue - c.summary.totalRevenue)} (${yoy(p.summary.totalRevenue, c.summary.totalRevenue)})\n`;
-        enhancedInstructions += `- Utilidad Neta: ${fmt(p.summary.netIncome - c.summary.netIncome)} (${yoy(p.summary.netIncome, c.summary.netIncome)})`;
-        enhancedInstructions += `\n\nREGLA MULTIPERIODO: Tus estados financieros, KPIs y notas DEBEN producir DOS columnas (actual + comparativo) + variacion. Cifras 0 -> $0,00. Cifras inexistentes -> ND. NUNCA omitas el comparativo silenciosamente.`;
-      } else {
-        enhancedInstructions += `\n\nNOTA: solo hay un periodo en el balance — modo single-period. Declara explicitamente "Sin periodo comparativo disponible" en cada estado financiero.`;
-      }
-
-      enhancedInstructions += `\n\nREGLA: Estos totales son VINCULANTES. Tus estados financieros DEBEN reflejarlos.`;
-
-      // Discrepancias por periodo (si vienen).
-      const allDiscrepancies = preprocessed.periods.flatMap((s) =>
-        (s.discrepancies ?? []).map((d) =>
-          typeof d === 'string' ? `[${s.period}] ${d}` : `[${s.period}] ${d.description ?? ''}`,
-        ),
-      );
-      if (allDiscrepancies.length > 0) {
-        enhancedInstructions += '\nADVERTENCIA: Discrepancias aritmeticas detectadas. USA totales de auxiliares, NO los reportados.';
       }
     }
 

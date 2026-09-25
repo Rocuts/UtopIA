@@ -27,6 +27,10 @@ vi.mock('@/lib/agents/financial/agents/strategy-director', () => ({
 vi.mock('@/lib/agents/financial/agents/governance-specialist', () => ({
   runGovernanceSpecialist: vi.fn(),
 }));
+// runStrategyPhase consulta el servicio macro (valoracion-18): sin red en tests.
+vi.mock('@/lib/macro/prompt-snapshot', () => ({
+  getMacroSnapshotForPrompts: vi.fn(async () => null),
+}));
 // ───────────────────────────────────────────────────────────────────────────
 
 import { runNiifAnalyst } from '@/lib/agents/financial/agents/niif-analyst';

@@ -46,10 +46,21 @@ export async function runMisstatementReviewer(
 // Adapter local — JSON-strict -> MisstatementResult legacy
 // ---------------------------------------------------------------------------
 
-function toLegacyShape(json: MisstatementReviewReportJson): MisstatementResult {
-  const totalUncorrected = json.misstatements
-    .filter((m) => !m.corrected)
-    .reduce((sum, m) => sum + m.amount, 0);
+export function toLegacyShape(rawJson: MisstatementReviewReportJson): MisstatementResult {
+  const uncorrected = rawJson.misstatements.filter((m) => !m.corrected);
+  const totalUncorrected = uncorrected.reduce((sum, m) => sum + m.amount, 0);
+
+  // NIA 450 par. 11: la evaluación agregada se recalcula en código. El LLM
+  // conservaba materialInAggregate/assessment aunque las incorrecciones no
+  // corregidas superaran la materialidad (tributario-modulos-11).
+  const threshold = rawJson.materiality.materialityThreshold;
+  const exceeds =
+    threshold > 0 &&
+    (Math.abs(totalUncorrected) > threshold || uncorrected.some((m) => Math.abs(m.amount) > threshold));
+  const materialInAggregate = rawJson.materialInAggregate || exceeds;
+  const assessment =
+    materialInAggregate && rawJson.assessment === 'immaterial' ? 'material' : rawJson.assessment;
+  const json: MisstatementReviewReportJson = { ...rawJson, materialInAggregate, assessment };
 
   // El LLM puede haber reportado un totalUncorrected ligeramente distinto;
   // usamos el recalculo determinista para no propagar errores.
@@ -59,8 +70,8 @@ function toLegacyShape(json: MisstatementReviewReportJson): MisstatementResult {
     materiality: { ...json.materiality },
     misstatements: json.misstatements.map((m) => ({ ...m })),
     totalUncorrected,
-    materialInAggregate: json.materialInAggregate,
-    assessment: json.assessment,
+    materialInAggregate,
+    assessment,
     analysis: json.analysis,
     fullContent,
   };

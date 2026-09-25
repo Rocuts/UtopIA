@@ -4,12 +4,15 @@
 // Calcula A01..A19, X01..X04, F01..F10, checks y nitDigito desde el
 // `PreprocessedBalance`. Diseñado para no fallar — cuando un campo opcional
 // del preprocesador no está poblado (e.g. snapshot comparativo ausente),
-// emite "0" como sentinel y nunca lanza. La pipeline downstream sigue
-// adelante con un Âncora parcial; el route emite el SSE event aun así.
+// emite "0" como sentinel y nunca lanza. Sin preprocesado (o con un cálculo
+// que no supera la validación Zod) el Âncora completo es un sentinela de
+// ceros MARCADO (`isSentinelAncora`): los productores lo emiten como `null`
+// (`ancoraOrNull`) para que ninguna superficie lo lea como un balance de $0.
 // ---------------------------------------------------------------------------
 
 import type { PreprocessedBalance, PeriodSnapshot, PUCClass } from '@/lib/preprocessing/trial-balance';
 import type { CompanyInfo } from '../types';
+import { componerActivosImpuesto } from '../escudo-survival/fiscal-anchor/credito-renta';
 import {
   type NiifAncora,
   type CcvNiif,
@@ -25,26 +28,12 @@ import {
 // también `cents` como BigInt al centavo (cuando el preprocesador lo populó).
 // Preferir `cents` siempre que exista; fallback a Math.round del number.
 // ---------------------------------------------------------------------------
-function toCentsString(pesos: number | undefined): string {
+function toCentsString(pesos: number | null | undefined): string {
   if (typeof pesos !== 'number' || !Number.isFinite(pesos)) return '0';
   // Math.round evita "1234.999999" → "123499" cuando el float está cerca pero
   // no exacto. Tolerancia centavo: aceptable porque controlTotals.cents es la
   // fuente real cuando precisión absoluta importa.
   return String(Math.round(pesos * 100));
-}
-
-/**
- * Suma saldos de cuentas leaf (transactional) cuyo código comienza con el
- * prefijo dado. Usa Math.abs para casos donde el preprocesador presenta
- * pasivos como negativos (PUC clase 2 saldo crédito ≡ valor positivo del
- * pasivo). Específico para la lectura del Âncora — para presentación
- * estándar usar los totales pre-calculados del controlTotals.
- */
-function sumAccountsByPrefix(klass: PUCClass | undefined, prefix: string): number {
-  if (!klass) return 0;
-  return klass.accounts
-    .filter((a) => a.isLeaf && a.code.startsWith(prefix))
-    .reduce((sum, a) => sum + a.balance, 0);
 }
 
 /**
@@ -110,11 +99,38 @@ function buildCcvNiif(actual: PeriodSnapshot, comparativo: PeriodSnapshot | null
   const ebitA = typeof ctA.ebit === 'number' ? ctA.ebit : 0;
   const ebitC = typeof ctC?.ebit === 'number' ? ctC.ebit : 0;
 
-  // Ganancia Bruta = Ingresos − (CostoVentas + CostoProduccion).
-  const costoTotalA = (ctA.costoVentas6 ?? 0) + (ctA.costoProduccion7 ?? 0);
-  const costoTotalC = (ctC?.costoVentas6 ?? 0) + (ctC?.costoProduccion7 ?? 0);
-  const gananciaBrutaA = ingresosA - costoTotalA;
-  const gananciaBrutaC = ingresosC - costoTotalC;
+  // Ganancia Bruta = ancla UB del preprocesador: ingresos OPERACIONALES netos
+  // (41 − 4175) − costos 6 + 7. El grupo 42 no entra (decisión §7, NM-12 /
+  // recalculo-final-06: antes se partía de los ingresos netos con el 42).
+  const gananciaBruta = (ct: typeof ctA | undefined): number => {
+    if (!ct) return 0;
+    if (typeof ct.utilidadBruta === 'number' && Number.isFinite(ct.utilidadBruta)) {
+      return ct.utilidadBruta;
+    }
+    const ingresosOp =
+      typeof ct.ingresosOperacionalesNetos === 'number'
+        ? ct.ingresosOperacionalesNetos
+        : typeof ct.ingresosNetos === 'number'
+          ? ct.ingresosNetos
+          : ct.ingresos;
+    return ingresosOp - ((ct.costoVentas6 ?? 0) + (ct.costoProduccion7 ?? 0));
+  };
+  const gananciaBrutaA = gananciaBruta(ctA);
+  const gananciaBrutaC = gananciaBruta(ctC);
+
+  // Ingresos operacionales netos (base del margen operacional). `null` sin el
+  // ancla del preprocesador: el margen queda N/D, nunca sobre ingresos con 42.
+  const ingresosOperacionalesA =
+    typeof ctA.ingresosOperacionalesNetos === 'number' &&
+    Number.isFinite(ctA.ingresosOperacionalesNetos)
+      ? toCentsString(ctA.ingresosOperacionalesNetos)
+      : null;
+
+  // Cartera comercial neta (1305 + 1310 − |1399|), no el grupo 13 completo.
+  const carteraA =
+    typeof ctA.clientesNetos === 'number' && Number.isFinite(ctA.clientesNetos)
+      ? toCentsString(ctA.clientesNetos)
+      : null;
 
   return {
     A01: toCentsString(ctA.activo),
@@ -133,13 +149,14 @@ function buildCcvNiif(actual: PeriodSnapshot, comparativo: PeriodSnapshot | null
     A14: toCentsString(ctC?.efectivoCuenta11),
     A15: toCentsString(ctA.pasivoCorriente),
     A16: toCentsString(ctA.inventarios14 ?? 0),
-    A17: toCentsString(ctA.deudoresCuenta13),
+    A17: carteraA,
     A18: toCentsString(ctA.proveedores22 ?? 0),
     A19: toCentsString(ctA.efectivoCuenta11 - (ctC?.efectivoCuenta11 ?? 0)),
     X01: toCentsString(gananciaBrutaA),
     X02: toCentsString(gananciaBrutaC),
     X03: toCentsString(ctA.activoCorriente),
     X04: toCentsString(ctA.activoNoCorriente),
+    X05: ingresosOperacionalesA,
   };
 }
 
@@ -177,11 +194,12 @@ function buildCcvFiscal(actual: PeriodSnapshot): {
   // F02 — impuesto referencial 35% (Art. 240 E.T. 2026).
   const f02 = uai * 0.35;
 
-  // F03 — retenciones a favor: PUC 1355 (anticipo impuesto) + PUC 1805
-  // (anticipos y retenciones pagadas).
-  const cta1355 = sumAccountsByPrefix(cls1, '1355');
-  const cta1805 = sumAccountsByPrefix(cls1, '1805');
-  const f03 = cta1355 + cta1805;
+  // F03 — sólo crédito imputable al impuesto de RENTA (Art. 373 E.T.). Misma
+  // lista blanca que el Âncora Fiscal (fiscal-anchor/credito-renta.ts):
+  // 135505, 135515 y 135595/1805 sólo si el nombre lo indica. ReteIVA,
+  // ReteICA/anticipo ICA, 135520/135525/135530 y 1805 «Bienes de arte y
+  // cultura» no netean F02 (auditoría 2026-09, tributario-modulos-01).
+  const f03 = Number(componerActivosImpuesto(cls1?.accounts ?? []).creditoRentaCents) / 100;
 
   // F04 — saldo neto a pagar = F02 − F03. Puede ser negativo (saldo a favor).
   const f04 = f02 - f03;
@@ -243,11 +261,14 @@ function buildChecks(args: {
   // hay Clase 54 (impuesto teórico existe pero no se registró contablemente).
   const alertaA5 = BigInt(fiscal.F02) > BigInt(0) && !hasClase54 ? 'activa' : 'inactiva';
 
-  // Alerta DEV — devoluciones materiales (>1% ingresos).
+  // Alerta DEV — devoluciones materiales (>1% de los ingresos brutos). Base:
+  // ingresos netos + devoluciones, no la Σ firmada de la clase 4, que cambia
+  // con la convención de signos del ERP (re-auditoría 2026-09-24,
+  // recalculo-final2-05).
   const ct = actual.controlTotals;
   const devTotal = ct.totalDevoluciones ?? 0;
-  const ingresos = ct.ingresos > 0 ? ct.ingresos : 1;
-  const devRatio = devTotal / ingresos;
+  const ingresosBrutos = (ct.ingresosNetos ?? Math.abs(ct.ingresos)) + devTotal;
+  const devRatio = ingresosBrutos > 0 ? devTotal / ingresosBrutos : 0;
   const alertaDev: AncoraChecks['alertaDev'] = devRatio > 0.01 ? 'activa' : 'inactiva';
 
   // Suprimir lint sobre `comparativo` (lo recibimos por contrato pero los
@@ -281,9 +302,11 @@ export function buildNiifAncora(
   company: CompanyInfo | undefined,
 ): NiifAncora {
   if (!preprocessed) {
-    // Sin preprocessed no podemos calcular nada determinístico; devolvemos
-    // un Âncora "mínimo" con todos los campos a "0" y nit '0'. El validator
-    // Zod sigue pasando porque "0" matches MoneyCop regex.
+    // Sin preprocessed no podemos calcular nada determinístico. El objeto
+    // "mínimo" que se devuelve (todas las cifras en "0") existe sólo para no
+    // romper el tipo de retorno de los llamadores internos: queda MARCADO
+    // como sentinela y NUNCA debe presentarse como dato (ver
+    // `isSentinelAncora` / `ancoraOrNull`). "0" no es "no hay dato".
     return makeEmptyAncora(company);
   }
 
@@ -321,16 +344,51 @@ export function buildNiifAncora(
   return parsed.data;
 }
 
+// ---------------------------------------------------------------------------
+// Âncora sentinela — "no hay dato" nunca viaja como $0
+// ---------------------------------------------------------------------------
+// El Âncora vacío (sin preprocesado, o cuyo cálculo no superó la validación
+// Zod) lleva "0" en TODAS las cifras y checks que, leídos como datos, suman
+// puntos de calidad (Δ patrimonial "0" = "cuadra al centavo"). La vista de las
+// cuatro áreas lo trataba como un balance real: activos $0, utilidad $0 y un
+// Score NIIF de 80/100 que ningún cálculo respalda. El contrato del producto es
+// que `null`/N/D no es cero, así que el sentinela queda registrado aquí y los
+// productores lo convierten en `null` antes de emitirlo.
+//
+// WeakSet y no un campo del schema: `NiifAncoraSchema` es contrato compartido
+// con la UI y la persistencia; la marca vive sólo en proceso, que es donde se
+// decide si el Âncora se emite o no.
+// ---------------------------------------------------------------------------
+const SENTINEL_ANCORAS = new WeakSet<NiifAncora>();
+
+/**
+ * `true` cuando el Âncora es el sentinela vacío de `buildNiifAncora` (sin
+ * preprocesado o con cálculo inválido): sus "0" no son cifras del cliente.
+ */
+export function isSentinelAncora(ancora: NiifAncora | null | undefined): boolean {
+  return !!ancora && SENTINEL_ANCORAS.has(ancora);
+}
+
+/**
+ * El Âncora listo para emitir: `null` cuando no hay cifras deterministas que
+ * lo respalden. Es la forma que deben usar las superficies (SSE `niif_ancora`,
+ * payload `niif_phase`, persistencia): un Âncora ausente se muestra como N/D.
+ */
+export function ancoraOrNull(ancora: NiifAncora | null | undefined): NiifAncora | null {
+  if (!ancora || isSentinelAncora(ancora)) return null;
+  return ancora;
+}
+
 function makeEmptyAncora(company: CompanyInfo | undefined): NiifAncora {
   const zero: string = '0';
-  return {
+  const sentinel: NiifAncora = {
     periodos: { actual: company?.fiscalPeriod ?? '', comparativo: null },
     nitDigito: extractNitDigit(company?.nit),
     ccvNiif: {
       A01: zero, A02: zero, A03: zero, A04: zero, A05: zero, A06: zero,
       A07: zero, A08: zero, A09: zero, A10: zero, A11: zero, A12: zero,
       A13: zero, A14: zero, A15: zero, A16: zero, A17: zero, A18: zero,
-      A19: zero, X01: zero, X02: zero, X03: zero, X04: zero,
+      A19: zero, X01: zero, X02: zero, X03: zero, X04: zero, X05: zero,
     },
     ccvFiscal: {
       F01: zero, F02: zero, F03: zero, F04: zero, F05: zero,
@@ -346,4 +404,6 @@ function makeEmptyAncora(company: CompanyInfo | undefined): NiifAncora {
     version: '1.0',
     computedAt: new Date().toISOString(),
   };
+  SENTINEL_ANCORAS.add(sentinel);
+  return sentinel;
 }

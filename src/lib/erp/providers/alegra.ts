@@ -4,6 +4,15 @@
 // Docs: https://developer.alegra.com/
 
 import { BaseERPConnector } from '../connector';
+import { resolveERPPeriod } from '../period';
+import { buildMovementsTrialBalance } from '../trial-balance-builders';
+import {
+  accountLevelFromCode,
+  deriveParentCode,
+  markLeafAccounts,
+  pucClassFromCode,
+  pucTypeFromCode,
+} from '../puc';
 import type {
   ERPCredentials,
   ERPAccount,
@@ -140,65 +149,67 @@ export class AlegraConnector extends BaseERPConnector {
     }
   }
 
-  /** Fetch the full chart of accounts and normalize to ERPAccount[]. */
+  /**
+   * Fetch the full chart of accounts and normalize to ERPAccount[]. Accounts
+   * without a PUC code are left out: the internal Alegra ID is never used as a
+   * code (its first digit would decide the PUC class).
+   */
   async getChartOfAccounts(credentials: ERPCredentials): Promise<ERPAccount[]> {
     const raw = await this.fetchAllPages<AlegraAccount>('/accounts', credentials);
-    return raw.map((a) => this.mapAccount(a));
+    return this.mapChart(raw).accounts;
   }
 
   /**
-   * Build a trial balance for the given period by aggregating journal entries.
-   * @param period - ISO month string, e.g. "2026-03"
+   * Movements of the period aggregated from journal entries. Alegra's API
+   * does not expose opening or accumulated balances here, so the result is
+   * flagged `movements_only` and is never presented as a trial balance.
+   * @param period - "AAAA", "AAAA-MM", "AAAA-Qn" or "AAAA-MM-DD..AAAA-MM-DD"
    */
   async getTrialBalance(
     credentials: ERPCredentials,
     period: string,
   ): Promise<ERPTrialBalance> {
-    const [year, month] = period.split('-').map(Number);
-    const dateFrom = `${period}-01`;
-    const lastDay = new Date(year, month, 0).getDate();
-    const dateTo = `${period}-${String(lastDay).padStart(2, '0')}`;
+    const resolved = resolveERPPeriod(period);
 
-    // Fetch chart of accounts and journal entries in parallel
-    const [accounts, entries] = await Promise.all([
-      this.getChartOfAccounts(credentials),
-      this.getJournalEntries(credentials, dateFrom, dateTo),
+    const [rawAccounts, rawEntries] = await Promise.all([
+      this.fetchAllPages<AlegraAccount>('/accounts', credentials),
+      this.fetchRawJournalEntries(credentials, resolved.from, resolved.to),
     ]);
+    const { accounts, codeById, withoutCode } = this.mapChart(rawAccounts);
 
-    // Aggregate debits/credits per account code
-    const aggregation = new Map<string, { debit: number; credit: number }>();
-    for (const entry of entries) {
-      for (const line of entry.lines) {
-        const existing = aggregation.get(line.accountCode) ?? { debit: 0, credit: 0 };
-        existing.debit += line.debit;
-        existing.credit += line.credit;
-        aggregation.set(line.accountCode, existing);
-      }
+    const warnings: string[] = [];
+    if (withoutCode > 0) {
+      warnings.push(`${withoutCode} cuenta(s) del plan sin código PUC excluidas.`);
     }
 
-    // Merge aggregation into accounts
-    const tbAccounts: ERPAccount[] = accounts.map((acct) => {
-      const agg = aggregation.get(acct.code);
-      return {
-        ...acct,
-        debit: agg?.debit ?? 0,
-        credit: agg?.credit ?? 0,
-        balance: (agg?.debit ?? 0) - (agg?.credit ?? 0),
-      };
-    });
-
-    const totalDebit = tbAccounts.reduce((s, a) => s + a.debit, 0);
-    const totalCredit = tbAccounts.reduce((s, a) => s + a.credit, 0);
-
-    return {
-      period,
+    return buildMovementsTrialBalance({
+      providerName: 'Alegra',
+      period: resolved,
+      chart: accounts,
+      lines: rawEntries.flatMap((e) =>
+        (e.accounts ?? []).map((l) => ({
+          accountCode: l.account.code ?? codeById.get(l.account.id) ?? '',
+          accountName: l.account.name,
+          debit: l.debit ?? 0,
+          credit: l.credit ?? 0,
+        })),
+      ),
       companyName: '',
       currency: 'COP',
-      accounts: tbAccounts,
-      totalDebit,
-      totalCredit,
-      generatedAt: new Date().toISOString(),
-    };
+      warnings,
+    });
+  }
+
+  private fetchRawJournalEntries(
+    credentials: ERPCredentials,
+    dateFrom: string,
+    dateTo: string,
+  ): Promise<AlegraJournalEntry[]> {
+    return this.fetchAllPages<AlegraJournalEntry>(
+      '/journal-entries',
+      credentials,
+      { start_date: dateFrom, end_date: dateTo },
+    );
   }
 
   /** Fetch journal entries for a date range. */
@@ -207,15 +218,12 @@ export class AlegraConnector extends BaseERPConnector {
     dateFrom: string,
     dateTo: string,
   ): Promise<ERPJournalEntry[]> {
-    const raw = await this.fetchAllPages<AlegraJournalEntry>(
-      '/journal-entries',
-      credentials,
-      { start_date: dateFrom, end_date: dateTo },
-    );
+    const raw = await this.fetchRawJournalEntries(credentials, dateFrom, dateTo);
 
     return raw.map((e) => {
       const lines: ERPJournalLine[] = (e.accounts ?? []).map((l) => ({
-        accountCode: l.account.code ?? String(l.account.id),
+        // Sin código PUC queda vacío: el ID interno no es un código contable.
+        accountCode: l.account.code ?? '',
         accountName: l.account.name,
         description: l.description,
         debit: l.debit ?? 0,
@@ -280,21 +288,39 @@ export class AlegraConnector extends BaseERPConnector {
 
   // ─── Mapping helpers ────────────────────────────────────────────────────
 
-  /** Map an Alegra account to the normalized ERPAccount. */
-  private mapAccount(a: AlegraAccount): ERPAccount {
-    const code = a.code ?? String(a.id);
-    return {
-      code,
-      name: a.name,
-      type: mapPUCType(code),
-      pucClass: pucClassFromCode(code),
-      balance: a.balance ?? 0,
-      debit: 0,
-      credit: 0,
-      level: accountLevel(code),
-      parentCode: a.parentId ? String(a.parentId) : undefined,
-      isAuxiliary: code.length >= 6,
-    };
+  /**
+   * Map the Alegra chart. Accounts without a PUC code are excluded (and
+   * counted); `parentId` is an internal ID, so it is translated to the
+   * parent's code instead of being used as a code.
+   */
+  private mapChart(raw: AlegraAccount[]): {
+    accounts: ERPAccount[];
+    codeById: Map<number, string>;
+    withoutCode: number;
+  } {
+    const codeById = new Map<number, string>();
+    for (const a of raw) {
+      const code = a.code?.trim();
+      if (code) codeById.set(a.id, code);
+    }
+    const accounts: ERPAccount[] = [];
+    for (const a of raw) {
+      const code = codeById.get(a.id);
+      if (!code) continue;
+      accounts.push({
+        code,
+        name: a.name,
+        type: pucTypeFromCode(code),
+        pucClass: pucClassFromCode(code),
+        balance: a.balance ?? 0,
+        debit: 0,
+        credit: 0,
+        level: accountLevelFromCode(code),
+        parentCode: (a.parentId !== undefined ? codeById.get(a.parentId) : undefined) ?? deriveParentCode(code),
+        isAuxiliary: false,
+      });
+    }
+    return { accounts: markLeafAccounts(accounts), codeById, withoutCode: raw.length - accounts.length };
   }
 
   /** Map Alegra invoice status string to ERPInvoice status. */
@@ -329,37 +355,4 @@ export class AlegraConnector extends BaseERPConnector {
     if (hasProvider) return 'supplier';
     return 'customer';
   }
-}
-
-// ─── Shared PUC helpers ──────────────────────────────────────────────────────
-// Used across Colombian ERP connectors to derive account type from PUC codes.
-
-/** Derive account type from the first digit of a PUC code. */
-function mapPUCType(code: string): ERPAccount['type'] {
-  const first = code.charAt(0);
-  switch (first) {
-    case '1': return 'asset';
-    case '2': return 'liability';
-    case '3': return 'equity';
-    case '4': return 'revenue';
-    case '5': return 'cost';
-    case '6': return 'expense';
-    case '7': return 'cost';
-    default: return 'asset';
-  }
-}
-
-/** Extract PUC class (first digit) from an account code. */
-function pucClassFromCode(code: string): number {
-  const n = parseInt(code.charAt(0), 10);
-  return isNaN(n) ? 0 : n;
-}
-
-/** Determine the hierarchy level from the code length (PUC convention). */
-function accountLevel(code: string): number {
-  if (code.length <= 1) return 1;
-  if (code.length <= 2) return 2;
-  if (code.length <= 4) return 3;
-  if (code.length <= 6) return 4;
-  return 5;
 }

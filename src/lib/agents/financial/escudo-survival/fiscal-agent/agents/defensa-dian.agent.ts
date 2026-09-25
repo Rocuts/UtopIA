@@ -47,8 +47,8 @@ DATOS_EMPRESA:
 ANCLAS_FISCALES_REFERENCIA (Bloque Âncora):
   F01 UAI: ${formatCopFromCents(BigInt(input.fiscalAnchor.f01))}
   F02 Imp. ref.: ${formatCopFromCents(BigInt(input.fiscalAnchor.f02))}
-  F03 Retenciones: ${formatCopFromCents(BigInt(input.fiscalAnchor.f03))}
-  F04 Saldo: ${formatCopFromCents(BigInt(input.fiscalAnchor.f04))}
+  F03 Crédito de renta: ${formatCopFromCents(BigInt(input.fiscalAnchor.f03))}
+  F04 Posición de referencia (estimación contable, no saldo a favor): ${formatCopFromCents(BigInt(input.fiscalAnchor.f04))}
   F09 TET: ${input.fiscalAnchor.f09}%
 
 PERIODO: ${input.fiscalAnchor.fuente.periodo}
@@ -66,5 +66,17 @@ ${input.instructions ?? '(sin instrucciones adicionales)'}
     signal: opts.signal,
   });
 
-  return json;
+  // Tipo, plazo, norma del plazo y reducciones: siempre los del esqueleto
+  // determinista (fase 2 de la auditoría 2026-09-24, pendiente #8). El prompt
+  // pide copiarlos; si el modelo los cambia, se publican los del builder.
+  return {
+    ...json,
+    data: {
+      ...json.data,
+      tipoRequerimiento: skeleton.classification.kind,
+      plazoRespuesta: skeleton.classification.plazoRespuesta,
+      normaPlazo: skeleton.classification.normaPlazo,
+      reduccionesDisponibles: skeleton.reduccionesDisponibles,
+    },
+  };
 }

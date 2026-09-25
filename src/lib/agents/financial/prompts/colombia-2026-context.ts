@@ -28,6 +28,13 @@
 //    Decreto 1074/2015 Cap. 13 Tit. 1 Parte 2 Libro 2, adicionado por el
 //    Decreto 957 de 2019 — manufacturero <= 23.563 UVT, servicios
 //    <= 32.988 UVT, comercio <= 44.769 UVT.
+//  - Tarifa general del Art. 240 E.T. = 35% desde el año gravable 2022:
+//    src/data/tax_docs/ley_2155_2021.md, art. 7 ("será del treinta y cinco
+//    por ciento (35%), a partir del año gravable 2022"), recogido como
+//    "Legislación Anterior" en estatuto_tributario_completo.md; la Ley 2277
+//    de 2022 (art. 10) conserva el 35% sin la referencia al año
+//    (prompts-normativa-25). El resumen et_articulo_240_renta_juridica.md
+//    del corpus quedó alineado con esa fuente (I4-escudo 4).
 //  - Cadena de modificatorios del DUR 2420/2015 confirmada contra MinCIT
 //    (normatividad vigente) + Diario Oficial: 2496/2015, 2483/2018,
 //    2270/2019, 938/2021, 1670/2021, 1611/2022, 1271/2024 (NIIF 17) y
@@ -82,23 +89,17 @@ Toda tu salida debe ser tecnicamente consistente con el marco vigente en Colombi
 - **CTCP (Consejo Tecnico de la Contaduria Publica):** regulador tecnico que emite conceptos vinculantes en materia contable y de aseguramiento.
 - **SuperSociedades:** emite circulares externas sobre presentacion de informacion financiera, reportes 42 (SIRFIN), y criterios de supervision.
 
-### 2. IFRS 18 — "Presentation and Disclosure in Financial Statements"
-- Emitida por el IASB en **abril de 2024**, reemplaza a la **NIC 1**.
-- **Obligatoria para ejercicios que inicien en o despues del 01 de enero de 2027**, con comparativos reestructurados del ejercicio anterior.
-- **2026 = ano de preparacion.** Las entidades del Grupo 1 colombianas deben comenzar el mapeo de su P&L actual (NIC 1) hacia las **tres nuevas categorias obligatorias**:
-  1. **Operating** (operacion recurrente del negocio).
-  2. **Investing** (resultados de inversiones, incluidos subsidiarias / asociadas / negocios conjuntos cuando aplique).
-  3. **Financing** (flujos de financiacion, gastos financieros de deuda).
-- **Management-defined Performance Measures (MPMs):** IFRS 18 introduce el deber de divulgar formalmente las metricas no-NIIF que la direccion usa para comunicar desempeno (p. ej. EBITDA ajustado), con conciliacion a la partida NIIF mas cercana y explicacion de por que se consideran utiles.
-- **Subtotales obligatorios en P&L:** Operating profit, Profit before financing and income taxes, Profit for the period.
-- **Implicacion para el reporte 2026:** elabora el reporte bajo NIC 1 (marco vigente en el ejercicio) y agrega una nota tecnica "Preparacion IFRS 18" cuando sea material, identificando: reclasificaciones previstas, MPMs candidatas en uso, brechas de datos, e impacto esperado en el P&L comparativo 2026 que se presentara reestructurado en 2027.
+### 2. NIIF 18 (IFRS 18) — "Presentacion e Informacion a Revelar en los Estados Financieros"
+- Emitida por el IASB en **abril de 2024**; reemplazara a la NIC 1. La vigencia **internacional** del IASB es el 01-ene-2027, pero **esa fecha NO es la vigencia en Colombia**.
+- **A la fecha del ejercicio 2026 la NIIF 18 no esta incorporada al DUR 2420 de 2015**: el Decreto 0701 de 2026 incorpora enmiendas emitidas entre sep-2022 y sep-2023, y la NIIF 18 es de abril de 2024. Existe un proyecto de incorporacion (con obligatoriedad propuesta para el Grupo 1 desde 2028 y aplicacion voluntaria anticipada); mientras no se expida el decreto, **no es obligatoria para ninguna entidad colombiana**.
+- **Implicacion para el reporte 2026:** el marco vigente es la NIC 1 (Grupo 1) o la Seccion 3 de la NIIF para las PYMES (Grupo 2). Para el Grupo 1 puede incluirse, cuando sea material, una nota de **preparacion voluntaria** (mapeo preliminar del P&G a las categorias operacion / inversion / financiacion, medidas de rendimiento definidas por la direccion candidatas, brechas de datos), aclarando que la norma no esta incorporada en Colombia y que la fecha de aplicacion depende del decreto que la incorpore.
 
 ### 3. MARCO TRIBUTARIO 2026
 - **UVT 2026 = \`$52.374\` COP** (Unidad de Valor Tributario ajustada anualmente por la DIAN; usa este valor para conversiones a cifras absolutas).
-- **Art. 240 ET — Tarifa del impuesto sobre la renta personas juridicas: 35%** (vigente desde el ejercicio 2023 por Ley 2277 de 2022).
+- **Art. 240 ET — Tarifa del impuesto sobre la renta personas juridicas: 35%** (desde el año gravable 2022 por el art. 7 de la Ley 2155 de 2021; conservada por el art. 10 de la Ley 2277 de 2022).
 - **Ley 2277 de 2022 — Reforma Tributaria** incorpora, entre otras, estas reglas vigentes:
   - **Sobretasa de 5 puntos porcentuales** para entidades financieras (ciertos rangos de renta liquida), sumada a la tarifa general.
-  - **Tarifa minima del 15%** (tasa minima de tributacion) para personas juridicas, con mecanismo de calculo basado en utilidad contable depurada.
+  - **Tasa de Tributacion Depurada (TTD, Art. 240 par. 6 E.T.)**: piso del 15% calculado como impuesto depurado / utilidad depurada (ID/UD); si resulta inferior se liquida un impuesto a adicionar. No es una tarifa sustituta y sin ID/UD verificados no se calcula.
   - **Impuesto a bebidas azucaradas y alimentos ultraprocesados**.
   - **Ajustes a beneficios tributarios** y depuracion de descuentos.
 
@@ -129,9 +130,9 @@ Vigente desde el ano gravable 2023 y aplicable en 2026. La escala derogada del A
 - El dictamen del Revisor Fiscal se rige por NIA 700 / 705 / 706 y debe emitirse conforme a los parametros de Ley 43/1990.
 
 ### 5. GOBIERNO CORPORATIVO Y SOCIETARIO
-- **Codigo de Comercio:** Arts. 446 (convocatoria asamblea), 448 (quorum), 452 (reserva legal 10% hasta el 50% del capital suscrito), 187 (actas).
+- **Codigo de Comercio:** Arts. 424 (convocatoria de la asamblea), 427 mod. art. 68 Ley 222 de 1995 (quorum y mayorias), 446 (documentos que se presentan a la asamblea), 187 (funciones del maximo organo), 189 (actas), 452 (reserva legal en la S.A.: 10% de las utilidades liquidas hasta el 50% del capital suscrito) y 371 (reserva legal en la Ltda.).
 - **Ley 222 de 1995** — regimen de sociedades (grupos empresariales, reformas estatutarias, informe de gestion).
-- **Ley 1258 de 2008 — SAS** — Art. 40 (reserva legal para SAS, aplicable cuando los estatutos asi lo disponen).
+- **Ley 1258 de 2008 — SAS** — Arts. 20 (convocatoria), 22 (quorum y mayorias) y 45 (remision a las normas de la S.A.). En la SAS la reserva legal **no es obligatoria** salvo que los estatutos la establezcan (Supersociedades, Oficio 220-069664 de 2017).
 - **SuperSociedades** — circulares sobre gobierno corporativo y reportes.
 - **Informe de gestion** del representante legal (Arts. 46-47 Ley 222/1995) y **dictamen del Revisor Fiscal** (cuando aplica).
 
@@ -180,22 +181,16 @@ Your entire output must be technically consistent with the framework in force in
 - **SuperSociedades:** issues external circulars on financial reporting, SIRFIN Form 42 and supervisory criteria.
 
 ### 2. IFRS 18 — "Presentation and Disclosure in Financial Statements"
-- Issued by the IASB in **April 2024**, replaces **IAS 1**.
-- **Mandatory for annual periods beginning on or after 01 January 2027**, with restructured comparatives from the prior year.
-- **2026 = preparation year.** Colombian Group 1 entities must begin mapping their current P&L (IAS 1) to the **three new mandatory categories**:
-  1. **Operating** (recurring business operations).
-  2. **Investing** (investment results, including subsidiaries / associates / joint ventures where applicable).
-  3. **Financing** (financing flows, debt finance costs).
-- **Management-defined Performance Measures (MPMs):** IFRS 18 introduces the duty to formally disclose non-IFRS metrics management uses to communicate performance (e.g. adjusted EBITDA), with reconciliation to the closest IFRS line and explanation of why they are considered useful.
-- **Mandatory subtotals in P&L:** Operating profit, Profit before financing and income taxes, Profit for the period.
-- **Implication for the 2026 report:** prepare the report under IAS 1 (framework in force during the period) and add a technical note "IFRS 18 Preparation" when material, identifying: planned reclassifications, MPMs in use, data gaps, and expected impact on the comparative 2026 P&L that will be restated in 2027.
+- Issued by the IASB in **April 2024**; it will replace IAS 1. The IASB's **international** effective date is 01-Jan-2027, but **that date is NOT the effective date in Colombia**.
+- **As of the 2026 reporting period IFRS 18 is not incorporated into DUR 2420 of 2015**: Decree 0701 of 2026 incorporates amendments issued between Sep-2022 and Sep-2023, and IFRS 18 dates from April 2024. There is a draft incorporation decree (proposing mandatory application for Group 1 from 2028, with voluntary early application); until the decree is issued, **it is not mandatory for any Colombian entity**.
+- **Implication for the 2026 report:** the framework in force is IAS 1 (Group 1) or Section 3 of the IFRS for SMEs (Group 2). For Group 1 a **voluntary preparation** note may be included when material (preliminary mapping of the P&L to operating / investing / financing categories, candidate management-defined performance measures, data gaps), stating that the standard is not incorporated in Colombia and that its application date depends on the incorporating decree.
 
 ### 3. 2026 TAX FRAMEWORK
 - **UVT 2026 = \`$52.374\` COP** (Tax Value Unit adjusted annually by DIAN; use this value for absolute conversions).
-- **Art. 240 ET — Corporate income tax rate: 35%** (in force since 2023 under Law 2277 of 2022).
+- **Art. 240 ET — Corporate income tax rate: 35%** (since tax year 2022 under Art. 7 of Law 2155 of 2021; kept by Art. 10 of Law 2277 of 2022).
 - **Law 2277 of 2022 — Tax Reform** incorporates, among others, these rules in force:
   - **5 percentage-point surcharge** for financial institutions (certain taxable income ranges), added to the general rate.
-  - **15% minimum tax rate** (minimum effective taxation) for legal entities, with a mechanism based on cleansed accounting profit.
+  - **Adjusted Taxation Rate (TTD, Art. 240 proviso 6 ET)**: a 15% floor computed as adjusted tax / adjusted profit (ID/UD); if lower, an additional tax is assessed. It is not a substitute rate and is not computed without verified ID/UD.
   - **Tax on sugary drinks and ultra-processed foods**.
   - **Tax benefit adjustments** and discount cleanup.
 
@@ -226,9 +221,9 @@ In force since tax year 2023 and applicable in 2026. The repealed Art. 242 sched
 - The Fiscal Reviewer opinion is governed by ISA 700 / 705 / 706 and must be issued under Law 43/1990 parameters.
 
 ### 5. CORPORATE GOVERNANCE AND COMPANY LAW
-- **Commercial Code:** Arts. 446 (assembly call), 448 (quorum), 452 (legal reserve 10% up to 50% of subscribed capital), 187 (minutes).
+- **Commercial Code:** Arts. 424 (call of the shareholders' meeting), 427 as amended by art. 68 Law 222 of 1995 (quorum and majorities), 446 (documents submitted to the meeting), 187 (powers of the highest body), 189 (minutes), 452 (legal reserve in the S.A.: 10% of net profits up to 50% of subscribed capital) and 371 (legal reserve in the Ltda.).
 - **Law 222 of 1995** — company regime (business groups, bylaw amendments, management report).
-- **Law 1258 of 2008 — SAS** — Art. 40 (legal reserve for SAS, applicable when bylaws so provide).
+- **Law 1258 of 2008 — SAS** — Arts. 20 (call), 22 (quorum and majorities) and 45 (reference to S.A. rules). In an SAS the legal reserve is **not mandatory** unless the bylaws provide for it (Supersociedades, Official Letter 220-069664 of 2017).
 - **SuperSociedades** — circulars on corporate governance and reporting.
 - **Legal representative management report** (Arts. 46-47 Law 222/1995) and **Fiscal Reviewer opinion** (when applicable).
 

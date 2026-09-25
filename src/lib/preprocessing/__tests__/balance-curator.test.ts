@@ -258,7 +258,12 @@ describe('R2 — Flujo Efectivo Método Indirecto', () => {
     expect(f.varObligacionesFinancieras + f.varCapitalReservas + f.dividendosEstimados).toBe(f.total);
   });
 
-  it('las cuentas virtuales de R8 (sufijo VC) no alimentan el cálculo de dividendos', () => {
+  it('3605VC (resultado del año que inyecta R8) no se lee como distribución', () => {
+    // Auditoría 2026-09 (niif-preproceso-15): la versión anterior excluía las
+    // virtuales de R8 y calculaba min(0, Δ(36+37) − utilidad del AÑO): con la
+    // utilidad del año en 3605VC eso fabricaba −$500M de "dividendos" aunque
+    // ni la caja ni 2360 se movieron. Con las virtuales incluidas,
+    // Δ(36+37) − utilidad = −dividendos decretados = 0.
     const prev = makeSnapshot({
       period: '2025',
       controlTotals: makeControlTotals({ efectivoCuenta11: 100_000_000, utilidadNeta: 0 }),
@@ -268,9 +273,8 @@ describe('R2 — Flujo Efectivo Método Indirecto', () => {
         makeClass(3, [{ code: '360505', name: 'Utilidades acumuladas', balance: 0 }]),
       ],
     });
-    // CON evidencia (2360 presente) el plug sí aplica — pero debe ignorar la
-    // cuenta virtual 3605VC, que es el cierre contable que inyecta R8 y no
-    // representa movimiento real de caja.
+    // CON evidencia (2360 presente) se calculan dividendos, pero la cuenta
+    // virtual 3605VC es el resultado del año: no hay distribución.
     const curr = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({ efectivoCuenta11: 100_000_000, utilidadNeta: 500_000_000 }),
@@ -284,9 +288,37 @@ describe('R2 — Flujo Efectivo Método Indirecto', () => {
       ],
     });
     const out = runR2(curr, prev);
-    // Sin la exclusión, 3605VC haría deltaUtilAcum = 500M y el plug daría $0.
-    // Con ella, deltaUtilAcum = 0 y el plug refleja la distribución real.
-    expect(out.cashFlowIndirecto!.financing.dividendosEstimados).toBe(-500_000_000);
+    expect(out.cashFlowIndirecto!.financing.dividendosEstimados).toBe(0);
+  });
+
+  it('dividendos pagados = traslado de la utilidad ANTERIOR − aumento de resultados acumulados', () => {
+    // T-1: utilidad 100M en 3605VC. T: 3705 recibe el traslado (100M) menos
+    // dividendos pagados (60M) → 3705 = 40M; utilidad del año 150M en 3605VC.
+    const prev = makeSnapshot({
+      period: '2025',
+      controlTotals: makeControlTotals({ efectivoCuenta11: 100_000_000, utilidadNeta: 100_000_000 }),
+      classes: [
+        makeClass(1, [{ code: '110505', name: 'Caja', balance: 100_000_000 }]),
+        makeClass(2, [{ code: '236005', name: 'Dividendos por pagar', balance: 0 }]),
+        makeClass(3, [{ code: '3605VC', name: 'Cierre virtual R8', balance: 100_000_000 }]),
+      ],
+    });
+    const curr = makeSnapshot({
+      period: '2026',
+      controlTotals: makeControlTotals({ efectivoCuenta11: 190_000_000, utilidadNeta: 150_000_000 }),
+      classes: [
+        makeClass(1, [{ code: '110505', name: 'Caja', balance: 190_000_000 }]),
+        makeClass(2, [{ code: '236005', name: 'Dividendos por pagar', balance: 0 }]),
+        makeClass(3, [
+          { code: '370505', name: 'Utilidades acumuladas', balance: 40_000_000 },
+          { code: '3605VC', name: 'Cierre virtual R8', balance: 150_000_000 },
+        ]),
+      ],
+    });
+    const efe = runR2(curr, prev).cashFlowIndirecto!;
+    expect(efe.financing.dividendosEstimados).toBe(-60_000_000);
+    expect(efe.operating.total).toBe(150_000_000);
+    expect(efe.netChangeInCash).toBe(90_000_000);
   });
 
   it('marca reconciled=false si la brecha excede tolerancia', () => {
@@ -388,40 +420,49 @@ describe('R3 — Brecha de Cuadratura con Atribución', () => {
 // R4 — Validación de provisión de renta
 // ---------------------------------------------------------------------------
 
-describe('R4 — Riesgo de Pasivo Fiscal Oculto', () => {
-  it('emite finding crítico cuando provisión < 30% de utilidad neta', () => {
+describe('R4 — Causación del impuesto de renta (sólo cuentas de renta)', () => {
+  // Auditoría 2026-09 (niif-preproceso-17): la versión anterior comparaba TODO
+  // el grupo 24 contra el 35 % de la utilidad NETA y emitía un crítico con un
+  // monto "a provisionar". La utilidad contable no es base fiscal: R4 sólo
+  // informa, sin monto, cuando no hay gasto de renta causado.
+
+  it('UAI positiva sin gasto de renta (54): hallazgo INFORMATIVO sin cifra de impuesto', () => {
     const snap = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({
         utilidadNeta: 2_000_000_000,
-        impuestosCuenta24: 3_800_000, // 0.19% — muy bajo
+        impuestosCuenta24: 3_800_000, // IVA/ICA: no es renta
       }),
       classes: [],
     });
     const out = runR4(snap);
-    expect(out.taxProvisionRisk).toBeDefined();
-    expect(out.taxProvisionRisk!.severidad).toBe('critico');
-    expect(out.taxProvisionRisk!.expectedProvisionCop).toBe(700_000_000);
-    expect(out.taxProvisionRisk!.gapCop).toBeCloseTo(696_200_000, -3);
+    expect(out.taxProvisionRisk).toBeUndefined();
     expect(out.findings).toHaveLength(1);
     expect(out.findings[0].code).toBe('CUR-R4');
+    expect(out.findings[0].severity).toBe('informativo');
+    // No afirma "pasivo oculto" ni cuantifica 35 %.
+    expect(out.findings[0].title).not.toMatch(/oculto/i);
+    expect(out.findings[0].description).not.toMatch(/35\s*%/);
+    expect(out.findings[0].recommendation).not.toMatch(/Provisionar \$/);
   });
 
-  it('no dispara cuando la provisión cubre 35% (ratio = 1)', () => {
+  it('renta causada (5405) y compensada (2404 = 0): sin hallazgo de R4', () => {
     const snap = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({
-        utilidadNeta: 2_000_000_000,
-        impuestosCuenta24: 700_000_000, // 35%
+        utilidadNeta: 650_000_000,
+        impuestosCuenta24: 0,
       }),
-      classes: [],
+      classes: [
+        makeClass(5, [{ code: '540505', name: 'Impuesto de renta', balance: 350_000_000 }]),
+      ],
     });
     const out = runR4(snap);
     expect(out.taxProvisionRisk).toBeUndefined();
     expect(out.findings).toHaveLength(0);
   });
 
-  it('no dispara cuando utilidadNeta = 0 (evita div/0)', () => {
+  it('no dispara cuando la UAI no es positiva', () => {
     const snap = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({
@@ -461,7 +502,8 @@ describe('runCurator (orchestrator)', () => {
     expect(codes).toContain('CUR-R3');
     expect(codes).toContain('CUR-R4');
     expect(out.reclassifications).toHaveLength(1);
-    expect(out.taxProvisionRisk).toBeDefined();
+    // R4 ya no cuantifica una "renta teórica" (auditoría 2026-09).
+    expect(out.taxProvisionRisk).toBeUndefined();
     expect(Object.keys(out.errors)).toHaveLength(0);
   });
 
@@ -484,8 +526,8 @@ describe('runCurator (orchestrator)', () => {
     const out = runCurator(broken, null);
     // R1 falla porque accede a classes.find(...).
     expect(out.errors['CUR-R1']).toBeDefined();
-    // R4 sí funciona aunque classes esté roto (no las usa).
-    expect(out.taxProvisionRisk).toBeDefined();
+    // R4 sí funciona aunque classes esté roto (lo trata como vacío).
+    expect(out.errors['CUR-R4']).toBeUndefined();
     expect(out.findings.some((f) => f.code === 'CUR-R4')).toBe(true);
   });
 
@@ -523,7 +565,9 @@ describe('runCurator (orchestrator)', () => {
       }),
       classes: [makeClass(1, [{ code: '110505', name: 'Caja', balance: 1_000_000_000 }])],
       equity: {
-        capitalAutorizado: 200_000_000,
+        // 3105 = capital suscrito y pagado (PUC); `capitalAutorizado` es
+        // informativo y no suma al patrimonio.
+        capitalSuscritoPagado: 200_000_000,
         reservaLegal: 50_000_000,
         utilidadEjercicio: 100_000_000,
         utilidadesAcumuladas: 50_000_000,
@@ -555,6 +599,8 @@ describe('runCurator (orchestrator)', () => {
     expect(snap.findings?.missingTaxCausation ?? false).toBe(false);
     expect(snap.findings?.ppeWithoutDepreciation ?? false).toBe(false);
     expect(snap.findings?.costeoIncompleto ?? false).toBe(false);
+    // Y ninguna regla bloquea un balance sano.
+    expect(snap.validation.blocking).toBe(false);
   });
 
   it('SÍ muta el snapshot cuando R1 detecta saldos negativos materiales (contrato Pulido Diamante)', () => {
@@ -592,9 +638,11 @@ describe('runCurator (orchestrator)', () => {
     expect(virtual?.balance).toBe(10_000_000);
   });
 
-  it('SÍ muta controlTotals.patrimonio cuando R5 detecta brecha Balance↔ECP', () => {
-    // R5 contract: si ECP_sum != patrimonio (más allá de tolerancia), R5 ancla
-    // patrimonio al ECP_sum.
+  it('R5 NO reescribe el patrimonio cuando el desglose (ECP) no concilia: revela la brecha y bloquea', () => {
+    // Auditoría 2026-09 (recalculo-08): la versión anterior anclaba
+    // controlTotals.patrimonio al desglose, borrando del balance las cuentas
+    // de patrimonio que el desglose no mapeaba. El patrimonio publicado es
+    // Σ clase 3; una brecha con el ECP se revela y bloquea la emisión.
     const snap = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({
@@ -604,16 +652,21 @@ describe('runCurator (orchestrator)', () => {
       }),
       classes: [makeClass(1, [{ code: '110505', name: 'Caja', balance: 1_000_000_000 }])],
       equity: {
-        capitalAutorizado: 200_000_000,
+        capitalSuscritoPagado: 200_000_000,
         reservaLegal: 50_000_000,
         utilidadEjercicio: 100_000_000,
         utilidadesAcumuladas: 50_000_000,
         // Suma = 400M
       },
     });
-    runCurator(snap, null);
-    expect(snap.controlTotals.patrimonio).toBe(400_000_000);
-    expect(snap.equityBreakdown.convergenceAdjustment).toBe(300_000_000);
-    expect(snap.equityAnchorAdjustment).toBe(300_000_000);
+    const result = runCurator(snap, null);
+    expect(snap.controlTotals.patrimonio).toBe(100_000_000);
+    expect(snap.equityBreakdown.convergenceAdjustment).toBeUndefined();
+    expect(snap.equityAnchorAdjustment).toBeUndefined();
+    expect(result.convergenceAdjustment).toBeUndefined();
+    expect(snap.validation.blocking).toBe(true);
+    expect(snap.validation.curatorBlockingReasons?.some((r) => r.startsWith('[CUR-R5]'))).toBe(true);
+    expect(snap.validation.curatorBlockingReasons?.join(' ')).toContain('300.000.000,00');
+    expect(result.findings.some((f) => f.code === 'CUR-R5' && f.severity === 'critico')).toBe(true);
   });
 });

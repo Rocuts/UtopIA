@@ -1,28 +1,29 @@
 /**
- * Cliente macro Colombia — BanRep + DANE
+ * Cliente macro Colombia — TRM (Superfinanciera), IPC (DANE) y tasa de política.
  *
- * Fuentes verificadas (2026-05-08):
+ * Auditoría valoracion-05: cada serie tiene columna y UNIDAD fijas, fecha de
+ * vigencia obligatoria y rango plausible. Nada de heurísticas `x > 1 ? x/100`
+ * (un 0,39 % mensual se leía como 39 %) ni de columnas genéricas 'tasa'/'valor'
+ * de un dataset de otra serie. Lo que no cumple ⇒ `reading: null` con motivo.
  *
- * TRM (USD/COP):
+ * TRM (COP por USD):
  *   URL: https://www.datos.gov.co/resource/32sa-8pi3.json
- *   Proveedor: datos.gov.co (Socrata) — dataset oficial Superintendencia Financiera
- *   Parámetros: ?$order=vigenciadesde+DESC&$limit=1
- *   Confiabilidad: ALTA — API REST JSON pública, sin auth, actualización diaria.
- *   Respuesta: [{ valor: "4215.12", vigenciadesde: "2026-05-07T00:00:00.000", ... }]
+ *   Dataset "Tasa de Cambio Representativa del Mercado" (Superintendencia
+ *   Financiera). Columnas: `valor` (COP por USD) y `vigenciadesde` (fecha de
+ *   vigencia). Rango aceptado: 1.000 – 10.000.
  *
- * Tasa BanRep (TIB):
- *   URL: https://suameca.banrep.gov.co/estadisticas-economicas/webService (SDMX/XML)
- *   Alternativa usada: https://www.datos.gov.co/resource/ceyp-9c7c.json
- *   Confiabilidad MEDIA-ALTA — el SDMX oficial devuelve XML, no JSON. Preferimos
- *   el dataset datos.gov.co que replica la TIB con lag < 1 día. Si falla, retorna null
- *   y el servicio usa default (0.0925 = 9.25%).
+ * IPC (variación anual, Colombia):
+ *   URL: https://www.datos.gov.co/resource/9mn6-ky8i.json
+ *   Sólo se aceptan columnas de variación ANUAL (`variacion_anual`,
+ *   `variacion_12_meses`) expresadas en PORCENTAJE, con fecha/periodo
+ *   (`fecha`, `periodo` o `mes`). Rango aceptado: −5 % a 30 %. Cualquier otra
+ *   forma de respuesta ⇒ N/D.
  *
- * IPC (anual Colombia):
- *   No existe API REST JSON oficial de DANE (2026). Los boletines son PDF.
- *   Fuente usada: BanRep publica la variación anual del IPC en su portal de series.
- *   URL alternativa robusta: https://www.datos.gov.co/resource/9mn6-ky8i.json
- *   Fallback: constante 0.045 (4.5% — promedio reciente Colombia según DANE mar-2026
- *   comunica 0.78% mensual, anual ~5.0%, usamos 0.045 como base conservadora).
+ * Tasa de intervención de política monetaria (BanRep):
+ *   No se consulta. La serie oficial vive en SUAMECA (BanRep) y no está
+ *   configurada; el dataset usado antes (ceyp-9c7c) no está verificado, el
+ *   propio código lo describía como "TRM" y la TIB no es la tasa de
+ *   intervención. ⇒ N/D con motivo hasta configurar la serie oficial.
  *
  * Headers: User-Agent obligatorio para cumplir ToS de datos.gov.co.
  * Timeout: 10 000 ms con AbortController.
@@ -30,6 +31,21 @@
 
 const TIMEOUT_MS = 10_000;
 const UA = 'UtopIA/1.0 (NIIF Colombia; developer@basileasystems.com)';
+
+export type MacroSource = 'superfinanciera' | 'dane' | 'banrep';
+
+export interface MacroReading {
+  value: number;
+  /** Fecha de vigencia / periodo del dato (YYYY-MM-DD o YYYY-MM). */
+  asOf: string;
+  source: MacroSource;
+}
+
+export interface MacroFetch {
+  reading: MacroReading | null;
+  /** Motivo cuando `reading` es null. */
+  reason: string | null;
+}
 
 // ─── helpers ──────────────────────────────────────────────────────────────
 
@@ -49,101 +65,75 @@ async function fetchWithTimeout(url: string): Promise<Response> {
   }
 }
 
-// ─── TRM ──────────────────────────────────────────────────────────────────
+/** Normaliza una fecha ISO/Socrata a YYYY-MM-DD (o YYYY-MM). null si no es fecha. */
+function normalizeDate(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const m = /^(\d{4})-(\d{2})(?:-(\d{2}))?/.exec(raw.trim());
+  if (!m) return null;
+  return m[3] ? `${m[1]}-${m[2]}-${m[3]}` : `${m[1]}-${m[2]}`;
+}
 
-/**
- * Retorna la TRM vigente (COP por 1 USD).
- * Fuente primaria: datos.gov.co dataset 32sa-8pi3 (Socrata JSON API).
- * Retorna `null` si la llamada falla o el dato no es parseable.
- */
-export async function fetchTRM(): Promise<number | null> {
-  const url =
-    'https://www.datos.gov.co/resource/32sa-8pi3.json' +
-    '?$order=vigenciadesde+DESC&$limit=1';
+function fail(reason: string): MacroFetch {
+  return { reading: null, reason };
+}
+
+async function firstRow(url: string): Promise<Record<string, unknown> | string> {
   try {
     const res = await fetchWithTimeout(url);
-    if (!res.ok) return null;
-    const data = (await res.json()) as Array<{ valor?: string }>;
-    const raw = data?.[0]?.valor;
-    if (!raw) return null;
-    const parsed = parseFloat(raw);
-    return isFinite(parsed) && parsed > 0 ? parsed : null;
+    if (!res.ok) return `La fuente respondió HTTP ${res.status}.`;
+    const data = (await res.json()) as unknown;
+    if (!Array.isArray(data) || !data[0] || typeof data[0] !== 'object') {
+      return 'La fuente no devolvió filas.';
+    }
+    return data[0] as Record<string, unknown>;
   } catch {
-    return null;
+    return 'No fue posible consultar la fuente.';
   }
 }
 
-// ─── Tasa BanRep (TIB) ────────────────────────────────────────────────────
+// ─── TRM ──────────────────────────────────────────────────────────────────
 
-/**
- * Tasa de Intervención de Política Monetaria del BanRep (decimal).
- * Fuente: datos.gov.co — dataset que replica la TIB del BanRep con lag <1 día.
- * El SDMX oficial (suameca.banrep.gov.co) devuelve XML; este endpoint JSON es
- * más fácil de consumir para pipelines serverless.
- * Retorna `null` si falla; el servicio usa default 0.0925 (9.25%).
- */
-export async function fetchTasaBanRep(): Promise<number | null> {
-  // Dataset ceyp-9c7c: "TRM" — pero también contiene la TIB en columnas separadas.
-  // URL directa al dataset de Tasa de Intervención BanRep (confirmado en
-  // https://www.datos.gov.co — buscar "tasa intervencion banco republica").
-  // Si el dataset cambia de ID, el fallback en service.ts devuelve el default.
-  const url =
-    'https://www.datos.gov.co/resource/ceyp-9c7c.json' +
-    '?$order=fecha+DESC&$limit=1';
-  try {
-    const res = await fetchWithTimeout(url);
-    if (!res.ok) return null;
-    const data = (await res.json()) as Array<Record<string, string>>;
-    if (!data?.[0]) return null;
-
-    // El dataset puede tener columnas 'tasa' o 'valor' según versión.
-    const row = data[0];
-    const raw = row['tasa'] ?? row['valor'] ?? row['tasaintervención'];
-    if (!raw) return null;
-    const parsed = parseFloat(raw);
-    // La TIB se publica como porcentaje (ej. 9.25) o decimal (ej. 0.0925).
-    // Si es > 1, asumimos que está en formato porcentaje → dividir entre 100.
-    if (!isFinite(parsed) || parsed <= 0) return null;
-    return parsed > 1 ? parsed / 100 : parsed;
-  } catch {
-    return null;
+export async function fetchTRM(): Promise<MacroFetch> {
+  const row = await firstRow(
+    'https://www.datos.gov.co/resource/32sa-8pi3.json?$order=vigenciadesde+DESC&$limit=1',
+  );
+  if (typeof row === 'string') return fail(row);
+  const value = parseFloat(String(row['valor'] ?? ''));
+  const asOf = normalizeDate(row['vigenciadesde']);
+  if (!asOf) return fail('TRM sin fecha de vigencia (vigenciadesde).');
+  if (!Number.isFinite(value) || value < 1_000 || value > 10_000) {
+    return fail('TRM fuera del rango plausible (1.000 – 10.000 COP/USD).');
   }
+  return { reading: { value, asOf, source: 'superfinanciera' }, reason: null };
+}
+
+// ─── Tasa de intervención BanRep ─────────────────────────────────────────
+
+export async function fetchTasaBanRep(): Promise<MacroFetch> {
+  return fail(
+    'Tasa de intervención de política monetaria: requiere la serie oficial del BanRep ' +
+      '(SUAMECA), no configurada. La TIB y el dataset consultado antes no son esa serie.',
+  );
 }
 
 // ─── IPC ──────────────────────────────────────────────────────────────────
 
-/**
- * Variación anual del IPC Colombia (decimal: 0.05 = 5%).
- * DANE no expone API REST JSON (2026) — publica PDFs y archivos Excel.
- * Usamos el dataset de BanRep/DANE en datos.gov.co (serie histórica de IPC).
- * Retorna `null` si falla; el servicio usa default 0.045 (4.5%).
- *
- * URL: https://www.datos.gov.co/resource/9mn6-ky8i.json
- * (dataset "Índice de Precios al Consumidor - Variación anual")
- */
-export async function fetchIPC(): Promise<number | null> {
-  const url =
-    'https://www.datos.gov.co/resource/9mn6-ky8i.json' +
-    '?$order=fecha+DESC&$limit=1';
-  try {
-    const res = await fetchWithTimeout(url);
-    if (!res.ok) return null;
-    const data = (await res.json()) as Array<Record<string, string>>;
-    if (!data?.[0]) return null;
+const IPC_ANNUAL_COLUMNS = ['variacion_anual', 'variacion_12_meses'] as const;
+const IPC_DATE_COLUMNS = ['fecha', 'periodo', 'mes'] as const;
 
-    const row = data[0];
-    // Columnas conocidas según exploración del dataset.
-    const raw =
-      row['variacion_anual'] ??
-      row['variacion_12_meses'] ??
-      row['variacion'] ??
-      row['valor'];
-    if (!raw) return null;
-    const parsed = parseFloat(raw);
-    if (!isFinite(parsed)) return null;
-    // Normalizar: si viene como porcentaje (ej. 4.5), convertir a decimal.
-    return parsed > 1 ? parsed / 100 : parsed;
-  } catch {
-    return null;
+export async function fetchIPC(): Promise<MacroFetch> {
+  const row = await firstRow(
+    'https://www.datos.gov.co/resource/9mn6-ky8i.json?$order=fecha+DESC&$limit=1',
+  );
+  if (typeof row === 'string') return fail(row);
+  const col = IPC_ANNUAL_COLUMNS.find((c) => row[c] !== undefined && row[c] !== null);
+  if (!col) return fail('La respuesta no trae la variación ANUAL del IPC.');
+  const asOf = IPC_DATE_COLUMNS.map((c) => normalizeDate(row[c])).find((d) => d !== null) ?? null;
+  if (!asOf) return fail('IPC sin fecha/periodo del dato.');
+  const pct = parseFloat(String(row[col]));
+  // Unidad declarada: PORCENTAJE (6.24 = 6,24 %).
+  if (!Number.isFinite(pct) || pct < -5 || pct > 30) {
+    return fail('IPC anual fuera del rango plausible (−5 % a 30 %).');
   }
+  return { reading: { value: pct / 100, asOf, source: 'dane' }, reason: null };
 }

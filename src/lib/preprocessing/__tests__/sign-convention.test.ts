@@ -108,6 +108,91 @@ describe('detectSignConvention', () => {
     expect(detectSignConvention(parseRaw(csv)).convention).toBe('natural');
   });
 
+  // -------------------------------------------------------------------------
+  // niif-preproceso-11 — partida doble real con saldo en 3605
+  // -------------------------------------------------------------------------
+  // Excluir el grupo 36 de la suma sólo sirve para el patrón NO de partida
+  // doble (3605 duplicado con el P&G). En un export algebraico de partida
+  // doble, Σ(todas las hojas) = 0 CON el 36: excluirlo dejaba |3605| y el
+  // archivo se leía como natural (pasivo y patrimonio negativos).
+  const ALGEBRAICO_PARTIDA_DOBLE = [
+    'codigo,nombre,nivel,transaccional,Saldo 2024,Saldo 2025',
+    // 2024 = después del cierre (P&G en cero, resultado en 3605)
+    // 2025 = antes del cierre (3605 del año previo aún sin trasladar, P&G activo)
+    '110505,Caja,Auxiliar,1,1000000000,1300000000',
+    '220505,Proveedores,Auxiliar,1,-400000000,-500000000',
+    '310505,Capital,Auxiliar,1,-400000000,-400000000',
+    '360505,Utilidad del ejercicio,Auxiliar,1,-200000000,-200000000',
+    '370505,Utilidades acumuladas,Auxiliar,1,0,0',
+    '413505,Ventas,Auxiliar,1,0,-900000000',
+    '613505,Costo,Auxiliar,1,0,500000000',
+    '513505,Gastos,Auxiliar,1,0,200000000',
+  ].join('\n');
+
+  it('detecta ALGEBRAICA una partida doble con 3605 real (año cerrado y utilidad previa)', () => {
+    const rows = parseRaw(ALGEBRAICO_PARTIDA_DOBLE);
+    for (const p of ['2024', '2025']) {
+      expect(rows.reduce((s, r) => s + (r.balancesByPeriod[p] ?? 0), 0)).toBe(0);
+    }
+    const detection = detectSignConvention(rows);
+    expect(detection.convention).toBe('algebraica');
+    expect(detection.ratioByPeriod['2024']).toBeLessThan(0.05);
+    expect(detection.ratioByPeriod['2025']).toBeLessThan(0.05);
+
+    // Y el preprocesado queda con pasivo y patrimonio positivos y cuadrado.
+    const s = preprocessTrialBalance(parseTrialBalanceCSV(ALGEBRAICO_PARTIDA_DOBLE)).primary;
+    expect(s.controlTotals.pasivo).toBe(500_000_000);
+    expect(s.controlTotals.patrimonio).toBe(800_000_000);
+    expect(s.summary.equationBalanced).toBe(true);
+  });
+
+  it('empate de votos en multiperiodo: algebraica si las clases 2 y 3 suman negativo en todos', () => {
+    // 2024 es partida doble exacta (voto algebraico). 2025 trae un error de
+    // captura de 100M (Σ ≠ 0 → voto natural). Clases 2+3 negativas en ambos.
+    const csv = [
+      'codigo,nombre,nivel,transaccional,Saldo 2024,Saldo 2025',
+      '110505,Caja,Auxiliar,1,1000000000,1100000000',
+      '220505,Proveedores,Auxiliar,1,-400000000,-400000000',
+      '310505,Capital,Auxiliar,1,-600000000,-600000000',
+    ].join('\n');
+    const detection = detectSignConvention(parseRaw(csv));
+    expect(detection.periodsEvaluated).toEqual(['2024', '2025']);
+    expect(detection.convention).toBe('algebraica');
+  });
+
+  // recalculo-07 (IW2): un export algebraico a nivel Cuenta (4 dígitos), sin
+  // columna "Transaccional", no tiene filas de 6+ dígitos. El detector sólo
+  // sumaba transaccionales o códigos de longitud ≥ 6, así que no evaluaba
+  // ningún periodo y el archivo quedaba como "natural" (pasivo e ingresos
+  // negativos). Las filas sumables son las hojas estructurales.
+  it('detecta ALGEBRAICA un export a nivel Cuenta (4 dígitos) sin columna transaccional', () => {
+    const csv = [
+      'codigo,nombre,Saldo 2025',
+      '1,Activo,1300000000',
+      '11,Disponible,1300000000',
+      '1105,Caja,1300000000',
+      '2,Pasivo,-500000000',
+      '22,Proveedores,-500000000',
+      '2205,Proveedores nacionales,-500000000',
+      '3,Patrimonio,-600000000',
+      '3105,Capital suscrito y pagado,-400000000',
+      '3605,Utilidad del ejercicio,-200000000',
+      '4135,Comercio al por mayor,-900000000',
+      '5135,Servicios,200000000',
+      '6135,Costo de ventas,500000000',
+    ].join('\n');
+    const detection = detectSignConvention(parseRaw(csv));
+    expect(detection.periodsEvaluated).toEqual(['2025']);
+    expect(detection.convention).toBe('algebraica');
+
+    const s = preprocessTrialBalance(parseTrialBalanceCSV(csv)).primary;
+    expect(s.controlTotals.pasivo).toBe(500_000_000);
+    // 400M capital + 200M del 3605 anterior (R8 → 3710VC) + 200M del periodo.
+    expect(s.controlTotals.patrimonio).toBe(800_000_000);
+    expect(s.controlTotals.ingresosNetos).toBe(900_000_000);
+    expect(s.summary.equationBalanced).toBe(true);
+  });
+
   it('no evalúa periodos cuyo activo es inmaterial — no toca balances de juguete', () => {
     const csv = [
       'codigo,nombre,nivel,transaccional,Saldo 2025',
@@ -176,15 +261,20 @@ describe('parseTrialBalanceCSV — normalización automática', () => {
     expect(despues.activo).toBeCloseTo(antes.activo, 2); // clase 1 no se toca
   });
 
-  it('el patrimonio deja de estar inflado por el tapón de R8', async () => {
+  it('sin normalizar, el descuadre ya no se esconde como patrimonio: bloquea', async () => {
     const csv = await loadGrupo2TresCsv();
 
-    const antes = preprocessTrialBalance(parseRaw(csv)).primary.controlTotals.patrimonio;
+    const antes = preprocessTrialBalance(parseRaw(csv)).primary;
     const despues = preprocessTrialBalance(parseTrialBalanceCSV(csv)).primary.controlTotals
       .patrimonio;
 
-    // Antes: $6.144.148.261,02 — patrimonio mayor que el activo entero.
-    expect(antes).toBeGreaterThan(6_000_000_000);
+    // Hasta la auditoría 2026-09 R8 llevaba el descuadre de la lectura sin
+    // normalizar a 3710VC y el patrimonio salía en $6.144.148.261,02 (mayor
+    // que el activo entero). Ahora ese residual queda expuesto y bloquea: el
+    // patrimonio publicado es Σ clase 3 + resultado del ejercicio.
+    expect(antes.controlTotals.patrimonio).toBeLessThan(6_000_000_000);
+    expect(antes.virtualCloseAdjustment?.blocking).toBe(true);
+    expect(antes.validation.blocking).toBe(true);
     // Después: ~$2.223.439.991,54 = aportes ($42.720) + utilidad del ejercicio.
     expect(despues).toBeGreaterThan(2_200_000_000);
     expect(despues).toBeLessThan(2_300_000_000);
@@ -217,11 +307,13 @@ describe('parseTrialBalanceCSV — normalización automática', () => {
     const csv = loadEliteCsv();
     const ct = preprocessTrialBalance(parseTrialBalanceCSV(csv)).primary.controlTotals;
 
-    // Totales post-curator vigentes antes de esta corrección — si la
-    // normalización se disparara sobre un balance natural, cambiarían.
+    // Totales post-curator — si la normalización se disparara sobre un balance
+    // natural, cambiarían. El patrimonio es Σ clase 3 tras el cierre virtual
+    // ($815,5M); antes de la auditoría 2026-09 salía en $2.390M porque R5
+    // lo anclaba a un desglose parcial y R8 absorbía el descuadre del fixture.
     expect(ct.activo).toBeCloseTo(3_270_000_000, 2);
     expect(ct.pasivo).toBeCloseTo(880_000_000, 2);
-    expect(ct.patrimonio).toBeCloseTo(2_390_000_000, 2);
+    expect(ct.patrimonio).toBeCloseTo(815_500_000, 2);
   });
 
   it('respeta el opt-out explícito para los callers que ya normalizan', async () => {

@@ -10,7 +10,7 @@
 //   module_complete — { stage, data: <module result> }
 //   report          — { report: FiscalAgentReport }
 //   done            — { partial: boolean }
-//   error           — { error: string, detail?: string }
+//   error           — { error: string, detail?: string, code?, reasons? }
 // ---------------------------------------------------------------------------
 
 import { useState, useRef, useCallback, useEffect } from 'react';
@@ -20,6 +20,10 @@ import type {
   FiscalAgentMode,
   FiscalAgentOrchestratorInput,
 } from '@/lib/agents/financial/escudo-survival/fiscal-agent';
+import {
+  escudoErrorFromHttp,
+  escudoErrorFromSse,
+} from '@/components/workspace/escudo/escudo-error';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -37,6 +41,11 @@ export type FiscalAgentState =
   | {
       status: 'error';
       error: string;
+      /**
+       * Razones del bloqueo del balance (422 / evento `error` con
+       * `code: 'BALANCE_VALIDATION_FAILED'`), para que el panel las muestre.
+       */
+      reasons?: string[];
       progress: FiscalAgentProgressEvent[];
     };
 
@@ -53,6 +62,32 @@ export interface FiscalAgentStartInput {
   instructions?: string;
   dianRequirementText?: string;
   dianRequirementKind?: FiscalAgentOrchestratorInput['dianRequirementKind'];
+  /**
+   * Saldo a favor LIQUIDADO en la declaración de renta (Formulario 110), en
+   * centavos MoneyCop (string de enteros no negativos). Sin él la devolución
+   * queda N/D: F04 es una estimación contable, no la declaración
+   * (tributario-modulos-02).
+   */
+  saldoAFavorDeclaradoCents?: string | null;
+}
+
+/**
+ * Cuerpo JSON para POST /api/escudo/fiscal. `saldoAFavorDeclaradoCents` sólo
+ * viaja cuando se conoce: nunca se sustituye por 0 ni por F04.
+ */
+export function buildFiscalAgentRequestBody(input: FiscalAgentStartInput): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    rawData: input.rawData,
+    mode: input.mode,
+    language: input.language ?? 'es',
+    company: input.company,
+    instructions: input.instructions,
+    dianRequirementText: input.dianRequirementText,
+    dianRequirementKind: input.dianRequirementKind,
+  };
+  const saldo = input.saldoAFavorDeclaradoCents?.trim();
+  if (saldo) body.saldoAFavorDeclaradoCents = saldo;
+  return body;
 }
 
 export interface UseFiscalAgentSSE {
@@ -120,23 +155,18 @@ export function useFiscalAgentSSE(): UseFiscalAgentSSE {
           'Content-Type': 'application/json',
           'X-Stream': 'true',
         },
-        body: JSON.stringify({
-          rawData: input.rawData,
-          mode: input.mode,
-          language: input.language ?? 'es',
-          company: input.company,
-          instructions: input.instructions,
-          dianRequirementText: input.dianRequirementText,
-          dianRequirementKind: input.dianRequirementKind,
-        }),
+        body: JSON.stringify(buildFiscalAgentRequestBody(input)),
         signal: controller.signal,
       });
 
       if (!res.ok) {
         const text = await res.text().catch(() => res.statusText);
+        // 422 del balance bloqueado: { error, code, reasons } (I4-escudo 1).
+        const info = escudoErrorFromHttp(res.status, text);
         setState({
           status: 'error',
-          error: text || `HTTP ${res.status}`,
+          error: info.error,
+          reasons: info.reasons,
           progress: [],
         });
         return;
@@ -194,23 +224,14 @@ export function useFiscalAgentSSE(): UseFiscalAgentSSE {
             // `done` arrives after `report` — no extra state change needed
             // (state already 'done'). Guard in case report arrives after done.
           } else if (block.event === 'error') {
-            try {
-              const err = JSON.parse(block.data) as {
-                error: string;
-                detail?: string;
-              };
-              setState({
-                status: 'error',
-                error: err.error ?? 'Error desconocido en el análisis.',
-                progress: progressAcc,
-              });
-            } catch {
-              setState({
-                status: 'error',
-                error: 'Error en el análisis.',
-                progress: progressAcc,
-              });
-            }
+            // Con el balance bloqueado trae `reasons` (I4-escudo 1).
+            const info = escudoErrorFromSse(block.data, 'Error en el análisis.');
+            setState({
+              status: 'error',
+              error: info.error,
+              reasons: info.reasons,
+              progress: progressAcc,
+            });
           }
         }
       }

@@ -50,7 +50,7 @@ function buildV21Sample(): TaxAuditReportJson {
       saldo24Cop: '120000000',
       posicionFiscalNetaCop: '555620400',
       evaluacion: 'Posicion fiscal neta a favor del contribuyente; pendiente solicitud de devolucion.',
-      reference: 'Art. 850 E.T.; Decreto 2235/2017',
+      reference: 'Art. 850 E.T.; DUR 1625/2016 Arts. 1.6.1.21.1 y ss.',
     },
     ivaIcaAnalysis: {
       pasivoIvaNetoCop: '85000000',
@@ -122,7 +122,7 @@ describe('renderTaxDictamenMarkdown — v2.1', () => {
     expect(md).toContain('## 2. IMPUESTO DE RENTA — CASCADA TEORICA');
     expect(md).toContain('## 3. RETENCIONES, ANTICIPOS Y POSICION FISCAL NETA');
     expect(md).toContain('## 4. IVA / ICA / IMPUESTOS TERRITORIALES');
-    expect(md).toContain('## 5. TASA MINIMA DE TRIBUTACION (TMT)');
+    expect(md).toContain('## 5. TASA DE TRIBUTACION DEPURADA (TTD, ART. 240 PAR. 6 E.T.)');
     expect(md).toContain('## 6. RIESGOS TRIBUTARIOS PRIORIZADOS');
     expect(md).toContain('## 7. CALENDARIO TRIBUTARIO 2026');
     expect(md).toContain('## 8. OPINION TRIBUTARIA FORMAL');

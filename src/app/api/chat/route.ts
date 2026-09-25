@@ -6,7 +6,12 @@ import { MODELS } from '@/lib/config/models';
 import { redactPII, extractNITContext, type NITContext } from '@/lib/security/pii-filter';
 import { searchDocuments } from '@/lib/rag/vectorstore';
 import { searchWeb, formatSearchResultsForLLM } from '@/lib/search/web-search';
-import { calculateSanction, type SanctionResult, type SanctionCalculation } from '@/lib/tools/sanction-calculator';
+import { calculateSanction, SanctionInputError, type SanctionResult } from '@/lib/tools/sanction-calculator';
+import {
+  SANCTION_TOOL_DESCRIPTION,
+  sanctionToolInputSchema,
+  toSanctionCalculation,
+} from '@/lib/tools/sanction-contract';
 import { analyzeDocument } from '@/lib/tools/document-analyzer';
 import { generateDianResponse, type DianResponseRequest } from '@/lib/tools/dian-response-generator';
 import { assessRisk, type RiskAssessment } from '@/lib/tools/risk-assessor';
@@ -491,31 +496,24 @@ ${langInstruction}
       },
     }),
 
+    // Contrato compartido con el camino orquestado (tools/registry.ts) y la voz
+    // (sanction-contract.ts). Auditoría 2026-09, tributario-calc-02.
     calculate_sanction: tool({
-      description:
-        'Calculate Colombian tax sanctions and interest (moratorios). Use this tool when the user asks about: ' +
-        '(1) Sancion por extemporaneidad (Art. 641 E.T.) — late filing penalties, ' +
-        '(2) Sancion por correccion (Art. 644 E.T.) — penalties for amending a tax return, ' +
-        '(3) Sancion por inexactitud (Art. 647 E.T.) — penalties for inaccurate reporting, ' +
-        '(4) Intereses moratorios (Art. 634 E.T.) — late payment interest. ' +
-        'Also use when the user provides specific numbers (tax due, delay months, difference amounts) and wants to know the penalty. ' +
-        'UVT 2026 = $52,374 COP (Res. DIAN 000238 del 15-dic-2025). Minimum sanction = 10 UVT = $523,740 COP.',
-      inputSchema: z.object({
-        type: z.enum(['extemporaneidad', 'correccion', 'inexactitud', 'intereses_moratorios'])
-          .describe('Type of sanction to calculate.'),
-        taxDue: z.number().optional().describe('Impuesto a cargo (tax due amount in COP). Used for extemporaneidad calculation.'),
-        grossIncome: z.number().optional().describe('Ingresos brutos (gross income in COP). Used for extemporaneidad when taxDue is 0.'),
-        difference: z.number().optional().describe('Mayor valor a pagar / difference in tax (COP). Used for correccion and inexactitud.'),
-        delayMonths: z.number().optional().describe('Meses de retraso (months of delay). Used for extemporaneidad.'),
-        isVoluntary: z.boolean().optional().describe('Whether the correction is voluntary (before DIAN notice) or provoked. Default: true.'),
-        principal: z.number().optional().describe('Capital amount for interest calculation (COP). Used for intereses_moratorios.'),
-        annualRate: z.number().optional().describe('Annual interest rate (%). Default: 27.44% (tasa de usura aprox 2026).'),
-        days: z.number().optional().describe('Days of late payment (dias de mora). Used for intereses_moratorios.'),
-      }),
+      description: SANCTION_TOOL_DESCRIPTION,
+      inputSchema: sanctionToolInputSchema,
       execute: async (args) => {
-        const result = calculateSanction(args as unknown as SanctionCalculation);
-        sanctionCalculation = result;
-        return JSON.stringify(result, null, 2);
+        try {
+          const result = calculateSanction(toSanctionCalculation(args));
+          sanctionCalculation = result;
+          return JSON.stringify(result, null, 2);
+        } catch (err) {
+          // Entrada contradictoria: se devuelve al modelo para que la corrija o
+          // pregunte al usuario, en lugar de inventar una cifra.
+          if (err instanceof SanctionInputError) {
+            return JSON.stringify({ error: err.message });
+          }
+          throw err;
+        }
       },
     }),
 

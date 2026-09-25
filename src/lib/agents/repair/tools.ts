@@ -596,7 +596,7 @@ function executeProposeAdjustment(
         activo: ct.activo,
         pasivo: ct.pasivo,
         patrimonio: ct.patrimonio,
-        ingresos: ct.ingresos,
+        ingresos: ct.ingresosNetos ?? Math.abs(ct.ingresos),
         gastos: ct.gastos,
         utilidadNeta: ct.utilidadNeta,
         ecuacionDiff,
@@ -668,21 +668,36 @@ function executeRecheckValidation(
     (s) => s.period === targetSnap.period,
   ) ?? application.balance.primary;
   const v = revalidate(application.balance, appliedSnap);
+  // Motivos persistentes (P4 cross-dep): la integridad de la lectura (unidad
+  // declarada sin confirmar, importes ilegibles, columnas ambiguas) y los
+  // bloqueos del curator posteriores a R8 no los resuelve ningún ajuste de
+  // saldos. El gate de /niif los exige en TODOS los periodos después de
+  // aplicar el ledger; si el recheck los omitiera, el Doctor diría "ya puede
+  // regenerar" y el informe volvería a bloquearse con 422.
+  const persistentes = [
+    ...new Set(
+      application.balance.periods.flatMap((s) => [
+        ...(s.validation?.integrityReasons ?? []),
+        ...(s.validation?.curatorBlockingReasons ?? []),
+      ]),
+    ),
+  ];
+  const errors = [...v.errors, ...persistentes.filter((r) => !v.errors.includes(r))];
   const ct = appliedSnap.controlTotals;
   const ecuacionDiff = ct.activo - (ct.pasivo + ct.patrimonio);
   const ecuacionPct =
     Math.abs(ct.activo) > 0 ? (ecuacionDiff / ct.activo) * 100 : 0;
 
   return {
-    ok: v.ok,
+    ok: errors.length === 0,
     period: appliedSnap.period,
-    errors: v.errors,
+    errors,
     warnings: v.warnings,
     controlTotals: {
       activo: ct.activo,
       pasivo: ct.pasivo,
       patrimonio: ct.patrimonio,
-      ingresos: ct.ingresos,
+      ingresos: ct.ingresosNetos ?? Math.abs(ct.ingresos),
       gastos: ct.gastos,
       utilidadNeta: ct.utilidadNeta,
       ecuacionDiff,

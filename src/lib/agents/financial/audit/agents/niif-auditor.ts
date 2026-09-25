@@ -16,7 +16,10 @@ import {
   type AuditFindingJson,
 } from '../../contracts/audit-report';
 import type { CompanyInfo } from '../../types';
-import type { AuditorResult, AuditFinding, AuditProgressEvent } from '../types';
+import type { AuditorResult, AuditFinding, AuditIntegrity, AuditProgressEvent } from '../types';
+
+/** Secciones NIIF PYMES que exige la lista mínima del Dictamen 1 (spec v2.1). */
+export const NIIF_REQUIRED_SECTION_COUNT = 13;
 
 export async function runNiifAuditor(
   reportContent: string,
@@ -24,6 +27,7 @@ export async function runNiifAuditor(
   language: 'es' | 'en',
   onProgress?: (event: AuditProgressEvent) => void,
   defaultPeriod?: string,
+  integrity?: AuditIntegrity,
 ): Promise<AuditorResult> {
   onProgress?.({
     type: 'auditor_progress',
@@ -40,18 +44,79 @@ export async function runNiifAuditor(
     ...MODELS_CONFIG.niifAuditor,
   });
 
-  return toLegacyAuditorResult(json, defaultPeriod);
+  return toLegacyAuditorResult(json, defaultPeriod, integrity);
+}
+
+// ---------------------------------------------------------------------------
+// Salvaguardas deterministas del Dictamen 1 (auditoria-calidad-03 / -13)
+// ---------------------------------------------------------------------------
+
+/** Conteo de la lista mínima derivado de los checks, nunca del LLM. */
+export function deriveNiifSummaryStats(
+  checks: NonNullable<NiifAuditReportJson['niifSectionChecks']>,
+): NonNullable<NiifAuditReportJson['summaryStats']> {
+  return {
+    conformes: checks.filter((c) => c.status === 'conforme').length,
+    observaciones: checks.filter((c) => c.status === 'observacion').length,
+    incumplimientos: checks.filter((c) => c.status === 'incumplimiento').length,
+  };
+}
+
+/**
+ * Misma salvaguarda que el Revisor Fiscal: una opinión NIIF "sin salvedades"
+ * no puede convivir con hallazgos crítico/alto, con secciones en
+ * incumplimiento ni con la integridad aritmética determinista rota.
+ */
+export function applyNiifDeterministicOverrides(
+  json: NiifAuditReportJson,
+  findings: AuditFinding[],
+  integrity?: AuditIntegrity,
+): NiifAuditReportJson {
+  const out: NiifAuditReportJson = { ...json };
+  if (json.niifSectionChecks) out.summaryStats = deriveNiifSummaryStats(json.niifSectionChecks);
+  if (json.auditOpinion && json.auditOpinion.type === 'sin_salvedades') {
+    const motivos: string[] = [];
+    if (findings.some((f) => f.severity === 'critico' || f.severity === 'alto')) {
+      motivos.push('hallazgos de severidad crítica o alta');
+    }
+    if (json.niifSectionChecks?.some((c) => c.status === 'incumplimiento')) {
+      motivos.push('secciones NIIF en incumplimiento');
+    }
+    if (integrity?.status === 'con_bloqueantes') {
+      motivos.push('integridad aritmética determinista con bloqueantes');
+    }
+    if (motivos.length > 0) {
+      out.auditOpinion = {
+        type: 'con_salvedades',
+        text:
+          `[Opinión ajustada por salvaguarda determinista: ${motivos.join('; ')} impiden una opinión sin salvedades (NIA 705 par. 7).] ` +
+          json.auditOpinion.text,
+      };
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
 // Adapter local: JSON strict -> AuditorResult legacy
 // ---------------------------------------------------------------------------
 
-function toLegacyAuditorResult(
-  json: NiifAuditReportJson,
+export function toLegacyNiifAuditorResult(
+  rawJson: NiifAuditReportJson,
   defaultPeriod: string | undefined,
+  integrity?: AuditIntegrity,
 ): AuditorResult {
-  const findings: AuditFinding[] = json.findings.map((f) => mapFinding(f, defaultPeriod));
+  return toLegacyAuditorResult(rawJson, defaultPeriod, integrity);
+}
+
+function toLegacyAuditorResult(
+  rawJson: NiifAuditReportJson,
+  defaultPeriod: string | undefined,
+  integrity?: AuditIntegrity,
+): AuditorResult {
+  const baseFindings: AuditFinding[] = rawJson.findings.map((f) => mapFinding(f, defaultPeriod));
+  const json = applyNiifDeterministicOverrides(rawJson, baseFindings, integrity);
+  const findings = baseFindings;
   return {
     domain: 'niif',
     auditorName: 'Auditor NIIF/Contable',
@@ -141,7 +206,19 @@ function renderMarkdown(json: NiifAuditReportJson, findings: AuditFinding[]): st
     json.requiredActions !== null;
 
   if (!hasV21) {
-    return renderLegacyMarkdown(json, findings);
+    // La estructura obligatoria del spec no se cumplió: se declara, no se
+    // degrada en silencio al formato legacy (auditoria-calidad-13).
+    const missing = [
+      json.niifSectionChecks === null ? 'lista mínima de verificación' : null,
+      json.summaryStats === null ? 'resumen estadístico' : null,
+      json.auditOpinion === null ? 'opinión formal' : null,
+      json.requiredActions === null ? 'acciones requeridas' : null,
+    ].filter(Boolean);
+    return [
+      `> ESTRUCTURA v2.1 INCOMPLETA: faltan ${missing.join(', ')}. Se presenta el formato abreviado.`,
+      '',
+      renderLegacyMarkdown(json, findings),
+    ].join('\n');
   }
 
   const lines: string[] = [];
@@ -179,6 +256,11 @@ function renderMarkdown(json: NiifAuditReportJson, findings: AuditFinding[]): st
   lines.push('## 3. LISTA MINIMA DE VERIFICACION');
   lines.push('');
   const checks = json.niifSectionChecks!;
+  if (checks.length !== NIIF_REQUIRED_SECTION_COUNT) {
+    lines.push(
+      `> ⚠ Lista mínima incompleta: ${checks.length} de ${NIIF_REQUIRED_SECTION_COUNT} secciones exigidas por el spec v2.1.`,
+    );
+  }
   for (const check of checks) {
     lines.push(
       `- ${statusIcon(check.status)} **${check.section} — ${check.sectionTitle}** [${check.reference}]`,
@@ -188,8 +270,8 @@ function renderMarkdown(json: NiifAuditReportJson, findings: AuditFinding[]): st
   }
   lines.push('');
 
-  // 4. RESUMEN ESTADISTICO
-  const stats = json.summaryStats!;
+  // 4. RESUMEN ESTADISTICO — derivado de los checks, no del LLM.
+  const stats = deriveNiifSummaryStats(checks);
   lines.push('## 4. RESUMEN ESTADISTICO');
   lines.push('');
   lines.push(`- ✅ Conformes: ${stats.conformes}`);

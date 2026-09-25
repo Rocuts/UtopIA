@@ -243,13 +243,26 @@ describe('POST /api/erp/webhook/[provider]', () => {
     expect(body.provider).toBe('siigo');
   });
 
-  it('calls revalidateTag for workspace-balance and pillars after valid sync', async () => {
+  // ingesta-18: esta prueba antes exigía revalidar caches tras una "sync" que
+  // leía el balance del ERP y lo descartaba. Sin persistencia no hay datos
+  // nuevos: no se lee el ERP, no se revalida ni se registra "sync ok".
+  it('does not fetch the ERP, revalidate caches or claim a sync while nothing is persisted', async () => {
     const { revalidateTag } = await import('next/cache');
+    const { ERPAdapter } = await import('@/lib/erp/adapter');
+    const { getCachedPreprocessedBalance } = await import('@/lib/cache/preprocessed-balance');
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
     mockDbRows([CRED_ROW]);
     const req = makeRequest('sap_s4hana', CE_PAYLOAD, 'valid-token-123');
     const params = Promise.resolve({ provider: 'sap_s4hana' });
-    await POST(req, { params });
-    expect(revalidateTag).toHaveBeenCalledWith('workspace-balance', 'max');
-    expect(revalidateTag).toHaveBeenCalledWith(`pillars-${CRED_ROW.workspaceId}`, 'max');
+    const res = await POST(req, { params });
+    const body = await res.json();
+    expect(res.status).toBe(202);
+    expect(body.persisted).toBe(false);
+    expect(revalidateTag).not.toHaveBeenCalled();
+    expect(ERPAdapter).not.toHaveBeenCalled();
+    expect(getCachedPreprocessedBalance).not.toHaveBeenCalled();
+    expect(info.mock.calls.flat().join(' ')).not.toMatch(/sync ok/);
+    expect(info.mock.calls.flat().join(' ')).toMatch(/not_persisted/);
+    info.mockRestore();
   });
 });

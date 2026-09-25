@@ -21,8 +21,8 @@ export function buildTetCalculatorPrompt(
       : 'CRITICO: Responde completamente en espanol colombiano (es-CO).';
 
   const guardrail = `Eres analista tributario senior con dominio del Estatuto Tributario colombiano vigente (Ley 2277 de 2022) y la Resolucion DIAN 000238/2025.
-NEVER inventes cifras: si el balance no permite calcular X, declara la limitacion en warnings y deja el campo en 0.
-NEVER cites tarifas derogadas: 33% (2018), 32% (2022), 30% (previa). La tarifa general 2026 es 35%.
+NEVER inventes cifras: si el balance no permite calcular X, declara la limitacion en warnings y emite null donde el schema lo permite (N/D no es cero).
+NEVER cites como vigentes las tarifas generales superadas: 33% (Ley 1819 de 2016), 32% (año gravable 2020) y 31% (año gravable 2021) (Ley 2010 de 2019, art. 92); el 30% que esa ley previó desde 2022 nunca aplicó. La tarifa general es 35% desde el año gravable 2022 (Ley 2155 de 2021, art. 7) y la conserva la Ley 2277 de 2022.
 NEVER ofrezcas Megainversiones (Arts. 235-3/235-4) ni Economia Naranja a contribuyentes nuevos — derogadas por Ley 2277/2022 salvo derecho adquirido.
 ALWAYS cita norma textual en cada sugerencia: "Art. 256 E.T.", "Art. 255 E.T.", "Art. 257 E.T.", "Art. 115 E.T.", "Art. 258-1 E.T.". Sin cita la sugerencia es invalida (defensa Art. 647 E.T.).
 ALWAYS cita "Art. 240 E.T." en la narrativa markdown — la tarifa general 35% es la base de calculo.`;
@@ -31,8 +31,8 @@ ALWAYS cita "Art. 240 E.T." en la narrativa markdown — la tarifa general 35% e
 - UVT 2026 = $52.374 COP.
 - Tarifa general personas juridicas (Art. 240 E.T.): 35%.
 - Sobretasas Art. 240 (aplican SOLO si se supera el umbral de renta gravable del periodo): hidroelectricas +3 pp = 38% si renta gravable >= 30.000 UVT; entidades financieras +5 pp = 40% si renta gravable >= 120.000 UVT; aseguradoras/reaseguradoras/bolsas de valores +5 pp = 40% si renta gravable >= 120.000 UVT. Por debajo del umbral: tarifa general 35%.
-- TTD minima (paragrafo 6 Art. 240): 15% sobre utilidad depurada.
-- Topes Art. 771-5: individual 100 UVT = $5.237.400; tope general 40.000 UVT = $2.094.960.000.
+- TTD (paragrafo 6 Art. 240): impuesto depurado / utilidad depurada >= 15%. Sin ID y UD verificados es N/D; la TET contable no es la TTD.
+- Topes Art. 771-5: individual 100 UVT por pago = $5.237.400; general: menor entre 40% de lo pagado (maximo 40.000 UVT = $2.094.960.000) y 35% de costos y deducciones.
 - Limite combinado de descuentos Arts. 255 + 256 + 257: maximo 25% del impuesto a cargo (Art. 258 E.T.).
 - Catalogo de descuentos vigentes 2026:
     Art. 256 E.T. — descuento 30% por inversion en CT&I (calificacion MinCiencias/CNBT; tope 25% impuesto a cargo; carry-forward 4 anos).
@@ -40,7 +40,7 @@ ALWAYS cita "Art. 240 E.T." en la narrativa markdown — la tarifa general 35% e
     Art. 255 E.T. — descuento 25% por inversiones en control y mejoramiento ambiental.
     Art. 115 E.T. — deduccion 100% del ICA pagado (afectacion neta ~35% via base gravable).
     Art. 258-1 E.T. — descuento 100% del IVA en bienes de capital productivos.
-- Niveles de alerta TET:
+- Niveles de alerta (heuristica interna sobre la TET contable = impuesto causado clase 54 / UAI):
     verde < 20%; amarillo 20-30%; rojo > 30%.
 - Cifras monetarias en formato es-CO: $1.234.567,89.
 ${nitContext ? `\nContexto del cliente: ${nitContext}.` : ''}${useCase ? `\nCaso de uso: ${useCase}.` : ''}`;
@@ -49,16 +49,13 @@ ${nitContext ? `\nContexto del cliente: ${nitContext}.` : ''}${useCase ? `\nCaso
 
 ${context2026}
 
-<task>Calcular la Tasa Efectiva de Tributacion (TET), la Tasa de Tributacion Depurada (TTD del paragrafo 6 Art. 240 E.T.) y emitir nivel de alerta verde/amarillo/rojo sobre los anchors deterministicos del balance preprocesado, generando sugerencias de optimizacion fiscal cuando el nivel sea amarillo o rojo.</task>
+<task>Explicar la tasa efectiva CONTABLE (impuesto causado clase 54 / UAI) y su nivel de alerta, ya calculados por el sistema sobre los anchors deterministicos, declarar la TTD del paragrafo 6 Art. 240 E.T. como no determinable sin ID/UD, y proponer sugerencias de optimizacion fiscal cuando el nivel sea amarillo o rojo.</task>
 
 <success_criteria>
-- data.uai = ingresos - (gastos sin gasto por impuesto). Si el preprocessor incluye el impuesto causado de clase 54, restalo del total de gastos.
-- data.impuestoProyectado = uai x tarifa Art. 240 (35% default; 38% hidroelectricas y 40% financieras/seguros/bolsas SOLO si superan su umbral de renta gravable en UVT).
-- data.tet = impuestoProyectado / uai como decimal (no porcentaje). El validator reconcilia con tolerancia 0.1 pp.
-- data.ttd aproximada (TTD ~ TET si no hay ajustes del paragrafo 6); si TTD < 15% el markdown declara el impuesto adicional = (UD x 15%) - ID.
-- data.nivelAlerta: verde si tet < 0.20; amarillo si 0.20 <= tet <= 0.30; rojo si tet > 0.30.
+- data.uai, data.impuestoProyectado (impuesto causado en libros, clase 54), data.tet (impuesto causado / UAI) y data.nivelAlerta los fija el sistema en codigo; copia los del contexto.
+- data.ttd = null: sin impuesto depurado (ID) ni utilidad depurada (UD) verificados la TTD y el impuesto adicional no son determinables; no los aproximes con la TET contable.
 - Si nivelAlerta es amarillo o rojo: data.sugerenciasOptimizacion[] tiene >= 2 entradas con factibilidad alta o media, cada una con norma Art. E.T. textual, ahorroEstimado en COP y requisitos[].
-- Si UAI < 0 (perdida fiscal): TET = 0, TTD = 0, nivelAlerta = verde y warning "perdida fiscal: TTD no aplica".
+- Si UAI <= 0: tet y nivelAlerta son null (no hay base para la razon); declara en warnings que la perdida contable no demuestra perdida fiscal ni UD <= 0.
 - El markdown cita explicitamente "Art. 240 E.T." en la seccion de calculo (defensa Art. 647 E.T.).
 </success_criteria>
 
@@ -74,8 +71,8 @@ ${context2026}
 </constraints>
 
 Formato esperado del campo markdown (4 secciones):
-1. Calculo de la TET (incluyendo formula, UAI, impuesto proyectado, TET porcentual, comparativo media empresarial CO ~25.5% MinHacienda 2024 + cita Art. 240 E.T.).
-2. Calculo de la TTD (paragrafo 6 Art. 240 E.T.).
+1. TET contable (formula impuesto causado / UAI, UAI, impuesto causado, TET porcentual + cita Art. 240 E.T.).
+2. TTD (paragrafo 6 Art. 240 E.T.): no determinable sin ID/UD; explicar que datos faltan.
 3. Nivel de alerta (verde/amarillo/rojo + justificacion).
 4. Sugerencias de optimizacion (2-4 con norma, ahorro COP, requisitos, factibilidad).
 

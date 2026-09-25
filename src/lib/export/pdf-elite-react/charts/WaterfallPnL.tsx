@@ -4,6 +4,7 @@
 import React from 'react';
 import { Svg, Rect, Line, Text as SvgText, G } from '@react-pdf/renderer';
 import type { WaterfallItem } from '../types';
+import { formatBigCop, formatCop } from '@/lib/charts/format';
 import {
   CHARCOAL_700,
   SAGE_500,
@@ -19,21 +20,12 @@ interface Props {
   height?: number;
 }
 
-function formatCompact(amount: number): string {
-  const abs = Math.abs(amount);
-  const sign = amount < 0 ? '-' : '';
-  if (abs >= 1e9) return `${sign}${(abs / 1e9).toFixed(1)}B`;
-  if (abs >= 1e6) return `${sign}${(abs / 1e6).toFixed(1)}M`;
-  if (abs >= 1e3) return `${sign}${(abs / 1e3).toFixed(0)}K`;
-  return `${sign}${abs.toFixed(0)}`;
-}
-
-function formatCOP(amount: number): string {
-  const abs = Math.abs(Math.round(amount));
-  const sign = amount < 0 ? '-' : '';
-  const withThousands = abs.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  return `${sign}$${withThousands}`;
-}
+// Formato es-CO único con gráficos y KPIs (reportes-export-19, spec v10.1
+// "Formato numérico estricto"): escalas en español ('M', 'mil M'; nunca 'B',
+// que en español se lee billón = 10^12), coma decimal y negativos entre
+// paréntesis, igual que los estados del mismo PDF. Antes: '2.4B', '-150.0M',
+// '-$150.000.000'. Ejes y cifras sobre las barras: `formatBigCop`; monto bajo
+// cada rótulo: `formatCop`.
 
 export function WaterfallPnL({ items, width = 500, height = 300 }: Props) {
   if (!items || items.length === 0) return null;
@@ -103,7 +95,7 @@ export function WaterfallPnL({ items, width = 500, height = 300 }: Props) {
               textAnchor: 'end',
             }}
           >
-            {formatCompact(tick)}
+            {formatBigCop(tick)}
           </SvgText>
         </G>
       ))}
@@ -152,7 +144,7 @@ export function WaterfallPnL({ items, width = 500, height = 300 }: Props) {
                 textAnchor: 'middle',
               }}
             >
-              {formatCompact(b.end)}
+              {formatBigCop(b.end)}
             </SvgText>
             {/* X label */}
             <SvgText
@@ -178,7 +170,7 @@ export function WaterfallPnL({ items, width = 500, height = 300 }: Props) {
                 textAnchor: 'middle',
               }}
             >
-              {formatCOP(b.amount)}
+              {formatCop(b.amount)}
             </SvgText>
           </G>
         );

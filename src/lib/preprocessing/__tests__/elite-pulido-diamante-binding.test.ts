@@ -6,14 +6,14 @@
 // que el LLM consume) emite las 4 secciones Curator esperadas cuando se le
 // pasa el snapshot 2025 del fixture Pulido Diamante.
 //
-// Las 4 secciones:
-//   - "## Reclasificaciones aplicadas (Curator R1)" — porque el fixture tiene
-//     saldos negativos materiales en 120505 y 159205.
-//   - "## Anclaje patrimonial aplicado (Curator R5)" — porque hay gap ECP↔Balance
-//     de $1.572M.
-//   - "## Cierre de Flujo de Efectivo aplicado (Curator R6)" — POST re-calibracion
-//     del fixture (gap dentro de guardrail al 50%).
-//   - "## Advertencia de Valoracion (Curator R7)" — porque margen bruto > 85%.
+// Secciones (auditoría 2026-09):
+//   - "## Reclasificaciones aplicadas (Curator R1)" — el fixture tiene un
+//     saldo crédito material en 120505.
+//   - "## Cierre Virtual aplicado (Curator R8)" — hay actividad P&L.
+//   - "## Advertencia de Valoracion (Curator R7)" — margen bruto > 85%.
+//   - NO "Anclaje patrimonial (R5)" ni "Cierre de Flujo de Efectivo (R6)":
+//     R5 ya no reescribe el patrimonio y R6 sólo absorbe redondeos; el
+//     descuadre deliberado del fixture (379505) bloquea en vez de maquillarse.
 //
 // Si alguna seccion falta, el LLM no veria el campo Curator correspondiente
 // y el reporte final se generaria sin el ajuste — la regresion mas peligrosa
@@ -25,6 +25,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { buildDeterministicCashFlow } from '@/lib/agents/financial/contracts/deterministic-breakdown';
 import { renderSnapshotLines } from '@/lib/agents/financial/orchestrator';
 
 import {
@@ -39,38 +40,41 @@ const FIXTURE_PATH = resolve(
   'elite-pulido-diamante.csv',
 );
 
-function loadPrimarySnapshot() {
+function loadBalance() {
   const csv = readFileSync(FIXTURE_PATH, 'utf-8');
   const rows = parseTrialBalanceCSV(csv);
   const result = preprocessTrialBalance(rows);
   if (!result.primary) {
     throw new Error('preprocessTrialBalance no produjo snapshot primario.');
   }
-  return result.primary;
+  return result;
+}
+
+function loadPrimarySnapshot() {
+  return loadBalance().primary;
 }
 
 describe('ELITE Pulido Diamante — smoke del bloque vinculante (LLM-facing)', () => {
   // -------------------------------------------------------------------------
-  // Notas de la nueva arquitectura (post-R8, mayo 2026):
+  // Notas (auditoría 2026-09, niif-preproceso-06/-15/-16, recalculo-08):
   //
-  // (a) R8 (Cierre Virtual) reemplaza a R5 como absorbedor del gap del fixture:
-  //     el residual de la cuenta 379505 (-$1,572B) + el gap 3605 viejo vs
-  //     utilidad dinámica ($147,5M) terminan en la cuenta virtual 3710VC. R5
-  //     solo ve la ecuación contable ya cuadrada y NO actúa, así que la
-  //     sección "## Anclaje patrimonial aplicado (Curator R5)" NO aparece en
-  //     el bloque vinculante. En su lugar aparece la sección R8.
+  // (a) R8 ya no absorbe el descuadre del fixture (379505, −$1.572M) en
+  //     3710VC: sólo reclasifica el 3605 anterior ($145M). El residual queda
+  //     bloqueante y R5 no ancla el patrimonio, así que la sección
+  //     "## Anclaje patrimonial aplicado (Curator R5)" NO aparece.
   //
-  // (b) R6 (Cierre EFE): PREMISA CORREGIDA en la auditoría 2026-08. Este
-  //     comentario afirmaba que la brecha era ≈ $312,5M y que el guardrail
-  //     rechazaba el cierre. Esa brecha era un artefacto del defecto de R1 que
-  //     reclasificaba la depreciación acumulada (159205) a pasivo y dejaba a R2
-  //     sin el ajuste no-cash de D&A. Con las correctoras preservadas
-  //     (NIC 1 párr. 33), la brecha real es de $80M —absorbible— y R6 SÍ
-  //     aplica el cierre, por lo que la sección R6 aparece en el bloque, tal
-  //     como anticipaba la cabecera de este archivo.
+  // (b) R6 sólo absorbe redondeos (≤ $1). La brecha del EFE de este fixture
+  //     es la variación del descuadre entre periodos ($177,5M) y queda
+  //     visible: la sección R6 NO aparece y el EFE se declara no reconciliado.
+  //
+  // (c) recalculo-11: el EFE del curator R2 ya no se publica como bloque
+  //     vinculante (la única fuente vinculante del EFE es el determinista de
+  //     TOTALES VINCULANTES, que imprime "Reconciliado: sí/no"). En este
+  //     helper la brecha de R2 llega al LLM como hallazgo del curator.
   // -------------------------------------------------------------------------
-  it('renderSnapshotLines emite R1 + R6 + R8 + R7 (R5 inactivo por la nueva arquitectura)', () => {
-    const snap = loadPrimarySnapshot();
+  it('renderSnapshotLines emite R1 + R8 + R7 (R5 y R6 no maquillan el descuadre)', () => {
+    const balance = loadBalance();
+    const snap = balance.primary;
     const lines = renderSnapshotLines(snap);
     const text = lines.join('\n');
 
@@ -91,26 +95,33 @@ describe('ELITE Pulido Diamante — smoke del bloque vinculante (LLM-facing)', (
         text,
     ).toContain('## Cierre Virtual aplicado (Curator R8)');
 
-    // Sub-string 3: R5 (anclaje patrimonial) — NO debe aparecer: bajo la nueva
-    // arquitectura R8 absorbe el gap antes y deja la ecuación cuadrada, por
-    // lo que el guard de R5 lo deja pasar sin actuar.
+    // Sub-string 3: R5 (anclaje patrimonial) — NO debe aparecer: desde la
+    // auditoría 2026-09 R5 nunca reescribe el patrimonio (sólo revela una
+    // brecha desglose ↔ clase 3 y bloquea), así que no hay anclaje que pintar.
     expect(
       text,
-      'La seccion R5 NO deberia emitirse cuando R8 ya cuadró la ecuación. ' +
+      'La seccion R5 NO deberia emitirse: R5 ya no ancla el patrimonio. ' +
         'Output recibido:\n' +
         text,
     ).not.toContain('## Anclaje patrimonial aplicado (Curator R5)');
 
-    // Sub-string 4: R6 (cierre EFE) — DEBE aparecer. Si el curator ajustó el
-    // EFE para cuadrarlo contra PUC 11 y el LLM no ve ese ajuste, redacta el
-    // estado de flujos como si cerrara solo: el ajuste queda sin revelar y el
-    // informe pierde su defensa ante el Art. 647 E.T.
+    // Sub-string 4: R6 (cierre EFE) — NO debe aparecer. Auditoría 2026-09:
+    // R6 sólo absorbe redondeos (≤ $1). Este fixture no cuadra (379505), el
+    // EFE queda con brecha visible y el bloque lo declara "Reconciliado: no"
+    // en lugar de presentar un ajuste de capital de trabajo inventado.
     expect(
       text,
-      'Falta seccion R6 — el LLM no veria el ajuste de cierre del EFE y no lo revelaria. ' +
-        'Output recibido:\n' +
-        text,
-    ).toContain('## Cierre de Flujo de Efectivo aplicado (Curator R6)');
+      'La seccion R6 NO deberia emitirse: no hubo cierre forzado. Output recibido:\n' + text,
+    ).not.toContain('## Cierre de Flujo de Efectivo aplicado (Curator R6)');
+    // El EFE no se declara reconciliado: ni el R2 (su brecha exacta llega como
+    // hallazgo ALTO, sin sección vinculante propia) ni el determinista.
+    expect(text).not.toContain('EFE INDIRECTO PRECALCULADO (Curator R2)');
+    expect(text).toMatch(
+      /\[CURATOR CUR-R2 · ALTO\] Estado de Flujos de Efectivo[^\n]*Brecha: \$177\.500\.000 \(NO cuadra/,
+    );
+    const efe = buildDeterministicCashFlow(snap, balance.comparative!)!;
+    expect(efe.reconciled).toBe(false);
+    expect(efe.reconciliationGapCents).toBe(BigInt(17_750_000_000));
 
     // Sub-string 5: R7 (costo presunto) — DEBE aparecer
     expect(
@@ -131,10 +142,13 @@ describe('ELITE Pulido Diamante — smoke del bloque vinculante (LLM-facing)', (
     expect(text).toMatch(/120505/);
     expect(text).toMatch(/159205/);
 
-    // R8: el residual absorbido en 3710VC ≈ $1.719,5M debe aparecer literal
-    // (formato es-CO: punto miles + coma decimal). El centsAdjustment es el
-    // único valor con esa magnitud que el renderer pinta.
-    expect(text).toMatch(/1\.719\.500\.000/);
+    // R8: la reclasificación del 3605 anterior ($145M → 3710VC) aparece
+    // literal (formato es-CO). Auditoría 2026-09: R8 ya no absorbe el
+    // descuadre del fixture (antes pintaba un "ajuste residual" de
+    // $1.719,5M); ese residual bloquea en el gate 422 y no se presenta al LLM
+    // como parte del patrimonio.
+    expect(text).toMatch(/145\.000\.000/);
+    expect(text).not.toMatch(/Ajuste residual absorbido/);
 
     // R7: el callout debe traer titulo y cuerpo (no vacios).
     expect(text).toMatch(/Texto literal del callout/);

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { adjustmentLedgerSchema } from '@/lib/reports/adjustment-ledger';
 import { z } from 'zod';
 import { financialReportRequestSchema, excludedFactIdsSchema } from '@/lib/validation/schemas';
 import { getCurrentWorkspaceId } from '@/lib/db/workspace';
@@ -7,10 +8,15 @@ import {
   BalanceValidationError,
 } from '@/lib/agents/financial/orchestrator';
 import {
-  parseTrialBalanceCSV,
   preprocessTrialBalance,
   type PreprocessedBalance,
 } from '@/lib/preprocessing/trial-balance';
+import {
+  parseUploadedTrialBalanceText,
+  TrialBalanceIngestError,
+} from '@/lib/preprocessing/raw-data';
+import { applyRequestConfirmations } from '@/lib/reports/ingest-confirmations';
+import { resolveClientPreprocessed } from '@/lib/reports/client-preprocessed';
 import {
   revivePreprocessedBalance,
   toJsonSafe,
@@ -64,22 +70,7 @@ const provisionalFlagSchema = z
   })
   .optional();
 
-const adjustmentSchema = z.object({
-  id: z.string().min(1).max(100),
-  accountCode: z.string().min(1).max(10),
-  accountName: z.string().min(1).max(200),
-  amount: z.number().refine((n) => Number.isFinite(n), 'amount debe ser finito'),
-  rationale: z.string().min(1).max(2_000),
-  status: z.enum(['proposed', 'applied', 'rejected']),
-  proposedAt: z.string().min(1).max(40),
-  appliedAt: z.string().min(1).max(40).optional(),
-  rejectedAt: z.string().min(1).max(40).optional(),
-});
-const adjustmentLedgerSchema = z
-  .object({
-    adjustments: z.array(adjustmentSchema).max(50),
-  })
-  .optional();
+// Contrato único del ledger (incluye `period` del ajuste multiperiodo).
 
 export async function POST(req: Request) {
   const gate = await requireAuthSession();
@@ -98,7 +89,20 @@ export async function POST(req: Request) {
       );
     }
 
-    const { rawData, company, language, instructions } = parsed.data;
+    const { company, language, instructions } = parsed.data;
+
+    // ── P4: confirmaciones del usuario sobre la lectura del balance ─────────
+    // `unitMultiplier` (1 | 1000 | 1000000) confirma la unidad de un archivo
+    // que declara "en miles / millones"; `maturityOverrides` declara el
+    // vencimiento real de cuentas puntuales. Ambas se escriben como directivas
+    // al inicio de `rawData` (el intake ya las trae ahí): Stage 0, los agentes
+    // y /export re-derivan el balance del MISMO texto. Una contradicción con
+    // las directivas del texto es 422, nunca se elige una en silencio.
+    // /consolidate y /export aceptan los mismos campos con el mismo helper
+    // (`applyRequestConfirmations`), para quien no reenvía el texto confirmado.
+    const confirmed = applyRequestConfirmations(body, parsed.data.rawData);
+    if (!confirmed.ok) return confirmed.response;
+    const rawData = confirmed.rawData;
 
     const provisionalParsed = provisionalFlagSchema.safeParse(
       (body as { provisional?: unknown }).provisional,
@@ -169,13 +173,22 @@ export async function POST(req: Request) {
       ),
     };
 
-    // Reutiliza el `preprocessed` enviado por el cliente (idempotencia con
-    // /api/upload). Sino, lo re-procesamos aqui — `runNiifPhase` tambien sabe
-    // hacerlo internamente; lo precomputamos por consistencia con /route.ts.
-    // El payload del cliente se valida estructuralmente y se reviven los
-    // BigInt (cents) — un shape inválido es 400, nunca cast ciego.
+    // Procedencia del preprocesado (ingesta-01):
+    //  1. El servidor lo RE-DERIVA desde `rawData` con el mismo helper que usa
+    //     /api/upload (`parseUploadedTrialBalanceText`: CSV, bloques XLSX
+    //     `[period=…]` y texto con el informe de validación antepuesto). Es la
+    //     fuente autoritativa: `rawData` es lo que leen los agentes, así que
+    //     las anclas deben salir de ahí y no de un objeto que manda el cliente.
+    //  2. El `preprocessed` que reenvía el cliente (el del upload) sólo se usa
+    //     si `rawData` no produce filas. Se valida estructuralmente y se
+    //     reviven los BigInt (cents) — un shape inválido es 400, nunca cast
+    //     ciego — y, antes de usarlo, se RE-DERIVA desde sus propias filas
+    //     (cross-dep P1): totales de control alterados → 422. Es el del
+    //     upload, sin ajustes: Stage 0 aplica después el ledger.
+    //  3. Si ninguno existe, Stage 0 (`prepareFinancialContext`) decide: un
+    //     balance tabular sin filas o con hojas en conflicto → 422 con motivo.
     const bodyPreprocessed = (body as { preprocessed?: unknown }).preprocessed;
-    let preprocessed: PreprocessedBalance | undefined;
+    let clientPreprocessed: PreprocessedBalance | undefined;
     if (bodyPreprocessed !== undefined && bodyPreprocessed !== null) {
       const revived = revivePreprocessedBalance(bodyPreprocessed);
       if (!revived) {
@@ -184,10 +197,34 @@ export async function POST(req: Request) {
           { status: 400 },
         );
       }
-      preprocessed = revived;
-    } else {
-      const rows = parseTrialBalanceCSV(rawData);
-      preprocessed = rows.length > 0 ? preprocessTrialBalance(rows) : undefined;
+      clientPreprocessed = revived;
+    }
+    let serverPreprocessed: PreprocessedBalance | undefined;
+    let rawDataRejected = false;
+    try {
+      const parsedRaw = parseUploadedTrialBalanceText(rawData);
+      if (parsedRaw.rows.length > 0) {
+        // ingesta-09 (cross-dep W3-A): mismo marcado de saldos de apertura que
+        // /api/upload, /api/financial-report, /export y el Stage 0.
+        serverPreprocessed = preprocessTrialBalance(parsedRaw.rows, {
+          openingPeriods: parsedRaw.openingPeriods,
+        });
+      }
+    } catch (err) {
+      // Conflicto de ingesta (hojas/periodos incompatibles): Stage 0 lo
+      // re-detecta y responde 422 con los motivos. No se sustituye por el
+      // objeto del cliente. Otros fallos caen al respaldo del cliente.
+      if (err instanceof TrialBalanceIngestError) rawDataRejected = true;
+    }
+    let preprocessed: PreprocessedBalance | undefined;
+    if (!rawDataRejected) {
+      if (serverPreprocessed) {
+        preprocessed = serverPreprocessed;
+      } else if (clientPreprocessed) {
+        const client = resolveClientPreprocessed(bodyPreprocessed, null);
+        if (!client.ok) return client.response;
+        preprocessed = client.preprocessed;
+      }
     }
 
     const stream =

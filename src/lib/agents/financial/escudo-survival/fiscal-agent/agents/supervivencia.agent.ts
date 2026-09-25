@@ -28,7 +28,8 @@ export async function runSupervivenciaAgent(
   });
 
   const activacionForzada = opts.forceActive === true;
-  const activacionPorScore = risk.score > 60;
+  // Un score no publicable (sin base gravable) no activa el modo.
+  const activacionPorScore = risk.publicable && risk.score > 60;
   const activo = activacionForzada || activacionPorScore;
 
   const system = buildSupervivenciaPrompt(input.language, input.company.nit);
@@ -43,7 +44,7 @@ ANCLAS_FISCALES (Bloque Âncora):
   F01 UAI: ${formatCopFromCents(BigInt(input.fiscalAnchor.f01))}
   F02 Imp. ref. 35%: ${formatCopFromCents(BigInt(input.fiscalAnchor.f02))}
   F03 Retenciones: ${formatCopFromCents(BigInt(input.fiscalAnchor.f03))}
-  F04 Saldo neto: ${formatCopFromCents(BigInt(input.fiscalAnchor.f04))}
+  F04 Posición de referencia contable (estimación, no liquidación): ${formatCopFromCents(BigInt(input.fiscalAnchor.f04))}
   F09 TET: ${input.fiscalAnchor.f09}%
   F10 Cobertura: ${input.fiscalAnchor.f10}%
 
@@ -67,7 +68,7 @@ PROXIMOS_VENCIMIENTOS_DIAN (15 días anticipación):
 ${input.fiscalAnchor.calendarioDian.vencimientos
   .filter((v) => v.estado === 'proximo' || v.estado === 'verificar')
   .slice(0, 5)
-  .map((v) => `  - ${v.obligacion} (${v.frecuencia}) → ${v.proximoVencimiento} | ${v.diasRestantes} días | est. ${formatCopFromCents(BigInt(v.valorEstimado))}`)
+  .map((v) => `  - ${v.obligacion} (${v.frecuencia}) → ${v.proximoVencimiento} | ${v.diasRestantes} días | est. ${v.valorEstimado === null ? 'N/D' : formatCopFromCents(BigInt(v.valorEstimado))}`)
   .join('\n') || '  (sin vencimientos próximos)'}
 
 PERIODO: ${input.fiscalAnchor.fuente.periodo}
@@ -85,7 +86,38 @@ ${input.instructions ?? '(sin instrucciones adicionales)'}
     signal: opts.signal,
   });
 
-  return { ...json, data: { ...json.data,
-    tet: { tetActual: ccv.f09Pct, brecha15Pct: null, impuestoAdicional: null } },
-    warnings: [...json.warnings, TTD_UNAVAILABLE_REASON] };
+  // Cifras derivables del Âncora / del score: deterministas. Exposiciones sin
+  // cálculo verificable: N/D. Reserva: 10% de la utilidad neta (heurística
+  // interna declarada, igual que el módulo legacy). Art. 36-3 derogado: la
+  // norma de dividendos se reemplaza (auditoría 2026-09, tributario-modulos-04,
+  // tributario-calc-01).
+  const utilidadNeta = input.preprocessed?.primary?.controlTotals?.cents?.utilidadNeta ?? BigInt(0);
+  const reserva = utilidadNeta > BigInt(0) ? utilidadNeta / BigInt(10) : BigInt(0);
+  const dividendos = json.data.dividendos;
+  const normaDividendos =
+    dividendos && /36-3/.test(dividendos.norma)
+      ? 'Arts. 48-49, 242 y 242-1 E.T. (Art. 36-3 derogado por Ley 2277/2022 art. 96)'
+      : dividendos?.norma;
+  return {
+    ...json,
+    data: {
+      ...json.data,
+      activo,
+      exposicionFiscalEstimada: null,
+      exposicionMitigada: null,
+      tet: { tetActual: ccv.f09Pct, brecha15Pct: null, impuestoAdicional: null },
+      escudoRetenciones: {
+        ...json.data.escudoRetenciones,
+        f03: input.fiscalAnchor.f03,
+        ratioF10: input.fiscalAnchor.f10,
+      },
+      reservaContingencia: { sugerida: reserva.toString(), pctUtilidad: 0.1 },
+      ...(dividendos && normaDividendos ? { dividendos: { ...dividendos, norma: normaDividendos } } : {}),
+    },
+    warnings: [
+      ...json.warnings,
+      TTD_UNAVAILABLE_REASON,
+      'Exposición fiscal estimada y mitigada: N/D — no hay cálculo verificable con los datos del balance.',
+    ],
+  };
 }

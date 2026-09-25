@@ -19,6 +19,7 @@ import type {
   EditorialReport,
   AuditFindingDomain,
   AuditFindingSeverity,
+  AuditFindingsSpec,
   AuditOpinionKind,
 } from '../types';
 import {
@@ -27,6 +28,7 @@ import {
   PageNumberBadge,
   GoldRule,
   TopoOrnament,
+  TocAnchor,
 } from '../primitives';
 import {
   CREAM_50,
@@ -75,6 +77,8 @@ const OPINION_LABEL: Record<AuditOpinionKind, string> = {
   con_salvedades: 'CON SALVEDADES',
   desfavorable: 'DESFAVORABLE',
   abstension: 'ABSTENCIÓN',
+  // Sin dictamen del Revisor Fiscal: no es una abstención (auditoria-calidad-04).
+  no_emitida: 'NO EMITIDA',
 };
 
 function opinionColor(o: AuditOpinionKind): string {
@@ -83,7 +87,20 @@ function opinionColor(o: AuditOpinionKind): string {
     case 'con_salvedades': return SAND_500;
     case 'desfavorable': return WINE_500;
     case 'abstension': return CHARCOAL_900;
+    case 'no_emitida': return CHARCOAL_900;
   }
+}
+
+/**
+ * Score global con su cobertura (auditoria-calidad-21), mismo texto que
+ * `formatScoreWithCoverage` del informe Markdown: con dominios fallidos el
+ * promedio es PARCIAL; sin ningún dominio completado es N/D.
+ */
+export function auditScoreLabel(audit: Pick<AuditFindingsSpec, 'overallScore' | 'coverage'>): string {
+  const cov = audit.coverage;
+  if (audit.overallScore === null || (cov?.partial && cov.completed === 0)) return 'N/D';
+  if (cov?.partial) return `${audit.overallScore}/100 — PARCIAL (${cov.completed}/${cov.total} dominios)`;
+  return `${audit.overallScore}/100`;
 }
 
 function severityColor(s: AuditFindingSeverity): string {
@@ -124,6 +141,7 @@ export function AuditFindingsPage({ doc }: Props) {
         position: 'relative',
       }}
     >
+      <TocAnchor id="audit" collect={doc.tocCollector} />
       <View
         style={{
           position: 'absolute',
@@ -136,7 +154,7 @@ export function AuditFindingsPage({ doc }: Props) {
       >
         <TopoOrnament
           variant="corner-tr"
-          opacity={1}
+          opacity={0.07}
           areaAccent="escudo"
           seed={404}
           width={PAGE_W * 0.28}
@@ -198,7 +216,7 @@ export function AuditFindingsPage({ doc }: Props) {
               opacity: 0.85,
             }}
           >
-            Score {audit.overallScore}/100
+            Score {auditScoreLabel(audit)}
           </Text>
         </View>
       </View>
@@ -308,7 +326,9 @@ export function AuditFindingsPage({ doc }: Props) {
       <View style={{ flexGrow: 1 }} wrap>
         {audit.topFindings.length === 0 ? (
           <Text style={{ fontFamily: FONT_SANS, fontSize: TYPE_BODY, color: CHARCOAL_900, fontStyle: 'italic' }}>
-            Sin hallazgos materiales. Dictamen favorable sin salvedades.
+            {audit.opinionType === 'favorable'
+              ? 'Sin hallazgos materiales. Dictamen favorable sin salvedades.'
+              : 'Sin hallazgos materiales reportados.'}
           </Text>
         ) : (
           audit.topFindings.map((f) => (
@@ -396,7 +416,7 @@ export function AuditFindingsPage({ doc }: Props) {
       </View>
 
       <GoldRule />
-      <PageNumberBadge pageNumber={0} />
+      <PageNumberBadge />
     </Page>
   );
 }

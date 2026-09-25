@@ -29,7 +29,19 @@ import { useDocumentExtraction } from './useDocumentExtraction';
 import type { FieldConfidence } from './useDocumentExtraction';
 import { IntakePreview } from './IntakePreview';
 import { HechosEmpresaConfirm } from './HechosEmpresaConfirm';
-import { collectMissingRequired, resolveNiifRawData } from './niifIntakeValidation';
+import {
+  applyIntakeDirectives,
+  collectMissingRequired,
+  isUnitPending,
+  missingRequiredLabels,
+  normalizeRegimenTributario,
+  resolveExtractedFiscalPeriod,
+  resolveNiifRawData,
+} from './niifIntakeValidation';
+import { RegimenTributarioSelector } from './RegimenTributarioSelector';
+import { UnitConfirmationPanel } from './UnitConfirmationPanel';
+import { MaturityOverridesEditor } from './MaturityOverridesEditor';
+import type { UnidadMonetaria, Vencimiento } from '@/lib/upload/ingest-directives';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -107,6 +119,8 @@ const DEFAULT_COMPANY: CompanyMetadata = {
   legalRepresentative: '',
   accountant: '',
   fiscalAuditor: '',
+  // Sin dato → se evalúa como régimen ordinario (V10 exigido).
+  regimenTributario: null,
 };
 
 const DEFAULT_OUTPUT_OPTIONS: NiifOutputOptions = {
@@ -362,7 +376,18 @@ export function NiifReportIntake() {
   const [skippedUpload, setSkippedUpload] = useState(false);
   // Hechos del negocio EXCLUIDOS de esta corrida (confirmación pre-reporte). Efímero.
   const [excludedFactIds, setExcludedFactIds] = useState<string[]>([]);
-  const { state: extractionState, uploadAndExtract, reset: resetExtraction } = useDocumentExtraction();
+  const {
+    state: extractionState,
+    uploadAndExtract,
+    confirmUnit,
+    reset: resetExtraction,
+  } = useDocumentExtraction();
+  // P4-b: excepciones de vencimiento por cuenta (opcionales). Efímeras como
+  // `excludedFactIds`: viajan como directiva en `rawData` al enviar.
+  const [maturityOverrides, setMaturityOverrides] = useState<Record<string, Vencimiento>>({});
+  // P4-a: unidad de un balance PEGADO a mano ('' = sin confirmar: pesos). La
+  // de un archivo la confirma /api/upload y ya viene en el texto extraído.
+  const [manualUnit, setManualUnit] = useState<UnidadMonetaria | ''>('');
 
   // Derive confidence map: when extraction is done, use it; otherwise all 'none'
   const confidenceMap: Record<string, FieldConfidence> =
@@ -386,6 +411,9 @@ export function NiifReportIntake() {
   // fires if the user is still on step 0 when OCR finishes — otherwise we'd
   // pull them back from a step they're already editing.
   const stepAtUploadRef = useRef(0);
+  // true cuando el usuario eligió el periodo fiscal a mano en esta sesión del
+  // intake: su elección gana sobre el periodo extraído del balance.
+  const fiscalPeriodEditedRef = useRef(false);
   useEffect(() => {
     if (extractionState.status === 'idle') {
       hasAutoAdvancedRef.current = false;
@@ -428,10 +456,14 @@ export function NiifReportIntake() {
         return {
           ...prev,
           company: updatedCompany,
-          fiscalPeriod:
-            extracted.fiscalPeriod && !prev.fiscalPeriod?.trim()
-              ? extracted.fiscalPeriod
-              : prev.fiscalPeriod,
+          // pipeline-flujo-17: el periodo del balance sustituye al valor por
+          // defecto (año actual − 1) salvo edición explícita del usuario; el
+          // servidor sella el informe si el intake y el balance difieren.
+          fiscalPeriod: resolveExtractedFiscalPeriod({
+            current: prev.fiscalPeriod,
+            extracted: extracted.fiscalPeriod,
+            userEdited: fiscalPeriodEditedRef.current,
+          }),
           niifGroup: extracted.niifGroup && !prev.niifGroup ? extracted.niifGroup : prev.niifGroup,
           rawData: extracted.rawText || prev.rawData,
         };
@@ -494,15 +526,30 @@ export function NiifReportIntake() {
   const extractedRawText =
     extractionState.status === 'done' ? extractionState.extracted?.rawText : undefined;
   const resolvedRawData = resolveNiifRawData(extractedRawText, values.rawData);
+  // P4-a: unidad declarada por el archivo subido y su confirmación.
+  const unitInfo =
+    extractionState.status === 'done' && !skippedUpload ? extractionState.extracted?.unit ?? null : null;
+  // ICU-04: también mientras una (re)confirmación está en vuelo o falló: el
+  // texto aún lleva la unidad anterior.
+  const unitPending = !skippedUpload && isUnitPending(extractionState);
 
   const handleSubmit = useCallback(() => {
     const extractedRaw =
       extractionState.status === 'done' ? extractionState.extracted?.rawText : undefined;
-    const finalRawData = resolveNiifRawData(extractedRaw, values.rawData);
+    // Confirmaciones del intake (P4) escritas como directivas en `rawData`:
+    // /niif, Stage 0 y /export re-derivan el balance de este mismo texto.
+    const finalRawData = applyIntakeDirectives(resolveNiifRawData(extractedRaw, values.rawData), {
+      vencimientos: maturityOverrides,
+      unidadConfirmada: extractedRaw ? undefined : manualUnit || undefined,
+    });
 
     // Guarda dura: el backend exige rawData.min(1). Sin esto el usuario llegaba
     // al final del wizard y recibía un HTTP 400 críptico.
     if (!finalRawData) return;
+    // Unidad declarada sin confirmar: /niif respondería 422 (recalculo-final-03).
+    // Con una reconfirmación en vuelo (o fallida) el texto lleva la unidad
+    // anterior: no se envía con una unidad distinta de la elegida (ICU-04).
+    if (isUnitPending(extractionState)) return;
 
     const finalIntake: NiifReportIntakeType = {
       ...values,
@@ -528,6 +575,8 @@ export function NiifReportIntake() {
   }, [
     values,
     excludedFactIds,
+    maturityOverrides,
+    manualUnit,
     extractionState,
     startNewConsultation,
     setPipelineInput,
@@ -539,7 +588,14 @@ export function NiifReportIntake() {
 
   // Generate year options
   const currentYear = new Date().getFullYear();
-  const years = Array.from({ length: 6 }, (_, i) => currentYear - i);
+  const baseYears = Array.from({ length: 6 }, (_, i) => currentYear - i);
+  // El periodo extraído del balance puede quedar fuera de la ventana de 6
+  // años: se añade como opción para que el select no lo muestre vacío.
+  const selectedYear = Number(values.fiscalPeriod);
+  const years =
+    /^\d{4}$/.test(values.fiscalPeriod ?? '') && !baseYears.includes(selectedYear)
+      ? [...baseYears, selectedYear].sort((a, b) => b - a)
+      : baseYears;
 
   // Helper: border class based on confidence + required-state.
   // Required fields with no value always render in danger color so the user
@@ -568,8 +624,9 @@ export function NiifReportIntake() {
           niifGroup: values.niifGroup,
         },
         resolvedRawData,
+        { unitPending, labels: missingRequiredLabels(t) },
       ),
-    [values.company, values.fiscalPeriod, values.niifGroup, resolvedRawData],
+    [values.company, values.fiscalPeriod, values.niifGroup, resolvedRawData, unitPending, t],
   );
 
   // ─── Step 1: Upload Document ──────────────────────────────────────────────
@@ -665,7 +722,7 @@ export function NiifReportIntake() {
           className="rounded-2xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger"
         >
           <p className="font-semibold mb-1">
-            Falta(n) {missingRequired.length} campo(s) requerido(s) para continuar:
+            {t.missingBanner.replace('{n}', String(missingRequired.length))}
           </p>
           <ul className="list-disc list-inside space-y-0.5">
             {missingRequired.map((label) => (
@@ -693,10 +750,22 @@ export function NiifReportIntake() {
           <span className="text-danger">*</span>
         </div>
         {extractedRawText ? (
-          <p className="text-xs text-n-600 flex items-center gap-1.5">
-            <CheckCircle className="w-3.5 h-3.5 text-success shrink-0" />
-            {t.rawDataFromFile}
-          </p>
+          <div className="space-y-3">
+            <p className="text-xs text-n-600 flex items-center gap-1.5">
+              <CheckCircle className="w-3.5 h-3.5 text-success shrink-0" />
+              {t.rawDataFromFile}
+            </p>
+            {/* P4-a: el archivo declara "en miles / millones" → confirmación explícita. */}
+            {unitInfo && (unitInfo.declared || unitInfo.confirmed) && (
+              <UnitConfirmationPanel
+                unit={unitInfo}
+                status={extractionState.unitConfirmation.status}
+                error={extractionState.unitConfirmation.error}
+                onConfirm={(u) => void confirmUnit(u)}
+                t={t}
+              />
+            )}
+          </div>
         ) : (
           <>
             <label htmlFor="niif-raw-data" className="block text-xs text-n-600 mb-1.5">
@@ -722,9 +791,29 @@ export function NiifReportIntake() {
             {!resolvedRawData && (
               <p className="text-2xs text-danger mt-1">{t.rawDataMissing}</p>
             )}
+            {/* P4-a: unidad de los importes pegados; sin elección = pesos. */}
+            <div className="mt-2">
+              <label htmlFor="niif-manual-unit" className="block text-xs text-n-700 mb-1">
+                {t.unitManualLabel}
+              </label>
+              <select
+                id="niif-manual-unit"
+                value={manualUnit}
+                onChange={(e) => setManualUnit(e.target.value as UnidadMonetaria | '')}
+                className="px-3 py-2 rounded-lg border border-n-200 text-sm text-n-900 bg-n-0 focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500"
+              >
+                <option value="">{t.unitManualNone}</option>
+                <option value="pesos">{t.unitPesos}</option>
+                <option value="miles">{t.unitMiles}</option>
+                <option value="millones">{t.unitMillones}</option>
+              </select>
+            </div>
           </>
         )}
       </div>
+
+      {/* P4-b: excepciones de vencimiento por cuenta (opcional). */}
+      <MaturityOverridesEditor value={maturityOverrides} onChange={setMaturityOverrides} t={t} />
 
       {/* Company data section */}
       <div>
@@ -890,6 +979,13 @@ export function NiifReportIntake() {
         </div>
       </div>
 
+      {/* Régimen de renta (auditoria-calidad-31): SIMPLE no exige V10 */}
+      <RegimenTributarioSelector
+        value={normalizeRegimenTributario(values.company.regimenTributario)}
+        onChange={(next) => updateCompany('regimenTributario', next)}
+        t={t}
+      />
+
       {/* 2-column: city + representante legal */}
       <div className="grid grid-cols-2 gap-4">
         <div>
@@ -1003,7 +1099,10 @@ export function NiifReportIntake() {
             <select
               id="niif-fiscal-period"
               value={values.fiscalPeriod}
-              onChange={(e) => updateField('fiscalPeriod', e.target.value)}
+              onChange={(e) => {
+                fiscalPeriodEditedRef.current = true;
+                updateField('fiscalPeriod', e.target.value);
+              }}
               aria-invalid={!values.fiscalPeriod}
               aria-describedby={
                 !values.fiscalPeriod && missingRequired.length > 0

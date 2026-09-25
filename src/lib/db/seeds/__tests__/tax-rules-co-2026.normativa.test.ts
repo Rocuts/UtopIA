@@ -10,6 +10,7 @@ import {
   RETIRED_RULE_CODES,
   UVT_VALUES,
 } from '../tax-rules-co-2026';
+import { PUC_PYME_COLOMBIA } from '../puc-pyme-colombia';
 import type { TaxRuleTriggers } from '@/lib/accounting/tax-engine/types';
 import { TAX_TREATMENT } from '@/lib/accounting/tax-engine/types';
 
@@ -194,18 +195,23 @@ describe('ReteFuente renta — Art. 392 E.T. y sujetos excluidos (Arts. 369 y 91
     expect(triggers('RTF_HONO_11').specificity!).toBeGreaterThan(0);
   });
 
-  it('existe la tarifa del 10% para personas naturales NO declarantes (Art. 392 inc. 2 E.T.)', () => {
-    // Art. 392 inc. 2 E.T. (mod. Art. 75 Ley 1819/2016): la tarifa por honorarios
-    // y comisiones de los NO obligados a declarar es del 10%. El seed sólo tenía
-    // el 11% plano, así que se retenía un punto de más a todo contratista no
-    // declarante y el certificado del Art. 381 E.T. salía por suma superior.
+  it('el 10% es para personas naturales dentro de 3.300 UVT (DUR 1.2.4.3.1), no para "no declarantes"', () => {
+    // Auditoría 2026-09 (tributario-calc-09): esta prueba exigía antes la
+    // etiqueta BENEFICIARIO_NO_DECLARANTE, que codificaba un criterio que el
+    // reglamento no usa. El DUR 1625/2016 Art. 1.2.4.3.1 (texto en
+    // src/data/tax_docs/decreto_1625_2016.md) fija 11% a personas jurídicas y
+    // 10% a personas naturales, salvo que el contrato o los pagos acumulados del
+    // año con el mismo agente superen 3.300 UVT (11% desde ese pago).
     const r10 = rule('RTF_HONO_10');
     expect(parseFloat(r10.rate)).toBeCloseTo(0.1, 6);
     expect(triggers('RTF_HONO_10').requiresTreatments).toEqual(
       expect.arrayContaining([
         TAX_TREATMENT.HONORARIOS,
-        TAX_TREATMENT.BENEFICIARIO_NO_DECLARANTE,
+        TAX_TREATMENT.HONORARIOS_PN_HASTA_3300_UVT,
       ]),
+    );
+    expect(triggers('RTF_HONO_10').requiresTreatments).not.toContain(
+      TAX_TREATMENT.BENEFICIARIO_NO_DECLARANTE,
     );
     // Es más específica que la del 11%, para que gane cuando ambas apliquen.
     expect(triggers('RTF_HONO_10').specificity!).toBeGreaterThan(
@@ -221,18 +227,51 @@ describe('ReteFuente renta — Art. 392 E.T. y sujetos excluidos (Arts. 369 y 91
     expect(3300 * 52_374).toBe(172_834_200);
   });
 
-  it('el 11% aplica a personas jurídicas y personas naturales declarantes, sin base mínima', () => {
+  it('el 11% aplica a personas jurídicas y a personas naturales por encima de 3.300 UVT, sin base mínima', () => {
+    // Antes la descripción decía "personas naturales declarantes" (criterio que
+    // el DUR 1.2.4.3.1 no usa). Ver prueba anterior.
     const r11 = rule('RTF_HONO_11');
     expect(parseFloat(r11.rate)).toBeCloseTo(0.11, 6);
     expect(r11.applyThresholdUvt).toBeNull();
-    expect(r11.description).toMatch(/declarante/i);
+    expect(r11.description).toMatch(/jur[ií]dicas/i);
+    expect(r11.description).toMatch(/3\.300 UVT/);
+    expect(r11.description).not.toMatch(/declarantes/i);
+    // Advierte la tabla del Art. 383 para rentas de trabajo no laborales.
+    expect(triggers('RTF_HONO_11').advisory).toMatch(/Art\. 383/);
+  });
+
+  it('rentas de trabajo no laborales por tabla del Art. 383: regla en revisión manual que desplaza la tarifa plana', () => {
+    // Art. 383 par. 2 E.T. (mod. art. 8 Ley 2277/2022) y DUR 1625/2016
+    // Art. 1.2.4.1.17 par. 4 (mod. art. 11 Decreto 2231/2023).
+    const t = triggers('RTF_RENTA_TRABAJO_TABLA_383');
+    expect(t.requiresTreatments).toEqual([TAX_TREATMENT.RENTA_TRABAJO_TABLA_383]);
+    expect(t.manualReview?.message).toMatch(/Art\. 383/);
+    expect(t.manualReview?.unlessTreatments).toBeUndefined();
+    expect(t.specificity!).toBeGreaterThan(triggers('RTF_HONO_10').specificity!);
+  });
+
+  it('servicios a no declarantes: 6% en las cuatro ventanas, más específico que el 4%', () => {
+    const svc6 = BUILT_IN_RULES.filter((r) => r.code.startsWith('RTF_SVC_6'));
+    expect(svc6).toHaveLength(4);
+    for (const r of svc6) {
+      expect(parseFloat(r.rate)).toBeCloseTo(0.06, 6);
+      expect(r.applicableTriggers.requiresTreatments).toEqual([
+        TAX_TREATMENT.BENEFICIARIO_NO_DECLARANTE,
+      ]);
+      expect(r.applicableTriggers.specificity!).toBeGreaterThan(0);
+      expect(r.applicableTriggers.specificity!).toBeLessThan(
+        triggers('RTF_HONO_11').specificity!,
+      );
+    }
   });
 });
 
 describe('Bases mínimas de retención — ventanas de vigencia del Decreto 0572/2025', () => {
+  // Servicios generales al 4% (declarantes). Las variantes del 6% y de compras
+  // tienen sus propias pruebas de ventanas más abajo.
   const svc = () =>
     BUILT_IN_RULES.filter(
-      (r) => r.taxType === 'RETEFUENTE' && r.code.startsWith('RTF_SVC_'),
+      (r) => r.taxType === 'RETEFUENTE' && r.code.startsWith('RTF_SVC_4'),
     );
 
   it('el umbral de servicios se modela en cuatro ventanas, no en un solo número', () => {
@@ -286,9 +325,96 @@ describe('Bases mínimas de retención — ventanas de vigencia del Decreto 0572
   });
 });
 
+describe('Compras de bienes — Art. 401 E.T.; DUR 1625/2016 Art. 1.2.4.9.1 (mod. Decreto 0572/2025)', () => {
+  const compras = (prefijo: string) => BUILT_IN_RULES.filter((r) => r.code.startsWith(prefijo));
+
+  it('2,5% declarantes y 3,5% no declarantes, sólo para transactionType purchase', () => {
+    for (const r of compras('RTF_COMPRAS_2_5')) {
+      expect(parseFloat(r.rate)).toBeCloseTo(0.025, 6);
+      expect(r.applicableTriggers.transactionTypes).toEqual(['purchase']);
+      expect(r.applicableTriggers.requiresTreatments).toBeUndefined();
+    }
+    for (const r of compras('RTF_COMPRAS_3_5')) {
+      expect(parseFloat(r.rate)).toBeCloseTo(0.035, 6);
+      expect(r.applicableTriggers.requiresTreatments).toEqual([
+        TAX_TREATMENT.BENEFICIARIO_NO_DECLARANTE,
+      ]);
+    }
+  });
+
+  it('base mínima 10 UVT desde el 01-jul-2026 y 27 UVT en la suspensión y antes del Decreto 0572', () => {
+    // Decreto 0572/2025 art. 6: literal i) del 1.2.4.9.1 = "cuantía inferior a
+    // diez (10) UVT" (texto en src/data/tax_docs/decreto_0572_2025.md).
+    expect(parseFloat(rule('RTF_COMPRAS_2_5').applyThresholdUvt!)).toBe(10);
+    expect(rule('RTF_COMPRAS_2_5').validFrom).toBe('2026-07-01T00:00:00-05:00');
+    expect(parseFloat(rule('RTF_COMPRAS_2_5_D572_W1').applyThresholdUvt!)).toBe(10);
+    expect(parseFloat(rule('RTF_COMPRAS_2_5_SUSPENSION').applyThresholdUvt!)).toBe(27);
+    expect(parseFloat(rule('RTF_COMPRAS_2_5_PRE_D572').applyThresholdUvt!)).toBe(27);
+  });
+
+  it('cada familia tiene cuatro ventanas temporalmente disjuntas', () => {
+    for (const prefijo of ['RTF_COMPRAS_2_5', 'RTF_COMPRAS_3_5', 'RTF_SVC_6']) {
+      const intervalos = compras(prefijo)
+        .map((r) => ({
+          from: r.validFrom ? Date.parse(r.validFrom) : Number.NEGATIVE_INFINITY,
+          until: r.validUntil ? Date.parse(r.validUntil) : Number.POSITIVE_INFINITY,
+        }))
+        .sort((a, b) => a.from - b.from);
+      expect(intervalos).toHaveLength(4);
+      for (let i = 1; i < intervalos.length; i++) {
+        expect(intervalos[i].from).toBeGreaterThan(intervalos[i - 1].until);
+      }
+    }
+  });
+});
+
+describe('ReteICA — calidad de agente retenedor del comprador', () => {
+  it('ICA_BOG_11 queda en revisión manual salvo que el caller declare agente_retenedor_ica', () => {
+    const t = triggers('ICA_BOG_11');
+    expect(t.manualReview?.unlessTreatments).toEqual([TAX_TREATMENT.AGENTE_RETENEDOR_ICA]);
+    expect(t.manualReview?.message).toMatch(/agente retenedor/i);
+  });
+});
+
 describe('UVT', () => {
   it('UVT 2026 = $52.374 (Resolución DIAN de diciembre de 2025)', () => {
     const uvt2026 = UVT_VALUES.find((u) => u.year === 2026);
     expect(parseFloat(uvt2026!.valueCop)).toBe(52_374);
+  });
+
+  it('cita la Resolución DIAN 000238 de 2025 (UVT 2026) y la 000193 de 2024 (UVT 2025)', () => {
+    // El seed citaba "Resolución DIAN 000187" para ambos años.
+    expect(UVT_VALUES.find((u) => u.year === 2026)!.decreeRef).toMatch(/000238/);
+    expect(UVT_VALUES.find((u) => u.year === 2025)!.decreeRef).toMatch(/000193/);
+  });
+});
+
+// Integración W3-B (auditoría 2026-09): las reglas de honorarios contabilizaban
+// la retención en 236525 «Servicios». En el PUC (Decreto 2650/1993) y en el
+// PUC sembrado la retención por honorarios es 236515 «Honorarios».
+describe('Cuentas de las reglas — existen en el PUC sembrado con el significado esperado', () => {
+  const puc = new Map(PUC_PYME_COLOMBIA.map((a) => [a.code, a]));
+
+  it('toda taxAccountCode del seed (salvo exento/excluido, sin línea) existe y es postable', () => {
+    const faltan = BUILT_IN_RULES.filter(
+      (r) => r.taxAccountCode !== null && !puc.get(r.taxAccountCode)?.isPostable,
+    ).map((r) => `${r.code} → ${r.taxAccountCode}`);
+    expect(faltan).toEqual([]);
+  });
+
+  it('la retención de honorarios (RTF_HONO_*) va a 236515 «Honorarios», no a 236525 «Servicios»', () => {
+    for (const code of ['RTF_HONO_11', 'RTF_HONO_10']) {
+      expect(rule(code).taxAccountCode, code).toBe('236515');
+      expect(puc.get(rule(code).taxAccountCode ?? '')?.name).toBe('Honorarios');
+    }
+  });
+
+  it('servicios sigue en 236525 y compras en 236540', () => {
+    for (const r of BUILT_IN_RULES.filter((x) => x.code.startsWith('RTF_SVC_'))) {
+      expect(r.taxAccountCode, r.code).toBe('236525');
+    }
+    for (const r of BUILT_IN_RULES.filter((x) => x.code.startsWith('RTF_COMPRAS_'))) {
+      expect(r.taxAccountCode, r.code).toBe('236540');
+    }
   });
 });

@@ -8,12 +8,13 @@
 // `wrap={false}` so it never splits mid-header.
 import React from 'react';
 import { Page, View, Text } from '@react-pdf/renderer';
-import type { EditorialReport, NoteBlock } from '../types';
+import type { EditorialReport, NoteBlock, TocAnchorCollector } from '../types';
 import {
   AuthorityChip,
   PaginationFooter,
   MarkdownToPdf,
   TopoOrnament,
+  TocAnchor,
 } from '../primitives';
 import {
   N0,
@@ -31,9 +32,10 @@ import {
   R_SM,
 } from '../tokens';
 
-// Landscape A4: width = PAGE_H (842), height = PAGE_W (595)
-const LW = PAGE_H; // 842 pt
-const LH = PAGE_W; // 595 pt
+// Landscape A4 (tokens.ts): width = PAGE_W (842), height = PAGE_H (595). Antes
+// LW = PAGE_H: con los tokens ya en apaisado la página salía vertical (595×842).
+const LW = PAGE_W; // 842 pt
+const LH = PAGE_H; // 595 pt
 const MARGIN = 48;
 const CONTENT_W = LW - MARGIN * 2;
 const COL_GAP = 16;
@@ -46,6 +48,8 @@ interface Props {
 interface NotePageProps {
   block: NoteBlock;
   index: number;
+  /** Recolector de la pasada de medición de la tabla de contenido. */
+  tocCollector?: TocAnchorCollector | null;
 }
 
 // Section header bar — emulates the ESLOP numbered forest-green bar with
@@ -169,7 +173,7 @@ function TwoColumnBody({ markdown }: { markdown: string }) {
   );
 }
 
-function NoteBlockPage({ block, index }: NotePageProps) {
+function NoteBlockPage({ block, index, tocCollector }: NotePageProps) {
   return (
     <Page
       size={[LW, LH]}
@@ -181,8 +185,11 @@ function NoteBlockPage({ block, index }: NotePageProps) {
         position: 'relative',
       }}
     >
+      {/* La primera nota abre la sección en la tabla de contenido. */}
+      {index === 1 ? <TocAnchor id="notes" collect={tocCollector} /> : null}
       {/* Topo ornament — bottom-left corner, very low opacity */}
       <View
+        fixed
         style={{
           position: 'absolute',
           bottom: 0,
@@ -194,7 +201,7 @@ function NoteBlockPage({ block, index }: NotePageProps) {
       >
         <TopoOrnament
           variant="lines"
-          opacity={1}
+          opacity={0.06}
           areaAccent="verdad"
           width={220}
           height={180}
@@ -211,7 +218,7 @@ function NoteBlockPage({ block, index }: NotePageProps) {
       {/* Two-column body — wrappable */}
       <TwoColumnBody markdown={block.bodyMarkdown} />
 
-      <PaginationFooter pageNumber={0} totalPages={0} sectionLabel="Notas" />
+      <PaginationFooter sectionLabel="Notas" />
     </Page>
   );
 }
@@ -222,7 +229,7 @@ function NoteBlockPage({ block, index }: NotePageProps) {
  */
 export function NotesPage({ doc }: Props): React.ReactElement[] {
   return doc.notes.blocks.map((block, i) => (
-    <NoteBlockPage key={`note-${i}`} block={block} index={i + 1} />
+    <NoteBlockPage key={`note-${i}`} block={block} index={i + 1} tocCollector={doc.tocCollector} />
   ));
 }
 

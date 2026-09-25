@@ -60,11 +60,17 @@ describe('getInsightTemplate', () => {
     expect(tpl.hallazgoTpl).toContain('{{monto_diferencia}}');
   });
 
-  it('Caso B — escudo/critico contiene shields & cash variables', () => {
-    const tpl = getInsightTemplate('escudo', 'critico', 'es');
-    expect(tpl.subjectTpl).toContain('🛡️');
-    expect(tpl.hallazgoTpl).toContain('{{impuesto_proyectado}}');
-    expect(tpl.impactoTpl).toContain('{{pct_reduccion}}');
+  // IW4 (ratios-kpis-10): la alerta crítica del Escudo ya no proyecta un
+  // impuesto de renta con UN × 35 %; es de liquidez medida (días de autonomía).
+  it('Caso B — escudo/critico es de liquidez (días de autonomía), sin impuesto proyectado', () => {
+    for (const lang of ['es', 'en'] as const) {
+      const tpl = getInsightTemplate('escudo', 'critico', lang);
+      expect(tpl.subjectTpl).toContain('🛡️');
+      expect(tpl.hallazgoTpl).toContain('{{dias_autonomia}}');
+      expect(`${tpl.hallazgoTpl} ${tpl.impactoTpl}`).not.toMatch(
+        /impuesto_proyectado|provision_actual|pct_reduccion|impuesto de renta|income tax/,
+      );
+    }
   });
 
   it('Caso C — futuro/critico contiene mes y trimestre de inflexión', () => {
@@ -100,14 +106,14 @@ describe('fillInsightFromTemplate', () => {
       pillar: 'escudo',
       severity: 'critico',
       vars: {
-        impuesto_proyectado: '$775M',
-        provision_actual: '$3.8M',
-        pct_reduccion: 40,
+        empresario_nombre: 'Andreita',
+        dias_autonomia: 18,
       },
     });
-    expect(insight.hallazgo).toContain('$775M');
-    expect(insight.hallazgo).toContain('$3.8M');
-    expect(insight.impacto).toContain('40%');
+    expect(insight.hallazgo).toContain('Andreita');
+    expect(insight.hallazgo).toContain('18 días');
+    expect(insight.hallazgo).not.toContain('{{');
+    expect(insight.impacto).not.toContain('{{');
   });
 
   it('default language es, default tone normal', () => {

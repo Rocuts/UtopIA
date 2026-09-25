@@ -38,7 +38,7 @@ export function getFuturoZones(lang: 'es' | 'en'): CapabilityZoneItem[] {
       subtitle: es ? 'Monte Carlo · opciones reales · stress testing' : 'Monte Carlo · real options · stress testing',
       count: es ? '5 modelos' : '5 models',
       capabilities: [
-        { name: es ? 'Monte Carlo 10.000 escenarios' : 'Monte Carlo 10,000 scenarios', desc: es ? 'Distribución probabilidad · P10, P50, P90 · confianza.' : 'Probability distribution · P10, P50, P90 · confidence.', source: 'balance' },
+        { name: es ? 'Monte Carlo · escenario simulado' : 'Monte Carlo · simulated scenario', desc: es ? 'Distribución simulada · P10, P50, P90 · supuestos visibles (σ, N, semilla).' : 'Simulated distribution · P10, P50, P90 · visible assumptions (σ, N, seed).', source: 'balance' },
         { name: es ? 'Opciones reales (ROV)' : 'Real options (ROV)', desc: es ? 'Valor de opción de expandir · diferir · abandonar.' : 'Option value to expand · defer · abandon.', source: 'balance' },
         { name: es ? 'Stress testing financiero' : 'Financial stress testing', desc: es ? 'Escenarios de choque · impacto en solvencia.' : 'Shock scenarios · impact on solvency.', source: 'balance' },
         { name: es ? 'Proyecciones 3 escenarios' : '3-scenario projections', desc: es ? 'Conservador · base · agresivo año por año.' : 'Conservative · base · aggressive year by year.', source: 'balance' },

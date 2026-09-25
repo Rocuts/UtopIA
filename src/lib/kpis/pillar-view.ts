@@ -5,35 +5,48 @@ import type { getDb } from '@/lib/db/client';
 // ---------------------------------------------------------------------------
 // Pillar KPI view — raw SQL queries for the 4 UtopIA pillars.
 //
-// MVP approximations (D3 — can be refined in WS6.1+):
-//   Resiliencia: SUM(credit - debit) on accounts starting with '24' (taxes
-//                payable in PUC Colombia). Positive = liability balance.
-//   Valor:       SUM(class-4 income) - SUM(class-5/6 costs+expenses) for the
-//                given period. EBITDA-ish, pre-depreciation.
-//   Verdad:      % of pyme_entries with status='confirmed' vs total (all
-//                periods, MVP simplification — gives a data-quality signal).
-//   Futuro:      Cash (1105+1110 accounts) - Accounts Payable (21xxxx) for
-//                the period. Simple free-cash-flow proxy.
+// Señales crudas del libro mayor (NO son KPIs financieros presentables):
+//   Resiliencia: movimiento neto del periodo en el grupo 24 (incluye IVA, ICA
+//                y retenciones — NO es "provisión de renta").
+//   Valor:       resultado clase 4 − clases 5 y 6 del periodo. Es un resultado
+//                neto, NO un EBITDA (ratios-kpis-05: el EBITDA canónico vive en
+//                `src/lib/pillars/ebitda.ts`).
+//   Verdad:      % de pyme_entries confirmados sobre el total del workspace.
+//   Futuro:      movimiento de 1105/1110 menos el de 21xx. NO es flujo de caja
+//                libre.
 //
-// All queries are defensive: if accounts, period, or workspace don't exist,
-// returns '0' (string) or 0 (number) without throwing.
+// Ausencia de datos o error ⇒ `null` (N/D), nunca '0'.
+//
+// Asientos de cierre (contab-nomina-04): el cierre (source_type 'closing')
+// lleva a cero las clases 4/5/6 y traslada el resultado al patrimonio; su
+// reverso lo deshace. Ninguno es actividad del periodo ⇒ se excluyen, igual
+// que en `pillar_kpis_view` (migración 0022).
 // ---------------------------------------------------------------------------
 
 export interface PillarKpis {
-  resiliencia: { totalProvisionTaxesCop: string };
-  valor: { ebitdaCop: string };
-  verdad: { documentsVerifiedPct: number };
-  futuro: { freeCashFlowProjectedCop: string };
+  resiliencia: { movimientoGrupo24Cop: string | null };
+  valor: { resultadoClase4Menos5y6Cop: string | null };
+  /** `null` cuando no hay asientos pyme (0 de 0 no es 0 %). */
+  verdad: { documentsVerifiedPct: number | null };
+  futuro: { cajaMenosObligaciones21Cop: string | null };
 }
 
 type DbInstance = ReturnType<typeof getDb>;
+
+/** Excluye el asiento de cierre y el reverso de un cierre (alias `je`). */
+const SIN_ASIENTOS_DE_CIERRE = sql`
+        AND je.source_type <> 'closing'
+        AND NOT EXISTS (
+          SELECT 1 FROM journal_entries o
+          WHERE o.id = je.reversal_of_entry_id AND o.source_type = 'closing'
+        )`;
 
 // Helper: extract a numeric string from a raw sql result row.
 function rowToString(
   result: unknown,
   key: string,
-  fallback = '0',
-): string {
+  fallback: string | null = null,
+): string | null {
   if (!result || typeof result !== 'object') return fallback;
   // drizzle-orm/node-postgres wraps execute results as { rows: [...] }
   const rows = (result as { rows?: unknown[] }).rows ?? (Array.isArray(result) ? result : []);
@@ -45,12 +58,6 @@ function rowToString(
   return Number.isFinite(n) ? String(Math.round(n)) : fallback;
 }
 
-function rowToNumber(result: unknown, key: string, fallback = 0): number {
-  const s = rowToString(result, key, String(fallback));
-  const n = parseFloat(s);
-  return Number.isFinite(n) ? n : fallback;
-}
-
 // ── Resiliencia ──────────────────────────────────────────────────────────────
 // SUM of (credit - debit) on journal lines for accounts starting with '24'
 // (Impuestos, gravámenes y tasas por pagar — Colombian PUC class 24).
@@ -59,7 +66,7 @@ async function queryResiliencia(
   db: DbInstance,
   workspaceId: string,
   periodId: string,
-): Promise<string> {
+): Promise<string | null> {
   try {
     const result = await db.execute(sql`
       SELECT COALESCE(SUM(jl.credit - jl.debit), 0) AS total_provision
@@ -69,16 +76,17 @@ async function queryResiliencia(
       WHERE je.workspace_id = ${workspaceId}
         AND je.period_id = ${periodId}
         AND je.status = 'posted'
+        ${SIN_ASIENTOS_DE_CIERRE}
         AND coa.code LIKE '24%'
     `);
     return rowToString(result, 'total_provision');
   } catch {
-    return '0';
+    return null;
   }
 }
 
 // ── Valor ────────────────────────────────────────────────────────────────────
-// EBITDA proxy: SUM of income accounts (class 4) minus SUM of cost/expense
+// Resultado neto (NO EBITDA): SUM of income accounts (class 4) minus SUM of cost/expense
 // accounts (class 5 + class 6) for the period.
 // Colombian PUC: 4=Ingresos, 5=Gastos, 6=Costos de ventas.
 // Income accounts carry credit balances; cost/expense carry debit balances.
@@ -86,7 +94,7 @@ async function queryValor(
   db: DbInstance,
   workspaceId: string,
   periodId: string,
-): Promise<string> {
+): Promise<string | null> {
   try {
     const result = await db.execute(sql`
       SELECT
@@ -96,18 +104,19 @@ async function queryValor(
         -
         COALESCE(SUM(
           CASE WHEN coa.code ~ '^[56]' THEN jl.debit - jl.credit ELSE 0 END
-        ), 0) AS ebitda
+        ), 0) AS resultado
       FROM journal_lines jl
       JOIN journal_entries je ON je.id = jl.entry_id
       JOIN chart_of_accounts coa ON coa.id = jl.account_id
       WHERE je.workspace_id = ${workspaceId}
         AND je.period_id = ${periodId}
         AND je.status = 'posted'
+        ${SIN_ASIENTOS_DE_CIERRE}
         AND coa.code ~ '^[456]'
     `);
-    return rowToString(result, 'ebitda');
+    return rowToString(result, 'resultado');
   } catch {
-    return '0';
+    return null;
   }
 }
 
@@ -115,10 +124,10 @@ async function queryValor(
 // % of pyme_entries confirmed vs total (across all periods for the workspace).
 // MVP simplification: we don't filter by periodId since pyme_entries don't have
 // a direct period_id FK — they belong to a book and use entry_date.
-async function queryVerdad(
+export async function queryDocumentsVerifiedPct(
   db: DbInstance,
   workspaceId: string,
-): Promise<number> {
+): Promise<number | null> {
   try {
     const result = await db.execute(sql`
       SELECT
@@ -130,49 +139,53 @@ async function queryVerdad(
     `);
     const rows = (result as { rows?: unknown[] }).rows ?? (Array.isArray(result) ? result : []);
     const first = rows[0] as Record<string, unknown> | undefined;
-    if (!first) return 0;
+    if (!first) return null;
     const confirmed = Number(first['confirmed_count'] ?? 0);
     const total = Number(first['total_count'] ?? 0);
-    if (!Number.isFinite(confirmed) || !Number.isFinite(total) || total === 0) return 0;
+    if (!Number.isFinite(confirmed) || !Number.isFinite(total) || total === 0) return null;
     return Math.round((confirmed / total) * 100);
   } catch {
-    return 0;
+    return null;
   }
 }
 
 // ── Futuro ───────────────────────────────────────────────────────────────────
-// Free cash flow proxy: Cash (1105 Caja + 1110 Bancos) minus Accounts Payable
+// Free cash flow proxy: Cash (1105 Caja + 1110 Bancos, con sus subcuentas —
+// la regla de `pillar_kpis_view`; antes `IN ('1105','1110')` sólo veía la
+// cuenta mayor y los auxiliares 110505… quedaban fuera) minus Accounts Payable
 // (21xxxx — Obligaciones financieras and CxP) for the period.
 // Positive = net cash surplus over short-term payables.
 async function queryFuturo(
   db: DbInstance,
   workspaceId: string,
   periodId: string,
-): Promise<string> {
+): Promise<string | null> {
   try {
     const result = await db.execute(sql`
       SELECT
         COALESCE(SUM(
-          CASE WHEN coa.code IN ('1105', '1110') THEN jl.debit - jl.credit ELSE 0 END
+          CASE WHEN coa.code LIKE '1105%' OR coa.code LIKE '1110%' THEN jl.debit - jl.credit ELSE 0 END
         ), 0)
         -
         COALESCE(SUM(
           CASE WHEN coa.code LIKE '21%' THEN jl.credit - jl.debit ELSE 0 END
-        ), 0) AS free_cash_flow
+        ), 0) AS caja_menos_21
       FROM journal_lines jl
       JOIN journal_entries je ON je.id = jl.entry_id
       JOIN chart_of_accounts coa ON coa.id = jl.account_id
       WHERE je.workspace_id = ${workspaceId}
         AND je.period_id = ${periodId}
         AND je.status = 'posted'
+        ${SIN_ASIENTOS_DE_CIERRE}
         AND (
-          coa.code IN ('1105', '1110')
+          coa.code LIKE '1105%'
+          OR coa.code LIKE '1110%'
           OR coa.code LIKE '21%'
         )
     `);
-    return rowToString(result, 'free_cash_flow');
+    return rowToString(result, 'caja_menos_21');
   } catch {
-    return '0';
+    return null;
   }
 }
 
@@ -184,18 +197,18 @@ export async function queryPillarKpisRaw(
   periodId: string,
 ): Promise<PillarKpis> {
   // Run 4 queries in parallel — they are independent reads.
-  const [totalProvisionTaxesCop, ebitdaCop, documentsVerifiedPct, freeCashFlowProjectedCop] =
+  const [movimientoGrupo24Cop, resultadoClase4Menos5y6Cop, documentsVerifiedPct, cajaMenosObligaciones21Cop] =
     await Promise.all([
       queryResiliencia(db, workspaceId, periodId),
       queryValor(db, workspaceId, periodId),
-      queryVerdad(db, workspaceId),
+      queryDocumentsVerifiedPct(db, workspaceId),
       queryFuturo(db, workspaceId, periodId),
     ]);
 
   return {
-    resiliencia: { totalProvisionTaxesCop },
-    valor: { ebitdaCop },
+    resiliencia: { movimientoGrupo24Cop },
+    valor: { resultadoClase4Menos5y6Cop },
     verdad: { documentsVerifiedPct },
-    futuro: { freeCashFlowProjectedCop },
+    futuro: { cajaMenosObligaciones21Cop },
   };
 }

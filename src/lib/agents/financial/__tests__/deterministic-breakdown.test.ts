@@ -29,7 +29,7 @@ import {
   completeBreakdownFromSnapshot,
 } from '../agents/reconcile-anchors';
 import { buildReportAnchors } from '../contracts/anchors';
-import { NiifReportSchema } from '../contracts/niif-report';
+import { NiifReportObjectSchema } from '../contracts/niif-report';
 import type { NiifReportJson } from '../contracts/niif-report';
 
 const FIXTURES = path.resolve(process.cwd(), 'src/lib/preprocessing/__fixtures__');
@@ -206,7 +206,7 @@ describe('completeBreakdownFromSnapshot', () => {
     const r = reconcileAnchors(roto, anchors);
     const { json } = completeBreakdownFromSnapshot(r.json, r.lineGaps, snap);
 
-    const parsed = NiifReportSchema.shape.balanceSheet.shape.assets.safeParse(
+    const parsed = NiifReportObjectSchema.shape.balanceSheet.shape.assets.safeParse(
       json.balanceSheet.assets,
     );
     expect(parsed.success, JSON.stringify(parsed.error?.issues?.slice(0, 3))).toBe(true);

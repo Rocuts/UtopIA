@@ -132,4 +132,73 @@ describe('csvParser — extracto en orden descendente', () => {
     const result = await csvParser.parse('e.csv', csv);
     expect(result.endingBalance).toBe('7000000.00');
   });
+
+  // ingesta-24: con varias filas el último día, `postedAt >= lastDate` hacía
+  // que la fila más ANTIGUA del día sobrescribiera el saldo final, y el
+  // control de continuidad comparaba con el monto de la fila equivocada.
+  it('varias filas el último día: endingBalance = primera fila (la más reciente) y sin falsos avisos', async () => {
+    const csv = buildCsv(
+      'Fecha;Descripción;Valor;Saldo',
+      '31/12/2025;Pago proveedor;-100.000;900.000',
+      '31/12/2025;Consignación;200.000;1.000.000',
+      '30/12/2025;Apertura;800.000;800.000',
+    );
+    const result = await csvParser.parse('ext.csv', csv);
+    expect(result.endingBalance).toBe('900000.00');
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('extracto de un solo día en orden descendente: la continuidad decide el orden', async () => {
+    const csv = buildCsv(
+      'Fecha;Descripción;Valor;Saldo',
+      '15/01/2026;Retiro;-50.000;950.000',
+      '15/01/2026;Consignación;1.000.000;1.000.000',
+    );
+    const result = await csvParser.parse('ext.csv', csv);
+    expect(result.endingBalance).toBe('950000.00');
+    expect(result.warnings).toEqual([]);
+  });
+});
+
+describe('csvParser — naturaleza y signo (ingesta-25)', () => {
+  it('columna Naturaleza D/C con valor siempre positivo: D es salida, C es entrada', async () => {
+    const csv = buildCsv(
+      'Fecha;Descripción;Valor;Naturaleza;Saldo',
+      '01/12/2025;Consignación;500.000;C;1.500.000',
+      '02/12/2025;Pago nómina;300.000;D;1.200.000',
+      '03/12/2025;Pago proveedor;200.000;D;1.000.000',
+    );
+    const result = await csvParser.parse('ext.csv', csv);
+    expect(result.transactions.map((t) => t.amountCop)).toEqual(['500000.00', '-300000.00', '-200000.00']);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('débito exportado con signo negativo sigue siendo salida (antes se volvía abono)', async () => {
+    const csv = buildCsv(
+      'Fecha;Descripción;Débito;Crédito;Saldo',
+      '01/12/2025;Pago proveedor;-300.000;;700.000',
+    );
+    const result = await csvParser.parse('ext.csv', csv);
+    expect(result.transactions[0].amountCop).toBe('-300000.00');
+  });
+
+  it('el control de continuidad detecta un signo invertido (antes aceptaba ±monto)', async () => {
+    const csv = buildCsv(
+      'fecha;descripcion;monto;saldo',
+      '2026-01-10;Apertura;1000000;1000000',
+      '2026-01-11;Pago con signo perdido;300000;700000',
+    );
+    const result = await csvParser.parse('e.csv', csv);
+    expect(result.warnings.some((w) => /saldo no cuadra/i.test(w))).toBe(true);
+  });
+
+  it('una columna "Tipo" con texto libre no se interpreta como naturaleza', async () => {
+    const csv = buildCsv(
+      'fecha;descripcion;tipo;monto',
+      '2026-01-10;Pago;Transferencia;-1000',
+      '2026-01-11;Abono;Consignación;2000',
+    );
+    const result = await csvParser.parse('e.csv', csv);
+    expect(result.transactions.map((t) => t.amountCop)).toEqual(['-1000.00', '2000.00']);
+  });
 });

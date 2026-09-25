@@ -27,14 +27,20 @@ import {
 
 describe('Bridge de Cuadratura — gate post-R8', () => {
   it('balance crudo descuadrado por utilidad NO trasladada → R8 cuadra → no bloquea', async () => {
-    // Fixture: Activo 1.456B, Pasivo 1.0B (lo demás), Patrimonio CRUDO sin
-    // utilidad trasladada → descalce ~ utilidad del periodo.
+    // Fixture: Pasivo $643,8M, Patrimonio CRUDO sin utilidad trasladada
+    // ($400M) y utilidad del periodo $2.000M → Activo $3.043,8M. El descalce
+    // crudo es EXACTAMENTE la utilidad del periodo.
     // R8 debería inyectar 3605VC con la utilidad dinámica y cuadrar al
     // centavo. El orquestador NO debe lanzar BalanceValidationError.
+    //
+    // Auditoría 2026-09 (niif-preproceso-06): el fixture anterior tenía
+    // Activo $1.456M, es decir, un descuadre de −$1.587,8M ajeno a la utilidad
+    // que R8 escondía en 3710VC. R8 ya no absorbe residuales; ese archivo
+    // bloquearía (ver curator-integridad-2026-09.test.ts).
     const csv = `codigo,nombre,nivel,transaccional,Saldo 2026
 110505,Caja,Auxiliar,1,300000000
 130505,Clientes,Auxiliar,1,500000000
-143505,Mercancias,Auxiliar,1,656000000
+143505,Mercancias,Auxiliar,1,2243800000
 210505,Bancos CP,Auxiliar,1,200000000
 230505,CxP,Auxiliar,1,350000000
 240505,Renta por pagar,Auxiliar,1,3800000

@@ -65,7 +65,9 @@ const BLACKLIST: readonly BlacklistEntry[] = [
       'emergencia\\s+econom[ií]ca\\s+2025',
     ],
     razon:
-      'Decreto 1474 de 2025 declarado INEXEQUIBLE por Sentencia C-079 de 2026 (Corte Constitucional). Las medidas tributarias del decreto (sobretasa 50%, restricción regalías) NO están vigentes en 2026.',
+      // NT-12: el corpus (decreto_1474_2025_emergencia.md) fecha la
+      // inexequibilidad el 15-abr-2026 y no trae el número de la sentencia.
+      'Decreto 1474 de 2025 declarado INEXEQUIBLE por la Corte Constitucional el 15-abr-2026 (el número de la sentencia no consta en el corpus: no lo cites). Las medidas tributarias del decreto (sobretasa 50%, restricción regalías) NO están vigentes en 2026.',
     alternativaCorrecta:
       'Tarifas vigentes: Art. 240 E.T. tarifa general 35%; par. 2 sobretasa financiera 40% y hidroeléctricas 38%.',
     severidad: 'CRITICA',
@@ -110,7 +112,7 @@ const BLACKLIST: readonly BlacklistEntry[] = [
     razon:
       'Concepto DIAN 481/2018 trata sobre ESALs, NO sobre capitalización de utilidades. El spec original lo atribuía a Art. 36-3 capitalización — error.',
     alternativaCorrecta:
-      'Oficio DIAN 0348 (005875) de 18-03-2020 para capitalización utilidades Art. 36-3 E.T.',
+      'La capitalización de utilidades se trata como distribución gravada (Arts. 48-49, 242 y 242-1 E.T.); el Art. 36-3 E.T. fue derogado por la Ley 2277 de 2022 art. 96 (DIAN Concepto 2769 de 2026).',
     severidad: 'ALTA',
     categoria: 'concepto_dian_no_verificable',
   },
@@ -151,7 +153,7 @@ const BLACKLIST: readonly BlacklistEntry[] = [
       'periodo.*iva.*anual',
     ],
     razon:
-      'El período IVA anual fue eliminado por Ley 1943/2018 (ratificado por Ley 2010/2019). Solo existen períodos bimestral y cuatrimestral en 2026. Citar el período anual puede generar presentación en fecha incorrecta.',
+      'El período IVA anual fue eliminado por el artículo 196 de la Ley 1819 de 2016, que sustituyó el Art. 600 E.T. Solo existen períodos bimestral y cuatrimestral en 2026. Citar el período anual puede generar presentación en fecha incorrecta.',
     alternativaCorrecta:
       'Art. 600 E.T.: bimestral (≥92.000 UVT ingresos) o cuatrimestral (resto).',
     severidad: 'ALTA',

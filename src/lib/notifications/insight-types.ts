@@ -31,6 +31,8 @@ export interface InsightVariables {
   meses_inflexion?: number | string;
   mes_anio_inflexion?: string;
   trimestre_inflexion?: string;
+  /** Margen bruto ya formateado CON el signo `%` ("95%") o N/D / N/A: la
+   *  plantilla no añade `%` para que un margen sin dato no salga "—%". */
   margen_bruto_pct?: number | string;
   dias_inventario?: number | string;
   dias_autonomia?: number | string;

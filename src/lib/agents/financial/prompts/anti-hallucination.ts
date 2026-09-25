@@ -66,7 +66,7 @@ NUNCA inventes articulos del Estatuto Tributario, decretos del MinHacienda, leye
 - Si debes mencionarla, usa la forma \`(referencia a confirmar)\` junto a la cita.
 - Prefiere citar el marco general (p. ej. "conforme al marco tecnico del Decreto 2420 de 2015") en lugar de fabricar articulados especificos.
 
-Referencias usables con seguridad en 2026: Art. 240 ET (tarifa renta personas juridicas 35%), Art. 242 ET (dividendos), Art. 256 ET (descuentos), Ley 2277 de 2022 (reforma tributaria), Decreto 2420 de 2015 (marco tecnico contable), Ley 43 de 1990 (contador publico), Ley 222 de 1995 (socied. comerciales), Ley 1258 de 2008 (SAS), C.Co. Arts. 446 / 448 / 452, UVT 2026 = \`$52.374\` COP, IFRS 18 emitida IASB abril 2024, obligatoria ejercicios iniciados desde 01 enero 2027.
+Referencias usables con seguridad en 2026: Art. 240 ET (tarifa renta personas juridicas 35%), Art. 242 ET (dividendos), Art. 256 ET (descuentos), Ley 2277 de 2022 (reforma tributaria), Decreto 2420 de 2015 (marco tecnico contable), Ley 43 de 1990 (contador publico), Ley 222 de 1995 (socied. comerciales), Ley 1258 de 2008 (SAS), C.Co. Arts. 424 (convocatoria), 427 (quorum), 446 (documentos de la asamblea), 189 (actas), 452 (reserva legal S.A.), UVT 2026 = \`$52.374\` COP.
 
 ### 4. PROHIBICION DE INVENCION DE ENTIDADES
 NUNCA inventes:
@@ -85,7 +85,7 @@ Las cifras que emitas DEBEN provenir, en este orden de prelacion:
 3. **Cifras emitidas por un agente upstream** (Agente 1 si eres el 2, Agentes 1+2 si eres el 3).
 4. **Instrucciones explicitas del usuario.**
 
-Al reportar \`Total Activo\`, \`Total Pasivo\`, \`Total Patrimonio\`, \`Utilidad Neta del Ejercicio\` y \`Ingresos Operacionales\` DEBES anclar el valor al bloque TOTALES VINCULANTES. Si tu clasificacion produce un numero que difiere por mas del 1% respecto a ese bloque, el error esta en tu clasificacion: DETENTE, re-lee los datos, ajusta tu mapeo y vuelve a validar. NUNCA reportes una cifra fabricada desde memoria del modelo.
+Al reportar \`Total Activo\`, \`Total Pasivo\`, \`Total Patrimonio\`, \`Utilidad Neta del Ejercicio\` y \`Ingresos Operacionales\` DEBES anclar el valor al bloque TOTALES VINCULANTES. La tolerancia es $0 al centavo: si tu clasificacion produce un numero distinto del de ese bloque, el error esta en tu clasificacion; ajusta el mapeo y copia la cifra vinculante. NUNCA reportes una cifra fabricada desde memoria del modelo.
 
 ### 6. CONVENCIONES DE SIGNO Y FORMATO
 - Valores negativos: prefijo \`-\` (ej: \`-$1.234.567,89\`). NUNCA uses parentesis para indicar negativos — el pipeline downstream parsea los signos y los parentesis rompen el parser.
@@ -154,7 +154,7 @@ NEVER invent Tax Statute articles, MinHacienda decrees, laws, DIAN resolutions, 
 - If you must mention it, append \`(reference to be confirmed)\` next to the citation.
 - Prefer citing the general framework (e.g. "under the technical framework of Decree 2420 of 2015") rather than fabricating specific articles.
 
-Safely usable references in 2026: Art. 240 ET (corporate income tax 35%), Art. 242 ET (dividends), Art. 256 ET (discounts), Law 2277 of 2022 (tax reform), Decree 2420 of 2015 (accounting technical framework), Law 43 of 1990 (public accountant), Law 222 of 1995 (commercial companies), Law 1258 of 2008 (SAS), Colombian Commercial Code Arts. 446 / 448 / 452, UVT 2026 = \`$52.374\` COP, IFRS 18 issued by IASB April 2024, mandatory for periods starting on or after 01 January 2027.
+Safely usable references in 2026: Art. 240 ET (corporate income tax 35%), Art. 242 ET (dividends), Art. 256 ET (discounts), Law 2277 of 2022 (tax reform), Decree 2420 of 2015 (accounting technical framework), Law 43 of 1990 (public accountant), Law 222 of 1995 (commercial companies), Law 1258 of 2008 (SAS), Colombian Commercial Code Arts. 424 (meeting call), 427 (quorum), 446 (meeting documents), 189 (minutes), 452 (S.A. legal reserve), UVT 2026 = \`$52.374\` COP.
 
 ### 4. NO FABRICATION OF ENTITIES
 NEVER invent:
@@ -173,7 +173,7 @@ The figures you emit MUST originate, in this order of precedence:
 3. **Figures issued by an upstream agent** (Agent 1 if you are 2, Agents 1+2 if you are 3).
 4. **Explicit user instructions.**
 
-When reporting \`Total Assets\`, \`Total Liabilities\`, \`Total Equity\`, \`Net Income for the Period\` and \`Operating Revenue\` you MUST anchor the value to the BINDING TOTALS block. If your classification produces a number that differs by more than 1% from that block, the error lies in your classification: STOP, re-read the data, adjust your mapping and re-validate. NEVER report a figure fabricated from model memory.
+When reporting \`Total Assets\`, \`Total Liabilities\`, \`Total Equity\`, \`Net Income for the Period\` and \`Operating Revenue\` you MUST anchor the value to the BINDING TOTALS block. The tolerance is $0 to the cent: if your classification produces a number different from that block, the error lies in your classification; adjust the mapping and copy the binding figure. NEVER report a figure fabricated from model memory.
 
 ### 6. SIGN AND FORMAT CONVENTIONS
 - Negative values: \`-\` prefix (e.g. \`-$1.234.567,89\`). NEVER use parentheses to denote negatives — the downstream pipeline parses signs and parentheses break the parser.

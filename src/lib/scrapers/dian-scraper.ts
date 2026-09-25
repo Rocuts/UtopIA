@@ -57,7 +57,11 @@ const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) UtopIA-Calendar-Sync/1.0';
 
 const DECREE = 'Decreto 2229 de 2023';
-const COMUNICADO_NOTE = 'Comunicado DIAN 128 del 26-dic-2025 — verificado';
+// La fecha se CALCULA con la regla de días hábiles; nunca se confronta fila a
+// fila con la tabla oficial (por eso `verified: false`). La nota no puede decir
+// «verificado» (auditoría 2026-09, tributario-calc-06).
+const COMUNICADO_NOTE =
+  'Fecha calculada con la regla del Decreto 2229/2023 — no confrontada con la tabla oficial';
 
 // Días NO hábiles 2026 — usados para calcular días hábiles.
 // Fuente: Ley 51 de 1983 (traslado al lunes) + Ley 35 de 1939 / Ley 43 de 1975.
@@ -464,7 +468,7 @@ function buildIVACuatrimestral(): NationalDeadline[] {
  *   1. La exógena NO sigue la regla del 7°–16° día hábil; tiene tabla propia.
  *   2. Los plazos reales terminan el 12-jun-2026, casi tres meses ANTES.
  * Anunciar septiembre expone al contribuyente a la sanción del Art. 651 E.T.
- * (hasta 15.000 UVT) más el desconocimiento de costos y deducciones.
+ * (1 % / 0,7 % / 0,5 %, tope 7.500 UVT) más el desconocimiento de costos y deducciones.
  *
  * Fuentes: https://actualicese.com/plazos-para-reportar-informacion-exogena-en-2026/
  *          https://siemprealdia.co/colombia/impuestos/resolucion-000012-de-2026-cambios-en-exogena/

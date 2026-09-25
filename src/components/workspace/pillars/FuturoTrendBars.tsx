@@ -9,12 +9,17 @@
  *   Agresiva     → emerald-500 (#10b981) escenario optimista
  *
  * Incluye markLine en y=0 para visualizar el umbral de quiebre de caja.
- * Tooltip con formato COP abreviado ($1.234M).
+ * Eje y tooltip con formato COP abreviado de lib/charts/format
+ * (ratios-kpis-27): `$1,2 mil M` / `($450 M)` en español, `$1.2B` en inglés.
  *
  * Selector "Crecimiento Estimado": cuando se recibe `balance` el usuario puede
  * ajustar el factor de crecimiento del escenario base y ver la línea
  * recalcularse instantáneamente. Sin balance, el selector queda visible pero
  * deshabilitado (modo demo / mock).
+ *
+ * Indexación de gastos fijos (ratios-kpis-29): la proyección usa el supuesto
+ * de escenario de `describeIpcAssumption()` (4,5 % anual, sin fuente oficial)
+ * y la vista lo rotula. No hay control en la UI para cambiar esa tasa.
  */
 
 import { useMemo, useState } from 'react';
@@ -26,7 +31,8 @@ import { getTokens } from '@/lib/charts/echarts-theme';
 import { useChartTheme } from '@/lib/charts/use-theme';
 import { ChartContainer } from '@/components/charts/ChartContainer';
 import { cn } from '@/lib/utils';
-import { buildFuturoBarSeries } from '@/lib/pillars/futuro-bars';
+import { formatBigCop } from '@/lib/charts/format';
+import { buildFuturoBarSeries, describeIpcAssumption } from '@/lib/pillars/futuro-bars';
 import type { FuturoBarSeries } from '@/lib/pillars/futuro-bars';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { useCapexEvents } from '@/hooks/useCapexEvents';
@@ -61,14 +67,13 @@ const GROWTH_PRESETS: GrowthPreset[] = [
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Formatea valor COP en millones con signo. Ej: $1.234M / −$450M */
-function formatCopM(v: number): string {
-  const abs = Math.abs(v);
-  const sign = v < 0 ? '−' : '';
-  if (abs >= 1_000_000_000) {
-    return `${sign}$${(abs / 1_000_000_000).toFixed(1)}B`;
-  }
-  return `${sign}$${Math.round(abs / 1_000_000).toLocaleString('es-CO')}M`;
+/**
+ * COP abreviado según el idioma de la UI (ratios-kpis-27): `$1,2 mil M` /
+ * `($450 M)` en español — nunca `B`, que en español se lee como billón
+ * (10^12) — y `$1.2B` / `($450M)` en inglés.
+ */
+function formatCopM(v: number, isEs: boolean): string {
+  return formatBigCop(v, isEs ? 'es' : 'en');
 }
 
 /** Formatea un factor de crecimiento como porcentaje con signo. Ej: +5% / -5% */
@@ -143,12 +148,12 @@ export function FuturoTrendBars({ series, language, density, balance, workspaceI
         return {
           name: label,
           coord: [p.label, Math.round(p.cajaBase)],
-          value: formatCopM(p.capexAplicado),
+          value: formatCopM(p.capexAplicado, isEs),
           symbolSize: 28,
           itemStyle: { color: '#f59e0b' },
           label: { show: false },
           tooltip: {
-            formatter: `<strong>${label}</strong><br/>−${formatCopM(p.capexAplicado)}`,
+            formatter: `<strong>${label}</strong><br/>−${formatCopM(p.capexAplicado, isEs)}`,
           },
         };
       });
@@ -178,16 +183,16 @@ export function FuturoTrendBars({ series, language, density, balance, workspaceI
 
           const rows = [
             `<strong>${point.label}</strong>`,
-            `<span style="color:${COLOR_BASE}">●</span> ${labelBase}: <strong>${formatCopM(point.cajaBase)}</strong>`,
-            `<span style="color:${COLOR_CONSERVADORA}">●</span> ${labelCons}: <strong>${formatCopM(point.cajaConservadora)}</strong>`,
-            `<span style="color:${COLOR_AGRESIVA}">●</span> ${labelAgr}: <strong>${formatCopM(point.cajaAgresiva)}</strong>`,
+            `<span style="color:${COLOR_BASE}">●</span> ${labelBase}: <strong>${formatCopM(point.cajaBase, isEs)}</strong>`,
+            `<span style="color:${COLOR_CONSERVADORA}">●</span> ${labelCons}: <strong>${formatCopM(point.cajaConservadora, isEs)}</strong>`,
+            `<span style="color:${COLOR_AGRESIVA}">●</span> ${labelAgr}: <strong>${formatCopM(point.cajaAgresiva, isEs)}</strong>`,
           ];
 
           if (point.capexAplicado > 0) {
             const names = capexNamesByMonth.get(point.monthIndex) ?? [];
             const evLabel = names.length > 0 ? names.join(', ') : (isEs ? 'Evento CapEx' : 'CapEx Event');
             rows.push(
-              `<span style="font-size:10px;color:#f59e0b">▼ ${evLabel}: −${formatCopM(point.capexAplicado)}</span>`,
+              `<span style="font-size:10px;color:#f59e0b">▼ ${evLabel}: −${formatCopM(point.capexAplicado, isEs)}</span>`,
             );
           }
 
@@ -223,7 +228,7 @@ export function FuturoTrendBars({ series, language, density, balance, workspaceI
         axisLabel: {
           color: tokens.textSecondary,
           fontSize: 10,
-          formatter: (v: number) => formatCopM(v),
+          formatter: (v: number) => formatCopM(v, isEs),
         },
         splitLine: { lineStyle: { color: tokens.textSecondary + '22', type: 'dashed' } },
       },
@@ -306,6 +311,8 @@ export function FuturoTrendBars({ series, language, density, balance, workspaceI
     : '12-month projection · adjustable base scenario · fixed conservative & aggressive';
 
   const hasBalance = !!balance;
+  // Mismo supuesto que aplica buildFuturoBarSeries (sin ipcRate explícito).
+  const ipcAssumption = describeIpcAssumption();
 
   return (
     <div className="flex flex-col gap-3">
@@ -317,8 +324,11 @@ export function FuturoTrendBars({ series, language, density, balance, workspaceI
           </span>
           <span className="text-xs text-n-600">
             {isEs
-              ? 'Factores: Base ajustable · Conservador 0.85× · Agresivo 1.10×'
+              ? 'Factores: Base ajustable · Conservador 0,85× · Agresivo 1,10×'
               : 'Factors: Adjustable base · Conservative 0.85× · Aggressive 1.10×'}
+          </span>
+          <span className="text-xs text-n-600" data-testid="futuro-ipc-assumption">
+            {isEs ? ipcAssumption.labelEs : ipcAssumption.labelEn}
           </span>
           {conservadoraCruzaCero && (
             <span className="inline-flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
@@ -474,8 +484,8 @@ export function FuturoTrendBars({ series, language, density, balance, workspaceI
           {capexEvents.length === 1
             ? (isEs ? '1 evento programado' : '1 scheduled event')
             : (isEs
-                ? `${capexEvents.length} eventos · Total ${formatCopM(capexEvents.reduce((s, e) => s + e.amountCop, 0))}`
-                : `${capexEvents.length} events · Total ${formatCopM(capexEvents.reduce((s, e) => s + e.amountCop, 0))}`
+                ? `${capexEvents.length} eventos · Total ${formatCopM(capexEvents.reduce((s, e) => s + e.amountCop, 0), isEs)}`
+                : `${capexEvents.length} events · Total ${formatCopM(capexEvents.reduce((s, e) => s + e.amountCop, 0), isEs)}`
               )}
         </button>
       )}

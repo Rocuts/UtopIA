@@ -13,7 +13,7 @@
 //     `controlTotals.cents`).
 //   - Cada blocker se reporta como string corta legible al socio-director.
 //   - El informe (`report`) se inspecciona con regex simples para detectar
-//     menciones a IFRS 18, reserva legal SAS, TMT 15%, y placeholders
+//     menciones a IFRS 18, reserva legal SAS, la TTD (Art. 240 par. 6) y placeholders
 //     prohibidos ("Triple SSS", "213.092.082-1").
 //
 // El gate se inyecta en `src/lib/agents/financial/orchestrator.ts` justo
@@ -23,6 +23,8 @@
 import type { FinancialReport } from '@/lib/agents/financial/types';
 import type { ExtractedCompanyMetadata, PeriodSnapshot, ActividadInferida, ReclasificacionNoCompensacion } from '@/lib/preprocessing/trial-balance';
 import { validateNITCheckDigit } from '@/lib/validation/nit-validator';
+import { buildDeterministicCashFlow } from '@/lib/agents/financial/contracts/deterministic-breakdown';
+import { formatCopFromCents } from '@/lib/agents/financial/contracts/money';
 
 /**
  * Metadata de la empresa que el gate consume. Combina la metadata extraída
@@ -37,6 +39,15 @@ export interface AuditCompanyContext {
   tipoSocietario?: 'SAS' | 'SA' | 'LTDA' | 'EU' | 'OTRO';
   /** Tri-state intencionalmente: `undefined` = "no preguntado al usuario". */
   estatutosRequierenReservaLegal?: boolean;
+  /**
+   * Régimen del impuesto de renta (auditoria-calidad-31). La TTD del par. 6
+   * del Art. 240 E.T. aplica a "los contribuyentes del impuesto sobre la renta
+   * de que trata este artículo y el artículo 240-1"; el Régimen Simple de
+   * Tributación (Art. 903 E.T.) "sustituye el impuesto sobre la renta", así
+   * que con `'simple'` V10 no se exige. `undefined` = no informado: V10 se
+   * evalúa como régimen ordinario.
+   */
+  regimenTributario?: 'ordinario' | 'simple';
 }
 
 export type AuditBlockerCode =
@@ -97,15 +108,97 @@ const CENTS_TOLERANCE_ZERO = BigInt(0);
 export interface AuditReportEmittableOptions {
   /**
    * Omite los checks que dependen del TEXTO del informe consolidado (V8, V9,
-   * V10). Se usa en el modo PRE-VUELO, que corre en `prepareFinancialContext`
-   * —Stage 0, antes de que exista informe alguno— para bloquear de entrada los
-   * balances que nunca van a producir un informe emitible.
+   * V10, V15). Se usa en el modo PRE-VUELO, que corre en
+   * `prepareFinancialContext` —Stage 0, antes de que exista informe alguno—
+   * para bloquear de entrada los balances que nunca van a producir un informe
+   * emitible.
    *
-   * Sin esta opción el pre-vuelo dispararía V10 siempre (la TMT la calcula el
-   * Strategy Director, que aún no ha corrido) y el gate perdería toda
-   * credibilidad justo donde más falta hace.
+   * Sin esta opción el pre-vuelo dispararía V10 siempre (la TTD la declara el
+   * Strategy Director, que aún no ha corrido) y V15 en todo balance de un solo
+   * periodo (la declaración de impracticabilidad la redacta el Analista NIIF),
+   * y el gate perdería toda credibilidad justo donde más falta hace. Quien usa
+   * el pre-vuelo evalúa esos checks después, sobre el texto real (ver
+   * `checkComparativosImpracticablesDeclaration`).
    */
   skipReportTextChecks?: boolean;
+  /**
+   * Snapshot del periodo comparativo. Habilita V3 sobre el EFE DETERMINISTA
+   * (`buildDeterministicCashFlow`), la única fuente vinculante del EFE.
+   *
+   * Sin comparativo V3 no se evalúa: no hay saldo de apertura contra el cual
+   * medir variaciones (NIC 7 ¶1). El EFE del curator R2
+   * (`snapshot.cashFlowIndirecto`) NO se usa como sustituto — arranca de la
+   * utilidad acumulada y produce bloqueantes falsos (recalculo-11).
+   */
+  comparativeSnapshot?: PeriodSnapshot | null;
+}
+
+/**
+ * V3 — el EFE determinista concilia con la variación del PUC 11 al centavo.
+ *
+ * Exportada para que el orquestador la evalúe tras Stage 0 con los dos
+ * snapshots, la misma función que usa el gate completo.
+ */
+export function checkDeterministicCashFlowV3(
+  primary: PeriodSnapshot,
+  comparative: PeriodSnapshot | null | undefined,
+): AuditBlocker | null {
+  if (!comparative) return null;
+  const efe = buildDeterministicCashFlow(primary, comparative);
+  if (!efe || efe.reconciled) return null;
+  return {
+    code: 'V3',
+    message:
+      `V3: el EFE determinista (${efe.comparativePeriod} → ${efe.primaryPeriod}) no concilia con la ` +
+      `variación de la cuenta 11 (diferencia = ${formatBigCents(efe.reconciliationGapCents)}). ` +
+      'Revisar la ecuación patrimonial de ambos periodos (NIC 7 ¶45).',
+  };
+}
+
+/** Año del periodo anterior al que se firma, o `null` si el periodo no trae año. */
+function priorPeriodLabel(primaryPeriod: string | undefined): string | null {
+  const year = /(\d{4})/.exec(primaryPeriod ?? '')?.[1];
+  return year ? String(Number(year) - 1) : null;
+}
+
+/**
+ * V15 — el informe declara la impracticabilidad de los comparativos (NIIF para
+ * las PYMES §3.14 / §10.21) cuando el preprocesador la detectó.
+ *
+ * Depende del TEXTO del informe: sólo tiene sentido evaluarla cuando ese texto
+ * existe. Exportada para que el orquestador la corra después del Analista
+ * NIIF sobre el contenido real, no en el pre-vuelo de Stage 0.
+ */
+export function checkComparativosImpracticablesDeclaration(
+  reportText: string,
+  elite: EmittableEliteContext | undefined,
+  primaryPeriod: string | undefined,
+): AuditBlocker | null {
+  if (elite?.comparativos_impracticables !== true) return null;
+  const text = reportText ?? '';
+  // "Sección 3.14" / "párrafo 10.21" sin "§" también son declaración
+  // (prompts-normativa-23). "10.21" sólo cuenta como número aislado: dentro de
+  // una cifra ("$10.210.000") no es una cita.
+  const declaresImpracticabilidad =
+    /\bimpracticabl[ei]\b/i.test(text) ||
+    /§\s*3\.14/i.test(text) ||
+    /§\s*10\.21/i.test(text) ||
+    /Secci[oó]n(?:es)?\s*3\.14(?![\d.]\d)/i.test(text) ||
+    /(?<![\d.])10\.21(?![\d.]?\d)/.test(text) ||
+    /sin\s+comparativos\s+del\s+periodo\s+(\d{4}|anterior)/i.test(text);
+  if (declaresImpracticabilidad) return null;
+
+  const prior = priorPeriodLabel(primaryPeriod);
+  const priorBooks = prior ? `los libros del periodo ${prior}` : 'los libros del periodo anterior';
+  return {
+    code: 'V15',
+    message:
+      'V15: el preprocesador detectó que no hay comparativos materiales del periodo ' +
+      'anterior, pero el informe NO declara impracticabilidad NIIF for SMEs §3.14 / §10.21. ' +
+      'Reconstruir cuentas individuales desde Utilidades Retenidas viola §10.19 (es ' +
+      'manipulación). Declarar la impracticabilidad explícitamente en notas, o presentar ' +
+      `comparativos reales obtenidos de ${priorBooks}.`,
+  };
 }
 
 export function auditReportEmittable(
@@ -128,11 +221,19 @@ export function auditReportEmittable(
   // engañoso (la utilidad no está trasladada al patrimonio).
   // -------------------------------------------------------------------------
   if (snapshot.findings?.librosNoCerrados === true) {
+    // recalculo-03: con el comparativo sin cerrar (R12 `pygAcumulado`) la causa
+    // no es un traslado pendiente del año sino un P&G posiblemente ACUMULADO;
+    // el mensaje nombra el periodo no cerrado y el resultado alternativo.
+    const pyg = snapshot.closingDetectorAudit?.pygAcumulado;
     blockers.push({
       code: 'V12',
-      message:
-        'V12: libros no cerrados — utilidad del ejercicio sin trasladar al patrimonio. ' +
-        'Pasar el asiento de cierre antes de re-procesar.',
+      message: pyg
+        ? `V12: P&G posiblemente acumulado: el periodo ${pyg.comparativePeriod} no se cerró; ` +
+          `resultado del ejercicio alternativo ${formatCanonicalCop(pyg.utilidadMovimientoRaw)} ` +
+          `(saldo final − saldo ${pyg.comparativePeriod}). Pasar el asiento de cierre de ` +
+          `${pyg.comparativePeriod} o cargar el balance con el P&G del ejercicio antes de re-procesar.`
+        : 'V12: libros no cerrados — utilidad del ejercicio sin trasladar al patrimonio. ' +
+          'Pasar el asiento de cierre antes de re-procesar.',
       detail: snapshot.closingDetectorAudit?.suggestedClosingEntries.join(' | '),
     });
     if (snapshot.closingDetectorAudit?.suggestedClosingEntries) {
@@ -174,20 +275,14 @@ export function auditReportEmittable(
 
   // -------------------------------------------------------------------------
   // V3 — EFE concilia con caja PUC 11 al cierre.
-  // R6 ya cierra el EFE contra PUC 11. Si el ajuste residual de R6 está
-  // cerrado al centavo, V3 pasa. Si R6 no se ejecutó (no hubo comparativo),
-  // saltamos V3 (no aplicable).
+  // Se evalúa sobre el EFE DETERMINISTA (la misma fuente que el prompt declara
+  // vinculante), nunca sobre el EFE del curator R2: R2 arranca de la utilidad
+  // acumulada y, en el balance real de la auditoría, dejaba una brecha de
+  // $1.559.097.749,11 que el determinista no tiene (recalculo-11). Sin
+  // comparativo V3 no aplica (NIC 7 ¶1: sin saldo de apertura no hay EFE).
   // -------------------------------------------------------------------------
-  if (snapshot.cashFlowIndirecto) {
-    const efeNetCents = BigInt(Math.round(snapshot.cashFlowIndirecto.netChangeInCash * 100));
-    const observedCents = BigInt(Math.round(snapshot.cashFlowIndirecto.observedChangeInCash * 100));
-    if (efeNetCents !== observedCents) {
-      blockers.push({
-        code: 'V3',
-        message: `V3: EFE no concilia con cuenta 11 (diferencia = ${formatBigCents(efeNetCents - observedCents)}).`,
-      });
-    }
-  }
+  const v3 = checkDeterministicCashFlowV3(snapshot, options.comparativeSnapshot);
+  if (v3) blockers.push(v3);
 
   // -------------------------------------------------------------------------
   // V4 — ECP === patrimonio del balance (post-R5/R8 al centavo).
@@ -290,16 +385,26 @@ export function auditReportEmittable(
   }
 
   // -------------------------------------------------------------------------
-  // V10 — TMT 15% calculada en el informe del Strategy Director.
-  // Sólo aplica al régimen ordinario (no SIMPLE / no Zona Franca).
+  // V10 — el informe aborda la Tasa de Tributación Depurada (Art. 240 par. 6).
+  // Regla del corpus (estatuto_tributario_completo.md, par. 6 Art. 240):
+  // TTD = ID / UD; si es < 15 % se liquida IA = UD × 15 % − ID. Sin ID/UD
+  // verificados la TTD es N/D con motivo: la UAI contable no es base fiscal
+  // (re-auditoría 2026-09, NM-13 — el mensaje anterior pedía «TMT 15 % sobre
+  // utilidad contable depurada — tomar el mayor»). No aplica al Régimen Simple
+  // (Art. 903 E.T.) cuando el intake lo informa (auditoria-calidad-31).
   // -------------------------------------------------------------------------
-  if (!options.skipReportTextChecks && !reportIncluyeTMTCalculada(reportText)) {
+  if (
+    !options.skipReportTextChecks &&
+    company.regimenTributario !== 'simple' &&
+    !reportIncluyeTMTCalculada(reportText)
+  ) {
     blockers.push({
       code: 'V10',
       message:
-        'V10: TMT (Tasa Mínima de Tributación, 15%, parágrafo 6 Art. 240 E.T.) NO calculada ' +
-        'en el informe. Debe calcularse SIEMPRE: tarifa general 35% sobre renta líquida fiscal ' +
-        'vs. TMT 15% sobre utilidad contable depurada — tomar el mayor.',
+        'V10: el informe no aborda la Tasa de Tributación Depurada (TTD, parágrafo 6 Art. 240 E.T.). ' +
+        'TTD = ID / UD (impuesto depurado / utilidad depurada); si resulta inferior al 15% se ' +
+        'liquida un impuesto a adicionar IA = UD × 15% − ID. Sin ID y UD verificados la TTD se ' +
+        'declara N/D con motivo: la utilidad contable (UAI) no es base fiscal ni sustituye la UD.',
     });
   }
 
@@ -369,28 +474,18 @@ export function auditReportEmittable(
   // Si el preprocesador detectó que NO hay periodo comparativo material
   // (`comparativos_impracticables===true`), el reporte DEBE declarar la
   // impracticabilidad NIIF for SMEs §3.14 / §10.21 explícitamente en notas.
-  // Si el reporte presenta una columna 2024 con números sin esta declaración,
-  // es manipulación contable: §10.19 prohíbe reconstruir cuentas individuales
-  // desde Utilidades Retenidas.
+  // Si el reporte presenta una columna comparativa con números sin esta
+  // declaración, es manipulación contable: §10.19 prohíbe reconstruir cuentas
+  // individuales desde Utilidades Retenidas.
+  //
+  // Depende del TEXTO: en el pre-vuelo (`skipReportTextChecks`) todavía no hay
+  // informe y evaluarla sobre '' sellaba todo balance de un solo periodo
+  // (pipeline-flujo-02). Quien corre el pre-vuelo la evalúa después, sobre el
+  // texto del Analista NIIF.
   // -------------------------------------------------------------------------
-  if (elite?.comparativos_impracticables === true) {
-    const declaresImpracticabilidad =
-      /\bimpracticabl[ei]\b/i.test(reportText) ||
-      /§\s*3\.14/i.test(reportText) ||
-      /§\s*10\.21/i.test(reportText) ||
-      /sin\s+comparativos\s+del\s+periodo\s+(2024|anterior)/i.test(reportText);
-
-    if (!declaresImpracticabilidad) {
-      blockers.push({
-        code: 'V15',
-        message:
-          'V15: el preprocesador detectó que no hay comparativos materiales del periodo ' +
-          'anterior, pero el informe NO declara impracticabilidad NIIF for SMEs §3.14 / §10.21. ' +
-          'Reconstruir cuentas individuales desde Utilidades Retenidas viola §10.19 (es ' +
-          'manipulación). Declarar la impracticabilidad explícitamente en notas, o presentar ' +
-          'comparativos reales obtenidos de los libros de 2024.',
-      });
-    }
+  if (!options.skipReportTextChecks) {
+    const v15 = checkComparativosImpracticablesDeclaration(reportText, elite, snapshot.period);
+    if (v15) blockers.push(v15);
   }
 
   return {
@@ -420,16 +515,23 @@ export function reportConstituyeReservaLegal(reportText: string): boolean {
   return RESERVA_LEGAL_REGEX.test(reportText);
 }
 
+/**
+ * ¿El informe aborda la Tasa de Tributación Depurada (Art. 240 par. 6 E.T.)?
+ * Heurística de mención: acepta la terminología canónica del repo («Tasa de
+ * Tributación Depurada», «TTD», «Art. 240 par. 6» en cualquier orden) y la
+ * histórica («TMT», «tasa mínima», «tributación mínima»). No valida la cifra:
+ * sin ID/UD verificados lo correcto es declararla N/D.
+ */
 export function reportIncluyeTMTCalculada(reportText: string): boolean {
   if (!reportText) return false;
-  // Heurística: el informe debe mencionar "TMT" o "Tasa Mínima" o "tasa mínima"
-  // o "15%" en contexto de tributación o "parágrafo 6". Aceptamos cualquier
-  // de estas variantes.
   const indicators = [
+    /\bTTD\b/,
+    /tributaci[oó]n\s+depurada/i,
     /\bTMT\b/i,
     /tasa\s+m[ií]nima/i,
-    /par[aá]grafo\s+6\s+(del\s+)?art(\.|[ií]culo)\s+240/i,
     /tributaci[oó]n\s+m[ií]nima/i,
+    /par[aá]grafo\s+6\s+(del\s+)?art(\.|[ií]culo)\s+240/i,
+    /art(\.|[ií]culo)\s*240,?\s+par(\.|[aá]grafo)\s*6\b/i,
   ];
   return indicators.some((re) => re.test(reportText));
 }
@@ -437,6 +539,14 @@ export function reportIncluyeTMTCalculada(reportText: string): boolean {
 // ---------------------------------------------------------------------------
 // Helpers internos
 // ---------------------------------------------------------------------------
+
+/** Cifra canónica de centavos exactos (`-?\d+\.\d{2}`) en formato COP; N/D si no lo es. */
+function formatCanonicalCop(raw: string): string {
+  const m = /^(-?)(\d+)\.(\d{2})$/.exec(raw ?? '');
+  if (!m) return 'N/D';
+  const cents = BigInt(`${m[1]}${m[2]}${m[3]}`);
+  return formatCopFromCents(cents, false);
+}
 
 function formatBigCents(cents: bigint): string {
   const ZERO = BigInt(0);

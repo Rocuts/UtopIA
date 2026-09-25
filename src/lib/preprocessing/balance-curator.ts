@@ -16,15 +16,16 @@
 //
 // Justificación del orden:
 //   1. R1 sanea Activos/Pasivos negativos (mutación de control totals).
-//   2. R12 detecta libros NO cerrados (utilidad transitoria sin trasladar).
-//      Si dispara `abortVirtualClose=true`, R8 NO ejecuta y el orquestador
-//      del pipeline financiero debe emitir dictamen "no emitible".
-//   3. R8 aplica Cierre Virtual SÓLO si R12 no abortó: traslada utilidad
-//      del ejercicio (Clase 4-5-6-7) a Patrimonio (cuenta virtual 3605VC)
-//      y reclasifica saldo histórico de 3605 a 3710VC.
-//   4. R5 ancla el patrimonio al ECP (sólo absorbe gaps reales de transición
-//      NIIF / redondeos; los gaps por utilidad transitoria ya fueron
-//      eliminados por R8).
+//   2. R12 detecta libros NO cerrados (utilidad sin trasladar al grupo 36;
+//      cortes parciales sólo reciben nota) y un comparativo no cerrado (P&G
+//      posiblemente acumulado, bloqueante). La bandera `librosNoCerrados`
+//      la consume el gate (V12); R8 igual ejecuta.
+//   3. R8 aplica Cierre Virtual: traslada utilidad del ejercicio (Clase
+//      4-5-6-7) a Patrimonio (cuenta virtual 3605VC) y reclasifica un saldo
+//      histórico del grupo 36 a 3710VC. Cualquier otro residual de la
+//      ecuación queda BLOQUEANTE (auditoría 2026-09, niif-preproceso-06).
+//   4. R5 verifica que el desglose del patrimonio (ECP) concilie con la
+//      clase 3. NO muta el balance; una brecha bloquea (recalculo-08).
 //   5. R3 atribuye el descuadre residual (lectura sobre control totals
 //      saneados).
 //   6. R2 construye el EFE indirecto (sobre control totals saneados).
@@ -36,8 +37,9 @@
 //  12. R14 advierte PPE bruto sin depreciación correspondiente.
 //  13. R15 advierte costeo incompleto en comercializadoras.
 //
-// La función NO ES PURA en sentido estricto: las reglas R1, R5, R6, R7 y R8
-// mutan el snapshot recibido (ver contratos en `curator-rules/types.ts`).
+// La función NO ES PURA en sentido estricto: las reglas R1, R6 y R8 mutan el
+// snapshot recibido, y R5/R8/R12 pueden añadir bloqueos post-curator a
+// `snapshot.validation` (ver `curator-rules/curator-blockers.ts`).
 // Sigue siendo determinística: mismo input → mismo output (snapshot mutado
 // idénticamente, R8 idempotente sobre cuentas virtuales 3605VC/3710VC).
 // ---------------------------------------------------------------------------
@@ -96,7 +98,7 @@ export function runCurator(
     abortVirtualClose: false,
   };
   try {
-    r12Out = runR12(snapshot);
+    r12Out = runR12(snapshot, prev);
     findings.push(...r12Out.findings);
   } catch (err) {
     errors['CUR-R12'] = err instanceof Error ? err.message : String(err);

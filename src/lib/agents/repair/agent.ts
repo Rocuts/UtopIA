@@ -2,7 +2,8 @@
 // Repair Chat — Agent runner
 // ---------------------------------------------------------------------------
 // Loop conversacional para "El Doctor de Datos":
-//   1. Reconstruye el `PreprocessedBalance` desde `rawCsv` (si lo hay).
+//   1. Reconstruye el `PreprocessedBalance` desde `rawCsv` (si lo hay) con la
+//      misma lectura que /upload y /niif (`preprocessUploadedTrialBalanceText`).
 //   2. Llama a `streamText` con `MODELS.CHAT`, las dos tools de repair y los
 //      mensajes de la conversacion.
 //   3. Hace streaming token-a-token via SSE (`event: token`).
@@ -26,11 +27,8 @@ import {
   type ToolResultPart,
 } from 'ai';
 import { MODELS } from '@/lib/config/models';
-import {
-  parseTrialBalanceCSV,
-  preprocessTrialBalance,
-  type PreprocessedBalance,
-} from '@/lib/preprocessing/trial-balance';
+import { preprocessUploadedTrialBalanceText } from '@/lib/preprocessing/raw-data';
+import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { buildRepairSystemPrompt } from './prompt';
 import { executeRepairTool, repairTools } from './tools';
 import type {
@@ -44,6 +42,52 @@ import type {
 // → apply → recheck" necesita más rondas que el chat read-only de Phase 1.
 const MAX_ROUNDS = 8;
 const MAX_OUTPUT_TOKENS = 1500;
+
+/**
+ * Reconstruye el balance del Doctor de Datos desde `rawCsv` (el `rawData` del
+ * pipeline) con la MISMA lectura que /upload, /niif y el Stage 0 del
+ * orquestador (P4 cross-dep): directivas de ingesta confirmadas (unidad,
+ * vencimientos), bloques por hoja del XLSX y texto con el informe de
+ * validación antepuesto. Antes se parseaba con `parseTrialBalanceCSV` directo
+ * y un balance "en miles" confirmado se leía 1.000 veces menor.
+ *
+ * Una unidad declarada sin confirmar NO impide reconstruir el balance: el
+ * Doctor lo necesita para explicar el bloqueo, y el motivo viaja en
+ * `validation.integrityReasons` (lo publica `recheck_validation`). Hojas
+ * incompatibles devuelven `preprocessed: null` con los motivos de la ingesta.
+ */
+export function rebuildRepairBalance(rawCsv: string | null | undefined): {
+  preprocessed: PreprocessedBalance | null;
+  ingestReasons: string[];
+} {
+  if (!rawCsv || !rawCsv.trim()) return { preprocessed: null, ingestReasons: [] };
+  try {
+    const leido = preprocessUploadedTrialBalanceText(rawCsv);
+    if (leido.kind === 'rejected') return { preprocessed: null, ingestReasons: leido.reasons };
+    if (leido.kind === 'empty') return { preprocessed: null, ingestReasons: [] };
+    const preprocessed = leido.preprocessed;
+    // Audit P1 fix: parse parcial sospechoso. Si el preprocesador devolvio
+    // filas pero TODOS los totales de control quedaron en cero, casi
+    // seguro el CSV venia con separador equivocado, columnas mal mapeadas
+    // o saldos vacios. Tratar ese resultado como autoritativo lleva a
+    // tools que reportan datos inexistentes. Caemos al raw-text fallback.
+    // Multiperiodo T1: leemos del snapshot primario.
+    const ct = preprocessed.primary.controlTotals;
+    if (ct.activo === 0 && ct.pasivo === 0 && ct.patrimonio === 0) {
+      console.warn(
+        '[repair-chat] preprocess parcial sospechoso (totales en cero), cayendo a raw-text fallback',
+      );
+      return { preprocessed: null, ingestReasons: [] };
+    }
+    return { preprocessed, ingestReasons: [] };
+  } catch (err) {
+    console.warn(
+      '[repair-chat] preprocess fallo, continuando sin balance:',
+      err instanceof Error ? err.message : err,
+    );
+    return { preprocessed: null, ingestReasons: [] };
+  }
+}
 
 /**
  * Runner principal. Recibe el `controller` del `ReadableStream` para emitir SSE
@@ -68,34 +112,7 @@ export async function runRepairAgent(
   // ---------------------------------------------------------------------------
   // 0. Reconstruir preprocessed (best-effort)
   // ---------------------------------------------------------------------------
-  let preprocessed: PreprocessedBalance | null = null;
-  if (req.context.rawCsv && req.context.rawCsv.trim()) {
-    try {
-      const rows = parseTrialBalanceCSV(req.context.rawCsv);
-      if (rows.length > 0) {
-        preprocessed = preprocessTrialBalance(rows);
-        // Audit P1 fix: parse parcial sospechoso. Si el preprocesador devolvio
-        // filas pero TODOS los totales de control quedaron en cero, casi
-        // seguro el CSV venia con separador equivocado, columnas mal mapeadas
-        // o saldos vacios. Tratar ese resultado como autoritativo lleva a
-        // tools que reportan datos inexistentes. Caemos al raw-text fallback.
-        // Multiperiodo T1: leemos del snapshot primario.
-        const ct = preprocessed.primary.controlTotals;
-        if (ct.activo === 0 && ct.pasivo === 0 && ct.patrimonio === 0) {
-          console.warn(
-            '[repair-chat] preprocess parcial sospechoso (totales en cero), cayendo a raw-text fallback',
-          );
-          preprocessed = null;
-        }
-      }
-    } catch (err) {
-      console.warn(
-        '[repair-chat] preprocess fallo, continuando sin balance:',
-        err instanceof Error ? err.message : err,
-      );
-      preprocessed = null;
-    }
-  }
+  const { preprocessed, ingestReasons } = rebuildRepairBalance(req.context.rawCsv);
 
   // Phase 2: ledger replicado por el cliente. Vacio si el caller es Phase 1.
   const adjustments: Adjustment[] = Array.isArray(req.adjustments)
@@ -106,6 +123,7 @@ export async function runRepairAgent(
     req.context,
     preprocessed,
     adjustments,
+    ingestReasons,
   );
 
   // ---------------------------------------------------------------------------

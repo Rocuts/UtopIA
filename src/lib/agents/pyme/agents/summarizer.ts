@@ -33,7 +33,8 @@ interface SummarizerContext {
 
 /**
  * Calcula alertas a partir de los numeros agregados. Reglas:
- *  - margenPct < 0  -> critical (perdida del mes)
+ *  - margen < 0     -> critical (perdida del mes; incluye meses con egresos
+ *                      y sin ingresos, donde margenPct es null / N/D)
  *  - cambio en margen vs mes anterior > 20% (caida) -> critical
  *  - cambio en margen vs mes anterior 10-20% (caida o subida) -> warning
  *  - egresos suben >30% sin que ingresos suban -> warning
@@ -44,10 +45,11 @@ interface SummarizerContext {
 function computeAlerts(data: MonthlySummary, language: 'es' | 'en'): SummaryAlert[] {
   const isEn = language === 'en';
   const alerts: SummaryAlert[] = [];
-  const { ingresos, egresos, margen, margenPct } = data.totals;
+  const { ingresos, egresos, margen } = data.totals;
 
-  // Regla 1: perdida del mes.
-  if (margenPct < 0) {
+  // Regla 1: perdida del mes. Se evalua el resultado (margen), no margenPct:
+  // sin ingresos margenPct es null y el mes con egresos igual es perdida.
+  if (margen < 0) {
     alerts.push({
       severity: 'critical',
       message: isEn

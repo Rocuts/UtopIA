@@ -10,8 +10,12 @@
 // Reglas:
 //   - Cifras en `number` (no centavos) por compatibilidad con `types.ts`.
 //   - Strict mode Zod: arrays siempre presentes. Si vacío, el LLM emite [] explícito (instruido en el prompt). NUNCA .default([]) — OpenAI strict no lo admite.
-//   - Las normas Art. 242 / Art. 36-3 / Art. 771-5 §2 son `z.literal` o `z.enum`
-//     para forzar citación textual (defensa Art. 647 E.T.).
+//   - Las normas Art. 242 / Art. 771-5 §2 son `z.literal` o `z.enum` para
+//     forzar citación textual (defensa Art. 647 E.T.). El Art. 36-3 E.T. fue
+//     derogado por la Ley 2277/2022 art. 96 y no es una norma admitida.
+//   - Cifras sin base verificable → `.nullable()` (N/D ≠ 0). Los agentes
+//     sobrescriben con el cálculo determinista después del LLM (auditoría
+//     2026-09: tributario-modulos-06, -07, tributario-calc-01).
 // ---------------------------------------------------------------------------
 
 import { z } from 'zod';
@@ -31,10 +35,10 @@ export const TetReportSchema = z.object({
   markdown: z.string().min(20),
   warnings: z.array(z.string()),
   data: z.object({
-    tet: z.number().describe('Tasa Efectiva de Tributación como decimal [0,1+]'),
-    ttd: z.number().describe('Tasa de Tributación Depurada (paragrafo 6 Art. 240 ET)'),
-    nivelAlerta: z.enum(['verde', 'amarillo', 'rojo']),
-    impuestoProyectado: z.number(),
+    tet: z.number().nullable().describe('Tasa efectiva CONTABLE = impuesto causado (clase 54) / UAI, decimal. null si UAI ≤ 0. La fija el sistema'),
+    ttd: z.number().nullable().describe('TTD (parágrafo 6 Art. 240 ET) = ID/UD. null sin ID/UD verificados'),
+    nivelAlerta: z.enum(['verde', 'amarillo', 'rojo']).nullable(),
+    impuestoProyectado: z.number().nullable().describe('Impuesto de renta causado en libros (clase 54), COP'),
     uai: z.number().describe('Utilidad Antes de Impuestos'),
     sugerenciasOptimizacion: z.array(TetOptimizationSuggestionSchema),
   }),
@@ -62,9 +66,9 @@ export const RetentionShieldReportSchema = z.object({
   markdown: z.string().min(20),
   warnings: z.array(z.string()),
   data: z.object({
-    retencionesAcumuladas: z.number(),
-    impuestoProyectado: z.number(),
-    saldoAFavorProyectado: z.number(),
+    retencionesAcumuladas: z.number().describe('Crédito imputable a renta (135505, 135515; 135595/1805 con nombre de renta)'),
+    impuestoProyectado: z.number().nullable().describe('Impuesto de renta causado en libros (clase 54)'),
+    saldoAFavorProyectado: z.number().nullable().describe('null: sin declaración no hay saldo a favor determinable'),
     acciones: z.array(RetentionActionSchema),
   }),
 });
@@ -94,11 +98,13 @@ export const AntiDianAuditReportSchema = z.object({
   markdown: z.string().min(20),
   warnings: z.array(z.string()),
   data: z.object({
-    pagosEfectivoTotal: z.number(),
+    // Sin detalle de pagos del año (auxiliar de caja / pagos por transacción)
+    // los montos de bancarización son N/D: el saldo de 1105 no es un flujo.
+    pagosEfectivoTotal: z.number().nullable(),
     pagosNoDeduciblesIndividuales: z.array(CashPaymentViolationSchema),
-    excesoNoDeducibleGeneral: z.number(),
+    excesoNoDeducibleGeneral: z.number().nullable(),
     crucesExogenaSospechosos: z.array(ExogenaCrossSchema),
-    mayorImpuestoEstimado: z.number(),
+    mayorImpuestoEstimado: z.number().nullable(),
   }),
 });
 
@@ -145,7 +151,7 @@ export const DividendOptimizationReportSchema = z.object({
       hibrido50_50: DividendScenarioSchema,
     }),
     recomendacion: z.string().min(1),
-    norma: z.enum(['Art. 242 E.T.', 'Art. 36-3 E.T.']),
+    norma: z.enum(['Art. 242 E.T.', 'Art. 242-1 E.T.']),
   }),
 });
 

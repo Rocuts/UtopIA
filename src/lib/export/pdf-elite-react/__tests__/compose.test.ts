@@ -249,7 +249,9 @@ describe('composeEditorialReport', () => {
     expect(out.meta.language).toBe('es');
     expect(out.meta.watermark).toBeUndefined();
 
-    expect(out.kpiGrid.kpis.length).toBeLessThanOrEqual(12);
+    // 10 KPIs del balance + hasta 3 de pilares; ya no se recortan a 12 en
+    // silencio (reportes-export-18).
+    expect(out.kpiGrid.kpis.length).toBeLessThanOrEqual(13);
     expect(out.kpiGrid.kpis.length).toBeGreaterThan(0);
 
     expect(out.waterfall.items.length).toBeGreaterThanOrEqual(3);
@@ -333,5 +335,47 @@ describe('composeEditorialReport', () => {
     for (const e of expected) {
       expect(labels.some((l) => l.toLowerCase() === e.toLowerCase())).toBe(true);
     }
+  });
+});
+
+// pipeline-flujo-14 (W3-A, defensa en profundidad): /export responde 422 para
+// un informe sin Partes II/III, pero si el composer se invoca igual la portada
+// debe decir INCOMPLETO en lugar de presentarse como informe completo.
+describe('composeEditorialReport — informe INCOMPLETO', () => {
+  it('Estrategia vacía → watermark INCOMPLETO con las partes faltantes', () => {
+    const base = stubFinancialReport();
+    const out = composeEditorialReport({
+      report: { ...base, strategicAnalysis: { ...base.strategicAnalysis, fullContent: '   ' } },
+      preprocessed: stubPreprocessed(),
+      pillars: null,
+      language: 'es',
+    });
+    expect(out.meta.watermark).toBe('INCOMPLETO');
+    expect(out.meta.watermarkSubtitle).toMatch(/Parte II/);
+    expect(out.meta.watermarkSubtitle).not.toMatch(/Parte III/);
+  });
+
+  it('Gobierno vacío (en) → INCOMPLETE subtitle names Part III', () => {
+    const base = stubFinancialReport();
+    const out = composeEditorialReport({
+      report: { ...base, governance: { ...base.governance, fullContent: '' } },
+      preprocessed: stubPreprocessed(),
+      pillars: null,
+      language: 'en',
+    });
+    expect(out.meta.watermark).toBe('INCOMPLETO');
+    expect(out.meta.watermarkSubtitle).toMatch(/Part III/);
+  });
+
+  it('BLOQUEADO prevalece sobre INCOMPLETO', () => {
+    const base = stubFinancialReport();
+    const out = composeEditorialReport({
+      report: { ...base, governance: { ...base.governance, fullContent: '' } },
+      preprocessed: stubPreprocessed(),
+      pillars: null,
+      language: 'es',
+      emittable: { ok: false, blockers: ['V1'] },
+    });
+    expect(out.meta.watermark).toBe('BLOQUEADO');
   });
 });

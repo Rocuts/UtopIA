@@ -9,6 +9,10 @@
 // Rate limit: 429 con Retry-After. Token TTL=3600s, renovar a 3300s.
 
 import { BaseERPConnector } from '../connector';
+import { connectionKey } from '../session-store';
+import { resolveERPPeriod } from '../period';
+import { buildClosingTrialBalance } from '../trial-balance-builders';
+import { leafCodes, rawLevelFor } from '../puc';
 import {
   assertSafeTenantUrl,
   fetchWithSafeRedirects,
@@ -96,25 +100,20 @@ async function fetchWithRetry(
   throw new Error('fetchWithRetry: exceeded max retries');
 }
 
-// ─── Cached token shape ────────────────────────────────────────────────────────
-
-interface CachedToken {
-  value: string;
-  expiresAt: number;
-}
-
 // ─── Connector ────────────────────────────────────────────────────────────────
 
 export class OracleFusionConnector extends BaseERPConnector {
   readonly provider: ERPProvider = 'oracle_fusion';
 
-  /** Per-instance token cache so tests don't bleed across connector instances. */
-  private readonly tokenCache = new Map<string, CachedToken>();
-
   // ─── Auth ──────────────────────────────────────────────────────────────────
 
+  /**
+   * Cache key of THIS connection: provider + SHA-256 of every identity and
+   * secret field. A request with the same user but another secret, or another
+   * tenant/company, never receives a token issued for different credentials.
+   */
   private tokenCacheKey(credentials: ERPCredentials): string {
-    return `oracle_fusion:${credentials.clientId ?? ''}:${credentials.tenantId ?? ''}`;
+    return connectionKey(credentials, 'token');
   }
 
   private tokenEndpoint(credentials: ERPCredentials): string {
@@ -140,12 +139,15 @@ export class OracleFusionConnector extends BaseERPConnector {
       : 'urn:opc:resource:fusion:boss/';
   }
 
-  async getAccessToken(credentials: ERPCredentials): Promise<string> {
+  async getAccessToken(
+    credentials: ERPCredentials,
+    options: { forceRefresh?: boolean } = {},
+  ): Promise<string> {
     const key = this.tokenCacheKey(credentials);
-    const cached = this.tokenCache.get(key);
     // Refrescar 5 minutos antes de expirar (token TTL=3600s → refrescar a 3300s)
-    if (cached && Date.now() < cached.expiresAt - 300_000) {
-      return cached.value;
+    const cached = options.forceRefresh ? null : this.sessions.get<string>(key, 300_000);
+    if (cached) {
+      return cached;
     }
 
     const endpoint = this.tokenEndpoint(credentials);
@@ -183,10 +185,7 @@ export class OracleFusionConnector extends BaseERPConnector {
     }
 
     const data = (await res.json()) as OracleTokenResponse;
-    this.tokenCache.set(key, {
-      value: data.access_token,
-      expiresAt: Date.now() + data.expires_in * 1000,
-    });
+    this.sessions.set(key, data.access_token, data.expires_in * 1000);
 
     return data.access_token;
   }
@@ -304,14 +303,20 @@ export class OracleFusionConnector extends BaseERPConnector {
     const segIdx = this.naturalSegmentIndex(credentials);
     const rows = await this.fetchAllLedgerBalances(credentials, periodName, correlationId);
 
-    return rows.map((row): RawAccountRow => {
+    const codes = rows.map((row) => {
       const naturalAccount = this.extractNaturalAccount(row.DetailAccountCombination, segIdx);
-      const pucCode = pucMappingTable?.[naturalAccount] ?? naturalAccount;
+      return pucMappingTable?.[naturalAccount] ?? naturalAccount;
+    });
+    // Sólo las hojas del informe son transaccionales (jerarquía real).
+    const leaves = leafCodes(codes.map((code) => ({ code })));
+    return rows.map((row, i): RawAccountRow => {
+      const pucCode = codes[i];
+      const isLeaf = leaves.has(pucCode);
       return {
         code: pucCode,
         name: row.DetailAccountCombination,
-        level: 'Auxiliar',
-        transactional: true,
+        level: rawLevelFor(pucCode, isLeaf),
+        transactional: isLeaf,
         balancesByPeriod: { [fiscalYear]: row.EndingBalance },
       };
     });
@@ -321,7 +326,8 @@ export class OracleFusionConnector extends BaseERPConnector {
 
   async testConnection(credentials: ERPCredentials): Promise<boolean> {
     try {
-      await this.getAccessToken(credentials);
+      // Siempre contra el proveedor: nunca se valida con un token en caché.
+      await this.getAccessToken(credentials, { forceRefresh: true });
       return true;
     } catch {
       return false;
@@ -338,46 +344,28 @@ export class OracleFusionConnector extends BaseERPConnector {
     credentials: ERPCredentials,
     period: string,
   ): Promise<ERPTrialBalance> {
-    // period: "2025-12" → derive Oracle period name "Dec-25"
+    // Periodo Oracle del mes de corte ("Dec-25"); saldo inicial + actividad
+    // del periodo = saldo final se verifica cuenta por cuenta.
+    const resolved = resolveERPPeriod(period);
     const correlationId = crypto.randomUUID();
-    const [yearStr, monthStr] = period.split('-');
-    const year = parseInt(yearStr, 10);
-    const month = parseInt(monthStr ?? '12', 10);
-    const oraclePeriod = formatOraclePeriod(year, month);
+    const oraclePeriod = formatOraclePeriod(resolved.cutoffYear, resolved.cutoffMonth);
     const segIdx = this.naturalSegmentIndex(credentials);
 
     const rows = await this.fetchAllLedgerBalances(credentials, oraclePeriod, correlationId);
 
-    const accounts: ERPAccount[] = rows.map((row) => {
-      const naturalAccount = this.extractNaturalAccount(row.DetailAccountCombination, segIdx);
-      const debit = row.PeriodActivity > 0 ? row.PeriodActivity : 0;
-      const credit = row.PeriodActivity < 0 ? Math.abs(row.PeriodActivity) : 0;
-
-      return {
-        code: naturalAccount,
+    return buildClosingTrialBalance({
+      period: resolved,
+      rows: rows.map((row) => ({
+        code: this.extractNaturalAccount(row.DetailAccountCombination, segIdx),
         name: row.DetailAccountCombination,
-        type: inferTypeFromPUC(naturalAccount),
-        pucClass: parseInt(naturalAccount.charAt(0), 10) || undefined,
-        balance: row.EndingBalance,
-        debit,
-        credit,
-        level: accountLevel(naturalAccount),
-        isAuxiliary: naturalAccount.replace(/\D/g, '').length >= 6,
-      };
-    });
-
-    const totalDebit = accounts.reduce((s, a) => s + a.debit, 0);
-    const totalCredit = accounts.reduce((s, a) => s + a.credit, 0);
-
-    return {
-      period,
+        opening: row.BeginningBalance,
+        debit: row.PeriodActivity > 0 ? row.PeriodActivity : 0,
+        credit: row.PeriodActivity < 0 ? Math.abs(row.PeriodActivity) : 0,
+        closing: row.EndingBalance,
+      })),
       companyName: credentials.companyId ?? 'Oracle Fusion Ledger',
-      currency: rows[0]?.Currency ?? 'COP',
-      accounts,
-      totalDebit,
-      totalCredit,
-      generatedAt: new Date().toISOString(),
-    };
+      currency: rows[0]?.Currency ?? '',
+    });
   }
 
   async getJournalEntries(
@@ -415,26 +403,4 @@ function formatOraclePeriod(year: number, month: number): string {
   const monthName = months[month - 1] ?? 'Dec';
   const yearShort = String(year).slice(-2);
   return `${monthName}-${yearShort}`;
-}
-
-function inferTypeFromPUC(code: string): ERPAccount['type'] {
-  switch (code.charAt(0)) {
-    case '1': return 'asset';
-    case '2': return 'liability';
-    case '3': return 'equity';
-    case '4': return 'revenue';
-    case '5': return 'expense';
-    case '6': return 'cost';
-    case '7': return 'cost';
-    default: return 'asset';
-  }
-}
-
-function accountLevel(code: string): number {
-  const digits = code.replace(/\D/g, '');
-  if (digits.length <= 1) return 1;
-  if (digits.length <= 2) return 2;
-  if (digits.length <= 4) return 3;
-  if (digits.length <= 6) return 4;
-  return 5;
 }

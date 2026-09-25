@@ -3,8 +3,8 @@
 // ---------------------------------------------------------------------------
 // Lee del PeriodSnapshot (preprocesado determinístico) las cifras crudas
 // que alimentan F03/F05/F06/F07/F08:
-//   - F03 base: Σ(Cta.1355) + Σ(Cta.1805) SIN 135517 ni 135518
-//                                          → crédito imputable a RENTA.
+//   - F03 base: lista blanca de crédito imputable a RENTA (135505, 135515,
+//               135595/1805 sólo si el nombre lo indica) — ver credito-renta.ts.
 //   - F05    : |Σ(Cta.2408)|               → IVA por pagar.
 //   - F06    : |Σ(Cta.2365)|               → Retefuente por declarar.
 //   - F07    : |Σ(Cta.2368)|               → ICA por pagar.
@@ -18,6 +18,7 @@
 
 import type { PeriodSnapshot, ValidatedAccount } from '@/lib/preprocessing/trial-balance';
 import type { FiscalRawBase } from './internal-types';
+import { componerActivosImpuestoSnapshot } from './credito-renta';
 
 /**
  * Convierte un balance en pesos (number) a centavos (bigint) sin floating-point
@@ -52,18 +53,13 @@ function collectLeafAccounts(snapshot: PeriodSnapshot): ValidatedAccount[] {
  * Suma cents de todas las hojas cuyo `code` empieza por uno de los prefijos
  * provistos. Mantiene la operación en BigInt para evitar drift.
  *
- * `excludePrefixes` gana sobre `prefixes`: una hoja que caiga en ambos NO
- * se suma. Se usa para sacar del crédito de renta las subcuentas 135517 y
- * 135518, que están dentro del 1355 pero pertenecen a otros impuestos.
  */
 function sumLeavesByPrefix(
   leaves: readonly ValidatedAccount[],
   prefixes: readonly string[],
-  excludePrefixes: readonly string[] = [],
 ): bigint {
   let acc = BigInt(0);
   for (const leaf of leaves) {
-    if (excludePrefixes.some((p) => leaf.code.startsWith(p))) continue;
     if (prefixes.some((p) => leaf.code.startsWith(p))) {
       acc += pesosToCents(leaf.balance);
     }
@@ -71,27 +67,13 @@ function sumLeavesByPrefix(
   return acc;
 }
 
-/**
- * Subcuentas del PUC 1355 que NO son crédito del impuesto de renta.
- *
- * Por qué se excluyen (auditoría fiscal 2026-08, superficie 2):
- *   - 135517 «Impuesto a las ventas retenido» (ReteIVA). El Art. 484-1 E.T.
- *     ordena llevarlo «como menor valor del saldo a pagar o mayor valor del
- *     saldo a favor» EN LA DECLARACIÓN DE IVA del período en que se practicó.
- *     No es una retención a título de renta y por tanto el Art. 373 E.T. no
- *     lo deja imputar al impuesto de renta.
- *   - 135518 «Impuesto de industria y comercio retenido» / anticipo de ICA.
- *     El ICA es un tributo municipal: lo retenido se acredita en la
- *     declaración de ICA del municipio, jamás contra renta. Lo pagado por ICA
- *     es deducción del 100% en renta (Art. 115 E.T., tras Ley 2277/2022), que
- *     es una cosa distinta de un descuento o de una retención imputable.
- *
- * Sumarlas a F03 infla el crédito, reduce el «neto a pagar» F04 y lleva al
- * contribuyente a subdeclarar: sanción por inexactitud del 100% del mayor
- * impuesto (Art. 647 E.T.) y, si además se pide devolución, 20% adicional
- * sobre el monto improcedente (Art. 670 E.T.).
- */
-const PREFIJOS_NO_CREDITO_RENTA = ['135517', '135518'] as const;
+// Composición de F03 (auditoría 2026-08 superficie 2 + auditoría 2026-09,
+// tributario-modulos-01): antes se sumaba todo 1355 y 1805 excluyendo sólo
+// 135517/135518, con lo que 135510 (anticipo ICA), 135530 (impuestos
+// descontables), 135520/135525 y 1805 «Bienes de arte y cultura» inflaban el
+// crédito de renta, bajaban F04 y fabricaban un «saldo a favor». Ahora la
+// composición es una lista blanca (credito-renta.ts); lo demás se informa aparte
+// y nunca netea F02 (Arts. 373, 647 y 670 E.T.).
 
 /**
  * Extrae las cifras fiscales crudas del balance preprocesado.
@@ -102,22 +84,21 @@ const PREFIJOS_NO_CREDITO_RENTA = ['135517', '135518'] as const;
  *     `absBigInt` para emitir magnitudes presentables.
  *   - Cta.1355 y Cta.1805 siguen su signo natural (débito = positivo);
  *     si por algún motivo viniera negativa el calculator decide cómo proyectar.
- *   - El ReteIVA (135517) y el ReteICA (135518) se extraen aparte: existen en
- *     el balance y hay que mostrarlos, pero no acreditan renta.
+ *   - ReteIVA, ReteICA/anticipo de ICA y el resto de 1355/1805 que no es
+ *     crédito de renta se extraen aparte: existen en el balance y hay que
+ *     mostrarlos, pero no acreditan renta.
  */
 export function extractFiscalBaseFromTrialBalance(
   snapshot: PeriodSnapshot,
 ): FiscalRawBase {
   const leaves = collectLeafAccounts(snapshot);
 
-  // F03 sólo con lo imputable a renta (Art. 373 E.T.).
-  const retencionesAFavorCents = sumLeavesByPrefix(
-    leaves,
-    ['1355', '1805'],
-    PREFIJOS_NO_CREDITO_RENTA,
-  );
-  const reteIvaAFavorCents = sumLeavesByPrefix(leaves, ['135517']);
-  const reteIcaAFavorCents = sumLeavesByPrefix(leaves, ['135518']);
+  // F03 sólo con lo imputable a renta (Art. 373 E.T.) — lista blanca.
+  const composicion = componerActivosImpuestoSnapshot(snapshot);
+  const retencionesAFavorCents = composicion.creditoRentaCents;
+  const reteIvaAFavorCents = composicion.reteIvaCents;
+  const reteIcaAFavorCents = composicion.reteIcaCents;
+  const otrosActivosImpuestoNoRentaCents = composicion.otrosNoRentaCents;
   const ivaPorPagarCents = absBigInt(sumLeavesByPrefix(leaves, ['2408']));
   const reteFuentePorPagarCents = absBigInt(sumLeavesByPrefix(leaves, ['2365']));
   const icaPorPagarCents = absBigInt(sumLeavesByPrefix(leaves, ['2368']));
@@ -127,6 +108,7 @@ export function extractFiscalBaseFromTrialBalance(
     retencionesAFavorCents,
     reteIvaAFavorCents,
     reteIcaAFavorCents,
+    otrosActivosImpuestoNoRentaCents,
     ivaPorPagarCents,
     reteFuentePorPagarCents,
     icaPorPagarCents,

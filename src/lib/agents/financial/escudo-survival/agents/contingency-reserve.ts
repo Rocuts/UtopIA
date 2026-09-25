@@ -24,7 +24,7 @@ export async function runContingencyReserve(
     : undefined;
 
   const userContent = [
-    'Calcula la reserva de contingencia (10% utilidad neta) y revisa la reserva legal del Art. 452 C.Co. sobre los totales:',
+    'Calcula la reserva de contingencia (10% utilidad neta) y revisa la reserva legal segun el tipo societario (Arts. 452 y 371 C.Co.; S.A.S. solo si los estatutos la prevén) sobre los totales:',
     '',
     anchorBlock,
     '',
@@ -37,7 +37,10 @@ export async function runContingencyReserve(
     agentName: 'escudo-survival-reserve',
     model: MODELS.FINANCIAL_PIPELINE,
     schema: ContingencyReserveReportSchema,
-    system: buildContingencyReservePrompt(input.language, undefined, nitContext),
+    system: buildContingencyReservePrompt(input.language, undefined, nitContext, {
+      entityType: company.entityType ?? null,
+      bylawsRequireLegalReserve: company.bylawsRequireLegalReserve ?? null,
+    }),
     userContent,
     ...MODELS_CONFIG.contingencyReserve,
   });

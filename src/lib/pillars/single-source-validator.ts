@@ -10,7 +10,8 @@
 // Principios:
 //   - DETERMINÍSTICO: mismo input → mismo output. Sin LLM, sin Math.random.
 //   - NO DESTRUCTIVO: sólo lectura.
-//   - TOLERANCIA: $1.000 COP (redondeo aceptable en balances PUC).
+//   - TOLERANCIA: $1.000 COP entre pilares; el patrimonio (controlTotals vs
+//     summary) se compara al centavo, igual que V4 del gate de emisión.
 //   - HASH CANÓNICO: md5 del string "utilidadNeta|ingresos|activo|pasivo|patrimonio"
 //     sirve como session-id del balance procesado para audit log.
 // ---------------------------------------------------------------------------
@@ -19,6 +20,7 @@ import { createHash } from 'node:crypto';
 
 import type { PeriodSnapshot } from '@/lib/preprocessing/trial-balance';
 
+import { ingresosNetosPeriodo } from './shared-metrics';
 import type { PillarsResult } from './types';
 
 // ---------------------------------------------------------------------------
@@ -83,33 +85,17 @@ export function validateCrossPillarCoherence(
   const futuroAudit = metrics.futuro.futuroCards?.audit ?? null;
 
   // ── 1. Utilidad Neta inter-pilar ─────────────────────────────────────────
-  // VALOR: el audit ahora expone `utilidadNeta` directamente (FIX audit B1).
-  // Antes derivábamos desde `utilidadOperacional - impuestosCuenta24` con la
-  // fórmula vieja; ahora la fuente es canónica.
+  // Cada audit expone la utilidad neta que LEYÓ su pilar; se compara tal cual
+  // (ratios-kpis-10). Antes Escudo y Futuro se reconstruían desde
+  // rentaTeorica / 0,35 y utilidadProyectadaAnual / (1 + CAGR): con pérdida
+  // ambos daban 0 (usaban max(0, UN)) y el bus de datos parecía roto.
   const utNetaValor = valorAudit !== null ? valorAudit.utilidadNeta : null;
-
-  // ESCUDO: rentaTeorica = utilidadNeta × 0.35
-  //         → utNeta ≈ rentaTeorica / 0.35
-  const utNetaEscudo =
-    escudoAudit !== null
-      ? escudoAudit.rentaTeorica / 0.35
-      : null;
+  const utNetaEscudo = finiteOrNull(escudoAudit?.utilidadNeta);
 
   // VERDAD: no expone utilidadNeta directamente; usamos el snapshot.
   const utNetaVerdad = ct.utilidadNeta; // mismo canal que snapshot
 
-  // FUTURO: utilidadProyectadaAnual = max(0, utilidadNeta) × (1 + CAGR ?? 0.05)
-  //         → si utilidadNeta > 0: utNeta ≈ utilidadProyectadaAnual / (1 + cagr)
-  let utNetaFuturo: number | null = null;
-  if (futuroAudit !== null) {
-    const cagr = futuroAudit.cagrIngresos ?? 0.05;
-    const divisor = 1 + cagr;
-    // utilidadProyectadaAnual usa max(0, utilidadNeta), así que sólo es
-    // reversible cuando utilidadNeta ≥ 0.
-    if (divisor !== 0) {
-      utNetaFuturo = futuroAudit.utilidadProyectadaAnual / divisor;
-    }
-  }
+  const utNetaFuturo = finiteOrNull(futuroAudit?.utilidadNeta);
 
   const utNetaSnapshot = ct.utilidadNeta;
 
@@ -133,12 +119,14 @@ export function validateCrossPillarCoherence(
   if (utNetaFinding) findings.push(utNetaFinding);
 
   // ── 2. Ingresos inter-pilar ──────────────────────────────────────────────
+  // Base común: ingresos netos de devoluciones (ratios-kpis-04), la misma que
+  // usan Ratio Operativo, Margen Neto y CAGR.
   // VALOR: totalIngresos
   const ingresosValor = valorAudit?.totalIngresos ?? null;
   // FUTURO: ingresosActuales
   const ingresosFuturo = futuroAudit?.ingresosActuales ?? null;
   // ESCUDO/VERDAD: no exponen ingresos directamente — omitimos (null).
-  const ingresosSnapshot = ct.ingresos;
+  const ingresosSnapshot = ingresosNetosPeriodo(ct);
 
   const ingresosFinding = checkNumericField({
     code: 'INGRESOS_INCOHERENT',
@@ -182,11 +170,17 @@ export function validateCrossPillarCoherence(
   // ── 4. Patrimonio post-R8 ────────────────────────────────────────────────
   // controlTotals.patrimonio === summary.totalEquity
   // VERDAD: equationGap === activo − pasivo − patrimonio del snapshot
+  // Al centavo, como V4 del gate de emisión (auditoria-calidad-29).
   const patrimonioSnapshot = ct.patrimonio;
   const patrimonioSummary = snapshot.summary.totalEquity;
-  const spreadPatrimonio = Math.abs(patrimonioSnapshot - patrimonioSummary);
+  const patrimonioCents = ct.cents
+    ? ct.cents.patrimonio
+    : BigInt(Math.round(patrimonioSnapshot * 100));
+  const spreadPatrimonioCents =
+    patrimonioCents - BigInt(Math.round(patrimonioSummary * 100));
+  const spreadPatrimonio = Math.abs(Number(spreadPatrimonioCents) / 100);
 
-  if (spreadPatrimonio > COP_TOLERANCE) {
+  if (spreadPatrimonioCents !== BigInt(0)) {
     findings.push({
       code: 'PATRIMONIO_DESYNC',
       severity: 'warning',
@@ -300,6 +294,10 @@ function checkNumericField(args: NumericCheckArgs): CoherenceFinding | null {
     messageEs: messageEs(spread),
     messageEn: messageEn(spread),
   };
+}
+
+function finiteOrNull(v: number | null | undefined): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
 function aggregateSeverity(findings: CoherenceFinding[]): CoherenceSeverity {

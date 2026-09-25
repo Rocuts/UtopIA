@@ -50,12 +50,21 @@ import { NiifReportSchema, type NiifReportJson } from '@/lib/agents/financial/co
 
 const FIXTURES = path.resolve(process.cwd(), 'src/lib/preprocessing/__fixtures__');
 
-/** El único export de ERP real del repo: header en la fila 8, saldos firmados. */
+/**
+ * El único export de ERP real del repo: header en la fila 8, saldos firmados.
+ *
+ * Las celdas se entrecomillan (RFC 4180): nombres como "Anticipo Retención en
+ * la fuente 2,5%" traen coma. Auditoría 2026-09 (niif-preproceso-06): sin
+ * comillas esas filas corrían columnas, el balance quedaba descuadrado en
+ * −$5.014.078,19 (2025) y −$6.737.813,85 (2024), y R8 escondía la diferencia
+ * en 3710VC. R8 ya no absorbe residuales, así que la conversión debe ser fiel.
+ */
 async function loadRealBalance(): Promise<PreprocessedBalance> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(path.join(FIXTURES, 'grupo-empresarial-2tres-sas.xlsx'));
   const ws = wb.worksheets[0];
   const lines: string[] = [];
+  const csvCell = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
   ws.eachRow((row) => {
     const values = row.values as unknown[];
     lines.push(
@@ -63,10 +72,10 @@ async function loadRealBalance(): Promise<PreprocessedBalance> {
         .slice(1)
         .map((v) => {
           if (v === null || v === undefined) return '';
-          if (typeof v === 'string') return v;
+          if (typeof v === 'string') return csvCell(v);
           if (typeof v === 'number') return String(v);
           const o = v as { text?: string; result?: unknown };
-          return o.text ?? (o.result !== undefined ? String(o.result) : String(v));
+          return csvCell(o.text ?? (o.result !== undefined ? String(o.result) : String(v)));
         })
         .join(','),
     );
@@ -112,49 +121,58 @@ function informeCorrecto(): NiifReportJson {
       signatories: null,
     },
     balanceSheet: {
+      // Auditoría 2026-09: cifras del balance leído con CSV fiel (ver
+      // `loadRealBalance`). La corrida original partía de la lectura con
+      // columnas corridas y su renglón 37 incluía el tapón de R8 (−$5.014.078,19).
       assets: [
         linea('11', 'Efectivo y equivalentes de efectivo', '241367788864', 2),
-        linea('13', 'Deudores comerciales y otras cuentas por cobrar', '9817925895', 2),
+        linea('13', 'Deudores comerciales y otras cuentas por cobrar', '11302939292', 2),
         linea('14', 'Inventarios', '167021576929', 2),
         linea('15', 'Propiedades, planta y equipo', '6638628', 2),
         linea('18', 'Otros activos', '383953800', 2),
       ],
       liabilities: [
         linea('22', 'Proveedores', '180151828812', 2),
-        linea('23', 'Cuentas por pagar', '3059408350', 2),
+        linea('23', 'Cuentas por pagar', '3834412193', 2),
         linea('24', 'Impuestos, gravámenes y tasas', '10553782441', 2),
-        linea('28', 'Otros pasivos', '2488865359', 2),
+        linea('28', 'Otros pasivos', '2697467094', 2),
       ],
       equity: [
         linea('36', 'Resultados del ejercicio', '222849678973', 2),
-        linea('37', 'Resultados de ejercicios anteriores', '-505679819', 2),
+        linea('37', 'Resultados de ejercicios anteriores', '-4272000', 2),
       ],
-      totalAssetsPrimary: '418597884116',
-      totalAssetsComparative: '279820411750',
-      totalLiabilitiesPrimary: '196253884962',
-      totalLiabilitiesComparative: '123226317839',
-      totalEquityPrimary: '222343999154',
-      totalEquityComparative: '156594093911',
+      totalAssetsPrimary: '420082897513',
+      totalAssetsComparative: '282247951116',
+      totalLiabilitiesPrimary: '197237490540',
+      totalLiabilitiesComparative: '124980075820',
+      totalEquityPrimary: '222845406973',
+      totalEquityComparative: '157267875296',
       notes: [],
       modeBanner: null,
     },
     incomeStatement: {
       lines: [
-        linea('4', 'Ingresos de actividades ordinarias', '242910953157', 1, '167631515047'),
+        // Enmienda spec v2.1 (2026-09-24, auditoría niif-contrato-01): el
+        // grupo 42 (ingresos no operacionales, $163.653,88 en 2025 y
+        // $73.672,93 en 2024 en este balance) va DEBAJO del EBIT. La corrida
+        // real presentaba toda la clase 4 en un renglón '4' dentro de la
+        // Utilidad Bruta; la fixture se actualiza a la presentación PUC.
+        linea('41', 'Ingresos de actividades ordinarias', '242894587769', 1, '167624147754'),
         linea('74', '(-) Costos de producción', '1250000000', 2, '1250000000'),
-        linea(null, 'UTILIDAD BRUTA', '241660953157', 3, '166381515047'),
+        linea(null, 'UTILIDAD BRUTA', '241644587769', 3, '166374147754'),
         linea('51', '(-) Gastos administrativos', '16654133410', 2, '7886222859'),
         linea('52', '(-) Gastos de ventas', '543139932', 2, '464886667'),
-        linea(null, 'RESULTADO OPERACIONAL — EBIT', '224463679815', 3, '158030405521'),
+        linea(null, 'RESULTADO OPERACIONAL — EBIT', '224447314427', 3, '158023038228'),
+        linea('42', '(+) Otros ingresos no operacionales', '16365388', 2, '7367293'),
         linea('53', '(-) Gastos no operacionales', '1614000842', 2, '758258225'),
         linea(null, 'UTILIDAD ANTES DE IMPUESTOS', '222849678973', 3, '157272147296'),
         linea('54', '(-) Gasto por impuesto de renta', '0', 2, '0'),
         linea(null, 'UTILIDAD NETA DEL EJERCICIO', '222849678973', 4, '157272147296'),
       ],
-      grossProfitPrimary: '241660953157',
-      grossProfitComparative: '166381515047',
-      operatingProfitPrimary: '224463679815',
-      operatingProfitComparative: '158030405521',
+      grossProfitPrimary: '241644587769',
+      grossProfitComparative: '166374147754',
+      operatingProfitPrimary: '224447314427',
+      operatingProfitComparative: '158023038228',
       netIncomePrimary: '222849678973',
       netIncomeComparative: '157272147296',
       oriPrimary: '0',
@@ -163,14 +181,24 @@ function informeCorrecto(): NiifReportJson {
       modeBanner: null,
     },
     cashFlow: {
+      netChangeComparative: null,
+      cashOpeningComparative: null,
+      cashClosingComparative: null,
+      comparativeNote: null,
+      // Auditoría 2026-09 (niif-contrato-02, E18): la corrida real clasificaba
+      // en operación los −$2.916.666,00 que el EFE determinista del balance
+      // asigna a inversión. Con E18 cableado en `buildNiifValidatorOptions` esa
+      // reclasificación es un error; el informe correcto presenta las
+      // actividades del determinista (misma variación neta).
       sections: [
         {
           section: 'operating',
           lines: [linea(null, 'Utilidad neta del periodo', '222849678973', 2)],
-          netFlow: '85019233463',
+          netFlow: '85310900063',
+          netFlowComparative: null,
         },
-        { section: 'investing', lines: [], netFlow: '0' },
-        { section: 'financing', lines: [], netFlow: '0' },
+        { section: 'investing', lines: [], netFlow: '-291666600', netFlowComparative: null },
+        { section: 'financing', lines: [], netFlow: '0', netFlowComparative: null },
       ],
       netChange: '85019233463',
       cashOpening: '156348555401',
@@ -179,6 +207,16 @@ function informeCorrecto(): NiifReportJson {
       degeneracyFlag: null,
     },
     equityChanges: {
+      comparativeRows: null,
+      comparativeNote: null,
+      // Auditoría 2026-09 (niif-contrato-11, regla E19): la corrida real abría
+      // el ECP en −$5.056.798,19 y escondía en el propio saldo inicial la
+      // diferencia con el patrimonio 2024. Con el xlsx bien entrecomillado
+      // (niif-preproceso-06) el patrimonio 2024 es $1.572.678.752,96. El ECP
+      // abre en esa cifra, traslada el resultado 2024 (total $0) y declara como
+      // partida no conciliada la disminución que el balance no explica
+      // ($1.572.721.472,96: la utilidad 2024 republicada dentro del P&G 2025
+      // acumulado, recalculo-03; R12 la detecta y bloquea la emisión).
       rows: [
         {
           kind: 'opening_balance',
@@ -187,10 +225,34 @@ function informeCorrecto(): NiifReportJson {
           primaColocacion: '0',
           reservaLegal: '0',
           otrasReservas: '0',
-          resultadosAcumulados: '-505679819',
+          resultadosAcumulados: '-4272000',
+          resultadoEjercicio: '157272147296',
+          ori: '0',
+          total: '157267875296',
+        },
+        {
+          kind: 'prior_period_result_cancellation',
+          label: 'Traslado del resultado 2024 a resultados acumulados',
+          capitalSocial: '0',
+          primaColocacion: '0',
+          reservaLegal: '0',
+          otrasReservas: '0',
+          resultadosAcumulados: '157272147296',
+          resultadoEjercicio: '-157272147296',
+          ori: '0',
+          total: '0',
+        },
+        {
+          kind: 'convergence_adjustment',
+          label: 'Partida patrimonial no conciliada — requiere explicación del contador',
+          capitalSocial: '0',
+          primaColocacion: '0',
+          reservaLegal: '0',
+          otrasReservas: '0',
+          resultadosAcumulados: '-157272147296',
           resultadoEjercicio: '0',
           ori: '0',
-          total: '-505679819',
+          total: '-157272147296',
         },
         {
           kind: 'profit_for_period',
@@ -211,21 +273,25 @@ function informeCorrecto(): NiifReportJson {
           primaColocacion: '0',
           reservaLegal: '0',
           otrasReservas: '0',
-          resultadosAcumulados: '-505679819',
+          resultadosAcumulados: '-4272000',
           resultadoEjercicio: '222849678973',
           ori: '0',
-          total: '222343999154',
+          total: '222845406973',
         },
       ],
       notes: [],
     },
     technicalNotes: [],
+    // Auditoría 2026-09 (niif-contrato-23, regla E26): curatorFlags son hechos
+    // del Curator sobre este balance (R1 reclasificó $4.270.732,23 de activos
+    // con saldo acreedor y R7 emitió la advertencia de costo presunto). El
+    // fixture copiaba `false`/'0', que ahora E26 rechaza como eco sin base.
     curatorFlags: {
       equityConvergenceApplied: false,
       cashFlowClosureForced: false,
-      negativeAssetReclassified: false,
-      presumedCostWarning: false,
-      reclassifiedAmountCop: '0',
+      negativeAssetReclassified: true,
+      presumedCostWarning: true,
+      reclassifiedAmountCop: '427073223',
     },
     reportMode: 'COMPARATIVO_COMPLETO',
   };
@@ -260,10 +326,13 @@ describe('anclas del P&G — las cuatro cifras que la auditoría midió como lib
 
   it('el preprocesador entrega Utilidad Bruta y EBIT en centavos exactos, ambos periodos', () => {
     const a = buildReportAnchors(pp.primary, pp.comparative ?? undefined);
-    expect(a.primary?.cents.utilidadBruta).toBe(BigInt('241660953157'));
-    expect(a.primary?.cents.ebit).toBe(BigInt('224463679815'));
-    expect(a.comparative?.cents.utilidadBruta).toBe(BigInt('166381515047'));
-    expect(a.comparative?.cents.ebit).toBe(BigInt('158030405521'));
+    // Enmienda spec v2.1 (2026-09-24): UB y EBIT sin el grupo 42.
+    expect(a.primary?.cents.utilidadBruta).toBe(BigInt('241644587769'));
+    expect(a.primary?.cents.ebit).toBe(BigInt('224447314427'));
+    expect(a.primary?.cents.otrosIngresos).toBe(BigInt('16365388'));
+    expect(a.comparative?.cents.utilidadBruta).toBe(BigInt('166374147754'));
+    expect(a.comparative?.cents.ebit).toBe(BigInt('158023038228'));
+    expect(a.comparative?.cents.otrosIngresos).toBe(BigInt('7367293'));
     // Σ Clase 5 — el total que E8 necesitaba y que el call-site no pasaba.
     expect(a.primary?.cents.gastosClase5).toBe(BigInt('18811274184'));
   });
@@ -333,7 +402,7 @@ describe('anclas del P&G — las cuatro cifras que la auditoría midió como lib
     [
       'renglón de ingresos multiplicado ×3',
       (j) => {
-        const l = j.incomeStatement.lines.find((x) => x.account === '4')!;
+        const l = j.incomeStatement.lines.find((x) => x.account === '41')!;
         l.amountPrimary = serializeMoneyCop(parseMoneyCop(l.amountPrimary) * BigInt(3));
       },
     ],
@@ -409,7 +478,10 @@ describe('columna comparativa del Balance (NIIF para las PYMES §3.14)', () => {
       equity: anchors.comparative!.cents.patrimonio!,
     };
     for (const seccion of ['assets', 'liabilities', 'equity'] as const) {
-      const lineas = conComparativo.balanceSheet[seccion];
+      // Desde la auditoría 2026-09 (niif-contrato-07) el completado agrega los
+      // subtotales corriente / no corriente (renglones sin código): la suma
+      // del detalle se hace sobre los renglones con código PUC.
+      const lineas = conComparativo.balanceSheet[seccion].filter((l) => l.account !== null);
       // Cero "n/c": la auditoría midió 11 de 11 renglones sin cifra comparativa.
       expect(lineas.filter((l) => l.amountComparative === null)).toHaveLength(0);
       const suma = lineas.reduce(

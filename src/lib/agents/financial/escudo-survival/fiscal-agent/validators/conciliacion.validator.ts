@@ -324,7 +324,7 @@ export function validateConciliacionL2(m2: Modulo2Conciliacion): ValidationCheck
       norma: 'Art. 240 E.T. + par. 2',
       detail: ok
         ? `Tarifa ${m2.tarifa}% reconocida (Art. 240 / par. 2 — 35% PJ, 38% hidroeléctrica, 40% financiera).`
-        : `Tarifa ${m2.tarifa}% NO reconocida para 2026. Valores válidos: ${TARIFAS_VALIDAS.join('% / ')}% — recordar Sentencia C-079/2026 que tumbó Decreto 1474/2025 (sobretasa 50%).`,
+        : `Tarifa ${m2.tarifa}% NO reconocida para 2026. Valores válidos: ${TARIFAS_VALIDAS.join('% / ')}% — recordar que la Corte Constitucional declaró inexequible el Decreto 1474/2025 (sobretasa 50%) el 15-abr-2026.`,
     });
   }
 

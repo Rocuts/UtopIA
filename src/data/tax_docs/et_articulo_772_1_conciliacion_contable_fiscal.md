@@ -8,7 +8,7 @@ normCode: "ET Art. 772-1"
 normUrl: https://estatuto.co/?e=825
 status: vigente
 lastVerified: 2026-05-02
-tags: [conciliacion, formato-2516, niif, fiscal, ley-1819-2016, decreto-2235-2017]
+tags: [conciliacion, formato-2516, niif, fiscal, ley-1819-2016, decreto-1998-2017]
 relatedArticles: ["28", "31", "59", "60", "62", "771-2"]
 ---
 
@@ -20,9 +20,11 @@ Sin perjuicio de lo previsto en el Art. 4 de la Ley 1314 de 2009, los contribuye
 
 Las diferencias que surjan entre la aplicación de los nuevos marcos técnicos normativos contables y las disposiciones del Estatuto Tributario, NO tendrán efecto en el impuesto sobre la renta y complementarios.
 
-## Reglamentación: Decreto 2235/2017 — Formato 2516
+## Reglamentación: Decreto 1998/2017 — Formato 2516
 
-La DIAN reglamenta la conciliación a través del **Formato 2516** ("Conciliación Fiscal — Anexo Formulario 110") y **Formato 2517** ("Conciliación Fiscal — Anexo Formulario 210" personas naturales).
+El **Decreto 1998 de 2017** sustituyó la Parte 7 del Libro 1 del Decreto 1625 de 2016 (DUR tributario, Arts. 1.7.1 y ss.) para reglamentar la conciliación fiscal del Art. 772-1. El contenido, las especificaciones técnicas y los plazos del reporte los prescribe el Director General de la DIAN (Art. 1.7.2 par. 2).
+
+La DIAN implementa la conciliación a través del **Formato 2516** ("Conciliación Fiscal — Anexo Formulario 110") y **Formato 2517** ("Conciliación Fiscal — Anexo Formulario 210" personas naturales).
 
 ### Estructura del Formato 2516
 
@@ -55,6 +57,7 @@ La DIAN reglamenta la conciliación a través del **Formato 2516** ("Conciliaci�
 
 - Contribuyentes obligados a llevar contabilidad **NIIF** (Grupos 1, 2 y 3).
 - Personas naturales obligadas a llevar contabilidad.
+- No están obligados a presentarlo por los servicios informáticos electrónicos quienes en el año gravable hayan obtenido ingresos brutos fiscales inferiores a **45.000 UVT**; aun así deben tenerlo diligenciado y a disposición de la DIAN (Art. 1.7.2 DUR 1625/2016, texto del Decreto 1998/2017).
 - **Excluidos**: contribuyentes del Régimen SIMPLE (Arts. 903-916).
 
 ### Plazo
@@ -108,7 +111,7 @@ DB 1729 Activo impuesto diferido    $8.750.000
 
 - **Ley 2277/2022**: ajustes a depreciaciones aceleradas y nuevas diferencias.
 - **Resolución DIAN 0078/2024**: actualización Formato 2516 versión 6.
-- **Decreto 2235/2017**: reglamentación inicial.
+- **Decreto 1998/2017**: reglamentación de la conciliación fiscal (sustituye la Parte 7 del Libro 1 del DUR 1625/2016).
 - **Ley 1819/2016 Art. 137**: introdujo el Art. 772-1.
 
 ## Vinculación con NIIF
@@ -121,7 +124,7 @@ DB 1729 Activo impuesto diferido    $8.750.000
 
 - Norma: **ET Art. 772-1**
 - URL canónica: https://estatuto.co/?e=825
-- Decreto 2235/2017 (reglamentación)
+- Decreto 1998/2017 (reglamentación; DUR 1625/2016 Arts. 1.7.1 y ss.)
 - Resolución DIAN 0078/2024 (Formato 2516 v6)
 - NIC 12, NIIF PYMES Sección 29
 - Fecha consulta: 2026-05-02

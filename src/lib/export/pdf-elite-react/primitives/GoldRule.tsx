@@ -43,6 +43,10 @@ export interface GoldRuleProps {
  * Absolute-positioned gold rule with right-end dot. Place inside a `<Page>`
  * alongside `PageNumberBadge` — they are vertically independent (different
  * bottom offsets).
+ *
+ * `fixed` (reportes-export-21): un absoluto no fijo dentro del margen inferior
+ * hace que react-pdf parta la página y emita una página adicional casi en
+ * blanco con la regla; fija, se repite en cada página física y no parte nada.
  */
 export function GoldRule(props: GoldRuleProps): React.ReactElement {
   const {
@@ -63,6 +67,7 @@ export function GoldRule(props: GoldRuleProps): React.ReactElement {
 
   return (
     <View
+      fixed
       style={{
         position: 'absolute',
         bottom,

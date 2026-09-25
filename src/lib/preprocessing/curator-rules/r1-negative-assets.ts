@@ -11,8 +11,11 @@
 //   - Para cuentas materiales (>= max(0.01% activo, $50.000)) la regla MUTA el
 //     snapshot: mueve el saldo absoluto desde Clase 1 a una cuenta virtual
 //     `2810ZZ-<originalCode>` inyectada en Clase 2, recalcula los control
-//     totals (activo, pasivo, corrientes), y emite la `Reclassification`
-//     marcada `applied: true`.
+//     totals (activo, pasivo, corrientes, efectivo 11, deudores 13,
+//     inventarios 14), y emite la `Reclassification` marcada `applied: true`.
+//     El código virtual es interno: la presentación corriente/no corriente
+//     sigue al grupo de ORIGEN (`balance-groups.ts`) y el contrato externo
+//     (`reclasificacionesNoCompensacion`) cita el PUC real por origen.
 //   - Para cuentas NO materiales se emite SOLO un finding informativo (no se
 //     muta el snapshot).
 //   - La mutación es idempotente: correr R1 dos veces NO duplica reclasifi-
@@ -29,11 +32,23 @@ import type {
 
 import type { CuratorFinding, Reclassification } from './types';
 import {
+  ACTIVO_CORRIENTE_GROUPS,
+  ACTIVO_NO_CORRIENTE_GROUPS,
+  sumByGroups,
+  sumByPrefix,
+  sumCurrentLiabilities,
+  sumNonCurrentLiabilities,
+} from './balance-groups';
+import {
   isAmbiguousNatureAccount,
   isContraAsset,
   looksLikeContraAssetByName,
 } from './contra-asset-registry';
-import { syncControlTotals as syncControlTotalsHelper } from './sync-control-totals';
+import {
+  centsToCanonical,
+  pesosToCents,
+  syncControlTotals as syncControlTotalsHelper,
+} from './sync-control-totals';
 
 const VIRTUAL_LIABILITY_PREFIX = '2810ZZ';
 const VIRTUAL_LIABILITY_NAME = 'Otros pasivos transitorios (reclasificación curator)';
@@ -59,11 +74,6 @@ const NEGATIVE_TOLERANCE_COP = 100; // $100 COP
  * (incumplimiento NIC 1 párr. 32 si quedan en activo).
  */
 const INVERSIONES_MATERIAL_FLOOR_COP = 1_000;
-
-const ACTIVO_CORRIENTE_GROUPS = new Set(['11', '12', '13', '14']);
-const ACTIVO_NO_CORRIENTE_GROUPS = new Set(['15', '16', '17', '18', '19']);
-const PASIVO_CORRIENTE_GROUPS = new Set(['21', '22', '23', '24', '25', '26']);
-const PASIVO_NO_CORRIENTE_GROUPS = new Set(['27', '28', '29']);
 
 export interface R1Result {
   reclassifications: Reclassification[];
@@ -216,7 +226,11 @@ export function runR1(snapshot: PeriodSnapshot): R1Result {
         `Reclasificado a ${virtualCode} (Otros pasivos diversos) para preservar ` +
         `NIC 1 párr. 32 (no compensación). Revisar la naturaleza tributaria del reajuste.`
       : `Saldo crédito en cuenta de activo viola NIC 1 párr. 32 (no compensación). ` +
-        `Reclasificado a ${virtualCode} para preservar ecuación patrimonial. ` +
+        `Reclasificado a ${virtualCode} para preservar ecuación patrimonial` +
+        (ACTIVO_CORRIENTE_GROUPS.has(acc.code.slice(0, 2))
+          ? `, presentado como pasivo CORRIENTE por provenir de un activo corriente ` +
+            `(NIC 1 párr. 69-71). `
+          : '. ') +
         `Investigar origen del saldo (sobregiro, anticipo, retención).`;
 
     out.reclassifications.push({
@@ -442,8 +456,24 @@ function recomputeControlTotalsFromClasses(
 
   totals.activoCorriente = sumByGroups(claseActivo, ACTIVO_CORRIENTE_GROUPS);
   totals.activoNoCorriente = sumByGroups(claseActivo, ACTIVO_NO_CORRIENTE_GROUPS);
-  totals.pasivoCorriente = sumByGroups(clasePasivo, PASIVO_CORRIENTE_GROUPS);
-  totals.pasivoNoCorriente = sumByGroups(clasePasivo, PASIVO_NO_CORRIENTE_GROUPS);
+  // Auditoría 2026-09 (niif-preproceso-22): las virtuales `2810ZZ-<origen>`
+  // caían en pasivo NO corriente por su prefijo 28. Un sobregiro (11) o un
+  // anticipo recibido registrado en deudores (13) es pasivo CORRIENTE
+  // (NIC 1 párr. 69-71): la clasificación sigue al grupo de origen.
+  totals.pasivoCorriente = sumCurrentLiabilities(clasePasivo);
+  totals.pasivoNoCorriente = sumNonCurrentLiabilities(clasePasivo);
+
+  // Las anclas por grupo que leen el EFE (R6), el gate y el bloque vinculante
+  // deben describir el MISMO activo que el balance: tras mover un saldo
+  // crédito del grupo 11 a pasivo, el efectivo presentado es el de las
+  // cuentas 11 que quedan en el activo (el sobregiro es un pasivo).
+  totals.efectivoCuenta11 = sumByPrefix(claseActivo, '11');
+  totals.deudoresCuenta13 = sumByPrefix(claseActivo, '13');
+  totals.inventarios14 = sumByPrefix(claseActivo, '14');
+  if (totals.cents) totals.cents.efectivoCuenta11 = pesosToCents(totals.efectivoCuenta11);
+  if (totals.raw && totals.cents) {
+    totals.raw.efectivoCuenta11 = centsToCanonical(totals.cents.efectivoCuenta11);
+  }
 
   // Sincronizar cents y raw. El gate `auditReportEmittable` compara SIEMPRE en
   // cents con tolerancia 0n — si quedan obsoletos tras la mutación de R1, las
@@ -451,19 +481,6 @@ function recomputeControlTotalsFromClasses(
   // `patrimonio`: aunque R1 no lo mute, dejarlo fuera hacía que la ecuación
   // A = P + K evaluada en cents mezclara valores de dos momentos distintos.
   syncControlTotalsHelper(totals, classes);
-}
-
-function sumByGroups(cl: PUCClass | undefined, groups: Set<string>): number {
-  if (!cl) return 0;
-  let sum = 0;
-  for (const acc of cl.accounts) {
-    // Tomamos los 2 primeros chars como grupo PUC. Para cuentas virtuales
-    // `2810ZZ-*` los 2 primeros chars son '28' y caen en pasivo no corriente,
-    // que es lo que queremos (Otros pasivos no clasificados de largo plazo).
-    const grp = acc.code.length >= 2 ? acc.code.slice(0, 2) : acc.code;
-    if (groups.has(grp)) sum += acc.balance;
-  }
-  return sum;
 }
 
 function formatCOP(amount: number): string {

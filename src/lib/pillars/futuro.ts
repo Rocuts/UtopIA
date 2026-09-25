@@ -3,14 +3,35 @@
 // ---------------------------------------------------------------------------
 // KPIs maestros:
 //   1. Runway de Caja (3 escenarios, proyección 36 meses)
-//   2. Capacidad de Inversión (CapEx)
+//   2. Capacidad de Inversión — shared-metrics.capacidadInversion (misma
+//      función que la tarjeta; N/D sin base fiscal verificada)
 //   3. Punto de Inflexión (mes índice donde escenario conservador < 0)
 //
-// Score Futuro = weighted (Runway 40%, CapEx 30%, distancia PI 30%).
-// HARD CAP: si Punto Inflexión < 12 meses → score ≤ 30 (critical).
+// Flujos mensuales = ingresos netos (4175) y egresos del periodo divididos por
+// los MESES CUBIERTOS por el snapshot (shared-metrics.mesesCubiertos, la misma
+// regla del preprocesador: 'AAAA-MM', 'AAAA-Qn', rangos), no por 12 fijo
+// (ratios-kpis-03, NM-01). Sin duración derivable, runway y punto de
+// inflexión son N/D con motivo (sin score).
+//
+// Score Futuro = weighted (Runway 40%, CapEx 30%, distancia PI 30%) sobre los
+// KPIs con dato. HARD CAP: si Punto Inflexión < 12 meses → score ≤ 30.
 // ---------------------------------------------------------------------------
 
-import { clampScore, kpiToScore, scoreToStatus, statusToSeverity, weightedScore } from './health-score';
+import {
+  clampScore,
+  kpiCoverage,
+  kpiSeverity,
+  kpiStatus,
+  kpiToScore,
+  scoreToStatus,
+  weightedScore,
+} from './health-score';
+import {
+  capacidadInversion,
+  ingresosNetosPeriodo,
+  mesesCubiertos,
+  motivoSinMeses,
+} from './shared-metrics';
 import type {
   PillarAlert,
   PillarKpi,
@@ -22,7 +43,6 @@ const HORIZON_MONTHS = 36;
 const SCENARIO_BASE_FACTOR = 1.0;
 const SCENARIO_CONSERVATIVE_FACTOR = 0.85;
 const SCENARIO_AGGRESSIVE_FACTOR = 1.10;
-const TAX_RATE = 0.35;
 
 interface RunwayProjection {
   monthsToZero: number; // 36+ si nunca cae
@@ -48,21 +68,26 @@ export function computeFuturoPillar(input: PillarsAggregateInput): PillarMetrics
   const { snapshot } = input;
   const ct = snapshot.controlTotals;
 
-  const ingresoMes = ct.ingresos / 12;
-  const egresoMes = ct.gastos / 12;
+  const meses = mesesCubiertos(snapshot);
+  const sinMeses = meses === null ? motivoSinMeses(snapshot) : null;
 
   // ─── Proyección por escenarios ──────────────────────────────────────────
-  const baseProj = projectRunway(ct.efectivoCuenta11, ingresoMes, egresoMes, SCENARIO_BASE_FACTOR);
-  const conservadorProj = projectRunway(
-    ct.efectivoCuenta11,
-    ingresoMes,
-    egresoMes,
-    SCENARIO_CONSERVATIVE_FACTOR,
-  );
+  // Sin meses derivables no hay flujo mensual: ninguna proyección.
+  const proyectar = (factor: number): RunwayProjection | null =>
+    meses === null
+      ? null
+      : projectRunway(
+          ct.efectivoCuenta11,
+          ingresosNetosPeriodo(ct) / meses,
+          ct.gastos / meses,
+          factor,
+        );
+  const baseProj = proyectar(SCENARIO_BASE_FACTOR);
+  const conservadorProj = proyectar(SCENARIO_CONSERVATIVE_FACTOR);
 
   // ─── KPI 1 — Runway base ────────────────────────────────────────────────
   // Si nunca cae bajo 0 → "más de 36 meses" (representamos con 36).
-  const runway = Math.min(baseProj.monthsToZero, HORIZON_MONTHS);
+  const runway = baseProj === null ? null : Math.min(baseProj.monthsToZero, HORIZON_MONTHS);
   const runwayScore = kpiToScore(
     runway,
     { healthy: 24, watch: 12, warning: 6 },
@@ -76,19 +101,23 @@ export function computeFuturoPillar(input: PillarsAggregateInput): PillarMetrics
     unit: 'months',
     target: 24,
     score: runwayScore,
-    status: scoreToStatus(runwayScore),
-    severity: statusToSeverity(scoreToStatus(runwayScore)),
-    descriptionEs: `Meses hasta que la caja llegue a 0 al ritmo actual (horizonte ${HORIZON_MONTHS} meses).`,
-    descriptionEn: `Months until cash hits zero at current pace (${HORIZON_MONTHS}-month horizon).`,
+    status: kpiStatus(runwayScore),
+    severity: kpiSeverity(runwayScore),
+    descriptionEs:
+      sinMeses?.es ??
+      `Meses hasta que la caja llegue a 0 al ritmo actual (horizonte ${HORIZON_MONTHS} meses).`,
+    descriptionEn:
+      sinMeses?.en ??
+      `Months until cash hits zero at current pace (${HORIZON_MONTHS}-month horizon).`,
   };
 
   // ─── KPI 2 — Capacidad de Inversión (CapEx) ────────────────────────────
-  // CapEx disponible = caja − provisión renta esperada − reserva 60d gastos.
-  const provisionRenta = Math.max(0, ct.utilidadNeta) * TAX_RATE;
-  const reserva60d = (ct.gastos / 365) * 60;
-  const capex = ct.efectivoCuenta11 - provisionRenta - reserva60d;
-  // Score: capex sobre caja actual. ≥30% saludable.
-  const capexPct = ct.efectivoCuenta11 > 0 ? capex / ct.efectivoCuenta11 : 0;
+  // Una sola función con la tarjeta (ratios-kpis-19). Exige impuesto de renta
+  // pendiente verificado: hoy N/D (ratios-kpis-10).
+  const cap = capacidadInversion(snapshot);
+  const capex = cap.value;
+  const capexPct =
+    capex !== null && ct.efectivoCuenta11 > 0 ? capex / ct.efectivoCuenta11 : null;
   const capexScore = kpiToScore(
     capexPct,
     { healthy: 0.30, watch: 0.10, warning: 0.0 },
@@ -102,18 +131,23 @@ export function computeFuturoPillar(input: PillarsAggregateInput): PillarMetrics
     unit: 'cop',
     target: 0,
     score: capexScore,
-    status: scoreToStatus(capexScore),
-    severity: statusToSeverity(scoreToStatus(capexScore)),
-    descriptionEs: 'Caja libre tras provisionar renta y reserva de 60 días de gasto.',
-    descriptionEn: 'Free cash after provisioning income tax and a 60-day expense buffer.',
+    status: kpiStatus(capexScore),
+    severity: kpiSeverity(capexScore),
+    descriptionEs: capex === null ? cap.reasonEs : 'Caja libre tras impuesto de renta pendiente y reserva de 60 días de gasto.',
+    descriptionEn: capex === null ? cap.reasonEn : 'Free cash after pending income tax and a 60-day expense buffer.',
   };
 
   // ─── KPI 3 — Punto de Inflexión (escenario conservador) ────────────────
   const puntoInflexion =
-    conservadorProj.monthsToZero <= HORIZON_MONTHS ? conservadorProj.monthsToZero : null;
-  // Score: distancia. null (>36 meses) → 95. Cerca → bajo.
-  let piScore: number;
-  if (puntoInflexion === null) {
+    conservadorProj !== null && conservadorProj.monthsToZero <= HORIZON_MONTHS
+      ? conservadorProj.monthsToZero
+      : null;
+  // Score: distancia. null (>36 meses) → 95. Cerca → bajo. Sin proyección
+  // (meses no derivables) no hay score: N/D no suma puntos.
+  let piScore: number | null;
+  if (conservadorProj === null) {
+    piScore = null;
+  } else if (puntoInflexion === null) {
     piScore = 95;
   } else {
     piScore = kpiToScore(
@@ -130,16 +164,18 @@ export function computeFuturoPillar(input: PillarsAggregateInput): PillarMetrics
     unit: 'months',
     target: HORIZON_MONTHS,
     score: piScore,
-    status: scoreToStatus(piScore),
-    severity: statusToSeverity(scoreToStatus(piScore)),
+    status: kpiStatus(piScore),
+    severity: kpiSeverity(piScore),
     descriptionEs:
-      puntoInflexion === null
+      sinMeses?.es ??
+      (puntoInflexion === null
         ? `Sin punto de inflexión en los próximos ${HORIZON_MONTHS} meses bajo escenario conservador.`
-        : `Bajo escenario conservador (−15%), la caja entraría en negativo en el mes ${puntoInflexion}.`,
+        : `Bajo escenario conservador (−15%), la caja entraría en negativo en el mes ${puntoInflexion}.`),
     descriptionEn:
-      puntoInflexion === null
+      sinMeses?.en ??
+      (puntoInflexion === null
         ? `No inflection point in the next ${HORIZON_MONTHS} months under conservative scenario.`
-        : `Under conservative scenario (−15%), cash goes negative at month ${puntoInflexion}.`,
+        : `Under conservative scenario (−15%), cash goes negative at month ${puntoInflexion}.`),
   };
 
   // ─── Alertas ───────────────────────────────────────────────────────────
@@ -154,7 +190,7 @@ export function computeFuturoPillar(input: PillarsAggregateInput): PillarMetrics
       messageEn: `Under conservative scenario, cash runs out at month ${puntoInflexion}.`,
     });
   }
-  if (capex < 0) {
+  if (capex !== null && capex < 0) {
     alerts.push({
       code: 'FUTURE-CAPEX-NEG',
       severity: 'warning',
@@ -177,12 +213,14 @@ export function computeFuturoPillar(input: PillarsAggregateInput): PillarMetrics
   healthScore = clampScore(healthScore);
   const status = scoreToStatus(healthScore);
 
+  const kpis = [runwayKpi, capexKpi, piKpi];
   return {
     pillarId: 'futuro',
     healthScore,
     status,
-    kpis: [runwayKpi, capexKpi, piKpi],
+    kpis,
     alerts,
+    kpiCoverage: kpiCoverage(kpis),
     generatedAt: new Date().toISOString(),
   };
 }

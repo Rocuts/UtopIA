@@ -47,6 +47,9 @@ export interface PillarHealthBadgeProps {
   language?: 'es' | 'en';
   variant?: 'badge' | 'card' | 'inline';
   className?: string;
+  /** KPIs con dato / total (ratios-kpis-25). Si faltan KPIs, el score sólo
+   *  promedia los medidos y se rotula el pilar como incompleto. */
+  coverage?: { available: number; total: number };
 }
 
 export function PillarHealthBadge({
@@ -56,7 +59,14 @@ export function PillarHealthBadge({
   language = 'es',
   variant = 'badge',
   className,
+  coverage,
 }: PillarHealthBadgeProps) {
+  const incomplete = coverage !== undefined && coverage.available < coverage.total;
+  const coverageLabel = incomplete
+    ? language === 'es'
+      ? `Incompleto · ${coverage!.available} de ${coverage!.total} KPIs medidos`
+      : `Incomplete · ${coverage!.available} of ${coverage!.total} KPIs measured`
+    : null;
   const colors = STATUS_COLOR[status];
   const accent = PILLAR_ACCENT[pillar];
   const label = (language === 'es' ? PILLAR_LABEL_ES : PILLAR_LABEL_EN)[pillar];
@@ -94,6 +104,11 @@ export function PillarHealthBadge({
         <span className="font-mono text-[10px] uppercase tracking-eyebrow text-n-500 mt-0.5">
           {language === 'es' ? 'Health Score' : 'Health Score'}
         </span>
+        {coverageLabel && (
+          <span className="text-[11px] text-n-700 mt-1" data-testid={`pillar-coverage-${pillar}`}>
+            {coverageLabel}
+          </span>
+        )}
       </div>
     );
   }
@@ -126,6 +141,7 @@ export function PillarHealthBadge({
         className,
       )}
       data-testid={`pillar-health-badge-${pillar}`}
+      title={coverageLabel ?? undefined}
     >
       <span className={cn('h-1.5 w-1.5 rounded-full', colors.fg.replace('text', 'bg'))} aria-hidden="true" />
       {label} · {score}

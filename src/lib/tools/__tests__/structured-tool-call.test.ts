@@ -36,7 +36,7 @@ vi.mock('@/lib/db/telemetry', () => ({
 }));
 
 import { analyzeDocument } from '../document-analyzer';
-import { assessRisk } from '../risk-assessor';
+import { assessRisk, RiskAssessmentUnavailableError } from '../risk-assessor';
 import { generateDianResponse } from '../dian-response-generator';
 
 /**
@@ -124,10 +124,10 @@ describe('finishReason != stop no se entrega como respuesta completa', () => {
   it('risk-assessor: un corte por content-filter no se presenta como evaluacion', async () => {
     generateTextMock.mockResolvedValue(sdkResult(RIESGO_COMPLETO, 'content-filter'));
 
-    const res = await assessRisk('caso tributario');
-
-    expect(res.factors[0].category).toBe('sistema');
-    expect(res.factors[0].description).toMatch(/finish_reason=content-filter/);
+    // Fase 2 (tributario-calc-22): ya no se devuelve «medio / 50» con un factor
+    // 'sistema'; la evaluación es N/D y el motivo viaja en el error.
+    await expect(assessRisk('caso tributario')).rejects.toBeInstanceOf(RiskAssessmentUnavailableError);
+    await expect(assessRisk('caso tributario')).rejects.toThrow(/finish_reason=content-filter/);
   });
 });
 
@@ -167,10 +167,8 @@ describe('el output se valida contra el contrato Zod', () => {
   it('risk-assessor: un score fuera de 0-100 no se presenta al RiskGauge', async () => {
     generateTextMock.mockResolvedValue(sdkResult({ ...RIESGO_COMPLETO, score: 420 }));
 
-    const res = await assessRisk('caso');
-
-    expect(res.factors[0].category).toBe('sistema');
-    expect(res.score).toBe(50);
+    // N/D con motivo: ni el 420 del modelo ni un 50 inventado llegan al gauge.
+    await expect(assessRisk('caso')).rejects.toBeInstanceOf(RiskAssessmentUnavailableError);
   });
 });
 
@@ -178,7 +176,7 @@ describe('telemetria', () => {
   it('cada llamada deja fila, tambien la que corto por length', async () => {
     generateTextMock.mockResolvedValue(sdkResult(RIESGO_COMPLETO, 'length'));
 
-    await assessRisk('caso');
+    await expect(assessRisk('caso')).rejects.toBeInstanceOf(RiskAssessmentUnavailableError);
     // La persistencia es fire-and-forget: cedemos el turno al microtask queue.
     await new Promise((r) => setTimeout(r, 0));
 

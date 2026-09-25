@@ -218,7 +218,7 @@ Grid `col-main` + `col-side`.
 - Eyebrow `Estado Financiero 02 · NIIF Pymes Sec. 5 · IAS 1.81 · Art. 26, 240 E.T.`.
 - H1 `Estado de Resultados Integrales` + cap.
 - Tabla con tr.grp por subtotal (ingresos operacionales / utilidad bruta / utilidad operacional / utilidad antes de impuestos), tr.sub para líneas.
-- **Devoluciones (Cta 4175) en LÍNEA SEPARADA**, marcada `(−) Devoluciones y descuentos en ventas`, color negative. NIIF 15 §47.
+- **Devoluciones (Cta 4175) en LÍNEA SEPARADA**, marcada `(−) Devoluciones y descuentos en ventas`, color negative: ingresos operacionales netos = 41 − 4175, con la cifra de la 4175 revelada en su propia línea. Es un criterio de presentación de UtopIA y se presenta sin cita normativa.
 - **Si la tasa efectiva de impuesto está fuera del rango (35% nominal vs efectiva):** fila con `tr.anomaly` y `<sup class="n">△</sup>` adyacente al label.
 - **Si UAI − Impuesto ≠ Utilidad neta reportada:** fila adicional `(UAI − Impuesto)` con valor calculado en color muted italic + tfoot con tr.total mostrando la utilidad reportada con `<sup class="n">†</sup>` y nota al pie aclarando la diferencia aritmética.
 
@@ -462,7 +462,7 @@ Mantén estos tokens y nombres de clase. El agente debe respetarlos para que el 
 - Eyebrow (ew): 8pt / sans / weight 600 / tracked 0.15em / uppercase / accent
 
 **Formato numérico estricto:**
-- KPIs / portada / análisis editorial: abreviado · `$2.429 M` o `$2,4 B`.
+- KPIs / portada / análisis editorial: abreviado en millones · `$2.429 M` (o `$2.429,1 M`). NUNCA `B` ni "billones" para miles de millones: en español un billón es 10^12 y `$2,4 B` se lee como dos billones. *(Corrección 2026-09-24, pipeline-flujo-20: la versión anterior ofrecía `$2,4 B`; alinea la spec con `formatCopAsMillions` del dashboard ejecutivo.)*
 - Estados financieros completos: cifra completa con punto de miles · `$2.429.105.532`.
 - Notas: abreviado con detalle entre paréntesis donde aporte · `$108,8 M ($108.766.861)`.
 - Porcentajes: un decimal · `91,7%`; dos solo si significativo · `0,52%`.

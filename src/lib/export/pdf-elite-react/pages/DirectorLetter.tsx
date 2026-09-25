@@ -15,6 +15,7 @@ import {
   WatermarkWord,
   MarkdownToPdf,
   PaginationFooter,
+  TocAnchor,
 } from '../primitives';
 import {
   N0,
@@ -41,10 +42,11 @@ interface Props {
 }
 
 // Letter-level citations pinned per spec §3.2 (always shown on this page).
+// Sin 'IFRS 18': la NIIF 18 no está incorporada al marco técnico colombiano
+// vigente (reportes-export-16).
 const FIXED_CITATIONS = [
   { label: 'NIA 700' },
   { label: 'Ley 222/1995' },
-  { label: 'IFRS 18' },
 ];
 
 /**
@@ -104,11 +106,13 @@ export function DirectorLetter({ doc }: Props) {
         position: 'relative',
       }}
     >
+      <TocAnchor id="director" collect={doc.tocCollector} />
       {/* Background watermark */}
       <WatermarkWord text="Liderazgo" opacity={0.04} />
 
       {/* Bottom-left topo decoration */}
       <View
+        fixed
         style={{
           position: 'absolute',
           bottom: 0,
@@ -120,7 +124,7 @@ export function DirectorLetter({ doc }: Props) {
       >
         <TopoOrnament
           variant="lines"
-          opacity={1}
+          opacity={0.06}
           areaAccent="futuro"
           seed={55}
           width={PAGE_W * 0.35}
@@ -262,7 +266,7 @@ export function DirectorLetter({ doc }: Props) {
         </Text>
       </View>
 
-      <PaginationFooter pageNumber={0} totalPages={0} sectionLabel="Liderazgo" />
+      <PaginationFooter sectionLabel="Liderazgo" />
     </Page>
   );
 }

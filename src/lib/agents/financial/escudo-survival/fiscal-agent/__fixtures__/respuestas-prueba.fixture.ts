@@ -8,7 +8,7 @@
 //
 // MoneyCop convention:
 //   - Cifras en strings de centavos (e.g. "150000000" = $1.500.000,00).
-//   - Negativos para saldo a favor (F04 < 0).
+//   - F04 < 0 es una posición de referencia contable, nunca el saldo a favor.
 // ---------------------------------------------------------------------------
 
 import type {
@@ -19,6 +19,7 @@ import type {
   Modulo6Devoluciones,
   Modulo7Format,
 } from '../validators/types';
+import { classificationFromKind } from '../tools/dian-letter-builder';
 
 // ---------------------------------------------------------------------------
 // Helpers de composición
@@ -108,28 +109,31 @@ export const RESP_CONCILIACION_BAD_158_3: FiscalResponse = {
 };
 
 // ===========================================================================
-// CASO 3 — Bloque Âncora F01-F10 OK (sólo proxy para tests de devoluciones)
+// CASO 4 — Risk Score BAJO (score 15)
 // ===========================================================================
 //
-// Los validators no leen el Bloque Âncora directamente — es M1. Pero
-// devoluciones cita |F04|. Aquí el saldo a favor es $5.000.000 = 500_000_000 cts
-// y F04 (signed) = -500_000_000.
-// ===========================================================================
-
-// ===========================================================================
-// CASO 4 — Risk Score BAJO (score 15)
+// Contrato de la fase 2 (pendiente #8): factores con los códigos y máximos de
+// `computeRiskScore`, publicabilidad según F01 y la prosa del modelo.
 // ===========================================================================
 
 const MOD3_BAJO: Modulo3RiskScore = {
   score: 15,
-  factor1_tetVsSector: 5,
-  factor2_rentaPresuntiva: 5,
-  factor3_proporcionDeducciones: 3,
-  factor4_consistenciaIVA: 2,
-  factor5_historicoSanciones: 0,
-  interpretacion: 'BAJO',
-  modoSupervivenciaActivo: false,
-  tetActualPct: 28.5,
+  nivel: 'bajo',
+  factores: [
+    { factor: 'tet_baja', puntos: 5 },
+    { factor: 'sin_provision_renta', puntos: 0 },
+    { factor: 'margen_alto', puntos: 5 },
+    { factor: 'costo_bajo', puntos: 0 },
+    { factor: 'crecimiento_inusual', puntos: 0 },
+    { factor: 'saldo_favor_sin_solicitar', puntos: 0 },
+    { factor: 'cobertura_retenciones_baja', puntos: 5 },
+  ],
+  publicable: true,
+  noPublicableMotivo: null,
+  f01Cents: '10000000000',
+  narrativa: 'Risk Score: 15/100 (bajo). Tasa efectiva contable 28,5% — heurística interna.',
+  recomendaciones: ['Conservar soportes de costos y deducciones (Art. 771-2 E.T.).'],
+  modoSupervivenciaActivo: null,
 };
 
 export const RESP_RISK_SCORE_BAJO: FiscalResponse = {
@@ -139,7 +143,7 @@ export const RESP_RISK_SCORE_BAJO: FiscalResponse = {
   modulo5: null,
   modulo6: null,
   modulo7: null,
-  rawText: 'Risk Score: 15 (BAJO). TET 28.5% — dentro de norma.',
+  rawText: 'Risk Score: 15/100 (bajo). Tasa efectiva contable 28,5% — heurística interna.',
 };
 
 // ===========================================================================
@@ -148,14 +152,21 @@ export const RESP_RISK_SCORE_BAJO: FiscalResponse = {
 
 const MOD3_CRITICO: Modulo3RiskScore = {
   score: 85,
-  factor1_tetVsSector: 28,
-  factor2_rentaPresuntiva: 22,
-  factor3_proporcionDeducciones: 18,
-  factor4_consistenciaIVA: 12,
-  factor5_historicoSanciones: 5,
-  interpretacion: 'CRITICO',
+  nivel: 'critico',
+  factores: [
+    { factor: 'tet_baja', puntos: 30 },
+    { factor: 'margen_alto', puntos: 25 },
+    { factor: 'costo_bajo', puntos: 20 },
+    { factor: 'crecimiento_inusual', puntos: 8 },
+    { factor: 'saldo_favor_sin_solicitar', puntos: 0 },
+    { factor: 'cobertura_retenciones_baja', puntos: 2 },
+  ],
+  publicable: true,
+  noPublicableMotivo: null,
+  f01Cents: '10000000000',
+  narrativa: 'Risk Score: 85/100 (crítico). Modo Supervivencia ACTIVO — protocolo Módulo 8 desplegado.',
+  recomendaciones: ['Activar Modo Supervivencia Élite (Módulo 8) antes de un eventual emplazamiento Art. 685 E.T.'],
   modoSupervivenciaActivo: true,
-  tetActualPct: 7.2,
 };
 
 export const RESP_RISK_SCORE_CRITICO: FiscalResponse = {
@@ -166,17 +177,17 @@ export const RESP_RISK_SCORE_CRITICO: FiscalResponse = {
   modulo6: null,
   modulo7: null,
   rawText:
-    'Risk Score: 85 (CRITICO). TET 7.2%. Modo Supervivencia ACTIVO — protocolo Módulo 8 desplegado.',
+    'Risk Score: 85/100 (crítico). Modo Supervivencia ACTIVO — protocolo Módulo 8 desplegado.',
 };
 
 // ===========================================================================
-// CASO 6 — Defensa DIAN: requerimiento ordinario Art. 752 + parágrafo Art. 647
+// CASO 6 — Defensa DIAN: requerimiento ordinario (Arts. 684 y 686) + parágrafo Art. 647
 // ===========================================================================
 
-const CARTA_752_OK = `# Carta Borrador — Respuesta a Requerimiento DIAN
+const CARTA_ORDINARIO_OK = `# Carta Borrador — Respuesta a Requerimiento DIAN
 
 ## Antecedentes
-La sociedad fue notificada del requerimiento ordinario en virtud del Art. 752 E.T., con plazo de respuesta de 15 días hábiles contados desde la notificación.
+La sociedad fue notificada del requerimiento ordinario de información (Arts. 684 y 686 E.T.); se responde dentro del plazo fijado en el acto.
 
 ## Posición Jurídica
 Se invoca el parágrafo del Art. 647 E.T. (diferencia de criterio) en relación con la interpretación del Art. 122 E.T. sobre limitación de costos al exterior.
@@ -200,21 +211,24 @@ NIT 901714014-6
 **Este es un borrador para revisión por contador público o abogado tributarista antes de su presentación oficial ante la DIAN.**
 `;
 
-const MOD5_752_OK: Modulo5DefensaDian = {
-  tipoRequerimiento: 'requerimiento_ordinario_752',
-  cartaTexto: CARTA_752_OK,
-  invocaDiferenciaCriterio: true,
-  mencionaReduccion: false,
+const ORDINARIO = classificationFromKind('requerimiento_ordinario');
+
+const MOD5_ORDINARIO_OK: Modulo5DefensaDian = {
+  tipoRequerimiento: 'requerimiento_ordinario',
+  plazoRespuesta: ORDINARIO.plazoRespuesta,
+  normaPlazo: ORDINARIO.normaPlazo,
+  cartaTexto: CARTA_ORDINARIO_OK,
+  defensaArt647: 'Parágrafo del Art. 647 E.T. — diferencia de criterio.',
 };
 
 export const RESP_DEFENSA_DIAN_REQUERIMIENTO: FiscalResponse = {
   modulos: ['M5'],
   modulo2: null,
   modulo3: null,
-  modulo5: MOD5_752_OK,
+  modulo5: MOD5_ORDINARIO_OK,
   modulo6: null,
   modulo7: null,
-  rawText: CARTA_752_OK,
+  rawText: CARTA_ORDINARIO_OK,
 };
 
 // ===========================================================================
@@ -224,7 +238,7 @@ export const RESP_DEFENSA_DIAN_REQUERIMIENTO: FiscalResponse = {
 const CARTA_1352_BAD = `# Carta Borrador
 
 ## Antecedentes
-Notificado requerimiento ordinario Art. 752 E.T. (15 días hábiles).
+Notificado requerimiento ordinario (Art. 686 E.T.).
 
 ## Posición Jurídica
 La defensa diferencia de criterio se sustenta en el Concepto DIAN 100208221-1352 de 2018.
@@ -243,10 +257,11 @@ Representante legal — borrador sujeto a revisión por contador público.
 `;
 
 const MOD5_1352_BAD: Modulo5DefensaDian = {
-  tipoRequerimiento: 'requerimiento_ordinario_752',
+  tipoRequerimiento: 'requerimiento_ordinario',
+  plazoRespuesta: ORDINARIO.plazoRespuesta,
+  normaPlazo: ORDINARIO.normaPlazo,
   cartaTexto: CARTA_1352_BAD,
-  invocaDiferenciaCriterio: true,
-  mencionaReduccion: false,
+  defensaArt647: 'Parágrafo Art. 647 E.T.',
 };
 
 export const RESP_DEFENSA_DIAN_USA_1352: FiscalResponse = {
@@ -260,12 +275,18 @@ export const RESP_DEFENSA_DIAN_USA_1352: FiscalResponse = {
 };
 
 // ===========================================================================
-// CASO 8 — Devolución por retenciones (saldo a favor F04 < 0)
+// CASO 8 — Devolución con saldo a favor DECLARADO (Formulario 110)
+// ===========================================================================
+//
+// Contrato de la fase 2 (pendiente #8): el saldo devolvible es el declarado;
+// F04 es una posición de referencia contable y sólo se cita rotulada.
+//   saldo declarado = $5.000.000,00 (500_000_000 cts)
+//   F04 (signed)    = −$3.200.000,00 (−320_000_000 cts)
 // ===========================================================================
 
 const TEXTO_DEVOLUCION_OK = `Análisis de saldo a favor
 
-Según el Bloque Âncora F04, el saldo a favor proyectado es de $5.000.000,00, originado en retenciones en la fuente acumuladas durante el período.
+La declaración de renta del periodo (Formulario 110) liquida un saldo a favor de $5.000.000,00. La posición de referencia contable F04 de $3.200.000,00 es una estimación y no la base de la solicitud.
 
 Conforme al Art. 850 E.T., el contribuyente tiene derecho a solicitar la devolución del saldo. El plazo de la DIAN para resolver es de 50 días hábiles contados desde la radicación completa de la solicitud, según Art. 855 E.T.
 
@@ -275,16 +296,18 @@ Recomendamos validar previamente con el revisor fiscal antes de radicar.
 `;
 
 const MOD6_RETENCIONES_OK: Modulo6Devoluciones = {
-  origen: 'retenciones_fuente',
-  saldoFavorCents: '500000000',
-  f04CitadoCents: '-500000000',
+  saldoDeclaradoCents: '500000000',
+  saldoAFavorCents: '500000000',
+  viabilidad: 'baja',
+  f04Cents: '-320000000',
   textoAnalisis: TEXTO_DEVOLUCION_OK,
-  listaRequisitos: [
+  documentosRequeridos: [
     'Solicitud presentada por MUISCA con firma electrónica',
     'Certificación del contador público que ratifica el saldo a favor',
     'Relación de retenedores con NIT, razón social y monto retenido',
     'Copia de la declaración tributaria del periodo objeto de devolución',
   ],
+  pasosProcedimentales: ['Radicar la solicitud dentro del término del Art. 854 E.T.'],
 };
 
 export const RESP_DEVOLUCION_RETENCIONES: FiscalResponse = {

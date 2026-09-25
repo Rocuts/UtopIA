@@ -14,7 +14,7 @@ import type { FiscalAnchorBlock } from './types';
 import { extractFiscalBaseFromTrialBalance } from './extractor';
 import { deriveFiscalAnchorMetrics } from './calculator';
 import type { FiscalDerivedMetrics } from './internal-types';
-import { buildCalendarioDian } from './dian-calendar';
+import { buildCalendarioDian, fechaCivilColombia } from './dian-calendar';
 import { evaluateFiscalAlerts } from './alerts';
 import { buildFiscalAnchorBlockShell } from './block-builder';
 
@@ -70,7 +70,8 @@ export function buildFiscalAnchor(input: BuildFiscalAnchorInput): FiscalAnchorBl
     nit: effectiveNit,
     hoy,
     metrics,
-    periodo: extractYearFromPeriod(primary.period) ?? String(hoy.getUTCFullYear()),
+    // Año en hora de Colombia, no el UTC (re-auditoría 2026-09-24, NT-11).
+    periodo: extractYearFromPeriod(primary.period) ?? String(fechaCivilColombia(hoy).year),
   });
   // --- Alertas. -----------------------------------------------------------
   const alertas = evaluateFiscalAlerts({

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   pesosToCentavos,
+  pesosToCentavosStrict,
   centavosToPesos,
   centavosToDisplay,
   donationSummary,
@@ -25,6 +26,26 @@ describe('dinero MoneyCop', () => {
     expect(pesosToCentavos('0')).toBe('0');
     expect(pesosToCentavos(' 1.234.567 ')).toBe('123456700'); // tolera separadores/espacios
     expect(pesosToCentavos('100000000000')).toBe('10000000000000'); // > 2^53, prueba el path BigInt (no Number)
+  });
+  it('pesos es-CO con coma decimal → centavos reales, no ×100 (ratios-kpis-23)', () => {
+    // Antes: '1.500.000,00' → '15000000000' ($150.000.000,00): ×100 del monto real,
+    // que alimentaba el descuento por donaciones del Art. 257 E.T.
+    expect(pesosToCentavos('1.500.000,00')).toBe('150000000');
+    expect(pesosToCentavos('1.500.000,50')).toBe('150000050');
+    expect(pesosToCentavos('850.000')).toBe('85000000');
+    expect(pesosToCentavos('$ 50.000.000')).toBe('5000000000');
+  });
+  it('entrada no interpretable: el estricto devuelve null y el legado 0 (bloquea el envío)', () => {
+    expect(pesosToCentavosStrict('1,500,000')).toBeNull();
+    expect(pesosToCentavosStrict('12.3456')).toBeNull();
+    expect(pesosToCentavos('1,500,000')).toBe('0');
+    expect(pesosToCentavosStrict('1.500.000,00')).toBe('150000000');
+  });
+  it('buildRegistrarInput guarda los centavos reales de la donación', () => {
+    const input = buildRegistrarInput({
+      kind: 'donation', title: 't', body: 'b', fiscalPeriod: '2026', montoPesos: '1.500.000,00', articulo: '257',
+    });
+    expect(input.structured).toMatchObject({ montoCentavos: '150000000' });
   });
   it('centavos → pesos (parte entera)', () => {
     expect(centavosToPesos('5000000000')).toBe('50000000');

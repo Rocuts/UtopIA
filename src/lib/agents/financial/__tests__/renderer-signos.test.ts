@@ -127,10 +127,13 @@ describe('renderer — signo de los totales', () => {
   it('una pérdida neta NO se imprime igual que una utilidad de la misma magnitud', () => {
     const md = renderIncomeStatement(makeReportEnPerdida());
 
+    // Una pérdida se rotula PÉRDIDA (paridad con PDF y Excel, reportes-export-01):
+    // el rótulo "UTILIDAD NETA" sobre una cifra negativa también la disfrazaba.
+    expect(md).not.toContain('UTILIDAD NETA DEL PERÍODO');
     const utilidadNeta = md
       .split('\n')
-      .find((l) => l.includes('UTILIDAD NETA DEL PERÍODO'));
-    expect(utilidadNeta, 'no se encontró el renglón de utilidad neta').toBeDefined();
+      .find((l) => l.includes('PÉRDIDA NETA DEL PERÍODO'));
+    expect(utilidadNeta, 'no se encontró el renglón de pérdida neta').toBeDefined();
     expect(
       utilidadNeta,
       'Una pérdida de $250.000 se estaba imprimiendo como "$250.000,00", ' +
@@ -163,7 +166,7 @@ describe('renderer — signo de los totales', () => {
     const md = renderIncomeStatement(conComparativo);
     const utilidadNeta = md
       .split('\n')
-      .find((l) => l.includes('UTILIDAD NETA DEL PERÍODO'));
+      .find((l) => l.includes('PÉRDIDA NETA DEL PERÍODO'));
 
     expect(utilidadNeta).toContain('($250.000,00)');
     expect(

@@ -62,15 +62,26 @@ export const CcvNiifSchema = z.object({
   // Capital de trabajo
   A15: MoneyCop, // Pasivo Corriente actual
   A16: MoneyCop, // Inventarios actual (Cta. 14)
-  A17: MoneyCop, // Cartera / Deudores actual (Cta. 13)
+  // Cartera comercial neta actual = 1305 + 1310 − |1399| (controlTotals.
+  // clientesNetos, niif-preproceso-25). `null` sin cuentas de clientes: no es
+  // el grupo 13 completo (anticipos de impuestos 1355 no son cartera, NM-12).
+  A17: MoneyCop.nullable(),
   A18: MoneyCop, // Proveedores actual (Cta. 22)
   // Flujo de caja
   A19: MoneyCop, // Variación de caja del período = A13 - A14
   // Anexos derivados (X-series)
-  X01: MoneyCop, // Ganancia Bruta actual = A07 - (Costo Ventas + Costo Producción)
+  // Ganancia Bruta = ancla UB del preprocesador (controlTotals.utilidadBruta):
+  // ingresos operacionales netos (41 − 4175) − costos (clases 6 + 7). El
+  // grupo 42 va debajo de la utilidad operacional (decisión §7 de la
+  // auditoría 2026-09; NM-12 / recalculo-final-06).
+  X01: MoneyCop, // Ganancia Bruta actual
   X02: MoneyCop, // Ganancia Bruta comparativo
   X03: MoneyCop, // Activo Corriente actual
   X04: MoneyCop, // Activo No Corriente actual
+  // Ingresos operacionales netos actual = grupo 41 − devoluciones 4175
+  // (controlTotals.ingresosOperacionalesNetos): base del margen operacional.
+  // `null` en Âncoras sin el ancla (persistidos antes de 2026-09-24).
+  X05: MoneyCop.nullable(),
 });
 export type CcvNiif = z.infer<typeof CcvNiifSchema>;
 

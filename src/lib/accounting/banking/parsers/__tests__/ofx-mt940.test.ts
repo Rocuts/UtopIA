@@ -162,6 +162,29 @@ describe('mt940Parser', () => {
     expect(tx.externalId).toBeUndefined();
   });
 
+  // ingesta-26: la fecha de entrada (MMDD) no trae año. Heredar el de la fecha
+  // valor desplazaba casi un año los movimientos del cambio de año.
+  it('fecha valor 31-dic y entrada 02-ene: la entrada es del año siguiente', async () => {
+    const msg = ':20:R\n:25:123\n:61:2512310102D1000,00NTRFNONREF//BB-1\n:86:PAGO\n-';
+    const st = await mt940Parser.parse('e.sta', msg);
+    const tx = st.transactions[0];
+    expect(tx.valueDate?.toISOString().slice(0, 10)).toBe('2025-12-31');
+    expect(tx.postedAt.toISOString().slice(0, 10)).toBe('2026-01-02');
+    expect(st.periodEnd?.toISOString().slice(0, 10)).toBe('2026-01-02');
+  });
+
+  it('fecha valor 02-ene y entrada 31-dic: la entrada es del año anterior', async () => {
+    const msg = ':20:R\n:25:123\n:61:2601021231C1000,00NTRFNONREF//BB-2\n:86:ABONO\n-';
+    const st = await mt940Parser.parse('e.sta', msg);
+    expect(st.transactions[0].postedAt.toISOString().slice(0, 10)).toBe('2025-12-31');
+  });
+
+  it('entrada del mismo año cercana a la fecha valor: sin cambio', async () => {
+    const msg = ':20:R\n:25:123\n:61:2606030605C1000,00NTRFNONREF//BB-3\n:86:ABONO\n-';
+    const st = await mt940Parser.parse('e.sta', msg);
+    expect(st.transactions[0].postedAt.toISOString().slice(0, 10)).toBe('2026-06-05');
+  });
+
   it('código de tipo presente + NONREF sigue funcionando como antes', async () => {
     const msg = ':20:R\n:25:123\n:61:260315D1234,56NTRFNONREF//BB-77\n:86:PAGO\n-';
     const st = await mt940Parser.parse('e.sta', msg);

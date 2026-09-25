@@ -19,6 +19,10 @@ import type {
 } from '@/lib/agents/financial/escudo-survival/types';
 import { createSafeSse } from '@/lib/api/sse-safe';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
+import {
+  EscudoBalanceBloqueadoError,
+  escudoBalanceBloqueadoPayload,
+} from '@/lib/agents/financial/escudo-survival/lib/balance-ingesta';
 
 // 5 minutos — el pipeline corre 5 LLM calls + sintetizador en paralelo.
 export const maxDuration = 300;
@@ -27,6 +31,7 @@ export async function POST(req: Request) {
   const gate = await requireAuthSession();
   if (!gate.ok) return gate.response;
 
+  let language: 'es' | 'en' = 'es';
   try {
     const body = await req.json();
     const parsed = escudoSurvivalRequestSchema.safeParse(body);
@@ -41,6 +46,7 @@ export async function POST(req: Request) {
       );
     }
 
+    language = parsed.data.language;
     const orchestratorInput: OrchestrateEscudoSurvivalInput = {
       rawData: parsed.data.rawData,
       company: parsed.data.company,
@@ -59,6 +65,11 @@ export async function POST(req: Request) {
     const report = await orchestrateEscudoSurvival(orchestratorInput);
     return NextResponse.json(report);
   } catch (error) {
+    // Balance que no sirve de base para cifras fiscales: 422 con los motivos,
+    // mismo contrato que /niif (I4-escudo 1). No es un error del servidor.
+    if (error instanceof EscudoBalanceBloqueadoError) {
+      return NextResponse.json(escudoBalanceBloqueadoPayload(error, language), { status: 422 });
+    }
     console.error(
       '[escudo-survival] API error:',
       error instanceof Error ? error.message : error,
@@ -87,13 +98,24 @@ function handleStreaming(input: OrchestrateEscudoSurvivalInput) {
         });
         sse.send('result', report);
       } catch (error) {
+        const language = input.language ?? 'es';
+        if (error instanceof EscudoBalanceBloqueadoError) {
+          // Mismo contrato que el 422 de /niif por SSE: code + reasons.
+          sse.send('error', escudoBalanceBloqueadoPayload(error, language));
+          return;
+        }
         console.error(
           '[escudo-survival] Pipeline error:',
           error instanceof Error ? error.message : error,
         );
+        const friendly = toFriendlyError(error, language);
         sse.send('error', {
-          error: 'Error during Escudo Survival pipeline execution.',
-          detail: toFriendlyError(error).message,
+          error:
+            language === 'en'
+              ? 'Error during Escudo Survival pipeline execution.'
+              : 'Error durante la ejecución del Modo Supervivencia.',
+          detail: friendly.message,
+          code: friendly.code,
         });
       } finally {
         sse.close();

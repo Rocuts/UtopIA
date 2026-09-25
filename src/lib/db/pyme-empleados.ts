@@ -43,7 +43,16 @@ export async function updateEmpleado(
   patch: Partial<
     Pick<
       PymeEmpleado,
-      'nombre' | 'tipo' | 'cargo' | 'tipoContrato' | 'salarioCop' | 'eps' | 'afp' | 'arl' | 'arlClase'
+      | 'nombre'
+      | 'tipo'
+      | 'cargo'
+      | 'tipoContrato'
+      | 'salarioCop'
+      | 'salarioIntegral'
+      | 'eps'
+      | 'afp'
+      | 'arl'
+      | 'arlClase'
     >
   >,
 ): Promise<PymeEmpleado | null> {
@@ -54,6 +63,19 @@ export async function updateEmpleado(
     .where(and(eq(pymeEmpleados.id, id), eq(pymeEmpleados.workspaceId, workspaceId)))
     .returning();
   return updated ?? null;
+}
+
+export async function getEmpleado(
+  id: string,
+  workspaceId: string,
+): Promise<PymeEmpleado | null> {
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(pymeEmpleados)
+    .where(and(eq(pymeEmpleados.id, id), eq(pymeEmpleados.workspaceId, workspaceId)))
+    .limit(1);
+  return row ?? null;
 }
 
 /** Retiro lógico (activo=false) — preserva el registro para trazabilidad. */

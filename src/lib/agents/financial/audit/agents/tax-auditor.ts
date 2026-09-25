@@ -10,20 +10,55 @@
 
 import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
 import { callFinancialAgent } from '../../agents/runtime';
-import { buildTaxAuditorPrompt } from '../prompts/tax-auditor.prompt';
+import {
+  buildTaxAuditorPrompt,
+  regimenRentaDeEmpresa,
+  type RegimenRentaAuditoria,
+} from '../prompts/tax-auditor.prompt';
 import {
   TaxAuditReportSchema,
   type TaxAuditReportJson,
   type AuditFindingJson,
 } from '../../contracts/audit-report';
-import { formatCopFromCents, parseMoneyCop } from '../../contracts/money';
+import { formatCopFromCents, parseMoneyCop, serializeMoneyCop } from '../../contracts/money';
 import type { CompanyInfo } from '../../types';
+import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import type { AuditorResult, AuditFinding, AuditProgressEvent } from '../types';
+import { computeRentaPosition } from '../bindings';
 
-/** Format MoneyCop (string en centavos) -> "$X.XXX,XX" estilo COP. */
+/**
+ * Format MoneyCop (string en centavos) -> "$X.XXX,XX" estilo COP, CON signo
+ * (paréntesis NIIF para negativos). El signo de brecha, posición fiscal e
+ * IVA neto tiene significado contractual (auditoria-calidad-02).
+ */
 function fmtMoneyCop(value: string): string {
-  return formatCopFromCents(parseMoneyCop(value), /* absolute */ true);
+  return formatCopFromCents(parseMoneyCop(value), false);
 }
+
+/**
+ * Motivo por el que la TTD (par. 6 Art. 240 E.T.) no se determina en el
+ * Dictamen 2: TTD = ID / UD (impuesto depurado / utilidad depurada) con su
+ * ámbito verificado. El impuesto contable / UAI NO es la TTD
+ * (prompts-normativa-03; mismo criterio que CCV/Supervivencia).
+ */
+export const TTD_NO_DETERMINABLE_REASON =
+  'TTD no determinable: faltan impuesto depurado (ID), utilidad depurada (UD) y la verificación del ámbito del par. 6 Art. 240 E.T.; el impuesto contable / UAI no es la TTD.';
+
+/**
+ * Régimen SIMPLE declarado en el intake (re-auditoría 2026-09-24, NT-02).
+ * Art. 903 E.T. (estatuto_tributario_completo.md): el impuesto unificado
+ * «sustituye el impuesto sobre la renta», así que la TTD del par. 6 del
+ * Art. 240 no aplica y el impuesto teórico a la tarifa del Art. 240 (35% × UAI)
+ * no es una referencia de conciliación del contribuyente. Mismo criterio que
+ * V10 en el gate (auditoria-calidad-31).
+ */
+export const TTD_NO_APLICA_SIMPLE_REASON =
+  'no aplica: la entidad declaró el Régimen Simple de Tributación, cuyo impuesto unificado sustituye el impuesto sobre la renta (Art. 903 E.T.); la TTD del par. 6 Art. 240 E.T. no le aplica.';
+
+export const RENTA_TEORICA_NO_APLICA_SIMPLE_REASON =
+  'N/D — Régimen Simple de Tributación (Art. 903 E.T.): el impuesto unificado sustituye el impuesto sobre la renta; no se calcula el impuesto teórico a la tarifa del Art. 240 E.T.';
+
+export { regimenRentaDeEmpresa, type RegimenRentaAuditoria };
 
 export async function runTaxAuditor(
   reportContent: string,
@@ -31,6 +66,7 @@ export async function runTaxAuditor(
   language: 'es' | 'en',
   onProgress?: (event: AuditProgressEvent) => void,
   defaultPeriod?: string,
+  preprocessed?: PreprocessedBalance,
 ): Promise<AuditorResult> {
   onProgress?.({
     type: 'auditor_progress',
@@ -47,17 +83,104 @@ export async function runTaxAuditor(
     ...MODELS_CONFIG.taxAuditor,
   });
 
-  return toLegacyAuditorResult(json, defaultPeriod);
+  return toLegacyAuditorResult(json, defaultPeriod, preprocessed, regimenRentaDeEmpresa(company));
+}
+
+// ---------------------------------------------------------------------------
+// Overrides deterministas post-LLM
+// ---------------------------------------------------------------------------
+
+/**
+ * Reemplaza la aritmética fiscal del LLM por cifras deterministas:
+ *   - TTD (análisis 5): `tasaEfectivaPct=null`, `status='no_determinable'`
+ *     mientras no existan ID/UD y ámbito verificados (prompts-normativa-03).
+ *   - Renta (análisis 2): impuesto teórico = UAI × tarifa y diferencia de
+ *     conciliación recalculados en BigInt (referencia NIC 12, no renta líquida).
+ *   - Posición de renta (análisis 3): (1355 renta + 1805 fiscal) − 2404 desde el
+ *     preprocesador; sin detalle auxiliar → N/D (auditoria-calidad-22).
+ *   - Régimen SIMPLE del intake (NT-02): TTD 'no_aplica' (Art. 903 E.T.) y sin
+ *     impuesto teórico a la tarifa del Art. 240 ni diferencia de conciliación.
+ */
+export function applyTaxDeterministicOverrides(
+  json: TaxAuditReportJson,
+  preprocessed?: PreprocessedBalance | null,
+  regimen: RegimenRentaAuditoria = null,
+): TaxAuditReportJson {
+  const out: TaxAuditReportJson = { ...json };
+
+  if (regimen === 'simple') {
+    if (json.tmtAnalysis) {
+      out.tmtAnalysis = {
+        ...json.tmtAnalysis,
+        tasaMinimaExigidaPct: 15,
+        tasaEfectivaPct: null,
+        status: 'no_aplica',
+        reference: 'Art. 903 E.T. (Régimen Simple de Tributación); Art. 240 par. 6 E.T.',
+      };
+    }
+    if (json.rentaAnalysis) {
+      out.rentaAnalysis = { ...json.rentaAnalysis, provisionTeoricaCop: null, brechaCop: null };
+    }
+  } else if (json.tmtAnalysis) {
+    out.tmtAnalysis = {
+      ...json.tmtAnalysis,
+      tasaMinimaExigidaPct: 15,
+      tasaEfectivaPct: null,
+      status: 'no_determinable',
+      reference: 'Art. 240 par. 6 E.T. (Ley 2277/2022 art. 10)',
+    };
+  }
+
+  if (json.rentaAnalysis && regimen !== 'simple') {
+    const r = json.rentaAnalysis;
+    let provisionTeoricaCop: string | null = null;
+    let brechaCop: string | null = null;
+    if (r.utilidadAntesImpuestosCop !== null && Number.isFinite(r.tarifaGeneralPct)) {
+      const uai = parseMoneyCop(r.utilidadAntesImpuestosCop);
+      const tarifaBps = BigInt(Math.round(r.tarifaGeneralPct * 100));
+      provisionTeoricaCop = serializeMoneyCop((uai * tarifaBps) / BigInt(10_000));
+      if (r.impuestoRegistradoCop !== null) {
+        brechaCop = serializeMoneyCop(parseMoneyCop(provisionTeoricaCop) - parseMoneyCop(r.impuestoRegistradoCop));
+      }
+    }
+    out.rentaAnalysis = { ...r, provisionTeoricaCop, brechaCop };
+  }
+
+  if (json.retencionesAnalysis) {
+    const pos = computeRentaPosition(preprocessed?.primary);
+    out.retencionesAnalysis = {
+      ...json.retencionesAnalysis,
+      saldo1355Cop: pos.saldo1355RentaCop,
+      saldo1805Cop: pos.saldo1805FiscalCop,
+      saldo24Cop: pos.saldo2404Cop,
+      posicionFiscalNetaCop: pos.posicionFiscalNetaCop,
+      evaluacion: pos.motivo ? `${pos.motivo} ${json.retencionesAnalysis.evaluacion}` : json.retencionesAnalysis.evaluacion,
+    };
+  }
+
+  return out;
 }
 
 // ---------------------------------------------------------------------------
 // Adapter local: JSON strict -> AuditorResult legacy
 // ---------------------------------------------------------------------------
 
-function toLegacyAuditorResult(
-  json: TaxAuditReportJson,
+export function toLegacyTaxAuditorResult(
+  rawJson: TaxAuditReportJson,
   defaultPeriod: string | undefined,
+  preprocessed?: PreprocessedBalance | null,
+  regimen: RegimenRentaAuditoria = null,
 ): AuditorResult {
+  return toLegacyAuditorResult(rawJson, defaultPeriod, preprocessed, regimen);
+}
+
+function toLegacyAuditorResult(
+  rawJson: TaxAuditReportJson,
+  defaultPeriod: string | undefined,
+  preprocessed?: PreprocessedBalance | null,
+  regimen: RegimenRentaAuditoria = null,
+): AuditorResult {
+  const json = applyTaxDeterministicOverrides(rawJson, preprocessed, regimen);
   const findings: AuditFinding[] = json.findings.map((f) => mapFinding(f, defaultPeriod));
   return {
     domain: 'tributario',
@@ -65,7 +188,7 @@ function toLegacyAuditorResult(
     complianceScore: json.complianceScore,
     findings,
     summary: json.executiveSummary,
-    fullContent: renderMarkdown(json, findings),
+    fullContent: renderMarkdown(json, findings, regimen),
     failed: false,
   };
 }
@@ -130,15 +253,38 @@ function evaluacionIcon(e: 'coherente' | 'observacion' | 'incoherente'): string 
   }
 }
 
-function tmtIcon(status: 'cumple' | 'no_cumple' | 'no_aplica'): string {
+function tmtIcon(status: 'cumple' | 'no_cumple' | 'no_aplica' | 'no_determinable'): string {
   switch (status) {
     case 'cumple':
       return '✅';
     case 'no_cumple':
       return '❌';
     case 'no_aplica':
+    case 'no_determinable':
       return '—';
   }
+}
+
+/** Monto con rótulo de sentido: + saldo a favor / − saldo a pagar. */
+function fmtPosicion(value: string | null): string {
+  if (value === null) return NO_DATA;
+  const v = parseMoneyCop(value);
+  if (v === BigInt(0)) return `${fmtMoneyCop(value)} (sin saldo)`;
+  return `${fmtMoneyCop(value)} (${v > BigInt(0) ? 'saldo a favor' : 'saldo a pagar'})`;
+}
+
+/** Pasivo neto de IVA: + a pagar / − saldo a favor. */
+function fmtIvaNeto(value: string | null): string {
+  if (value === null) return NO_DATA;
+  const v = parseMoneyCop(value);
+  if (v === BigInt(0)) return `${fmtMoneyCop(value)} (sin saldo)`;
+  return `${fmtMoneyCop(value)} (${v > BigInt(0) ? 'saldo a pagar' : 'saldo a favor'})`;
+}
+
+/** Utilidad con rótulo de pérdida cuando es negativa. */
+function fmtResultado(value: string | null): string {
+  if (value === null) return NO_DATA;
+  return parseMoneyCop(value) < BigInt(0) ? `${fmtMoneyCop(value)} (pérdida)` : fmtMoneyCop(value);
 }
 
 function riesgoIcon(p: 'alta' | 'media' | 'baja'): string {
@@ -172,11 +318,16 @@ function priorityLabel(p: 'alta' | 'media' | 'baja'): string {
 export function renderTaxDictamenMarkdown(
   json: TaxAuditReportJson,
   findings: AuditFinding[],
+  regimen: RegimenRentaAuditoria = null,
 ): string {
-  return renderMarkdown(json, findings);
+  return renderMarkdown(json, findings, regimen);
 }
 
-function renderMarkdown(json: TaxAuditReportJson, findings: AuditFinding[]): string {
+function renderMarkdown(
+  json: TaxAuditReportJson,
+  findings: AuditFinding[],
+  regimen: RegimenRentaAuditoria = null,
+): string {
   const hasV21 =
     json.rentaAnalysis !== null &&
     json.retencionesAnalysis !== null &&
@@ -215,11 +366,22 @@ function renderMarkdown(json: TaxAuditReportJson, findings: AuditFinding[]): str
   const renta = json.rentaAnalysis!;
   lines.push('## 2. IMPUESTO DE RENTA — CASCADA TEORICA');
   lines.push('');
-  lines.push(`- Tarifa general aplicable: ${renta.tarifaGeneralPct}%`);
-  lines.push(`- Utilidad antes de impuestos: ${fmtMoneyOrNa(renta.utilidadAntesImpuestosCop)}`);
-  lines.push(`- Provision teorica (${renta.tarifaGeneralPct}%): ${fmtMoneyOrNa(renta.provisionTeoricaCop)}`);
-  lines.push(`- Impuesto registrado: ${fmtMoneyOrNa(renta.impuestoRegistradoCop)}`);
-  lines.push(`- Brecha (teorico - registrado): ${fmtMoneyOrNa(renta.brechaCop)}`);
+  if (regimen === 'simple') {
+    // NT-02: con SIMPLE no hay tarifa del Art. 240 ni cascada teórica.
+    lines.push('- Regimen de renta: Regimen Simple de Tributacion (Arts. 903-916 E.T.)');
+    lines.push(`- Utilidad antes de impuestos: ${fmtResultado(renta.utilidadAntesImpuestosCop)}`);
+    lines.push(`- Impuesto teorico a la tarifa del Art. 240 E.T.: ${RENTA_TEORICA_NO_APLICA_SIMPLE_REASON}`);
+    lines.push(`- Impuesto corriente registrado: ${fmtMoneyOrNa(renta.impuestoRegistradoCop)}`);
+    lines.push('- Diferencia de conciliacion (teorico - registrado): N/D — sin impuesto teorico del Art. 240 E.T.');
+  } else {
+    lines.push(`- Tarifa general aplicable: ${renta.tarifaGeneralPct}%`);
+    lines.push(`- Utilidad antes de impuestos: ${fmtResultado(renta.utilidadAntesImpuestosCop)}`);
+    lines.push(
+      `- Impuesto teorico a tarifa nominal (${renta.tarifaGeneralPct}% x UAI — referencia de conciliacion NIC 12, no renta liquida): ${fmtMoneyOrNa(renta.provisionTeoricaCop)}`,
+    );
+    lines.push(`- Impuesto corriente registrado: ${fmtMoneyOrNa(renta.impuestoRegistradoCop)}`);
+    lines.push(`- Diferencia de conciliacion (teorico - registrado): ${fmtMoneyOrNa(renta.brechaCop)}`);
+  }
   lines.push(`- Evaluacion: ${evaluacionIcon(renta.evaluacion)} ${renta.evaluacion.toUpperCase()}`);
   lines.push(`- Accion: ${renta.accion}`);
   lines.push(`- Referencia: ${renta.reference}`);
@@ -229,10 +391,12 @@ function renderMarkdown(json: TaxAuditReportJson, findings: AuditFinding[]): str
   const ret = json.retencionesAnalysis!;
   lines.push('## 3. RETENCIONES, ANTICIPOS Y POSICION FISCAL NETA');
   lines.push('');
-  lines.push(`- Saldo Cta.1355 (anticipos): ${fmtMoneyOrNa(ret.saldo1355Cop)}`);
-  lines.push(`- Saldo Cta.1805 (impuesto diferido activo): ${fmtMoneyOrNa(ret.saldo1805Cop)}`);
-  lines.push(`- Saldo Cta.24 (impuestos por pagar): ${fmtMoneyOrNa(ret.saldo24Cop)}`);
-  lines.push(`- Posicion fiscal neta: ${fmtMoneyOrNa(ret.posicionFiscalNetaCop)}`);
+  lines.push(`- Anticipos y retenciones de renta (Cta.1355 — 135505/135515): ${fmtMoneyOrNa(ret.saldo1355Cop)}`);
+  lines.push(
+    `- Saldo fiscal en Cta.1805 (solo si su nombre indica impuesto): ${ret.saldo1805Cop === null ? 'no aplica' : fmtMoneyCop(ret.saldo1805Cop)}`,
+  );
+  lines.push(`- Impuesto de renta por pagar (Cta.2404): ${fmtMoneyOrNa(ret.saldo24Cop)}`);
+  lines.push(`- Posicion fiscal neta de renta: ${fmtPosicion(ret.posicionFiscalNetaCop)}`);
   lines.push(`- Evaluacion: ${ret.evaluacion}`);
   lines.push(`- Referencia: ${ret.reference}`);
   lines.push('');
@@ -241,7 +405,7 @@ function renderMarkdown(json: TaxAuditReportJson, findings: AuditFinding[]): str
   const iva = json.ivaIcaAnalysis!;
   lines.push('## 4. IVA / ICA / IMPUESTOS TERRITORIALES');
   lines.push('');
-  lines.push(`- Pasivo IVA neto: ${fmtMoneyOrNa(iva.pasivoIvaNetoCop)}`);
+  lines.push(`- Pasivo IVA neto: ${fmtIvaNeto(iva.pasivoIvaNetoCop)}`);
   lines.push(
     `- Regimen IVA: ${iva.regimenIva === null ? NO_DATA : iva.regimenIva.replace(/_/g, ' ')}`,
   );
@@ -249,12 +413,18 @@ function renderMarkdown(json: TaxAuditReportJson, findings: AuditFinding[]): str
   lines.push(`- Referencia: ${iva.reference}`);
   lines.push('');
 
-  // 5. TMT
+  // 5. TTD — Tasa de Tributación Depurada (Art. 240 par. 6 E.T.)
   const tmt = json.tmtAnalysis!;
-  lines.push('## 5. TASA MINIMA DE TRIBUTACION (TMT)');
+  lines.push('## 5. TASA DE TRIBUTACION DEPURADA (TTD, ART. 240 PAR. 6 E.T.)');
   lines.push('');
   lines.push(`- Tasa minima exigida: ${tmt.tasaMinimaExigidaPct}%`);
-  lines.push(`- Tasa efectiva calculada: ${fmtPctOrNa(tmt.tasaEfectivaPct)}`);
+  if (tmt.status === 'no_determinable') {
+    lines.push(`- Tasa de tributacion depurada (TTD = ID / UD): N/D — ${TTD_NO_DETERMINABLE_REASON}`);
+  } else if (tmt.status === 'no_aplica' && regimen === 'simple') {
+    lines.push(`- Tasa de tributacion depurada (TTD = ID / UD): ${TTD_NO_APLICA_SIMPLE_REASON}`);
+  } else {
+    lines.push(`- Tasa de tributacion depurada (TTD = ID / UD): ${fmtPctOrNa(tmt.tasaEfectivaPct)}`);
+  }
   lines.push(`- Estado: ${tmtIcon(tmt.status)} ${tmt.status.replace(/_/g, ' ').toUpperCase()}`);
   lines.push(`- Referencia: ${tmt.reference}`);
   lines.push('');

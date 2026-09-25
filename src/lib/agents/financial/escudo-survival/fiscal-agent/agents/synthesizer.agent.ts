@@ -50,7 +50,7 @@ Consolidar los outputs de los módulos del Agente Fiscal en un dictamen ejecutiv
 
 <success_criteria>
 - \`markdown\` cabe en una página A4: secciones "Situación fiscal", "Top recomendaciones", "Próximos pasos", cierre obligatorio.
-- \`topRecommendations\` lista entre 3 y 5 acciones priorizadas (orden 1 = más importante), cada una con norma, impacto estimado MoneyCop y prioridad.
+- \`topRecommendations\` lista entre 3 y 5 acciones priorizadas (orden 1 = más importante), cada una con norma y prioridad; \`impactoEstimado\` en MoneyCop sólo si sale de una cifra de los módulos, otherwise null.
 - \`cierre\` contiene EXACTAMENTE: "Este análisis fue generado por El Escudo (1+1 IA). Las cifras y posiciones deben ser validadas por un contador público o asesor tributario antes de su uso oficial o presentación ante la DIAN."
 </success_criteria>
 
@@ -58,6 +58,7 @@ Consolidar los outputs de los módulos del Agente Fiscal en un dictamen ejecutiv
 ALWAYS reusa las citas normativas que ya aparecieron en los módulos — no inventes nuevas.
 NEVER uses §, "centavos" en texto visible.
 NEVER cites Conceptos DIAN no whitelisted.
+NEVER presentes F04 (estimación contable) como saldo a favor ni recomiendes solicitar devolución sin saldo declarado.
 </constraints>
 
 <context>
@@ -80,7 +81,7 @@ MODULO_1_CCV (resumen):
   ${m.ccv.markdown.slice(0, 500)}
 
 MODULO_3_RISK_SCORE:
-  Score: ${m.riskScore.data.score}/100 | Nivel: ${m.riskScore.data.nivel}
+  Score: ${m.riskScore.data.publicable ? `${m.riskScore.data.score}/100 | Nivel: ${m.riskScore.data.nivel}` : `No determinable — ${m.riskScore.data.noPublicableMotivo ?? ''}`}
   ${m.riskScore.markdown.slice(0, 500)}
 
 ${m.conciliacion ? `MODULO_2_CONCILIACION:
@@ -96,11 +97,11 @@ ${m.defensaDian ? `MODULO_5_DEFENSA_DIAN:
   ${m.defensaDian.markdown.slice(0, 500)}` : 'MODULO_5_DEFENSA_DIAN: no ejecutado'}
 
 ${m.devoluciones ? `MODULO_6_DEVOLUCIONES:
-  Viabilidad: ${m.devoluciones.data.viabilidad} | Saldo: ${m.devoluciones.data.saldoAFavor}
+  Viabilidad: ${m.devoluciones.data.viabilidad} | Saldo a favor declarado: ${m.devoluciones.data.saldoAFavor ?? 'N/D (sin declaración; F04 es estimación contable)'}
   ${m.devoluciones.markdown.slice(0, 500)}` : 'MODULO_6_DEVOLUCIONES: no ejecutado'}
 
 ${m.supervivencia ? `MODULO_8_SUPERVIVENCIA:
-  Activo: ${m.supervivencia.data.activo} | Exposición: ${m.supervivencia.data.exposicionFiscalEstimada} | Mitigada: ${m.supervivencia.data.exposicionMitigada}
+  Activo: ${m.supervivencia.data.activo} | Exposición: ${m.supervivencia.data.exposicionFiscalEstimada ?? 'N/D'} | Mitigada: ${m.supervivencia.data.exposicionMitigada ?? 'N/D'}
   ${m.supervivencia.markdown.slice(0, 500)}` : 'MODULO_8_SUPERVIVENCIA: no ejecutado'}
 </context>`;
 

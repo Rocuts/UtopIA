@@ -59,12 +59,18 @@ export interface TefInput {
   taxableIncomeBaseline: number;
   /** Base gravable CON planeación fiscal aplicada */
   taxableIncomeOptimized: number;
-  /** Tasa efectiva observada en el escenario baseline (0-1). Opcional: se infiere de taxRate si falta. */
+  /** Tasa efectiva observada en el escenario baseline (0-1). Sin ella se
+   *  deriva como impuesto / ingresos si hay ingresos; si no, N/D (no se
+   *  publica la tarifa nominal como tasa efectiva). */
   effectiveRateBaseline?: number;
-  /** Tasa efectiva observada en el escenario optimizado (0-1). Opcional. */
+  /** Tasa efectiva observada en el escenario optimizado (0-1). Misma regla. */
   effectiveRateOptimized?: number;
-  /** Tasa IR sociedades. Default 0.35 (Art. 240 ET Colombia 2026). */
+  /** Tarifa de referencia (0-1). Ausente: tarifa general del Art. 240 E.T.
+   *  (35 %), rotulada en `assumptions`; fuera de (0, 1): N/D. */
   taxRate?: number;
+  /** Tarifa del escenario optimizado (0-1), p. ej. un régimen preferencial
+   *  declarado. Ausente: la misma `taxRate`. */
+  taxRateOptimized?: number;
   /** Datos del periodo anterior para calcular tendencia. */
   periodPrevious?: {
     taxableIncomeBaseline: number;
@@ -86,9 +92,12 @@ export interface ExitValueInput {
   industry: ExitValueIndustry;
   /** Tasa de crecimiento esperada (0-1). Ej. 0.15 = 15%. */
   growthRate: number;
-  /** WACC (0-1). Default 0.135 (13.5% CO típico 2026). Se usa para sanity-check/descuento. */
+  /** WACC (0-1) declarado por el usuario — supuesto, sin valor por defecto
+   *  (valoracion-07: el 13,5 % "CO típico" no tenía fuente). Informativo: el
+   *  método por múltiplos no descuenta flujos. */
   wacc?: number;
-  /** Deuda neta en COP. Se resta al EV para obtener Equity Value. Default 0. */
+  /** Deuda neta en COP. Se resta al EV para obtener Equity Value. Sin valor
+   *  por defecto (valoracion-25): ausente ⇒ Exit Value N/D. */
   netDebt?: number;
   /** Ajustes de EBITDA (add-backs, one-offs). Suma algebráica. */
   adjustments?: Array<{ label: string; amount: number }>;
@@ -101,6 +110,8 @@ export type LastAuditOpinion =
   | 'con_salvedades'
   | 'desfavorable'
   | 'abstension';
+// 'no_emitida' (sin dictamen del Revisor Fiscal) NO es una opinión: el score
+// de cumplimiento no se calcula (ver src/lib/kpis/live.ts).
 
 export interface ComplianceInput {
   /** Adherencia NIIF 0-100 */
@@ -133,9 +144,17 @@ export interface RoiProbabilisticProject {
 
 export interface RoiProbabilisticInput {
   projects: RoiProbabilisticProject[];
-  /** Riesgo de mercado agregado (0-1). Default 0.25 (CO medio-alto). */
+  /** Riesgo de mercado agregado (0-1) declarado. Sin valor por defecto
+   *  (valoracion-25): ausente ⇒ no se aplica ajuste; nunca achica pérdidas. */
   marketRisk?: number;
-  /** Tasa de descuento (0-1). Default 0.135. Informativa para el disclaimer; no se aplica por defecto al portfolio return (los proyectos ya traen TIR). */
+  /** Fuente del riesgo de mercado declarado (p. ej. acta del comité). */
+  marketRiskSource?: string;
+  /** Retorno si el proyecto fracasa (−1 = pérdida total de la inversión).
+   *  Obligatorio para calcular (valoracion-25): ausente ⇒ N/D. */
+  failureReturn?: number;
+  /** Tasa de descuento (0-1) declarada por el usuario — supuesto, sin valor
+   *  por defecto. Informativa para el disclaimer; no se aplica al portfolio
+   *  return (los proyectos ya traen TIR). */
   discountRate?: number;
 }
 

@@ -19,6 +19,7 @@ import {
   getPeriodAccountBalances,
 } from './provisions/repository';
 import { calculateProvisions } from './provisions/calculator';
+import { getEmployer114_1, smmlvForYear } from './provisions/employer';
 
 // ---------------------------------------------------------------------------
 // Implementation
@@ -49,9 +50,10 @@ const adjustmentsPortImpl: AdjustmentsPort = {
 
   async previewProvisions(input: AdjustmentPreviewBase) {
     const period = await getPeriod(input.workspaceId, input.periodId);
-    const [configs, periodBalances] = await Promise.all([
+    const [configs, periodBalances, employerExonerated114_1] = await Promise.all([
       listActiveProvisionsConfig(input.workspaceId),
       getPeriodAccountBalances(input.workspaceId, input.periodId),
+      getEmployer114_1(input.workspaceId),
     ]);
     return calculateProvisions({
       workspaceId: input.workspaceId,
@@ -59,6 +61,8 @@ const adjustmentsPortImpl: AdjustmentsPort = {
       entryDate: input.entryDate,
       configs,
       periodBalances,
+      employerExonerated114_1,
+      smmlvCop: smmlvForYear(period.year),
     });
   },
 };

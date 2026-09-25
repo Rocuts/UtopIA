@@ -2,8 +2,12 @@ import { NextResponse } from 'next/server';
 import { requireAuthSession } from '@/lib/auth/require-session';
 import { financialAuditRequestSchema } from '@/lib/validation/schemas';
 import { orchestrateAudit } from '@/lib/agents/financial/audit/orchestrator';
+import { deriveReportIntegrity } from '@/lib/agents/financial/audit/integrity';
+import { resolveClientPreprocessed } from '@/lib/reports/client-preprocessed';
+import { resolveAuditedReport } from '@/lib/reports/audited-report';
+import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import type { FinancialReport } from '@/lib/agents/financial/types';
-import type { AuditProgressEvent } from '@/lib/agents/financial/audit/types';
+import type { AuditIntegrity, AuditProgressEvent } from '@/lib/agents/financial/audit/types';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
 import { createSafeSse } from '@/lib/api/sse-safe';
 
@@ -18,6 +22,12 @@ import { createSafeSse } from '@/lib/api/sse-safe';
 //   4. Fiscal Reviewer — ISA/NIA statutory audit opinion
 //
 // Returns consolidated findings, compliance scores, and formal opinion.
+//
+// Integridad (auditoria-calidad-03 / -07): el cuerpo puede traer
+// `preprocessed` (round-trip JSON de /niif, revivido y validado aquí) y el
+// informe completo con sus banderas de reconciliación / emitibilidad. Esas
+// señales se leen ANTES de que el esquema de validación las descarte y sólo
+// pueden degradar la opinión (nunca producir una favorable).
 // ---------------------------------------------------------------------------
 
 export const maxDuration = 300;
@@ -38,25 +48,43 @@ export async function POST(req: Request) {
       );
     }
 
-    const { report, language, auditFocus } = parsed.data;
+    const { language, auditFocus } = parsed.data;
+
+    const rawBody = body as { preprocessed?: unknown; report?: unknown; adjustmentLedger?: unknown };
+    // Cross-dep P1: el preprocesado de /niif se re-deriva desde sus filas con
+    // el ledger confirmado de la petición; alterado → 422 antes de auditar.
+    const client = resolveClientPreprocessed(rawBody.preprocessed, rawBody.adjustmentLedger);
+    if (!client.ok) return client.response;
+    const preprocessed: PreprocessedBalance | undefined = client.preprocessed;
+    // I5-1: los auditores leen el consolidado que produce el servidor desde el
+    // JSON de las Partes I–III (con sus veredictos y el preprocesado
+    // re-derivado), no el Markdown recibido; las banderas de integridad salen
+    // de ese mismo informe (sólo endurecen las del cliente).
+    const audited = resolveAuditedReport(
+      { ...(rawBody.report as object), company: parsed.data.report.company },
+      client,
+      language,
+    );
+    if (!audited.ok) return audited.response;
+    const typedReport: FinancialReport = audited.report;
+    const integrity = deriveReportIntegrity(typedReport, preprocessed);
 
     const stream =
       req.headers.get('X-Stream') === 'true' ||
       new URL(req.url).searchParams.get('stream') === '1';
 
-    // Cast the Zod-validated report to the full FinancialReport type.
-    // The schema validates the minimal fields needed; downstream code only uses consolidatedReport + company.
-    const typedReport = report as unknown as FinancialReport;
-
     if (stream) {
-      return handleStreaming(typedReport, language, auditFocus);
+      return handleStreaming(typedReport, language, auditFocus, preprocessed, integrity);
     }
 
-    const auditReport = await orchestrateAudit({
-      report: typedReport,
-      language,
-      auditFocus,
-    });
+    const auditReport = await orchestrateAudit(
+      {
+        report: typedReport,
+        language,
+        auditFocus,
+      },
+      { preprocessed, integrity },
+    );
 
     return NextResponse.json(auditReport);
   } catch (error) {
@@ -75,6 +103,8 @@ function handleStreaming(
   report: FinancialReport,
   language: 'es' | 'en',
   auditFocus: string | undefined,
+  preprocessed: PreprocessedBalance | undefined,
+  integrity: AuditIntegrity,
 ) {
   const readableStream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -89,6 +119,8 @@ function handleStreaming(
             onProgress: (event: AuditProgressEvent) => {
               sse.send('progress', event);
             },
+            preprocessed,
+            integrity,
           },
         );
         sse.send('result', auditReport);

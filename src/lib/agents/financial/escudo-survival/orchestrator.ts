@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // Modo Supervivencia Élite — Orchestrator
 // ---------------------------------------------------------------------------
-// Pipeline: rawData -> preprocessTrialBalance -> [5 agentes en paralelo] ->
+// Pipeline: rawData -> leerBalanceEscudo -> [5 agentes en paralelo] ->
 // sintetizador -> EscudoSurvivalReport.
 //
 // Patron: Promise.allSettled. Si CUALQUIER agente falla, el reporte se entrega
@@ -13,8 +13,6 @@
 import { z } from 'zod';
 import {
   extractCompanyMetadata,
-  parseTrialBalanceCSV,
-  preprocessTrialBalance,
   type PreprocessedBalance,
 } from '@/lib/preprocessing/trial-balance';
 import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
@@ -42,6 +40,16 @@ import type {
   TetCalculatorResult,
 } from './types';
 import { UVT_2026 } from './types';
+import { extractSurvivalAnchors, type SurvivalAnchorTotals } from './lib/extract-totals';
+import {
+  ART_36_3_DEROGADO_MOTIVO,
+  BANCARIZACION_ND_MOTIVO,
+  SALDO_FAVOR_ND_MOTIVO,
+  computeTetContable,
+} from './lib/deterministic-survival';
+import { TTD_UNAVAILABLE_REASON } from './fiscal-agent/tools/ccv-calculator';
+import { validateSurvivalReport } from './validators/survival-validators';
+import { EscudoBalanceBloqueadoError, leerBalanceEscudo } from './lib/balance-ingesta';
 
 // ---------------------------------------------------------------------------
 // Synthesizer schema — el LLM consolida los 5 resultados en topRecommendations
@@ -79,10 +87,14 @@ export async function orchestrateEscudoSurvival(
   // Stage 0: Preprocessing (deterministico)
   // -------------------------------------------------------------------------
   emit(onProgress, 'preprocessing', 'started');
+  // Misma lectura que /upload y /niif (P4 cross-dep): directivas de ingesta
+  // confirmadas (unidad, vencimientos), bloques por hoja del XLSX y bloqueo
+  // con motivo si la lectura tiene problemas de integridad (p. ej. unidad
+  // declarada sin confirmar). El texto libre (OCR) conserva el contrato
+  // anterior: balance vacío, sin cifras vinculantes.
   let preprocessed: PreprocessedBalance;
   try {
-    const rows = parseTrialBalanceCSV(input.rawData);
-    preprocessed = preprocessTrialBalance(rows);
+    preprocessed = leerBalanceEscudo(input.rawData, { language, sinFilas: 'vacio' });
   } catch (err) {
     emit(
       onProgress,
@@ -90,6 +102,7 @@ export async function orchestrateEscudoSurvival(
       'failed',
       err instanceof Error ? err.message : 'parse_error',
     );
+    if (err instanceof EscudoBalanceBloqueadoError) throw err;
     throw new Error(
       `[escudo-survival] No se pudo preprocesar el balance: ${
         err instanceof Error ? err.message : 'unknown_error'
@@ -160,8 +173,9 @@ export async function orchestrateEscudoSurvival(
     dividendSettled,
   ] = await Promise.all(stagePromises);
 
-  const tet = tetSettled.value ?? buildFallbackTet();
-  const retentionShield = retentionSettled.value ?? buildFallbackRetention();
+  const anchors = extractSurvivalAnchors(preprocessed);
+  const tet = tetSettled.value ?? buildFallbackTet(anchors);
+  const retentionShield = retentionSettled.value ?? buildFallbackRetention(anchors);
   const antiDian = antiDianSettled.value ?? buildFallbackAntiDian();
   const contingencyReserve = reserveSettled.value ?? buildFallbackReserve();
   const dividendOptimizer = dividendSettled.value ?? buildFallbackDividend();
@@ -197,9 +211,11 @@ export async function orchestrateEscudoSurvival(
   }
 
   // -------------------------------------------------------------------------
-  // Resultado final
+  // Resultado final + validación determinista (3 capas) antes de entregar
+  // (auditoría 2026-09, tributario-modulos-03: el validador existía y nadie
+  // lo llamaba).
   // -------------------------------------------------------------------------
-  return {
+  const report: EscudoSurvivalReport = {
     tet,
     retentionShield,
     antiDian,
@@ -215,6 +231,23 @@ export async function orchestrateEscudoSurvival(
       durationMs: Date.now() - startTime,
     },
   };
+
+  emit(onProgress, 'validation', 'started');
+  try {
+    const v = validateSurvivalReport(report, preprocessed);
+    report.validation = { ok: v.ok, errors: v.errors, warnings: v.warnings };
+    emit(
+      onProgress,
+      'validation',
+      v.ok ? 'completed' : 'failed',
+      v.ok ? `${v.warnings.length} advertencias` : `${v.errors.length} errores de validación`,
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'validation_error';
+    report.validation = { ok: false, errors: [`Validación no ejecutada: ${msg}`], warnings: [] };
+    emit(onProgress, 'validation', 'failed', msg);
+  }
+  return report;
 }
 
 // ---------------------------------------------------------------------------
@@ -341,31 +374,34 @@ async function runStage<T>(
 // declaran explicitamente que el submodulo no fue calculado por el LLM.
 // ---------------------------------------------------------------------------
 
-function buildFallbackTet(): TetCalculatorResult {
+function buildFallbackTet(anchors: SurvivalAnchorTotals): TetCalculatorResult {
+  // La TET contable es determinista: se publica aunque el LLM falle. Sin
+  // nivel de alerta si no es medible (nunca «verde» por defecto).
+  const t = computeTetContable(anchors);
   return {
     markdown:
-      '## TET Calculator — submodulo no disponible\n\nEste submodulo no se pudo ejecutar en esta corrida. Reintenta o consulta los logs del orchestrator.',
-    warnings: ['tet_calculator_failed'],
+      '## TET Calculator — narrativa no disponible\n\nEl submodulo LLM no se pudo ejecutar; se muestran solo las cifras deterministas (TET contable = impuesto causado / UAI).',
+    warnings: ['tet_calculator_failed', TTD_UNAVAILABLE_REASON],
     data: {
-      tet: 0,
-      ttd: 0,
-      nivelAlerta: 'verde',
-      impuestoProyectado: 0,
-      uai: 0,
+      tet: t.tet,
+      ttd: null,
+      nivelAlerta: t.nivelAlerta,
+      impuestoProyectado: t.impuestoProyectado,
+      uai: t.uai,
       sugerenciasOptimizacion: [],
     },
   };
 }
 
-function buildFallbackRetention(): RetentionShieldResult {
+function buildFallbackRetention(anchors: SurvivalAnchorTotals): RetentionShieldResult {
   return {
     markdown:
-      '## Escudo de Retenciones — submodulo no disponible\n\nReintenta la corrida.',
-    warnings: ['retention_shield_failed'],
+      '## Escudo de Retenciones — narrativa no disponible\n\nReintenta la corrida.',
+    warnings: ['retention_shield_failed', SALDO_FAVOR_ND_MOTIVO],
     data: {
-      retencionesAcumuladas: 0,
-      impuestoProyectado: 0,
-      saldoAFavorProyectado: 0,
+      retencionesAcumuladas: anchors.creditoRenta,
+      impuestoProyectado: anchors.impuestoCausado,
+      saldoAFavorProyectado: null,
       acciones: [],
     },
   };
@@ -375,13 +411,13 @@ function buildFallbackAntiDian(): AntiDianResult {
   return {
     markdown:
       '## Anti-DIAN Preventivo — submodulo no disponible\n\nReintenta la corrida.',
-    warnings: ['anti_dian_failed'],
+    warnings: ['anti_dian_failed', BANCARIZACION_ND_MOTIVO],
     data: {
-      pagosEfectivoTotal: 0,
+      pagosEfectivoTotal: null,
       pagosNoDeduciblesIndividuales: [],
-      excesoNoDeducibleGeneral: 0,
+      excesoNoDeducibleGeneral: null,
       crucesExogenaSospechosos: [],
-      mayorImpuestoEstimado: 0,
+      mayorImpuestoEstimado: null,
     },
   };
 }
@@ -404,7 +440,7 @@ function buildFallbackDividend(): DividendOptimizerResult {
   return {
     markdown:
       '## Optimizacion de Dividendos — submodulo no disponible\n\nReintenta la corrida.',
-    warnings: ['dividend_optimizer_failed'],
+    warnings: ['dividend_optimizer_failed', ART_36_3_DEROGADO_MOTIVO],
     data: {
       utilidadDistribuible: 0,
       escenarios: {

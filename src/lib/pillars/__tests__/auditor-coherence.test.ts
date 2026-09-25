@@ -109,10 +109,12 @@ function makeSnapshot(
 // ---------------------------------------------------------------------------
 
 describe('Auditor — Partida conciliatoria Retefuente cuenta 2365', () => {
-  it('cuenta 2365 con signo invertido (saldo débito en pasivo) → VERDAD detecta saldosPositivosPasivo > 0', () => {
-    // Cuenta 2365 (Retefuente) es un PASIVO. Signo natural CRÉDITO (negativo
-    // en accounting). Si trae saldo DÉBITO (positivo), es una incoherencia
-    // contable que el auditor debe revisar antes de presentar a la DIAN.
+  it('cuenta 2365 con signo invertido (saldo débito en pasivo) → VERDAD detecta saldosContrariosPasivo > 0', () => {
+    // Cuenta 2365 (Retefuente) es un PASIVO de naturaleza CRÉDITO. El
+    // preprocesador entrega los pasivos como MAGNITUDES positivas (ratios-kpis-09:
+    // el fixture previo usaba el signo contable crudo y contaba como anómalo
+    // cada pasivo normal). Un saldo DÉBITO llega negativo: incoherencia que el
+    // auditor debe revisar antes de presentar a la DIAN.
     const snap = makeSnapshot(
       makeControlTotals({
         activo: 1_000_000_000,
@@ -127,20 +129,20 @@ describe('Auditor — Partida conciliatoria Retefuente cuenta 2365', () => {
           { code: '110505', name: 'Caja', balance: 1_000_000_000 },
         ]),
         makeClass(2, [
-          { code: '230505', name: 'CxP comerciales', balance: -200_000_000 }, // signo correcto
+          { code: '230505', name: 'CxP comerciales', balance: 205_000_000 }, // naturaleza correcta
           // 2365 con signo INVERTIDO: pasivo con saldo débito → anomalía.
-          { code: '2365', name: 'Retención en la fuente', balance: 5_000_000 },
+          { code: '2365', name: 'Retención en la fuente', balance: -5_000_000 },
         ]),
         makeClass(3, [
-          { code: '3105', name: 'Capital', balance: -800_000_000 },
+          { code: '3105', name: 'Capital', balance: 800_000_000 },
         ]),
       ],
     );
 
     const cards = computeVerdadExecutiveCards({ snapshot: snap });
 
-    // VERDAD detecta el signo positivo (anómalo) en cuenta de pasivo.
-    expect(cards.audit.saldosPositivosPasivo).toBeGreaterThanOrEqual(1);
+    // VERDAD detecta el saldo débito (anómalo) en la cuenta de pasivo.
+    expect(cards.audit.saldosContrariosPasivo).toBe(1);
     // El score de Consistencia debe estar por debajo de 100% (no perfecto).
     expect(cards.consistencia.value).not.toBeNull();
     expect(cards.consistencia.value!).toBeLessThan(100);

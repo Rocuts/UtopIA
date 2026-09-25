@@ -1,55 +1,80 @@
-# Continuidad — integridad financiera del SaaS
+# Continuidad — exactitud financiera y normativa del SaaS
 
-Actualizado: 2026-09-05. Alcance: revisión y correcciones a partir de **main**, no revisión de la PR #7. Prioridad del usuario: lógica financiera, concordancia normativa, métricas reales, informes y exportaciones, con seguridad y funcionamiento bajo distinta carga/conexión.
+Actualizado: 2026-09-24. Alcance: auditoría integral multiagente desde **main** `dea0329` (PR #14 fusionada), con foco en
+el módulo NIIF (balance de prueba → estados → informe → exportaciones), métricas, tributario, laboral, valoración y
+normativa; fase 1 (hallazgos y correcciones) y fase 2 (cierre de pendientes y re-auditoría final). Informe y evidencia:
+[auditoría integral 2026-09-24](../reviews/auditoria-integral-niif-2026-09-24.md).
 
-## Referencias verificadas
+## Referencias
 
-- Repo: `Rocuts/UtopIA`.
-- Main revisado: `4d0db2db6176c7d8bae73da209e765a45f6a9d5b`.
-- Commit de correcciones funcionales: `fd77cc5357c3d6cc9bf76b274c0adfbc77bd4d22`.
-- Rama: `fix/main-financial-integrity-20260905`.
-- [PR #14](https://github.com/Rocuts/UtopIA/pull/14): abierta, borrador, sin fusionar en la última consulta. Esta documentación se añade después del commit funcional; consultar HEAD remoto antes de continuar.
-- [Informe y fuentes oficiales](../reviews/main-financial-integrity-2026-09-05.md).
+- Repo: `Rocuts/UtopIA`. Rama: `claude/auditoria-proyecto-niif-sdr3ia`; código final verificado en `4bbbd377` (después
+  sólo documentación). No está fusionada en `main` ni desplegada.
+- Resultado: fase 1, 269 hallazgos confirmados (264 corregidos y 5 en parte tras la fase 2); fase 2, los pendientes
+  #1–#4, #8 y #9 de la fase 1 atendidos por los paquetes P1–P6 y las integraciones I1–I5 (sus remanentes siguen en
+  *Pendientes* del informe); re-auditoría final, 55 hallazgos: 54 corregidos y 1 residual documentado. Índice en el
+  [anexo](../reviews/auditoria-integral-niif-2026-09-24-anexo.md).
+- Verificación final en `4bbbd377`: vitest 535 archivos / 5.404 pruebas (23 omitidas: 20 en los 6 archivos
+  que requieren Postgres y 3 marcadores `describe.skip` preexistentes), `tsc` sin errores, eslint 0 errores (158 avisos preexistentes, 1 de ellos en un archivo generado por la
+  compilación), strict-mode y `npm run build`
+  (credenciales ficticias) correctos. Re-auditoría final: 879/900 cifras al centavo por la ruta real (12 en balances
+  descuadrados bloqueados con 422 y 9 N/D por diseño), 3.401/3.401 en 32 variantes honestas nuevas, 814/814 mutaciones
+  de 1 centavo del cliente bloqueadas y 0/89.238 pares compensados que pasan.
+- Enmiendas de criterio: `docs/spec/financial-pipeline-v2.1.md`, enmiendas 1–14 del 2026-09-24 (prevalecen sobre el
+  cuerpo).
 
-No se fusionó ni desplegó. No hay certificación integral de preparación del SaaS para producción.
+## Lo que ya se implementó (no rehacer sin regresión probada)
 
-## Lo que ya se implementó
+- Entrada NIIF: `rawData` limpio y preprocesado re-derivado en el servidor; XLSX con RFC 4180, periodos por hoja,
+  saldo inicial/final, `parseNumber` morfológico. Unidad "en miles/millones" sólo con la confirmación de la solicitud,
+  en centavos exactos (un importe ambiguo de tres decimales bloquea); vencimientos declarados por cuenta; fecha de corte
+  del título o del encabezado de la columna → periodo `AAAA-MM`.
+- Curador: R8 no absorbe residuales, R5 no reescribe patrimonio, R12 detecta P&G acumulado (también con columna de
+  saldo inicial), EFE R2 completo; motivos persistentes no se degradan en el Bridge.
+- Contrato NIIF: grupo 42/53 debajo de la utilidad operacional; E18–E27 (EFE contra el determinista, ECP, un código
+  por renglón, subtotales por plazo con sustitución por la proyección determinista); comparativos del EFE/ECP
+  calculados por el código con tres cortes o nota que pide el corte; ORI = Δ grupo 38; revaluación fuera de operación.
+- Procedencia servidor (`src/lib/reports`): versión persistida por workspace con huellas (formato v2), `reportRef` en
+  `/export`, `/html` y `/api/escudo/fiscal-anchor`; sello verificado / no verificado / BORRADOR; Markdown de las
+  Partes I–III re-renderizado desde el JSON; veredictos del servidor que sólo endurecen; preprocesado re-derivado en
+  todas las rutas de análisis; Partes IV/V sobre el consolidado del servidor.
+- Narrativa: validador de prosa en notas, acta y Parte II (corpus de 89 frases honestas y 58 falsas); KPIs sin ancla
+  N/D; R6–R8 del HTML con ORI y comparativos fila por fila.
+- Métricas: EBITDA único, ingresos operacionales netos como denominador, anualización y N/D con motivo; formato es-CO.
+- Tributario/normativo: TTD N/D sin ID/UD y "no aplica" en el SIMPLE; regla única de crédito de renta; derogatorias;
+  reserva legal por tipo societario; sanciones y mora (usura del mes − 2 pp o N/D); retención 2/10 UVT; 35 % desde el
+  AG 2022; M3/M5/M6 conectados; ajuste de precios de transferencia N/D sin base; tope del Art. 258 por escenario;
+  Capa 2 catalogada desde el corpus.
+- Contabilidad/ERP: reversos netean a cero, cierre anual en periodo 13, periodos sin solapamiento y dentro del mes,
+  PUC sembrado conforme al Decreto 2650, sesiones ERP aisladas; Escudo con el mismo gate de balance que `/niif`.
 
-- KPI sin bases verificadas → `null`/N/D con motivo; sin escenarios, curvas ni puntuaciones de relleno.
-- TTD: retirada la aproximación basada en F09/UAI. Aplicabilidad, brecha e impuesto adicional quedan `null` sin ID, UD y ámbito fiscal verificado. Se preserva esa salida estructurada después del LLM en CCV/Supervivencia.
-- ECP: suma exacta de componentes por fila (E17); corrección del falso positivo EBIT = utilidad neta; bloqueo explícito de integridad si falta JSON NIIF.
-- Exportación: comprobación estructural y aritmética servidor en Excel/PDF; Excel incorpora EFE y cambios en patrimonio.
-- ERP: periodo conservado en CSV y filas, serializador único, moneda COP validada, caché por conexión. Entradas y agregados fuera del rango seguro de centavos se rechazan.
-- UVT: años desconocidos no reutilizan otro año. Proxy reconoce los mismos secretos de auth que el backend.
+## Operación pendiente antes de desplegar
 
-**No rehacer estos cambios sin encontrar una regresión.** Hay informes históricos sobre 4175, P&G y validadores que ya no describen main. Verifica el código y sus pruebas antes de repetir sus conclusiones.
+1. `npm run db:migrate` (0022 y 0023 de la fase 1; la fase 2 no añadió migraciones).
+2. `npm run db:ingest` para reindexar el corpus RAG corregido (6 archivos de `src/data/tax_docs` en la fase 2).
+3. Avisar a consumidores del API v1 (`tb-2026-09-24.4`) y de las rutas internas (`reportRef`, 422 nuevos, contrato
+   `informe-niif-2026-09-24.4`, versión v2): lista en *Operación* del informe.
+4. Registrar cada mes la usura certificada en `TASA_USURA_CERTIFICADA` (hoy sólo 2026-08; sin ella la mora es N/D).
+5. Revisión visual de un PDF y un Excel reales.
 
-## Evidencia y límites
+## Pendientes
 
-Sobre el código funcional indicado: suite de 199 archivos con 2.352 pruebas aprobadas y 3 omitidas; después, 3 pruebas adicionales de alias de auth en otro archivo. Tipos, lint y build pasaron. Strict-mode pasó con aviso sobre un `schemaRef` de OpenAPI no verificable por ese script. Prueba con 10.000 auxiliares y orden invertido conservó totales.
+Ver la sección *Pendientes* del informe (cada uno con motivo y dueño). Los más relevantes: filas de dinero del
+dashboard de la Parte II sin ancla (exigen N/D en el contrato), límites del validador de prosa (inglés, redacciones
+fuera de sus listas), Partes IV/V no persistidas con la versión, aislamiento probado sin sesión real, saldos acumulados
+de ERPs que sólo entregan movimientos, nómina de independientes, normas 2026 sin fuente primaria, y verificación con el
+LLM real y visual del PDF/Excel.
 
-No se usaron credenciales reales de ERP/DB/LLM. No se acreditó carga concurrente de producción, todas las conexiones, validación visual integral ni seguridad completa. La prueba de volumen no garantiza latencia ni capacidad ilimitada. La documentación añadida posteriormente no modifica esos resultados funcionales.
+## Próxima tarea recomendada
 
-## Próxima tarea recomendada: procedencia servidor de informes
-
-Objetivo: que una exportación se obtenga de una versión de informe persistida y autorizada para la empresa/sesión, con referencia a la fuente y a las reglas utilizadas. Validar cifras internamente no demuestra su procedencia.
-
-1. Comprueba el estado remoto: si #14 sigue abierta, continúa desde su rama; si ya se fusionó, trabaja desde main actualizado. Preserva cambios ajenos y examina sólo el diff posterior al commit conocido.
-2. Usa la primera fila de `MAP.md` para rastrear generación → persistencia → selección de informe → exportación. Busca almacenamiento y permisos existentes; reutilízalos antes de introducir otro mecanismo.
-3. Define el cambio mínimo compatible y una prueba de integración con almacenamiento controlado: usuario autorizado obtiene su versión; acceso de otra empresa, versión ajena o referencia inválida se rechazan; contenido alterado no sustituye al informe persistido. No documentes detalles sensibles en público.
-4. Implementa y prueba ese recorrido. Explica migración/compatibilidad de informes históricos y modo anónimo. Un mock de auth aislado no acredita aislamiento real.
-
-## Pendientes siguientes
-
-| Orden | Trabajo | Criterio de cierre |
-|---|---|---|
-| 2 | Completar bases fiscales y revisar narrativas/consumidores | ID/UD y ámbito con fuentes oficiales vigentes; casos válidos, exentos/no aplicables e incompletos; el texto no convierte N/D en una liquidación |
-| 3 | Integrar métricas de eficiencia, valoración y ROI | Fórmula, unidad, periodo, fuente, supuestos y calidad explícitos; datos ausentes siguen ausentes; escenarios identificados como tales |
-| 4 | Comprobar aislamiento y configuración real | Sesiones y permisos por empresa en entorno de integración; decidir modo de operación del SaaS sin asumir que el modo anónimo está aprobado |
-| 5 | Probar fallos, carga y concurrencia | Límites medidos, datos parciales/caducados identificados, tiempos de espera y reintentos sin duplicación; sin ceros ni simulaciones de sustitución |
-
-Consultar vigencia normativa en fuentes oficiales al implementar reglas; enlaces y fechas previos son evidencia histórica, no una actualización automática.
+Medición con el LLM real (requiere `OPENAI_API_KEY` y autorización para su costo) sobre el balance real del repo y los
+fixtures de tres cortes: correr `/niif` → `/strategy` → `/governance` → `/consolidate` → `/export` y `/html`, medir la
+tasa de sellos y de falsos positivos del validador de prosa, E21 y E27 sobre salidas reales, y revisar visualmente el
+PDF y el Excel producidos. Todo lo anterior se probó con salidas simuladas y un corpus sintético. Empezar por las filas
+"Validador de prosa" y "Aritmética y contrato NIIF" de `MAP.md`.
 
 ## Cómo ahorrar contexto al continuar
 
-Lee `AGENTS.md`, este archivo y sólo la fila pertinente de `MAP.md`. Amplía a contratos y evidencia cuando haga falta. No repitas auditoría completa, inventario del repo ni todas las pruebas al iniciar. Registra resultados con commit y distingue los nuevos de los heredados. Al cerrar sustituye este estado por un resumen breve y conserva la evidencia detallada enlazada.
+Lee `AGENTS.md`, este archivo y la fila pertinente de `MAP.md`. La sección *Fase 2* del informe resume qué se hizo por
+paquete; `docs/ARCHITECTURE.md` (procedencia) describe los contratos de las rutas. Los informes fechados describen su
+commit; verifica el código antes de repetir conclusiones. Con worktrees en paralelo no uses `git stash` (la pila es
+compartida); comprueba el fallo de una prueba con copias de archivos.

@@ -2,6 +2,21 @@
  * Lógica de cálculo de nómina y liquidación — Contabilidad Pyme.
  * Funciones puras sobre NORMATIVA_2026. Sin estado, sin efectos.
  *
+ * ⚠ MÓDULO NO MONTADO (contab-nomina-22, auditoría 2026-09-24). Ninguna ruta ni
+ * componente de producción importa `src/modules/pyme`: el cálculo de nómina
+ * en producción es `src/lib/payroll` (/api/pyme/empleados). Este módulo NO es
+ * referencia normativa. Antes de montarlo hay que corregir, con fuente:
+ *   (a) `liquidacion` calcula prima y cesantías sobre TODA la antigüedad y
+ *       vacaciones como si no se hubiera tomado ninguna: debe liquidar sólo los
+ *       días pendientes de cada concepto (semestre de prima, año de cesantías
+ *       no consignado, vacaciones causadas y no disfrutadas).
+ *   (b) `incapacidadComun` paga 66,67 % sin piso de SMMLV diario y sin el
+ *       tramo del 50 % desde el día 91.
+ *   (c) el IBC excluye horas extra y recargos (factores salariales).
+ *   (d) `pilaEmpleado` no descuenta el Fondo de Solidaridad Pensional.
+ * La prueba `__tests__/modulo-no-montado.test.ts` falla si alguien lo importa
+ * fuera del módulo, para que esa corrección no se salte.
+ *
  * Se ubica en `data/` (capa de datos = constantes + cálculos derivados) para
  * respetar el alcance de 3 directorios del módulo (components/ design/ data/).
  *
@@ -375,6 +390,58 @@ export function costoRealEmpleado(
   provisiones = 0,
 ): number {
   return totalDevengado + pilaEmpleador(salario, diasCotizados).total + provisiones;
+}
+
+/* ─────────────────────── Nómina del mes ─────────────────────── */
+
+export interface LiquidarMesInput {
+  salario: number;
+  diasTrabajados: number;
+  horasExtraDiurnas: number;
+  domingosTrabajados: number;
+  otrosDescuentos: number;
+  /** Fecha del hecho: define jornada y recargo dominical vigentes. */
+  fecha?: FechaLike;
+}
+
+export interface LiquidarMesResultado {
+  sueldoProrrateado: number;
+  auxProrrateado: number;
+  extras: number;
+  dominicales: number;
+  devengado: number;
+  pilaEmpleado: PilaEmpleadoDesglose;
+  pilaEmpleador: PilaEmpleadorDesglose;
+  neto: number;
+  costoReal: number;
+}
+
+/**
+ * Nómina del mes de la pantalla «Liquidar el mes». La hora extra se valora
+ * sobre el salario DEL EMPLEADO (hora ordinaria × 1,25, Art. 168 CST); antes la
+ * pantalla llamaba `horaExtraDiurna()` sin salario y usaba la hora del SMMLV
+ * (contab-nomina-22 c). Sueldo y auxilio se prorratean por días/30.
+ */
+export function liquidarMes(input: LiquidarMesInput): LiquidarMesResultado {
+  const { salario, diasTrabajados, horasExtraDiurnas, domingosTrabajados, otrosDescuentos, fecha } = input;
+  const aux = auxTransporteAplicable(salario);
+  const sueldoProrrateado = salario * (diasTrabajados / 30);
+  const auxProrrateado = aux * (diasTrabajados / 30);
+  const extras = horaExtraDiurna(fecha, salario) * horasExtraDiurnas;
+  const dominicales = dominicalDiurnoDia(salario, fecha) * domingosTrabajados;
+  const devengado = sueldoProrrateado + auxProrrateado + extras + dominicales;
+  return {
+    sueldoProrrateado,
+    auxProrrateado,
+    extras,
+    dominicales,
+    devengado,
+    pilaEmpleado: pilaEmpleado(salario, diasTrabajados),
+    pilaEmpleador: pilaEmpleador(salario, diasTrabajados),
+    neto: netoEmpleado(devengado, salario, diasTrabajados, otrosDescuentos),
+    // Costo del mes = devengado + PILA patrón; sin provisiones (caja del mes).
+    costoReal: costoRealEmpleado(devengado, salario, diasTrabajados, 0),
+  };
 }
 
 /* ─────────────────────── Liquidación ─────────────────────── */

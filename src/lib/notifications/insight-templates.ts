@@ -83,24 +83,27 @@ const TEMPLATES: TemplateDict = {
   // ESCUDO — Resiliencia y Protección
   // ════════════════════════════════════════════════════════════════════════
   escudo: {
+    // IW4 (ratios-kpis-10): antes proyectaba un "impuesto de renta" = UN ×
+    // 35 %; la utilidad contable no es base fiscal. La alerta crítica del
+    // Escudo es de liquidez medida (días de autonomía < 30).
     critico: {
       es: {
-        subjectTpl: '🛡️ Alerta del Escudo: Reserva fiscal detectada.',
+        subjectTpl: '🛡️ Alerta del Escudo: autonomía de caja crítica.',
         hallazgoTpl:
-          'Tu utilidad acumulada proyecta un impuesto de renta de aprox. {{impuesto_proyectado}}, pero tu provisión actual es de {{provision_actual}}.',
+          '{{empresario_nombre}}, el efectivo disponible cubre sólo {{dias_autonomia}} días de los egresos del periodo.',
         impactoTpl:
-          'Podrías enfrentar una salida de caja inesperada en el próximo vencimiento tributario que reduciría tu autonomía financiera en un {{pct_reduccion}}%.',
+          'Con menos de 30 días de autonomía, cualquier retraso en cobros o un vencimiento de obligaciones puede dejar la operación sin caja.',
         accionLabelTpl: 'Ajustar presupuesto de caja',
-        accionHrefTpl: '/workspace/escudo/planeacion-tributaria',
+        accionHrefTpl: '/workspace/escudo',
       },
       en: {
-        subjectTpl: '🛡️ Shield Alert: Tax reserve gap detected.',
+        subjectTpl: '🛡️ Shield Alert: critical cash runway.',
         hallazgoTpl:
-          'Your accumulated earnings project an income tax of approx. {{impuesto_proyectado}}, but the current provision is {{provision_actual}}.',
+          '{{empresario_nombre}}, available cash covers only {{dias_autonomia}} days of the period outflows.',
         impactoTpl:
-          'You could face an unexpected cash outflow at the next tax due date, reducing your financial autonomy by {{pct_reduccion}}%.',
+          'With fewer than 30 days of runway, any delay in collections or an obligation due date can leave operations without cash.',
         accionLabelTpl: 'Adjust cash budget',
-        accionHrefTpl: '/workspace/escudo/planeacion-tributaria',
+        accionHrefTpl: '/workspace/escudo',
       },
     },
     advertencia: {
@@ -161,7 +164,7 @@ const TEMPLATES: TemplateDict = {
       es: {
         subjectTpl: '💰 Anomalía de Valor: Margen inusualmente alto detectado.',
         hallazgoTpl:
-          'Tu margen bruto reportado es {{margen_bruto_pct}}% y los días de inventario son {{dias_inventario}}.',
+          'Tu margen bruto reportado es {{margen_bruto_pct}} y los días de inventario son {{dias_inventario}}.',
         impactoTpl: 'Tu rentabilidad podría estar inflada por falta de registro de costos.',
         accionLabelTpl: 'Revisar registro de costos',
         accionHrefTpl: '/workspace/contabilidad/mayor',
@@ -169,7 +172,7 @@ const TEMPLATES: TemplateDict = {
       en: {
         subjectTpl: '💰 Value Anomaly: Unusually high margin detected.',
         hallazgoTpl:
-          'Reported gross margin is {{margen_bruto_pct}}% with {{dias_inventario}} inventory days.',
+          'Reported gross margin is {{margen_bruto_pct}} with {{dias_inventario}} inventory days.',
         impactoTpl: 'Profitability may be inflated by missing cost entries.',
         accionLabelTpl: 'Review cost entries',
         accionHrefTpl: '/workspace/contabilidad/mayor',
@@ -250,6 +253,57 @@ const TEMPLATES: TemplateDict = {
   },
 };
 
+// ─── Valor / advertencia (T3) según el disparador ──────────────────────────
+// Re-auditoría 2026-09-24 (ICU-06): T3 se dispara por margen bruto > 90 % o
+// por días de inventario > 365, pero la plantilla siempre decía «Margen
+// inusualmente alto detectado» y «tu rentabilidad podría estar inflada», aun
+// con margen del 35 % o N/D. El asunto, el impacto y la acción nombran ahora
+// la condición que disparó la alerta; el hallazgo (margen y días) no cambia.
+
+export type ValorAnomaliaDisparador = 'margen' | 'inventario' | 'ambos';
+
+const VALOR_ANOMALIA: Record<
+  Exclude<ValorAnomaliaDisparador, 'margen'>,
+  Record<'es' | 'en', Pick<InsightTemplate, 'subjectTpl' | 'impactoTpl' | 'accionLabelTpl'>>
+> = {
+  inventario: {
+    es: {
+      subjectTpl: '💰 Anomalía de Valor: Inventario sin rotación por más de un año.',
+      impactoTpl:
+        'Un inventario que tarda más de 365 días en rotar puede estar sobrevalorado (mercancía obsoleta o costo de ventas sin registrar).',
+      accionLabelTpl: 'Revisar inventario y costo de ventas',
+    },
+    en: {
+      subjectTpl: '💰 Value Anomaly: Inventory not turning over for more than a year.',
+      impactoTpl:
+        'Inventory that takes more than 365 days to turn over may be overstated (obsolete stock or unrecorded cost of sales).',
+      accionLabelTpl: 'Review inventory and cost of sales',
+    },
+  },
+  ambos: {
+    es: {
+      subjectTpl: '💰 Anomalía de Valor: Margen inusualmente alto e inventario sin rotación.',
+      impactoTpl:
+        'Tu rentabilidad podría estar inflada por falta de registro de costos, y el inventario podría estar sobrevalorado.',
+      accionLabelTpl: 'Revisar registro de costos e inventario',
+    },
+    en: {
+      subjectTpl: '💰 Value Anomaly: Unusually high margin and slow-moving inventory.',
+      impactoTpl: 'Profitability may be inflated by missing cost entries, and inventory may be overstated.',
+      accionLabelTpl: 'Review cost entries and inventory',
+    },
+  },
+};
+
+/** Plantilla de valor/advertencia (T3) para la condición que la disparó. */
+export function getValorAnomaliaTemplate(
+  disparador: ValorAnomaliaDisparador,
+  language: 'es' | 'en',
+): InsightTemplate {
+  const base = TEMPLATES.valor.advertencia[language];
+  return disparador === 'margen' ? base : { ...base, ...VALOR_ANOMALIA[disparador][language] };
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 export function getInsightTemplate(
@@ -284,10 +338,12 @@ export function fillInsightFromTemplate(
     workspaceId?: string;
     language?: 'es' | 'en';
     tone?: Insight['tone'];
+    /** Plantilla explícita (p. ej. la de T3 según su disparador). */
+    template?: InsightTemplate;
   },
 ): Insight {
   const language = insight.language ?? 'es';
-  const tpl = getInsightTemplate(insight.pillar, insight.severity, language);
+  const tpl = insight.template ?? getInsightTemplate(insight.pillar, insight.severity, language);
   return {
     pillar: insight.pillar,
     severity: insight.severity,

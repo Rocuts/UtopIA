@@ -11,7 +11,9 @@
  *   2. Verifica feature flag — si OFF → 200 { skipped: 'flag_disabled' }.
  *   3. Itera workspaces activos con períodos open/closed-reciente.
  *   4. Por cada workspace + período: runForensicScan().
- *   5. Si score < 70 o hay anomalías high: dispatchNotification.
+ *   5. Si score < 70, hay anomalías high o la cobertura es PARCIAL (reglas
+ *      sin evaluar: el score no equivale a "limpio", auditoria-calidad-19):
+ *      dispatchNotification.
  *   6. Persiste resultado en reports.kind = 'forensic_scan'.
  *   7. Idempotencia: idempotency_key = forensic:{ws}:{period}:{YYYYMMDD}.
  */
@@ -55,20 +57,37 @@ async function maybeSendAnomalyNotification(
     const topAnomaly =
       result.anomalies.find((a) => a.severity === 'high') ??
       result.anomalies[0];
-    if (!topAnomaly) return;
+    const parcial = result.coverage === 'parcial';
+    const coberturaNota = parcial
+      ? `Escaneo forense con cobertura parcial: ${result.rulesFailed.length} regla(s) no se ` +
+        `evaluaron (${result.rulesFailed.join(', ') || 'omitidas'}); el puntaje no equivale a "limpio".`
+      : null;
+    if (!topAnomaly && !coberturaNota) return;
+    const defaultReviewUrl = `/workspace/contabilidad/asientos?period=${result.periodId}`;
 
     await dispatch({
       workspaceId,
       event: 'anomaly.detected',
       idempotencyKey: `${idempotencyKey}:notify`,
-      payload: {
-        workspaceName: workspaceId, // Se enriquece con nombre real si disponible
-        periodLabel,
-        anomalyKind: topAnomaly.kind,
-        description: topAnomaly.description,
-        severity: topAnomaly.severity,
-        reviewUrl: topAnomaly.reviewUrl ?? `/workspace/contabilidad/asientos?period=${result.periodId}`,
-      },
+      payload: topAnomaly
+        ? {
+            workspaceName: workspaceId, // Se enriquece con nombre real si disponible
+            periodLabel,
+            anomalyKind: topAnomaly.kind,
+            description: coberturaNota
+              ? `${topAnomaly.description} ${coberturaNota}`
+              : topAnomaly.description,
+            severity: topAnomaly.severity,
+            reviewUrl: topAnomaly.reviewUrl ?? defaultReviewUrl,
+          }
+        : {
+            workspaceName: workspaceId,
+            periodLabel,
+            anomalyKind: 'cobertura_parcial',
+            description: coberturaNota ?? '',
+            severity: 'medium',
+            reviewUrl: defaultReviewUrl,
+          },
     });
   } catch (err) {
     // Swallow — la notificación es best-effort; no debe bloquear el scan.
@@ -110,6 +129,9 @@ export async function GET(request: NextRequest) {
       periodId: string;
       score: number;
       totalAnomalies: number;
+      /** Cobertura del escaneo; 'parcial' = reglas sin evaluar. */
+      coverage?: ForensicScanResult['coverage'];
+      rulesFailed?: ForensicScanResult['rulesFailed'];
       action: 'scanned' | 'skipped_idempotent' | 'error';
       error?: string;
     }> = [];
@@ -197,9 +219,10 @@ export async function GET(request: NextRequest) {
           },
         });
 
-        // 8. Notificar si score < 70 o hay anomalías high.
+        // 8. Notificar si score < 70, hay anomalías high o la cobertura es
+        // parcial (un escaneo incompleto con score 100 no es "limpio").
         const hasHighAnomaly = result.bySeverity.high > 0;
-        if (result.score < 70 || hasHighAnomaly) {
+        if (result.score < 70 || hasHighAnomaly || result.coverage === 'parcial') {
           await maybeSendAnomalyNotification(ws.id, result, periodLabel, idempotencyKey);
         }
 
@@ -208,11 +231,13 @@ export async function GET(request: NextRequest) {
           periodId: p.id,
           score: result.score,
           totalAnomalies: result.totalAnomalies,
+          coverage: result.coverage,
+          rulesFailed: result.rulesFailed,
           action: 'scanned',
         });
 
         console.info(
-          `[cron.anomaly-detection] ws=${ws.id} period=${periodLabel} score=${result.score} anomalies=${result.totalAnomalies}`,
+          `[cron.anomaly-detection] ws=${ws.id} period=${periodLabel} score=${result.score} anomalies=${result.totalAnomalies} coverage=${result.coverage}`,
         );
       } catch (scanErr) {
         const msg = scanErr instanceof Error ? scanErr.message : String(scanErr);

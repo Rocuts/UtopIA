@@ -57,9 +57,20 @@ function companyInitials(name: string): string {
   return (words[0][0] + words[1][0]).toUpperCase();
 }
 
+/**
+ * Rótulo superior de la portada con el año del periodo que el informe cubre
+ * (reportes-export-21): antes decía "Colombia 2026" fijo, también en un
+ * informe del ejercicio 2025. Sin año identificable no se afirma ninguno.
+ */
+export function coverEyebrow(fiscalPeriod: string | null | undefined): string {
+  const year = /(?:19|20)\d{2}/.exec(fiscalPeriod ?? '')?.[0];
+  return year ? `Informe Financiero NIIF · Colombia · Ejercicio ${year}` : 'Informe Financiero NIIF · Colombia';
+}
+
 export function CoverPage({ doc }: Props) {
   const isBlocked = doc.meta.watermark === 'BLOQUEADO';
   const isDraft = doc.meta.watermark === 'BORRADOR';
+  const isIncomplete = doc.meta.watermark === 'INCOMPLETO';
   const watermarkSubtitle = doc.meta.watermarkSubtitle;
 
   const LEFT_W = PAGE_W * 0.60;
@@ -148,7 +159,7 @@ export function CoverPage({ doc }: Props) {
               textTransform: 'uppercase',
             }}
           >
-            Informe Financiero NIIF · Colombia 2026
+            {coverEyebrow(doc.meta.fiscalPeriod)}
           </Text>
         </View>
 
@@ -159,6 +170,15 @@ export function CoverPage({ doc }: Props) {
             emphasisText="BLOQUEADO"
             emphasisStyle="box"
             areaAccent="escudo"
+            size="hero"
+            tone="light-on-dark"
+          />
+        ) : isIncomplete ? (
+          <EditorialTitle
+            leadText="Informe"
+            emphasisText="INCOMPLETO"
+            emphasisStyle="box"
+            areaAccent="valor"
             size="hero"
             tone="light-on-dark"
           />
@@ -377,6 +397,7 @@ export function CoverPage({ doc }: Props) {
       {/* BLOQUEADO diagonal watermark over entire page */}
       {isBlocked ? (
         <View
+          fixed
           style={{
             position: 'absolute',
             top: 0,

@@ -5,30 +5,35 @@
  *
  * Layout matches handoff `La Verdad.html` + `assets/module.css`:
  *  - 2-column hero: left (eyebrow + h1 + lede) · right (teal gradient KPI card)
- *  - KPI card: 94/100, ↑ Grado A, sparkline, sub-KPIs (Dictámenes / Hallazgos / Opinión)
+ *  - KPI card: score real (calidad NIIF del Âncora o cumplimiento de una
+ *    auditoría completa) o N/D con motivo
  *  - Section headers with teal left-bar accent (border-left: 3px solid #3D6B7E)
  *  - 3 submodule cards (.subcard style — teal-tinted bg, hover left-bar)
- *  - Dictámenes panel (progress-bar ladder)
+ *  - Dictámenes: estado vacío (no hay fuente de dictámenes emitidos)
  *  - DataSourceLadder + CapabilityZones
  *  - Constellation particles handled by AreaFX via AreaShell (dots connected by lines)
+ *
+ * Auditoría ratios-kpis-01 / ratios-kpis-12: el héroe pintaba 94/100 del
+ * mockup (o 95/100 de mockCompliance), "Grado A · +6 pts", "4 dictámenes
+ * vigentes", "2 hallazgos menores", opinión "Limpia" y un panel de dictámenes
+ * 98/94/79/91 (SAGRLAFT incluido) aunque existiera un informe real.
  */
 
 import Link from 'next/link';
 import { motion, useReducedMotion } from 'motion/react';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Scale,
   ShieldCheck,
   GitCompare,
   Award,
   ArrowRight,
-  ArrowUp,
 } from 'lucide-react';
 
 import { useLanguage } from '@/context/LanguageContext';
 import { useAncoraView } from '@/hooks/useAncoraView';
+import { getRegulatoryHealth, type LiveKpiValue } from '@/lib/kpis/live';
 import { cn } from '@/lib/utils';
-import type { KpiResult, LastAuditOpinion } from '@/types/kpis';
 import { DataSourceLadder } from './shared/DataSourceLadder';
 import { CapabilityZones } from './shared/CapabilityZones';
 import { getSourceLabels } from './shared/source-labels';
@@ -45,9 +50,6 @@ export interface ActiveFinding {
 }
 
 export interface VerdadAreaProps {
-  kpi?: KpiResult;
-  activeFindings?: ActiveFinding[];
-  lastOpinion?: LastAuditOpinion;
   compact?: boolean;
   className?: string;
 }
@@ -60,91 +62,26 @@ interface VerdadSubmoduleDef {
   key: VerdadSubmoduleKey;
   href: string;
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
-  statusLabel: { es: string; en: string };
-  statusColor: string;
+  /** true = la subpágina aún no está conectada a datos de la empresa. */
+  inPreparation: boolean;
 }
 
+// Sin estados inventados ("Conciliado", "4 vigentes"): V7a-extra-01.
 const SUBMODULES: VerdadSubmoduleDef[] = [
-  {
-    key: 'conciliacionFiscal',
-    href: '/workspace/verdad/conciliacion-fiscal',
-    icon: GitCompare,
-    statusLabel: { es: 'Conciliado', en: 'Reconciled' },
-    statusColor: '#22C55E',
-  },
-  {
-    key: 'dictamenes',
-    href: '/workspace/verdad/dictamenes',
-    icon: Award,
-    statusLabel: { es: '4 vigentes', en: '4 active' },
-    statusColor: '#22C55E',
-  },
-  {
-    key: 'revisoriaFiscal',
-    href: '/workspace/verdad/revisoria-fiscal',
-    icon: ShieldCheck,
-    statusLabel: { es: 'Activo', en: 'Active' },
-    statusColor: '#22C55E',
-  },
+  { key: 'conciliacionFiscal', href: '/workspace/verdad/conciliacion-fiscal', icon: GitCompare, inPreparation: true },
+  { key: 'dictamenes', href: '/workspace/verdad/dictamenes', icon: Award, inPreparation: true },
+  { key: 'revisoriaFiscal', href: '/workspace/verdad/revisoria-fiscal', icon: ShieldCheck, inPreparation: true },
 ];
-
-// ─── Dictámenes panel (matching handoff DICTS array) ─────────────────────────
-
-const DICTAMENES_ES = [
-  { name: 'Estados financieros 2025',       color: '#4F7A4C', value: 98 },
-  { name: 'Cumplimiento tributario',         color: '#4F7A4C', value: 94 },
-  { name: 'Control interno',                 color: '#C48A2E', value: 79 },
-  { name: 'Lavado de activos (SAGRLAFT)',    color: '#4F7A4C', value: 91 },
-] as const;
-
-const DICTAMENES_EN = [
-  { name: 'Financial statements 2025',       color: '#4F7A4C', value: 98 },
-  { name: 'Tax compliance',                  color: '#4F7A4C', value: 94 },
-  { name: 'Internal control',               color: '#C48A2E', value: 79 },
-  { name: 'AML (SAGRLAFT)',                  color: '#4F7A4C', value: 91 },
-] as const;
-
-// ─── Sparkline — ascending series matching handoff bars/vVer data ─────────────
-
-function VerdadSparkline() {
-  const pts = [78, 80, 83, 85, 88, 90, 92, 93, 94];
-  const W = 100, H = 48;
-  const minV = Math.min(...pts), maxV = Math.max(...pts);
-  const span = maxV - minV || 1;
-  const barW = W / pts.length;
-  const gap = 1.2;
-
-  return (
-    <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
-      {pts.map((v, i) => {
-        const barH = 4 + ((v - minV) / span) * (H - 6);
-        const x = i * barW + gap / 2;
-        const w = barW - gap;
-        const y = H - barH;
-        const isLast = i === pts.length - 1;
-        return (
-          <rect
-            key={i}
-            x={x} y={y} width={w} height={barH}
-            rx="1.5"
-            fill={isLast ? 'rgba(255,255,255,.95)' : 'rgba(255,255,255,.45)'}
-          />
-        );
-      })}
-    </svg>
-  );
-}
 
 // ─── Component principal ──────────────────────────────────────────────────────
 
 export function VerdadArea({
-  kpi,
-  lastOpinion = 'favorable',
   compact = false,
   className,
 }: VerdadAreaProps) {
   const { t, language } = useLanguage();
   const verdad = t.elite.areas.verdad;
+  const ds = t.elite.dataStatus;
   const reduced = useReducedMotion();
   const { view } = useAncoraView();
 
@@ -152,16 +89,38 @@ export function VerdadArea({
   const zones = useMemo(() => getVerdadZones(language), [language]);
   const sourceLabels = useMemo(() => getSourceLabels(language), [language]);
 
-  // Score: real scoreNiif when available, else prop value, else handoff mock (94)
+  // Sin Âncora, sólo una auditoría COMPLETA persistida puede dar un score
+  // (getRegulatoryHealth devuelve N/D si falta cualquier eje, hallazgo o
+  // dictamen). Nunca un valor de demostración.
+  const [regulatory, setRegulatory] = useState<LiveKpiValue | null>(null);
+  useEffect(() => {
+    if (view.hasData) return;
+    let cancelled = false;
+    getRegulatoryHealth()
+      .then((r) => {
+        if (!cancelled) setRegulatory(r);
+      })
+      .catch(() => {
+        if (!cancelled) setRegulatory(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [view.hasData]);
+
   const scoreNiif = view.hasData ? view.derived.scoreNiif : null;
-  const gaugeScore =
+  const heroScore =
     scoreNiif != null
       ? Math.round(scoreNiif)
-      : kpi?.value != null
-        ? Math.round(kpi.value)
-        : 94;
-
-  const dicts = language === 'es' ? DICTAMENES_ES : DICTAMENES_EN;
+      : regulatory?.value != null
+        ? Math.round(regulatory.value)
+        : null;
+  const heroLabel =
+    scoreNiif != null
+      ? ds.verdad.scoreNiifLabel
+      : regulatory?.value != null
+        ? ds.verdad.complianceLabel
+        : ds.verdad.scoreNiifLabel;
 
   const fadeItem = (index: number) =>
     reduced
@@ -262,7 +221,7 @@ export function VerdadArea({
                       color: 'rgba(255,255,255,.82)',
                     }}
                   >
-                    {language === 'es' ? 'SCORE DE CUMPLIMIENTO' : 'COMPLIANCE SCORE'}
+                    {heroLabel}
                   </p>
 
                   <div
@@ -274,122 +233,42 @@ export function VerdadArea({
                       margin: '10px 0 6px',
                     }}
                   >
-                    {gaugeScore}
-                    <span
-                      style={{
-                        fontSize: '.42em',
-                        color: 'rgba(255,255,255,.5)',
-                        marginLeft: 3,
-                      }}
-                    >
-                      /100
-                    </span>
+                    {heroScore != null ? (
+                      <>
+                        {heroScore}
+                        <span
+                          style={{
+                            fontSize: '.42em',
+                            color: 'rgba(255,255,255,.7)',
+                            marginLeft: 3,
+                          }}
+                        >
+                          /100
+                        </span>
+                      </>
+                    ) : (
+                      ds.notAvailable
+                    )}
                   </div>
 
-                  <div
-                    className="inline-flex items-center gap-1"
-                    style={{ fontSize: '0.875rem', fontWeight: 600, color: '#fff' }}
-                  >
-                    <ArrowUp className="h-[15px] w-[15px]" strokeWidth={2} aria-hidden />
-                    <span style={{ color: 'rgba(255,255,255,.82)' }}>
-                      {language === 'es'
-                        ? 'Grado A · +6 pts en el año'
-                        : 'Grade A · +6 pts this year'}
-                    </span>
-                  </div>
-
-                  <div style={{ marginTop: 20, height: 48 }}>
-                    <VerdadSparkline />
-                  </div>
-
-                  {/* Sub-KPIs */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      gap: 24,
-                      marginTop: 22,
-                      paddingTop: 18,
-                      borderTop: '1px solid rgba(255,255,255,.25)',
-                      flexWrap: 'wrap',
-                    }}
-                  >
-                    <div>
-                      <div
-                        className="num"
-                        style={{
-                          fontFamily: 'var(--font-mono)',
-                          fontWeight: 600,
-                          fontSize: '1.25rem',
-                          color: '#fff',
-                        }}
-                      >
-                        4
-                      </div>
-                      <div
-                        style={{
-                          fontSize: '0.625rem',
-                          textTransform: 'uppercase',
-                          letterSpacing: '.08em',
-                          color: 'rgba(255,255,255,.72)',
-                          marginTop: 2,
-                        }}
-                      >
-                        {language === 'es' ? 'Dictámenes vigentes' : 'Active opinions'}
-                      </div>
-                    </div>
-                    <div>
-                      <div
-                        className="num"
-                        style={{
-                          fontFamily: 'var(--font-mono)',
-                          fontWeight: 600,
-                          fontSize: '1.25rem',
-                          color: '#E8B42C',
-                        }}
-                      >
-                        2
-                      </div>
-                      <div
-                        style={{
-                          fontSize: '0.625rem',
-                          textTransform: 'uppercase',
-                          letterSpacing: '.08em',
-                          color: 'rgba(255,255,255,.72)',
-                          marginTop: 2,
-                        }}
-                      >
-                        {language === 'es' ? 'Hallazgos menores' : 'Minor findings'}
-                      </div>
-                    </div>
-                    <div>
-                      <div
-                        className="num"
-                        style={{
-                          fontFamily: 'var(--font-mono)',
-                          fontWeight: 600,
-                          fontSize: '1.25rem',
-                          color: '#22C55E',
-                        }}
-                      >
-                        {language === 'es' ? 'Limpia' : 'Clean'}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: '0.625rem',
-                          textTransform: 'uppercase',
-                          letterSpacing: '.08em',
-                          color: 'rgba(255,255,255,.72)',
-                          marginTop: 2,
-                        }}
-                      >
-                        {language === 'es' ? 'Opinión' : 'Opinion'}
-                      </div>
-                    </div>
-                  </div>
+                  {heroScore == null && (
+                    <p style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,.86)', maxWidth: '42ch' }}>
+                      {ds.reason}: {ds.verdad.scoreReason}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
           </motion.section>
+
+          {!view.hasData && (
+            <p
+              role="status"
+              className="mb-10 rounded-xl border border-n-300 bg-n-100 px-4 py-3 text-sm text-n-800"
+            >
+              {ds.noCompanyData}
+            </p>
+          )}
 
           {/* ── Submódulos ── */}
           <motion.section {...fadeItem(1)} className="mb-10">
@@ -419,7 +298,7 @@ export function VerdadArea({
                   sub={sub}
                   title={verdad.submodules[sub.key].title}
                   description={verdad.submodules[sub.key].description}
-                  language={language}
+                  statusLabel={sub.inPreparation ? ds.moduleInPreparation : ds.openModule}
                 />
               ))}
             </div>
@@ -427,84 +306,22 @@ export function VerdadArea({
 
           {/* ── Dictámenes ── */}
           <motion.section {...fadeItem(2)} className="mb-10">
-            <div className="flex items-center justify-between gap-4 mb-[18px]">
-              <h2
-                className="font-serif-elite font-medium text-n-1000"
-                style={{
-                  fontSize: 'clamp(1.25rem, 2vw, 1.5rem)',
-                  paddingLeft: 14,
-                  borderLeft: '3px solid #3D6B7E',
-                }}
-              >
-                {language === 'es' ? 'Dictámenes' : 'Opinions'}
-              </h2>
-              <span
-                className="inline-flex items-center gap-[6px] rounded-full font-bold uppercase"
-                style={{
-                  height: 22,
-                  padding: '0 10px',
-                  fontSize: '0.625rem',
-                  letterSpacing: '.1em',
-                  background: 'color-mix(in srgb, #3D6B7E 18%, transparent)',
-                  color: '#315869',
-                }}
-              >
-                <span
-                  className="h-[6px] w-[6px] rounded-full bg-current animate-pulse"
-                  aria-hidden
-                />
-                {language === 'es' ? 'Panel de opinión' : 'Opinion panel'}
-              </span>
-            </div>
-
-            <div
-              className="flex flex-col gap-[10px] p-6 rounded-xl"
+            <h2
+              className="font-serif-elite font-medium text-n-1000 mb-[18px]"
               style={{
-                border: '1px solid color-mix(in srgb, #3D6B7E 20%, transparent)',
-                background: 'color-mix(in srgb, #3D6B7E 4%, var(--color-n-0, #FCFBF8))',
+                fontSize: 'clamp(1.25rem, 2vw, 1.5rem)',
+                paddingLeft: 14,
+                borderLeft: '3px solid #3D6B7E',
               }}
             >
-              {dicts.map(({ name, color, value }) => (
-                <div
-                  key={name}
-                  className="flex items-center gap-[14px] px-4 py-[13px] rounded-lg"
-                  style={{
-                    background: 'var(--color-n-0, #FCFBF8)',
-                    border: '1px solid var(--color-n-200, #E5E3DE)',
-                  }}
-                >
-                  <span
-                    aria-hidden
-                    className="h-2 w-2 rounded-full shrink-0"
-                    style={{ background: color }}
-                  />
-                  <span className="flex-1 text-sm font-medium text-n-800">{name}</span>
-                  <span
-                    className="h-[6px] rounded-full overflow-hidden shrink-0"
-                    style={{
-                      minWidth: 90,
-                      flex: '0 0 110px',
-                      background: 'var(--color-n-100, #F0EDE8)',
-                    }}
-                    role="progressbar"
-                    aria-valuenow={value}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                  >
-                    <span
-                      className="block h-full rounded-full"
-                      style={{ width: `${value}%`, background: color }}
-                    />
-                  </span>
-                  <span
-                    className="num shrink-0 text-sm text-n-600"
-                    style={{ fontFamily: 'var(--font-mono)' }}
-                  >
-                    {value}/100
-                  </span>
-                </div>
-              ))}
-            </div>
+              {ds.verdad.opinionsTitle}
+            </h2>
+            <p
+              role="status"
+              className="rounded-xl border border-n-300 bg-n-100 px-5 py-4 text-sm leading-relaxed text-n-800"
+            >
+              {ds.verdad.opinionsEmpty}
+            </p>
           </motion.section>
         </>
       )}
@@ -543,11 +360,11 @@ interface SubmoduleCardProps {
   sub: VerdadSubmoduleDef;
   title: string;
   description: string;
-  language: 'es' | 'en';
+  statusLabel: string;
 }
 
-function SubmoduleCard({ sub, title, description, language }: SubmoduleCardProps) {
-  const { icon: Icon, href, statusLabel, statusColor } = sub;
+function SubmoduleCard({ sub, title, description, statusLabel }: SubmoduleCardProps) {
+  const { icon: Icon, href } = sub;
 
   return (
     <Link
@@ -589,16 +406,9 @@ function SubmoduleCard({ sub, title, description, language }: SubmoduleCardProps
 
       {/* Footer */}
       <div className="flex items-center justify-between mt-4">
-        <span
-          className="inline-flex items-center gap-[6px] text-xs font-semibold"
-          style={{ color: statusColor }}
-        >
-          <span
-            aria-hidden
-            className="inline-block h-[6px] w-[6px] rounded-full"
-            style={{ background: statusColor }}
-          />
-          {statusLabel[language]}
+        <span className="inline-flex items-center gap-[6px] text-xs font-semibold text-n-600">
+          <span aria-hidden className="inline-block h-[6px] w-[6px] rounded-full bg-current" />
+          {statusLabel}
         </span>
         <span className="inline-flex" style={{ color: '#3D6B7E' }}>
           <ArrowRight

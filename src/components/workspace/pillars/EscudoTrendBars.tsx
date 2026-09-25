@@ -22,13 +22,14 @@ import ReactECharts from 'echarts-for-react/lib/core';
 import { echarts } from '@/lib/charts/setup';
 import { getTokens } from '@/lib/charts/echarts-theme';
 import { useChartTheme } from '@/lib/charts/use-theme';
-import { formatBigCop, formatCop } from '@/lib/charts/format';
+import { formatBigCop, formatCop, formatDecimal } from '@/lib/charts/format';
 import { ChartContainer } from '@/components/charts/ChartContainer';
 import type { EscudoBarSeries } from '@/lib/pillars/escudo-bars';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
-type Metric = 'efectivo' | 'activoCorriente' | 'solvencia';
+export type EscudoMetric = 'efectivo' | 'activoCorriente' | 'solvencia';
+type Metric = EscudoMetric;
 
 export interface EscudoTrendBarsProps {
   series: EscudoBarSeries[];
@@ -65,9 +66,20 @@ function isSolvenciaNull(point: EscudoBarSeries, metric: Metric): boolean {
   return metric === 'solvencia' && point.solvencia === null;
 }
 
-function formatValue(v: number, metric: Metric): string {
-  if (metric === 'solvencia') return v.toFixed(2);
-  return formatCop(v);
+/**
+ * Valor de la etiqueta y el tooltip. La solvencia es una razón: dos decimales
+ * con el separador del idioma (`1,25` / `1.25`), no `toFixed(2)` con punto
+ * decimal, que un lector colombiano lee como miles (ratios-kpis-27).
+ */
+export function formatEscudoValue(v: number, metric: Metric, language: 'es' | 'en'): string {
+  if (metric === 'solvencia') return formatDecimal(v, 2, language);
+  return formatCop(v, language);
+}
+
+/** Etiqueta del eje Y: razón con el formato del idioma; montos compactos del idioma. */
+export function formatEscudoAxis(v: number, metric: Metric, language: 'es' | 'en'): string {
+  if (metric === 'solvencia') return formatDecimal(v, 2, language);
+  return formatBigCop(v, language);
 }
 
 // ─── Componente principal ────────────────────────────────────────────────────
@@ -114,7 +126,7 @@ export function EscudoTrendBars({ series, language, density }: EscudoTrendBarsPr
           const metricLabel = METRIC_LABELS[metric][isEs ? 'es' : 'en'];
           const valueStr = nullSolv
             ? (isEs ? '— (sin comparativo)' : '— (no comparative period)')
-            : (metric === 'solvencia' ? v.toFixed(2) : formatCop(v));
+            : formatEscudoValue(v, metric, language);
           const provisional = point.isInterpolated
             ? `<br/><span style="font-size:10px;opacity:0.6">${isEs ? 'Estimado (interpolación lineal)' : 'Estimated (linear interpolation)'}</span>`
             : '';
@@ -134,8 +146,7 @@ export function EscudoTrendBars({ series, language, density }: EscudoTrendBarsPr
         axisLabel: {
           color: tokens.textSecondary,
           fontSize: 10,
-          formatter: (v: number) =>
-            metric === 'solvencia' ? v.toFixed(2) : formatBigCop(v),
+          formatter: (v: number) => formatEscudoAxis(v, metric, language),
         },
         splitLine: { lineStyle: { color: tokens.textSecondary + '22', type: 'dashed' } },
       },
@@ -154,7 +165,7 @@ export function EscudoTrendBars({ series, language, density }: EscudoTrendBarsPr
             formatter: (p: { dataIndex: number }) => {
               const pt = series[p.dataIndex];
               if (!pt) return '';
-              return isSolvenciaNull(pt, metric) ? '?' : formatValue(getValue(pt, metric), metric);
+              return isSolvenciaNull(pt, metric) ? '?' : formatEscudoValue(getValue(pt, metric), metric, language);
             },
           },
           animationDelay: (idx: number) => idx * 60,
@@ -162,8 +173,7 @@ export function EscudoTrendBars({ series, language, density }: EscudoTrendBarsPr
         },
       ],
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [series, metric, tokens, color, isEs]);
+  }, [series, metric, tokens, color, isEs, language]);
 
   const subtitle = hasInterpolated
     ? (isEs

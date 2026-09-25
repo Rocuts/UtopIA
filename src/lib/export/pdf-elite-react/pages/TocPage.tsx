@@ -70,7 +70,7 @@ export function TocPage({ doc }: Props) {
       >
         <TopoOrnament
           variant="hex"
-          opacity={1}
+          opacity={0.08}
           areaAccent="futuro"
           seed={31}
           width={120}
@@ -166,7 +166,7 @@ export function TocPage({ doc }: Props) {
                     }}
                   />
 
-                  {/* Page reference — placeholder dashes when page = 1 (default from buildTocEntries) */}
+                  {/* Página real (render.ts → resolveTocEntries); '—' si no se midió */}
                   <Text
                     style={{
                       fontFamily: FONT_MONO,
@@ -187,6 +187,7 @@ export function TocPage({ doc }: Props) {
 
       {/* Bottom rule + 1+1 generation tag */}
       <View
+        fixed
         style={{
           position: 'absolute',
           bottom: PAGE_MARGIN + S6 + 20,
@@ -205,7 +206,7 @@ export function TocPage({ doc }: Props) {
         </Text>
       </View>
 
-      <PaginationFooter pageNumber={0} totalPages={0} sectionLabel="Contenidos" />
+      <PaginationFooter sectionLabel="Contenidos" />
     </Page>
   );
 }

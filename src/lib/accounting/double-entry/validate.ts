@@ -33,15 +33,17 @@ const SCALE = BigInt(100);
 /**
  * Parse a NUMERIC-compatible decimal string into a BigInt scaled by SCALE
  * (i.e. centavos). Accepts:
- *   "0", "0.00", "1234.5", "1234.50", "1234.567" (truncated to 2 dec → "1234.56").
+ *   "0", "0.00", "1234.5", "1234.50", "1234.500" (ceros de relleno).
  *
- * Rejects negatives, NaN, scientific notation, anything non-decimal.
+ * Rejects negatives, NaN, scientific notation, anything non-decimal, and
+ * any amount with a NON-ZERO digit beyond the second decimal ("1234.567").
  *
- * Truncation policy: we explicitly *truncate* the third fractional digit
- * rather than round, to be deterministic and to match Postgres's behavior
- * when casting too-precise numerics into NUMERIC(20,2) (Postgres rounds
- * half-away-from-zero, but our caller has already serialized with the
- * intended precision; truncating here flags rather than masks bugs).
+ * Precision policy (auditoría contab-nomina-12): la columna es NUMERIC(20,2)
+ * y Postgres REDONDEA (half-away-from-zero) lo que excede 2 decimales. Antes
+ * este parser TRUNCABA para validar el cuadre mientras el servicio persistía
+ * el string crudo: cabecera cuadrada con líneas que en BD sumaban distinto.
+ * Ahora un tercer decimal significativo se rechaza y el servicio persiste
+ * exactamente el valor validado (`normalizeAmount`).
  *
  * Note: an explicit leading '+' is rejected to keep the input shape strict.
  */
@@ -89,7 +91,14 @@ function parseCentavos(raw: string, fieldHint: string): bigint {
     fracPart = trimmed.slice(dot + 1);
   }
 
-  // Truncate to 2 fractional digits (centavos).
+  // Más de 2 decimales sólo se admite si el exceso son ceros ("1.500").
+  if (fracPart.length > 2 && /[1-9]/.test(fracPart.slice(2))) {
+    throw new DoubleEntryError(
+      ERR.INVALID_LINES,
+      `${fieldHint}: amount has more than 2 decimals "${trimmed}" ` +
+        '(NUMERIC(20,2) redondearia; envie el valor en centavos exactos)',
+    );
+  }
   fracPart = fracPart.padEnd(2, '0').slice(0, 2);
 
   // BigInt() throws on invalid input; we already validated with regex.
@@ -107,6 +116,15 @@ function centavosToString(centavos: bigint): string {
   const fracPart = abs % SCALE;
   const fracStr = fracPart.toString().padStart(2, '0');
   return `${negative ? '-' : ''}${intPart.toString()}.${fracStr}`;
+}
+
+/**
+ * Canonical NUMERIC(20,2) string for an amount already accepted by
+ * `validateBalance` ("1000.5" → "1000.50", "1.500" → "1.50"). The service
+ * persists THIS value so the stored lines equal the validated totals.
+ */
+export function normalizeAmount(raw: string, fieldHint = 'amount'): string {
+  return centavosToString(parseCentavos(raw, fieldHint));
 }
 
 export interface ValidateBalanceResult {

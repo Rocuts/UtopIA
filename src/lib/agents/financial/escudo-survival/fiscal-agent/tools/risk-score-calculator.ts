@@ -12,22 +12,28 @@
 //        F09 1-14%       → +20
 //        F09 15-25%      → +5
 //        F09 > 25%       → +0
-//   2. Margen neto alto:
+//   2. Margen neto alto (utilidad neta / ingresos netos de devoluciones — el
+//      mismo `margenNeto` del preprocesador):
 //        > 90%           → +25
 //        70-90%          → +15
 //        30-70%          → +5
 //        < 30%           → +0
-//   3. Costo de ventas bajo (Clases 6+7 / Ingresos):
+//   3. Costo bajo (costos y gastos sin impuesto / ingresos netos):
 //        < 1%            → +20
 //        1-10%           → +10
 //        > 10%           → +0
-//   4. Crecimiento ingresos inusual (vs comparativo si existe):
+//   4. Crecimiento ingresos inusual (ingresos netos vs comparativo de IGUAL
+//      duración, si existe):
 //        > 100%          → +15
 //        50-100%         → +8
 //        < 50%           → +0
-//   5. Saldo a favor sin solicitar:
-//        > $50M y no se ha solicitado → +10
-//        sino                          → +0
+//   Base de ingresos: `controlTotals.cents.ingresosNetos` (|ordinarias| −
+//   |4175|), invariante a la convención de signos del ERP. Nunca la Σ firmada
+//   de la clase 4 (`cents.ingresos`), que suma las devoluciones cuando el ERP
+//   las exporta con el signo de las ventas (auditoría 2026-09-24,
+//   recalculo-final-01).
+//   5. Saldo a favor sin solicitar: 0 puntos — F04 es una estimación
+//      contable, no un saldo a favor determinable (auditoría 2026-09).
 //
 // Niveles:
 //   0-20   → bajo
@@ -38,13 +44,12 @@
 // ---------------------------------------------------------------------------
 
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
+import { mesesCubiertos, periodsComparable } from '@/lib/pillars/shared-metrics';
 import { formatCopFromCents, serializeMoneyCop } from '@/lib/agents/financial/contracts/money';
 import type { FiscalAnchorBlock } from '../../fiscal-anchor/types';
 import type { RiskFactorBreakdown, RiskNivel } from '../types';
 
 const ZERO = BigInt(0);
-
-const SALDO_FAVOR_MATERIALIDAD_COP = 50_000_000;
 
 export interface RiskScorePrecomputedData {
   score: number;
@@ -81,9 +86,9 @@ function pctRatioCents(num: bigint, denom: bigint): number {
 }
 
 /**
- * Ingresos del periodo anterior (comparativo) en BigInt cents, si están
- * disponibles. Retorna `null` cuando no hay periodo comparativo materializado
- * en `controlTotals.cents` (single-period balance).
+ * Ingresos netos de devoluciones del periodo anterior (comparativo) en BigInt
+ * cents, si están disponibles. Retorna `null` cuando no hay periodo
+ * comparativo materializado en `controlTotals.cents` (single-period balance).
  */
 function ingresosComparativoCents(
   pp: PreprocessedBalance,
@@ -92,7 +97,7 @@ function ingresosComparativoCents(
   if (!comp) return null;
   const cents = comp.controlTotals.cents;
   if (!cents) return null;
-  return cents.ingresos;
+  return cents.ingresosNetos;
 }
 
 // ---------------------------------------------------------------------------
@@ -111,18 +116,21 @@ function ingresosComparativoCents(
 //     (UAI −$460.000.000): el factor publicaba 30/100 "medio" con el texto
 //     "tasa efectiva nula sobre utilidad" para una empresa sin utilidad.
 //
-//   · UAI > 0 pero SIN grupo 54 en el balance — el impuesto no está causado.
-//     Es un defecto de CIERRE contable (NIC 12 §46 exige reconocer el gasto
-//     por impuesto corriente), no evidencia de que la empresa tribute poco:
-//     no se puede afirmar cuánto tributa quien todavía no registró la
-//     provisión. El motor YA denuncia este hecho por su propio canal —
-//     `A5_SIN_PROVISION`, severidad `error`, en `alerts.ts` — así que sumarle
+//   · UAI > 0 pero SIN grupo 54 en el balance — no hay gasto de renta
+//     causado. No es evidencia de que la empresa tribute poco: la UAI no es
+//     base fiscal (Art. 26 E.T.) y si hay impuesto por causar sólo lo dice la
+//     depuración de la renta. El motor YA reporta este hecho por su propio
+//     canal — `A5_SIN_PROVISION`, severidad `info`, en `alerts.ts` (Art. 26
+//     E.T. + NIIF PYMES Secc. 29 / NIC 12; re-auditoría 2026-09, NM-05) — así que sumarle
 //     además 30 puntos de riesgo cuenta el mismo hecho dos veces y, sobre el
 //     balance del cliente real, era el 43% de un score de 70/100 que enciende
 //     Modo Supervivencia (`score > 60`).
 //
-//   · UAI > 0 y grupo 54 poblado — aquí sí el cociente mide lo que dice medir
-//     y se aplica la escala del par. 6 del Art. 240 E.T. (TTD 15%).
+//   · UAI > 0 y grupo 54 poblado — aquí el cociente es medible y se aplica
+//     una escala HEURÍSTICA INTERNA de riesgo. F09 es una razón contable
+//     (impuesto causado / UAI), NO la TTD del par. 6 del Art. 240 E.T. (ID/UD):
+//     el umbral del 15% se usa como referencia interna, no como incumplimiento
+//     legal (auditoría 2026-09, tributario-modulos-15).
 //
 // El discriminante de la rama 2 es el propio hecho contable (Clase 54 = $0),
 // corroborado con la alerta que el anchor ya trae.
@@ -131,7 +139,7 @@ function factorTet(
   anchor: FiscalAnchorBlock,
   impuestoCausadoCents: bigint,
 ): RiskFactorBreakdown {
-  const descripcion = 'Tasa efectiva de tributación (F09)';
+  const descripcion = 'Tasa efectiva contable (F09 = impuesto causado / UAI) — heurística interna';
   const f01Cents = BigInt(anchor.f01);
 
   // Rama 1 — sin base gravable positiva el cociente no es medible.
@@ -148,9 +156,9 @@ function factorTet(
     };
   }
 
-  // Rama 2 — hay base gravable pero el impuesto no está causado: es un
-  // hallazgo de cierre contable, no de tasa efectiva. Cero puntos de riesgo;
-  // el hecho viaja por `A5_SIN_PROVISION` (severidad `error`).
+  // Rama 2 — UAI positiva sin gasto de renta causado (grupo 54 = $0): no es
+  // un hallazgo de tasa efectiva. Cero puntos de riesgo; el hecho viaja por
+  // `A5_SIN_PROVISION` (severidad `info`).
   const sinProvision =
     impuestoCausadoCents === ZERO ||
     anchor.alertas.some((a) => a.codigo === 'A5_SIN_PROVISION');
@@ -160,11 +168,11 @@ function factorTet(
       descripcion,
       puntos: 0,
       detalle:
-        `Utilidad antes de impuestos de ${formatCopFromCents(f01Cents)} SIN provisión de renta ` +
-        'registrada (Clase 54 = $0): los libros no están cerrados y la tasa efectiva todavía no ' +
-        'es medible. AVISO — se reporta por la alerta A5_SIN_PROVISION (Art. 240 E.T. + NIC 12 ' +
-        '§46), no como puntaje de riesgo: causar el impuesto es un ajuste de cierre, no un ' +
-        'indicio de elusión.',
+        `Utilidad antes de impuestos de ${formatCopFromCents(f01Cents)} sin gasto de renta ` +
+        'causado (grupo 54 = $0): la tasa efectiva contable no es medible. AVISO — se reporta por ' +
+        'la alerta informativa A5_SIN_PROVISION (Art. 26 E.T. + NIIF PYMES Secc. 29 / NIC 12), no ' +
+        'como puntaje de riesgo: si hay impuesto por causar lo determina la depuración de la ' +
+        'renta, no la UAI.',
     };
   }
 
@@ -176,16 +184,16 @@ function factorTet(
     puntos = 30;
     detalle =
       `F09 = ${f09}% con provisión causada de ${formatCopFromCents(impuestoCausadoCents)} sobre ` +
-      `una UAI de ${formatCopFromCents(f01Cents)} — tasa efectiva prácticamente nula. Activa Modo Supervivencia.`;
+      `una UAI de ${formatCopFromCents(f01Cents)} — tasa efectiva contable prácticamente nula (heurística interna; no es la TTD).`;
   } else if (f09 < 15) {
     puntos = 20;
-    detalle = `F09 = ${f09}% — debajo del umbral 15% de TTD (Art. 240 par. 6 E.T.).`;
+    detalle = `F09 = ${f09}% — tasa efectiva contable baja (heurística interna, referencia 15%). No es la TTD del Art. 240 par. 6 E.T., que exige impuesto y utilidad depurados.`;
   } else if (f09 <= 25) {
     puntos = 5;
-    detalle = `F09 = ${f09}% — por encima del umbral pero todavía revisable.`;
+    detalle = `F09 = ${f09}% — tasa efectiva contable moderada (heurística interna), todavía revisable.`;
   } else {
     puntos = 0;
-    detalle = `F09 = ${f09}% — tasa efectiva consistente con tarifa general.`;
+    detalle = `F09 = ${f09}% — tasa efectiva contable consistente con la tarifa general.`;
   }
   return { factor: 'tet_baja', descripcion, puntos, detalle };
 }
@@ -249,12 +257,12 @@ function factorSinProvisionRenta(
 }
 
 // ---------------------------------------------------------------------------
-// Factor 2 — Margen neto alto (utilidadNeta / ingresos)
+// Factor 2 — Margen neto alto (utilidadNeta / ingresos netos)
 // ---------------------------------------------------------------------------
 
 function factorMargenNeto(pp: PreprocessedBalance): RiskFactorBreakdown {
   const cents = pp.primary.controlTotals.cents;
-  if (!cents || cents.ingresos <= ZERO) {
+  if (!cents || cents.ingresosNetos <= ZERO) {
     return {
       factor: 'margen_alto',
       descripcion: 'Margen neto sobre ingresos',
@@ -262,7 +270,7 @@ function factorMargenNeto(pp: PreprocessedBalance): RiskFactorBreakdown {
       detalle: 'No hay ingresos materializados — factor no aplicable.',
     };
   }
-  const margenPct = pctRatioCents(cents.utilidadNeta, cents.ingresos);
+  const margenPct = pctRatioCents(cents.utilidadNeta, cents.ingresosNetos);
   let puntos: number;
   let detalle: string;
   if (margenPct > 90) {
@@ -290,7 +298,7 @@ function factorCostoBajo(pp: PreprocessedBalance): RiskFactorBreakdown {
   // operativos totales — el cálculo refinado por clase requiere acceso al
   // árbol de cuentas que no exponemos a este tool.
   const cents = pp.primary.controlTotals.cents;
-  if (!cents || cents.ingresos <= ZERO) {
+  if (!cents || cents.ingresosNetos <= ZERO) {
     return {
       factor: 'costo_bajo',
       descripcion: 'Relación costo-ingreso',
@@ -301,7 +309,7 @@ function factorCostoBajo(pp: PreprocessedBalance): RiskFactorBreakdown {
   // gastos = clase 5+6+7 (incluye impuesto causado). Para costo "operativo",
   // restamos impuesto causado.
   const costoOperativo = cents.gastos - cents.impuestoCausado;
-  const ratioPct = pctRatioCents(costoOperativo, cents.ingresos);
+  const ratioPct = pctRatioCents(costoOperativo, cents.ingresosNetos);
   let puntos: number;
   let detalle: string;
   if (ratioPct < 1) {
@@ -332,7 +340,21 @@ function factorCrecimiento(pp: PreprocessedBalance): RiskFactorBreakdown {
       detalle: 'No hay periodo comparativo materializado — factor no aplicable.',
     };
   }
-  const crecimientoPct = pctRatioCents(cents.ingresos - prev, prev);
+  // Mismo criterio que el CAGR del pilar Futuro: un acumulado parcial contra
+  // un año completo (o un saldo de apertura) no es un crecimiento.
+  if (!periodsComparable(pp.primary, pp.comparative!)) {
+    const ma = mesesCubiertos(pp.primary);
+    const mb = mesesCubiertos(pp.comparative!);
+    return {
+      factor: 'crecimiento_inusual',
+      descripcion: 'Crecimiento de ingresos vs periodo anterior',
+      puntos: 0,
+      detalle:
+        `Periodos de distinta duración o sin duración determinable (${ma ?? 'N/D'} vs ` +
+        `${mb ?? 'N/D'} meses) — crecimiento no comparable; factor no aplicable.`,
+    };
+  }
+  const crecimientoPct = pctRatioCents(cents.ingresosNetos - prev, prev);
   let puntos: number;
   let detalle: string;
   if (crecimientoPct > 100) {
@@ -352,31 +374,31 @@ function factorCrecimiento(pp: PreprocessedBalance): RiskFactorBreakdown {
 // Factor 5 — Saldo a favor sin solicitar
 // ---------------------------------------------------------------------------
 
+// F04 = F02 − F03 es una posición de referencia CONTABLE (UAI × 35% − crédito
+// de renta). Sin renta líquida depurada (Art. 26 E.T.), descuentos ni anticipo
+// del año siguiente (Art. 807 E.T.) no existe un saldo a favor determinable, y
+// sumar puntos por «saldo a favor sin solicitar» empujaría a pedir una
+// devolución que puede ser improcedente (Art. 670 E.T.). El factor se conserva
+// en el desglose con 0 puntos y el motivo (auditoría 2026-09,
+// tributario-modulos-02).
 function factorSaldoFavor(anchor: FiscalAnchorBlock): RiskFactorBreakdown {
   const f04Cents = BigInt(anchor.f04);
-  // F04 < 0 → saldo a favor (F02 < F03).
   if (f04Cents >= ZERO) {
     return {
       factor: 'saldo_favor_sin_solicitar',
       descripcion: 'Saldo a favor sin solicitud activa',
       puntos: 0,
-      detalle: 'No se identifica saldo a favor del periodo según F04.',
-    };
-  }
-  const saldoFavorCop = Number((-f04Cents) / BigInt(100));
-  if (saldoFavorCop > SALDO_FAVOR_MATERIALIDAD_COP) {
-    return {
-      factor: 'saldo_favor_sin_solicitar',
-      descripcion: 'Saldo a favor sin solicitud activa',
-      puntos: 10,
-      detalle: `Saldo a favor estimado supera $50.000.000 (Art. 850 E.T.). Si no se solicita devolución / compensación, prescribe en 2 años (Art. 854 E.T.).`,
+      detalle: 'La estimación contable F04 no muestra un posible saldo a favor.',
     };
   }
   return {
     factor: 'saldo_favor_sin_solicitar',
     descripcion: 'Saldo a favor sin solicitud activa',
     puntos: 0,
-    detalle: `Saldo a favor identificado pero por debajo del umbral de materialidad ($50.000.000).`,
+    detalle:
+      `F04 = ${formatCopFromCents(f04Cents)} es una estimación contable (UAI × 35% − F03), no el ` +
+      'saldo a favor de la declaración. No determinable sin renta líquida depurada (Art. 26 E.T.), ' +
+      'descuentos y anticipo del año siguiente (Art. 807 E.T.); factor sin puntos.',
   };
 }
 
@@ -423,7 +445,25 @@ function factorCoberturaRetenciones(anchor: FiscalAnchorBlock): RiskFactorBreakd
 // Calculadora principal
 // ---------------------------------------------------------------------------
 
-function classifyNivel(score: number): RiskNivel {
+/**
+ * Puntaje máximo de cada factor que emite `computeRiskScore`. Fuente única
+ * para el validador M3 (fase 2 de la auditoría 2026-09-24): el factor de
+ * saldo a favor vale 0 porque F04 no es un saldo a favor determinable.
+ */
+export const RISK_FACTOR_MAX_PUNTOS: Readonly<Record<RiskFactorBreakdown['factor'], number>> = {
+  tet_baja: 30,
+  sin_provision_renta: 30,
+  margen_alto: 25,
+  costo_bajo: 20,
+  crecimiento_inusual: 15,
+  saldo_favor_sin_solicitar: 0,
+  cobertura_retenciones_baja: 5,
+};
+
+/** Umbral del Modo Supervivencia (Módulo 8): score publicable > 60. */
+export const RISK_SCORE_UMBRAL_SUPERVIVENCIA = 60;
+
+export function classifyRiskNivel(score: number): RiskNivel {
   if (score <= 20) return 'bajo';
   if (score <= 40) return 'medio';
   if (score <= 60) return 'alto';
@@ -457,7 +497,7 @@ export function computeRiskScore(input: RiskInput): RiskScorePrecomputedData {
 
   return {
     score,
-    nivel: classifyNivel(score),
+    nivel: classifyRiskNivel(score),
     factores,
     publicable,
     noPublicableMotivo: publicable
@@ -470,10 +510,11 @@ export function computeRiskScore(input: RiskInput): RiskScorePrecomputedData {
 }
 
 /**
- * El saldo a favor en MoneyCop (para devoluciones / supervivencia).
- * Solo positivo si F04 < 0; cero en otro caso.
+ * Magnitud de la estimación contable |F04| cuando F04 < 0, en MoneyCop; `null`
+ * cuando F04 ≥ 0. NO es el saldo a favor de la declaración: sólo sirve como
+ * referencia rotulada «estimación contable, no liquidación».
  */
-export function saldoAFavorCents(anchor: FiscalAnchorBlock): string {
+export function posibleSaldoAFavorContableCents(anchor: FiscalAnchorBlock): string | null {
   const f04 = BigInt(anchor.f04);
-  return f04 < ZERO ? serializeMoneyCop(-f04) : '0';
+  return f04 < ZERO ? serializeMoneyCop(-f04) : null;
 }

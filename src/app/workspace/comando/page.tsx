@@ -20,11 +20,16 @@ import { buildEscudoBarSeries } from '@/lib/pillars/escudo-bars';
 import { buildVerdadBarSeries } from '@/lib/pillars/verdad-bars';
 import { buildFuturoBarSeries } from '@/lib/pillars/futuro-bars';
 import { runMonteCarlo } from '@/lib/pillars/monte-carlo';
-import type {
-  CashInflectionPoint,
-  PnLWaterfallData,
-  RunwayMonth,
-} from '@/components/charts';
+import { buildPnlBridge } from '@/lib/pillars/pnl-bridge';
+import {
+  diasAutonomia,
+  ingresosNetosPeriodo,
+  mesesCubiertos,
+  pruebaAcida,
+  razonCorriente,
+} from '@/lib/pillars/shared-metrics';
+import type { CashInflectionPoint, RunwayMonth } from '@/components/charts';
+import { buildRunway } from '@/lib/kpis/runway';
 
 export const dynamic = 'force-dynamic'; // workspace cookie obliga SSR per request
 
@@ -53,64 +58,38 @@ export default async function ComandoPage() {
       comparative: balance.comparative ?? undefined,
     });
 
-    const ct = balance.primary.controlTotals;
+    const snap = balance.primary;
+    const ct = snap.controlTotals;
 
-    // Build P&L waterfall from control totals.
-    const pnlBridge: PnLWaterfallData = {
-      ingresos: ct.ingresos,
-      // Costos clase 6+7
-      costos:
-        (balance.primary.classes.find((c) => c.code === 6)?.auxiliaryTotal ?? 0) +
-        (balance.primary.classes.find((c) => c.code === 7)?.auxiliaryTotal ?? 0),
-      gastosOperacionales: balance.primary.classes.find((c) => c.code === 5)?.auxiliaryTotal ?? 0,
-      gastosFinancieros: ct.gastoFinanciero5305 ?? 0,
-      impuestos: ct.impuestosCuenta24,
-      utilidadNeta: ct.utilidadNeta,
-    };
+    // Puente P&L con bloques disjuntos que cierran al centavo contra la
+    // utilidad neta (ratios-kpis-13). Si no cierra, no se pinta.
+    const pnlBridge = buildPnlBridge(snap) ?? undefined;
 
-    // Liquidity ratios.
-    const razonCorriente =
-      ct.pasivoCorriente > 0 ? ct.activoCorriente / ct.pasivoCorriente : null;
-    const diasAutonomia =
-      ct.gastos > 0 ? ct.efectivoCuenta11 / (ct.gastos / 365) : null;
+    // Liquidez: MISMAS funciones que pilar y tarjetas (ratios-kpis-15).
     const liquidity = {
-      razonCorriente,
-      pruebaAcida:
-        ct.pasivoCorriente > 0
-          ? (ct.activoCorriente - (ct.inventarios14 ?? 0)) / ct.pasivoCorriente
-          : null,
-      diasAutonomia,
+      razonCorriente: razonCorriente(ct),
+      pruebaAcida: pruebaAcida(ct),
+      diasAutonomia: diasAutonomia(snap).value,
     };
 
-    // Runway projection (3 escenarios, 36 meses) — replica la lógica del
-    // pilar Futuro pero genera la serie completa para el chart.
-    const ingresoMes = ct.ingresos / 12;
-    const egresoMes = ct.gastos / 12;
-    const runway: RunwayMonth[] = [];
-    let base = ct.efectivoCuenta11;
-    let cons = ct.efectivoCuenta11;
-    let agr = ct.efectivoCuenta11;
-    for (let i = 0; i < 36; i++) {
-      const d = new Date();
-      d.setDate(1);
-      d.setMonth(d.getMonth() + i);
-      const month = d.toLocaleDateString('es-CO', { month: 'short', year: '2-digit' });
-      runway.push({ month, base, conservador: cons, agresivo: agr });
-      base = base + ingresoMes - egresoMes;
-      cons = cons + ingresoMes * 0.85 - egresoMes;
-      agr = agr + ingresoMes * 1.10 - egresoMes;
-    }
+    // Runway 36 meses · 3 escenarios (src/lib/kpis/runway.ts). Flujos
+    // mensuales = ingresos netos y egresos del periodo divididos por los MESES
+    // CUBIERTOS (ratios-kpis-03, NM-01): sin duración derivable no hay runway
+    // ni Monte Carlo. Los escenarios conservador/agresivo son supuestos de
+    // sensibilidad sobre los ingresos, rotulados en RUNWAY_ESCENARIOS.
+    const meses = mesesCubiertos(snap);
+    const runway: RunwayMonth[] = buildRunway({
+      ingresosPeriodo: ingresosNetosPeriodo(ct),
+      egresosPeriodo: ct.gastos,
+      cajaInicial: ct.efectivoCuenta11,
+      meses,
+      desde: new Date(),
+    });
 
-    // Inflection series — caja base/conservador/agresivo + salidas fiscales
-    // (impuesto renta proyectado en mayo del año siguiente, distribuido).
-    const taxOutflowMes = Math.max(0, ct.utilidadNeta * 0.35) / 12;
-    const inflectionSeries: CashInflectionPoint[] = runway.slice(0, 13).map((r) => ({
-      date: r.month,
-      base: r.base,
-      conservador: r.conservador,
-      agresivo: r.agresivo,
-      salidasFiscales: taxOutflowMes,
-    }));
+    // Sin serie de inflexión fiscal: las «salidas fiscales» se estimaban sobre
+    // la utilidad neta, ya después de impuestos (ratios-kpis-10, valoracion-24).
+    // Sin impuesto causado por cuota del calendario DIAN no se dibuja.
+    const inflectionSeries: CashInflectionPoint[] = [];
 
     // Serie temporal EBITDA/FCF/Ingresos para el gráfico de barras del pilar Valor.
     const valorTrend = buildValorBarSeries(balance);
@@ -125,7 +104,8 @@ export default async function ComandoPage() {
     const futuroTrend = buildFuturoBarSeries(balance);
 
     // Monte Carlo — 9.600 sims en ~15ms, corre server-side sin bloquear.
-    const monteCarlo = runMonteCarlo(balance.primary);
+    // Sólo con meses cubiertos derivables (misma base del runway).
+    const monteCarlo = meses !== null ? runMonteCarlo(balance.primary) : undefined;
 
     // Gap attribution del Curator (R3) si hay descuadre.
     const curatorGap = balance.primary.curator?.balanceGapAttribution;

@@ -264,6 +264,7 @@ export interface ProposeAdjustmentOutput {
       activo: number;
       pasivo: number;
       patrimonio: number;
+      /** Ingresos netos (clase 4 neta de devoluciones 4175): base de la utilidad neta. */
       ingresos: number;
       gastos: number;
       utilidadNeta: number;
@@ -303,6 +304,7 @@ export interface RecheckValidationOutput {
     activo: number;
     pasivo: number;
     patrimonio: number;
+    /** Ingresos netos (clase 4 neta de devoluciones 4175): base de la utilidad neta. */
     ingresos: number;
     gastos: number;
     utilidadNeta: number;

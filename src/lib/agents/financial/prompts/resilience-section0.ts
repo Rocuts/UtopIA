@@ -201,7 +201,8 @@ export function formatErrorAsUserNote(input: UserNoteInput): string {
   return (
     `Se presento un inconveniente tecnico en ${step}${serviceLabel} durante la generacion. ` +
     `El informe fue completado con los datos disponibles.${fallbackLabel} ` +
-    `Las cifras financieras no se ven afectadas por este inconveniente.`
+    `Las cifras del informe siguen sujetas a las validaciones deterministas; si alguna no ` +
+    `cuadra, el informe se entrega sellado con salvedades.`
   );
 }
 
@@ -261,7 +262,7 @@ Conducta del agente: reportar el descuadre con alerta visible y continuar genera
 
 **TIPO C — Error de datos faltantes**
 Patrones: campo null, dato no suministrado, variable no encontrada en el balance.
-Conducta del agente: usar valor por defecto o la cadena literal "— (dato no suministrado)". Continuar con el resto del informe y registrar el faltante en la seccion "Limitaciones y Disclaimers". NO interrumpir el pipeline.
+Conducta del agente: NUNCA sustituir el dato por un valor por defecto ni por una estimacion. Escribir la cadena literal "— (dato no suministrado)" o N/D con el motivo, continuar con el resto del informe y registrar el faltante en la seccion "Limitaciones y Disclaimers". Un dato ausente no es cero. NO interrumpir el pipeline.
 
 **TIPO D — Error critico (no recuperable)**
 Patrones: balance de prueba no recibido, archivo corrupto, NIT invalido, CSV malformado.
@@ -282,7 +283,7 @@ El informe se marca como BORRADOR UNICAMENTE cuando:
 El informe NO se marca como BORRADOR por:
 - Network error (TIPO A).
 - Timeout de un servicio (TIPO A).
-- Campo null o dato no suministrado (TIPO C — usar valor por defecto).
+- Campo null o dato no suministrado (TIPO C — se declara "— (dato no suministrado)" o N/D con motivo).
 - Validacion de servicio externo fallida (TIPO A — usar validacion interna).
 - Ninguna razon tecnica interna sin instruccion explicita del usuario.
 
@@ -299,12 +300,12 @@ Si el sistema detecta riesgo de timeout por tamano del prompt:
 Todo mensaje al usuario tras un error sigue esta forma fija.
 
 CORRECTO:
-"Se presento un inconveniente tecnico en <paso especifico> durante la generacion. El informe fue completado con los datos disponibles. <Descripcion breve de que se omitio o uso como respaldo.> Las cifras financieras no se ven afectadas por este inconveniente."
+"Se presento un inconveniente tecnico en <paso especifico> durante la generacion. El informe fue completado con los datos disponibles. <Descripcion breve de que se omitio o que dato quedo como no suministrado.> Las cifras del informe siguen sujetas a las validaciones deterministas."
 
 INCORRECTO (NUNCA usar): "Error en el pipeline", "network error", "Validacion pendiente — BORRADOR", "No fue posible generar el reporte", "Internal server error", "Hubo un error al procesar su consulta".
 
 ### 0.7 Verificacion de integridad antes de entregar
-Antes de marcar el informe como entregable, el orquestador ejecuta cuatro checks que NUNCA bloquean la entrega; solo generan alertas visibles para el contador:
+Antes de marcar el informe como entregable, el orquestador ejecuta estos checks. Un descuadre aritmetico NO se oculta: el informe se entrega sellado como "REPORTE CON SALVEDADES" y su descarga queda bloqueada hasta corregirlo:
 - **CHECK 1 — Ecuacion patrimonial:** Total Activo == Total Pasivo + Total Patrimonio. Si no, alerta visible en el informe.
 - **CHECK 2 — EFE concilia:** Efectivo inicial + Flujo total == Efectivo final. Si no, alerta visible en el informe.
 - **CHECK 3 — ECP balancea:** Suma de movimientos == Saldo final - Saldo inicial. Si no, alerta visible en el informe.

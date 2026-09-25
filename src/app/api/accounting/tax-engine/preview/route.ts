@@ -25,6 +25,7 @@ import {
   TaxEngineError,
   TAX_ERR,
 } from '@/lib/accounting/tax-engine';
+import { TAX_TREATMENT } from '@/lib/accounting/tax-engine/types';
 import { taxErrorResponse, taxBadRequestZod, taxOk } from '../_shared';
 import { requireAuthSession } from '@/lib/auth/require-session';
 
@@ -33,6 +34,16 @@ import { requireAuthSession } from '@/lib/auth/require-session';
 // ---------------------------------------------------------------------------
 
 const taxTypeEnum = z.enum(['IVA', 'RETEFUENTE', 'RETEIVA', 'ICA', 'CREE', 'INC']);
+
+/**
+ * Calificaciones que el motor no puede inferir (IVA 5 %, exento/excluido,
+ * honorarios, honorarios PN ≤ 3.300 UVT, tabla del Art. 383, agente retenedor
+ * de ICA). Sin declararlas sólo aplican las reglas residuales. Auditoría
+ * 2026-09, tributario-calc-08.
+ */
+const taxTreatmentEnum = z.enum(
+  Object.values(TAX_TREATMENT) as [string, ...string[]],
+);
 
 const previewBodySchema = z.object({
   transactionType: z.enum([
@@ -45,7 +56,7 @@ const previewBodySchema = z.object({
   subtotalCop: z
     .string()
     .regex(/^\d+(\.\d{1,2})?$/, 'subtotalCop debe ser numérico con máximo 2 decimales'),
-  /** Año del UVT (default: año actual). */
+  /** Año del UVT (default: año de transactionDate en hora de Colombia, lo mide el motor). */
   uvtYear: z.number().int().min(2020).max(2030).optional(),
   /** ISO 8601 date string. Default: hoy. */
   transactionDate: z.string().datetime().optional(),
@@ -57,6 +68,8 @@ const previewBodySchema = z.object({
   amountIncludesTax: z.boolean().optional(),
   /** Para excluir tipos de impuesto específicos. */
   excludeTaxTypes: z.array(taxTypeEnum).optional(),
+  /** Tratamientos declarados por el usuario (ver `TAX_TREATMENT`). */
+  taxTreatments: z.array(taxTreatmentEnum).max(20).optional(),
   /** Referencia de contexto para audit trail. */
   contextRef: z.string().max(255).optional(),
 });
@@ -112,12 +125,16 @@ export async function POST(req: NextRequest) {
       workspaceId: workspace.id,
       transactionType: body.transactionType,
       subtotalCop: body.subtotalCop,
-      uvtYear: body.uvtYear ?? transactionDate.getFullYear(),
+      // Sin uvtYear el motor mide el año gravable en hora de Colombia
+      // (anioColombia); getFullYear() usaba la zona del servidor
+      // (tributario-calc-23).
+      uvtYear: body.uvtYear,
       transactionDate,
       thirdPartyId: body.thirdPartyId,
       baseAccountCode: body.baseAccountCode,
       amountIncludesTax: body.amountIncludesTax ?? false,
       excludeTaxTypes: body.excludeTaxTypes,
+      taxTreatments: body.taxTreatments,
       contextRef: body.contextRef,
     });
 

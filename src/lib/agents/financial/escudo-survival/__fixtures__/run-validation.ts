@@ -80,7 +80,7 @@ function goodDividendMarkdown(): string {
     `## Optimización de Dividendos\n\n` +
     `**Art. 242 E.T.** — Impuesto a dividendos personas naturales residentes:\n` +
     `- Utilidad ya gravada en la sociedad: +10% adicional al socio.\n\n` +
-    `**Art. 36-3 E.T.** — Capitalización como INCRGNO:\n` +
+    `**Art. 36-3 E.T.** — derogado por la Ley 2277/2022 (art. 96): capitalizar tributa como distribuir:\n` +
     `- Capitalizar vía emisión de acciones = $0 impuesto al socio.\n` +
     `- UVT 2026: $52.374.\n\n` +
     `Recomendación: evaluar capitalización parcial para diferir tributación del socio.`
@@ -177,18 +177,18 @@ function buildMockReportTetAlta(): EscudoSurvivalReport {
         utilidadDistribuible: 70_000_000,
         escenarios: {
           distribuirTotal: { ahorroSocio: 0, impuestoSocio: 7_000_000, netoSocio: 63_000_000 },
-          capitalizarTotal: { ahorroSocio: 7_000_000, impuestoSocio: 0, netoSocio: 70_000_000 }, // INCRGNO → impuesto = 0
-          hibrido50_50: { ahorroSocio: 3_500_000, impuestoSocio: 3_500_000, netoSocio: 66_500_000 },
+          capitalizarTotal: { ahorroSocio: 0, impuestoSocio: 7_000_000, netoSocio: 63_000_000 }, // Art. 36-3 derogado: tributa como distribuir
+          hibrido50_50: { ahorroSocio: 0, impuestoSocio: 7_000_000, netoSocio: 63_000_000 },
         },
-        recomendacion: 'Se recomienda capitalizar el 70% de las utilidades vía Art. 36-3 E.T. para diferir el impuesto al socio y fortalecer el patrimonio.',
-        norma: 'Art. 36-3 E.T.',
+        recomendacion: 'Se recomienda capitalizar el 70% de las utilidades para fortalecer el patrimonio; tributa como distribución (Art. 242 E.T.).',
+        norma: 'Art. 242 E.T.',
       },
     },
     synthesis: {
       markdown: goodSynthesisMarkdown(),
       topRecommendations: [
         { orden: 1, titulo: 'Aplicar descuento CT&I Art. 256', impacto: 5_000_000, norma: 'Art. 256 E.T.' },
-        { orden: 2, titulo: 'Capitalizar utilidades Art. 36-3', impacto: 7_000_000, norma: 'Art. 36-3 E.T.' },
+        { orden: 2, titulo: 'Capitalizar utilidades (tributa como distribución)', impacto: 0, norma: 'Art. 242 E.T.' },
       ],
     },
     metadata: {
@@ -279,8 +279,8 @@ function buildMockReportSaldoFavor(): EscudoSurvivalReport {
         utilidadDistribuible: 90_000_000,
         escenarios: {
           distribuirTotal: { ahorroSocio: 0, impuestoSocio: 9_000_000, netoSocio: 81_000_000 },
-          capitalizarTotal: { ahorroSocio: 9_000_000, impuestoSocio: 0, netoSocio: 90_000_000 },
-          hibrido50_50: { ahorroSocio: 4_500_000, impuestoSocio: 4_500_000, netoSocio: 85_500_000 },
+          capitalizarTotal: { ahorroSocio: 0, impuestoSocio: 9_000_000, netoSocio: 81_000_000 }, // Art. 36-3 derogado: tributa como distribuir
+          hibrido50_50: { ahorroSocio: 0, impuestoSocio: 9_000_000, netoSocio: 81_000_000 },
         },
         recomendacion: 'Con saldo a favor de $20M, se recomienda primero compensar el saldo antes de distribuir dividendos para mejorar el flujo de caja. Art. 242 E.T. aplica sobre lo distribuido.',
         norma: 'Art. 242 E.T.',
@@ -385,10 +385,10 @@ function buildMockReportBancarizacion(): EscudoSurvivalReport {
         utilidadDistribuible: 55_000_000,
         escenarios: {
           distribuirTotal: { ahorroSocio: 0, impuestoSocio: 5_500_000, netoSocio: 49_500_000 },
-          capitalizarTotal: { ahorroSocio: 5_500_000, impuestoSocio: 0, netoSocio: 55_000_000 },
-          hibrido50_50: { ahorroSocio: 2_750_000, impuestoSocio: 2_750_000, netoSocio: 52_250_000 },
+          capitalizarTotal: { ahorroSocio: 0, impuestoSocio: 5_500_000, netoSocio: 49_500_000 }, // Art. 36-3 derogado: tributa como distribuir
+          hibrido50_50: { ahorroSocio: 0, impuestoSocio: 5_500_000, netoSocio: 49_500_000 },
         },
-        recomendacion: 'Con riesgo de mayor impuesto por bancarización ($7.350.000 estimado, Art. 771-5 §2 E.T.), capitalizar vía Art. 36-3 E.T. para preservar caja. Art. 242 E.T. aplica sobre distribución.',
+        recomendacion: 'Con riesgo de mayor impuesto por bancarización ($7.350.000 estimado, Art. 771-5 §2 E.T.), capitalizar para preservar caja; la capitalización tributa como distribución (Art. 242 E.T.).',
         norma: 'Art. 242 E.T.',
       },
     },
@@ -479,11 +479,11 @@ function buildMockReportEliteClean(): EscudoSurvivalReport {
         utilidadDistribuible: 85_000_000,
         escenarios: {
           distribuirTotal: { ahorroSocio: 0, impuestoSocio: 8_500_000, netoSocio: 76_500_000 },
-          capitalizarTotal: { ahorroSocio: 8_500_000, impuestoSocio: 0, netoSocio: 85_000_000 },
-          hibrido50_50: { ahorroSocio: 4_250_000, impuestoSocio: 4_250_000, netoSocio: 80_750_000 },
+          capitalizarTotal: { ahorroSocio: 0, impuestoSocio: 8_500_000, netoSocio: 76_500_000 }, // Art. 36-3 derogado: tributa como distribuir
+          hibrido50_50: { ahorroSocio: 0, impuestoSocio: 8_500_000, netoSocio: 76_500_000 },
         },
-        recomendacion: 'Empresa en posición Élite (TET 20.56%, sin saldo a favor, sin riesgos de bancarización). Se recomienda capitalizar 60% de utilidades vía Art. 36-3 E.T. y distribuir el 40% restante con tributación reducida Art. 242 E.T.',
-        norma: 'Art. 36-3 E.T.',
+        recomendacion: 'Empresa en posición Élite (TET 20.56%, sin saldo a favor, sin riesgos de bancarización). Se recomienda capitalizar 60% de utilidades y distribuir el 40% restante; ambos tributan según el Art. 242 E.T.',
+        norma: 'Art. 242 E.T.',
       },
     },
     synthesis: {
@@ -582,11 +582,11 @@ function buildMockReportArt647Trap(): EscudoSurvivalReport {
         utilidadDistribuible: 70_000_000,
         escenarios: {
           distribuirTotal: { ahorroSocio: 0, impuestoSocio: 7_000_000, netoSocio: 63_000_000 },
-          capitalizarTotal: { ahorroSocio: 7_000_000, impuestoSocio: 0, netoSocio: 70_000_000 },
-          hibrido50_50: { ahorroSocio: 3_500_000, impuestoSocio: 3_500_000, netoSocio: 66_500_000 },
+          capitalizarTotal: { ahorroSocio: 0, impuestoSocio: 7_000_000, netoSocio: 63_000_000 }, // Art. 36-3 derogado: tributa como distribuir
+          hibrido50_50: { ahorroSocio: 0, impuestoSocio: 7_000_000, netoSocio: 63_000_000 },
         },
-        recomendacion: 'Capitalización vía Art. 36-3 E.T. es la opción preferida para diferir tributación. Art. 242 E.T. aplica sobre dividendos distribuidos.',
-        norma: 'Art. 36-3 E.T.',
+        recomendacion: 'La capitalización fortalece el patrimonio y tributa como distribución (Art. 242 E.T.; Art. 36-3 derogado).',
+        norma: 'Art. 242 E.T.',
       },
     },
     synthesis: {

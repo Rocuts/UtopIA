@@ -32,16 +32,44 @@ import {
 import { preprocessTrialBalance, type RawAccountRow } from '@/lib/preprocessing/trial-balance';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 
-import { getCachedAccountsFlat } from './ledger-queries';
-import { getCachedLedgerByPeriod, type LedgerRow } from './ledger-queries';
+import { getCachedAccountsFlat, getLedgerTotalsByPeriods } from './ledger-queries';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Etiqueta del periodo para `balancesByPeriod[period]`. */
-function periodLabel(p: Pick<AccountingPeriodRow, 'year'>): string {
-  return String(p.year);
+/**
+ * Etiqueta del periodo para `balancesByPeriod[period]`: `YYYY-MM`.
+ *
+ * Auditoría ratios-kpis-03: antes era `String(year)` y, con periodos
+ * MENSUALES, T (2026-08) y T-1 (2026-07) colisionaban en '2026' y el
+ * comparativo sobrescribía al actual. La etiqueta `YYYY-MM` también le dice a
+ * los pilares (shared-metrics.monthsCovered) que los resultados son el
+ * acumulado del año hasta ese mes.
+ *
+ * Período 13 (cierre anual, 31-dic) ⇒ `YYYY`: el ejercicio completo. El
+ * preprocesador no ordena `YYYY-13` como fecha (lo manda al final), así que
+ * con el comparativo de `findComparativePeriod` —el 13 del año anterior, si
+ * existe— el cierre 2025 quedaba como periodo PRINCIPAL y 2026-08 como
+ * comparativo. `YYYY` se ordena como diciembre de ese año y cubre 12 meses.
+ */
+export function periodLabel(p: Pick<AccountingPeriodRow, 'year' | 'month'>): string {
+  if (p.month === 13) return String(p.year);
+  return `${p.year}-${String(p.month).padStart(2, '0')}`;
+}
+
+/** Orden cronológico (año, mes). */
+function comparePeriods(
+  a: Pick<AccountingPeriodRow, 'year' | 'month'>,
+  b: Pick<AccountingPeriodRow, 'year' | 'month'>,
+): number {
+  return a.year !== b.year ? a.year - b.year : a.month - b.month;
+}
+
+/** Clases de resultado (se acumulan dentro del año fiscal, no entre años). */
+function isResultClass(code: string): boolean {
+  const d = code[0];
+  return d === '4' || d === '5' || d === '6' || d === '7';
 }
 
 /** Determina el signo natural: ACTIVO/GASTO/COSTO (debit-natural)
@@ -64,124 +92,179 @@ function inferLevel(code: string): RawAccountRow['level'] {
   return 'Auxiliar';
 }
 
-/** Suma debit/credit de las líneas, agrupado por accountId. */
-interface AggregatedAccount {
-  accountId: string;
-  totalDebit: number;
-  totalCredit: number;
-}
-
-function aggregateLedger(rows: LedgerRow[]): Map<string, AggregatedAccount> {
-  const map = new Map<string, AggregatedAccount>();
-  for (const r of rows) {
-    // Solo asientos posted+reversed cuentan para el balance oficial.
-    if (r.entry.status !== 'posted' && r.entry.status !== 'reversed') continue;
-    const acc = map.get(r.line.accountId);
-    const d = parseFloat(r.line.debit ?? '0');
-    const c = parseFloat(r.line.credit ?? '0');
-    if (acc) {
-      acc.totalDebit += d;
-      acc.totalCredit += c;
-    } else {
-      map.set(r.line.accountId, {
-        accountId: r.line.accountId,
-        totalDebit: d,
-        totalCredit: c,
-      });
-    }
-  }
-  return map;
-}
-
 // ---------------------------------------------------------------------------
 // loadTrialBalanceRows
 //
-// Reconstruye `RawAccountRow[]` desde la DB para uno o más periodos. La
-// salida incluye TODAS las cuentas activas del PUC (incluso sin
-// movimientos en el periodo — quedan con balance 0), porque el preprocesador
-// usa la jerarquía completa para detectar cuentas faltantes y calcular
-// totales por clase.
+// Reconstruye `RawAccountRow[]` desde la DB para uno o dos periodos. La salida
+// incluye TODAS las cuentas activas del PUC (incluso sin movimientos — quedan
+// con balance 0), porque el preprocesador usa la jerarquía completa.
+//
+// Semántica por periodo objetivo T (auditoría ratios-kpis-03):
+//   - Clases 1-3 (y 8-9, cuentas de orden): SALDO ACUMULADO al cierre de T =
+//     Σ movimientos de todos los periodos con (año, mes) ≤ T. El saldo inicial
+//     se postea como asiento en su periodo, así que queda incluido.
+//   - Clases 4-7: resultado ACUMULADO DEL AÑO de T = Σ movimientos de los
+//     periodos del mismo año con mes ≤ T.
+//   - Resultados de años anteriores que no se cerraron en libros (Σ clases 4-7
+//     de años < año(T)): se trasladan al patrimonio (3705 utilidades / 3710
+//     pérdidas acumuladas). Con asiento de cierre esa suma es 0. Sin este
+//     traslado la ecuación patrimonial no cuadraría.
+//   - Asientos de cierre (contab-nomina-04): los asientos source_type
+//     'closing' y los reversos de un cierre posteados en el MISMO año de T no
+//     cuentan para T. El cierre anual (período 13) deja las clases 4-6 en cero
+//     y, sumado, el P&G del ejercicio reportado (y su comparativo) saldría en
+//     0 — mismo criterio que pillar_kpis_view (migración 0022) y pillar-view.
+//     Se excluye el asiento COMPLETO, también su contrapartida 3605/3610: si
+//     quedara, el resultado estaría dos veces (clases 4-7 y grupo 36). Es el
+//     balance de prueba antes del cierre; el resultado del ejercicio lo lleva
+//     al patrimonio el cierre virtual del preprocesador (R8). En los años
+//     anteriores a T el cierre sí cuenta: es el traslado a patrimonio.
 // ---------------------------------------------------------------------------
 
 export interface LoadTrialBalanceInput {
   workspaceId: string;
   /** Periodo principal (T) — siempre presente. */
   periodId: string;
-  /** Periodo comparativo (T-1) — opcional. */
+  /** Periodo comparativo — opcional (ver `findComparativePeriod`). */
   comparativePeriodId?: string | null;
 }
+
+const PRIOR_RESULT_NAME =
+  'Resultados de ejercicios anteriores no trasladados (calculado del libro mayor)';
 
 export async function loadTrialBalanceRows(
   input: LoadTrialBalanceInput,
 ): Promise<{ rows: RawAccountRow[]; primaryLabel: string; comparativeLabel: string | null }> {
   const db = getDb();
 
-  // Resolver labels desde accounting_periods.
-  const periodRows = await db
+  const periodRows: AccountingPeriodRow[] = await db
     .select()
     .from(accountingPeriods)
-    .where(
-      and(
-        eq(accountingPeriods.workspaceId, input.workspaceId),
-        // Drizzle no tiene IN-array helper compacto sin `inArray`; mejor 2 queries.
-      ),
-    );
+    .where(eq(accountingPeriods.workspaceId, input.workspaceId));
   const primaryRow = periodRows.find((p) => p.id === input.periodId);
   if (!primaryRow) {
     return { rows: [], primaryLabel: 'unknown', comparativeLabel: null };
   }
-  const compRow = input.comparativePeriodId
-    ? periodRows.find((p) => p.id === input.comparativePeriodId)
+  const compRowRaw = input.comparativePeriodId
+    ? periodRows.find((p) => p.id === input.comparativePeriodId) ?? null
     : null;
+  // Un comparativo posterior al periodo principal no es un comparativo. Con
+  // el principal en el 13, diciembre del mismo año tampoco: `YYYY` y
+  // `YYYY-12` son el mismo corte para el preprocesador (no hay orden entre
+  // ellos) y el P&G de ambos es el acumulado del mismo año.
+  const sameCutAsPrimary = (c: AccountingPeriodRow) =>
+    primaryRow.month === 13 && c.year === primaryRow.year && c.month === 12;
+  const compRow =
+    compRowRaw && comparePeriods(compRowRaw, primaryRow) < 0 && !sameCutAsPrimary(compRowRaw)
+      ? compRowRaw
+      : null;
 
   const primaryLabel = periodLabel(primaryRow);
   const comparativeLabel = compRow ? periodLabel(compRow) : null;
+  const targets = compRow ? [primaryRow, compRow] : [primaryRow];
 
-  // Cargar PUC + ledgers (cacheados — Ola 2 activa heredará el cache).
+  // Todos los periodos hasta T: necesarios para el saldo acumulado.
+  const relevant = periodRows.filter((p) => comparePeriods(p, primaryRow) <= 0);
+  const periodById = new Map(relevant.map((p) => [p.id, p]));
+
   const accounts = await getCachedAccountsFlat(input.workspaceId);
-  const primaryLedger = await getCachedLedgerByPeriod(input.workspaceId, input.periodId);
-  const comparativeLedger = input.comparativePeriodId
-    ? await getCachedLedgerByPeriod(input.workspaceId, input.comparativePeriodId)
-    : [];
+  const totals = await getLedgerTotalsByPeriods(
+    input.workspaceId,
+    relevant.map((p) => p.id),
+  );
 
-  const aggPrimary = aggregateLedger(primaryLedger);
-  const aggComparative = aggregateLedger(comparativeLedger);
+  const accountById = new Map(accounts.map((a) => [a.id, a]));
+  // balances[label][accountId] y resultado de años anteriores por label.
+  const balances = new Map<string, Map<string, number>>();
+  const priorResult = new Map<string, number>();
+  for (const t of targets) {
+    balances.set(periodLabel(t), new Map());
+    priorResult.set(periodLabel(t), 0);
+  }
+
+  for (const row of totals) {
+    const p = periodById.get(row.periodId);
+    const account = accountById.get(row.accountId);
+    if (!p || !account) continue;
+    const debit = parseFloat(row.debit ?? '0') || 0;
+    const credit = parseFloat(row.credit ?? '0') || 0;
+    const signed = naturalSide(account.type) === 'debit' ? debit - credit : credit - debit;
+    const result = isResultClass(account.code);
+
+    for (const t of targets) {
+      const label = periodLabel(t);
+      if (comparePeriods(p, t) > 0) continue; // posterior a T
+      // Cierre (o su reverso) del ejercicio de T: fuera de T (ver cabecera).
+      if (row.closing === true && p.year === t.year) continue;
+      if (result) {
+        if (p.year === t.year) {
+          const m = balances.get(label)!;
+          m.set(account.id, (m.get(account.id) ?? 0) + signed);
+        } else {
+          // Año anterior sin cerrar: utilidad (+) o pérdida (−) acumulada.
+          priorResult.set(label, priorResult.get(label)! + (credit - debit));
+        }
+      } else {
+        const m = balances.get(label)!;
+        m.set(account.id, (m.get(account.id) ?? 0) + signed);
+      }
+    }
+  }
+
+  const round2 = (n: number) => Math.round(n * 100) / 100;
 
   const rows: RawAccountRow[] = accounts
     .filter((a) => a.active !== false)
     .map((a) => {
       const balancesByPeriod: Record<string, number> = {};
-
-      const aggT = aggPrimary.get(a.id);
-      const balanceT = aggT
-        ? naturalSide(a.type) === 'debit'
-          ? aggT.totalDebit - aggT.totalCredit
-          : aggT.totalCredit - aggT.totalDebit
-        : 0;
-      balancesByPeriod[primaryLabel] = balanceT;
-
-      if (comparativeLabel) {
-        const aggC = aggComparative.get(a.id);
-        const balanceC = aggC
-          ? naturalSide(a.type) === 'debit'
-            ? aggC.totalDebit - aggC.totalCredit
-            : aggC.totalCredit - aggC.totalDebit
-          : 0;
-        balancesByPeriod[comparativeLabel] = balanceC;
+      for (const t of targets) {
+        const label = periodLabel(t);
+        balancesByPeriod[label] = round2(balances.get(label)!.get(a.id) ?? 0);
       }
-
-      const inferredLevel = inferLevel(a.code);
       // El nivel del PUC sembrado (`a.level`) debe coincidir con la inferencia
       // de longitud, pero confiamos en el código (la longitud es invariante).
       // `transactional` se proyecta de `isPostable`.
       return {
         code: a.code,
         name: a.name,
-        level: inferredLevel,
+        level: inferLevel(a.code),
         transactional: Boolean(a.isPostable),
         balancesByPeriod,
       };
     });
+
+  // Traslado de resultados de años anteriores no cerrados en libros.
+  const hasPrior = targets.some((t) => Math.abs(priorResult.get(periodLabel(t))!) >= 0.005);
+  if (hasPrior) {
+    for (const [prefix, sign] of [['3705', 1], ['3710', -1]] as const) {
+      const values: Record<string, number> = {};
+      let any = false;
+      for (const t of targets) {
+        const label = periodLabel(t);
+        const v = priorResult.get(label)!;
+        const applies = sign === 1 ? v > 0 : v < 0;
+        values[label] = applies ? round2(v) : 0;
+        if (applies && Math.abs(v) >= 0.005) any = true;
+      }
+      if (!any) continue;
+      const postable = rows.find(
+        (r) => r.code.startsWith(prefix) && r.transactional && r.code.length >= 6,
+      );
+      if (postable) {
+        for (const [label, v] of Object.entries(values)) {
+          postable.balancesByPeriod[label] = round2((postable.balancesByPeriod[label] ?? 0) + v);
+        }
+      } else {
+        rows.push({
+          code: `${prefix}99`,
+          name: PRIOR_RESULT_NAME,
+          level: 'Subcuenta',
+          transactional: true,
+          balancesByPeriod: values,
+        });
+      }
+    }
+  }
 
   return { rows, primaryLabel, comparativeLabel };
 }
@@ -234,9 +317,14 @@ export async function getCachedPreprocessedBalance(
 // ---------------------------------------------------------------------------
 // findComparativePeriod
 //
-// Helper para que los callers no tengan que calcular el periodo T-1 manualmente.
-// Toma el periodo actual y devuelve el inmediatamente anterior (mes-1, con
-// rollover de año). Si no existe en DB, retorna null.
+// Comparativo = CIERRE DEL AÑO ANTERIOR (último periodo registrado del año
+// T−1, normalmente diciembre o el 13 de cierre). Con resultados acumulados del
+// año (ver loadTrialBalanceRows) es la única base consistente: el EFE
+// indirecto parte de la utilidad acumulada del año y de las variaciones de
+// balance desde el 31-dic anterior, y los KPIs comparan contra el cierre
+// (NIIF para PYMES §3.14). El mes anterior dejaba al EFE con la utilidad de
+// ocho meses contra variaciones de uno (auditoría ratios-kpis-03).
+// Si no existe ningún periodo del año anterior, retorna null.
 // ---------------------------------------------------------------------------
 
 export async function findComparativePeriod(
@@ -244,25 +332,14 @@ export async function findComparativePeriod(
   currentPeriod: AccountingPeriodRow,
 ): Promise<AccountingPeriodRow | null> {
   const db = getDb();
-  // Cálculo del mes anterior con rollover.
-  let prevYear = currentPeriod.year;
-  let prevMonth = currentPeriod.month - 1;
-  if (prevMonth < 1) {
-    prevMonth = 12;
-    prevYear -= 1;
-  }
-  const rows = await db
+  const rows: AccountingPeriodRow[] = await db
     .select()
     .from(accountingPeriods)
-    .where(
-      and(
-        eq(accountingPeriods.workspaceId, workspaceId),
-        eq(accountingPeriods.year, prevYear),
-        eq(accountingPeriods.month, prevMonth),
-      ),
-    )
-    .limit(1);
-  return rows[0] ?? null;
+    .where(eq(accountingPeriods.workspaceId, workspaceId));
+  const priorYear = rows
+    .filter((p) => p.year === currentPeriod.year - 1)
+    .sort((a, b) => b.month - a.month);
+  return priorYear[0] ?? null;
 }
 
 // ---------------------------------------------------------------------------

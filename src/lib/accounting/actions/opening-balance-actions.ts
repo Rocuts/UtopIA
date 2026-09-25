@@ -22,7 +22,8 @@
 //
 // Errores especificos del importer (`OpeningBalanceError`) se mapean a
 // codigos serializables: PARSE_FAILED / INVALID_INPUT / EMPTY_INPUT /
-// PUC_MISMATCH / NO_BALANCING_ACCOUNT / PERIOD_NOT_OPEN / DOWNSTREAM.
+// PUC_MISMATCH / UNMAPPED_ACCOUNTS / UNBALANCED / NO_BALANCING_ACCOUNT /
+// PERIOD_NOT_OPEN / DOWNSTREAM.
 // ---------------------------------------------------------------------------
 
 import { updateTag } from 'next/cache';

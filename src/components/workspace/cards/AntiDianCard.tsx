@@ -4,7 +4,14 @@
  * AntiDianCard — Anti-DIAN Preventivo.
  * Surfaces cash payment violations (Art. 771-5 §2 E.T.) and estimated
  * additional tax exposure if unaddressed.
- * Alert: rojo if any violations or excess, amarillo if exogena crosses detected.
+ * Alert: rojo if any violations or excess, amarillo if exogena crosses detected
+ * or the cash-payment flow is not available (N/D).
+ *
+ * tributario-modulos-07: pagosEfectivoTotal, excesoNoDeducibleGeneral y
+ * mayorImpuestoEstimado son `null` cuando el balance no trae el flujo de pagos
+ * en efectivo del año (el saldo de 1105 es un stock, no el flujo). Leerlos con
+ * `?? 0` pintaba "$0" y el semáforo "Óptimo — sin inconsistencias": una
+ * conclusión que el balance no soporta. Ahora se muestran como N/D.
  */
 
 import { Eye, AlertTriangle } from 'lucide-react';
@@ -28,13 +35,46 @@ interface AntiDianCardProps {
 export function AntiDianCard({ data, loading, error, t, language = 'es' }: AntiDianCardProps) {
   const violations = data?.data.pagosNoDeduciblesIndividuales ?? [];
   const crosses = data?.data.crucesExogenaSospechosos ?? [];
-  const mayorImpuesto = data?.data.mayorImpuestoEstimado ?? 0;
+  const mayorImpuesto = data?.data.mayorImpuestoEstimado ?? null;
+  const exceso = data?.data.excesoNoDeducibleGeneral ?? null;
+  // Sin el flujo de pagos en efectivo la bancarización no es evaluable.
+  const cashFlowUnavailable =
+    !!data && (data.data.pagosEfectivoTotal === null || exceso === null);
+  const notAvailable = language === 'es' ? 'N/D' : 'N/A';
 
   let alertLevel: AlertLevel = 'verde';
-  if (violations.length > 0 || (data?.data.excesoNoDeducibleGeneral ?? 0) > 0) {
+  if (violations.length > 0 || (exceso ?? 0) > 0) {
     alertLevel = 'rojo';
-  } else if (crosses.length > 0) {
+  } else if (crosses.length > 0 || cashFlowUnavailable) {
     alertLevel = 'amarillo';
+  }
+
+  const descriptionParts: string[] = [];
+  if (alertLevel === 'rojo') {
+    descriptionParts.push(
+      language === 'es'
+        ? 'Se detectaron pagos en efectivo no deducibles o exceso sobre el tope general. Corrija antes de la declaración.'
+        : 'Non-deductible cash payments or general excess detected. Correct before filing.',
+    );
+  } else if (crosses.length > 0) {
+    descriptionParts.push(
+      language === 'es'
+        ? 'Existen cruces de información exógena que pueden generar requerimientos. Revise los soportes.'
+        : 'Exogenous information crosses detected. Review supporting documents.',
+    );
+  } else if (!cashFlowUnavailable) {
+    descriptionParts.push(
+      language === 'es'
+        ? 'Sin inconsistencias detectadas en bancarización ni exógena.'
+        : 'No inconsistencies detected in banking or exogenous information.',
+    );
+  }
+  if (cashFlowUnavailable) {
+    descriptionParts.push(
+      language === 'es'
+        ? 'Bancarización no determinable (N/D): el balance no trae el flujo de pagos en efectivo del año; el saldo de caja no mide los pagos. Se requiere el detalle de pagos para evaluar el Art. 771-5 E.T.'
+        : 'Cash-payment limits not determinable (N/A): the trial balance does not include the year\'s cash-payment flow; the cash balance does not measure payments. Payment detail is required to evaluate Art. 771-5 E.T.',
+    );
   }
 
   return (
@@ -43,21 +83,9 @@ export function AntiDianCard({ data, loading, error, t, language = 'es' }: AntiD
       alertLevel={alertLevel}
       primaryMetric={{
         label: t.metric,
-        value: data ? formatCOP(mayorImpuesto) : '—',
+        value: !data ? '—' : mayorImpuesto === null ? notAvailable : formatCOP(mayorImpuesto),
       }}
-      description={
-        alertLevel === 'rojo'
-          ? (language === 'es'
-            ? 'Se detectaron pagos en efectivo no deducibles o exceso sobre el tope general. Corrija antes de la declaración.'
-            : 'Non-deductible cash payments or general excess detected. Correct before filing.')
-          : alertLevel === 'amarillo'
-          ? (language === 'es'
-            ? 'Existen cruces de información exógena que pueden generar requerimientos. Revise los soportes.'
-            : 'Exogenous information crosses detected. Review supporting documents.')
-          : (language === 'es'
-            ? 'Sin inconsistencias detectadas en bancarización ni exógena.'
-            : 'No inconsistencies detected in banking or exogenous information.')
-      }
+      description={descriptionParts.join(' ')}
       norma={t.norma}
       loading={loading}
       error={error}

@@ -21,6 +21,7 @@
 
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import type { FiscalAnchorBlock } from '../fiscal-anchor/types';
+import type { PlaneacionDescuentos } from './tools/planeacion-tope-258';
 import type { CompanyContext, Language } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -38,7 +39,8 @@ export type { CompanyContext, Language };
 //   supervivencia : Módulos 1 + 3 + 8. Activa Modo Supervivencia Élite cuando
 //                   Score DIAN > 60 o cuando el caller fuerza crisis.
 //   defensa_dian  : Módulos 1 + 3 + 5. Para responder requerimientos.
-//   devolucion    : Módulos 1 + 6. Para solicitar devolución saldo a favor.
+//   devolucion    : Módulos 1 + 3 + 6. Evalúa devolución de saldo a favor
+//                   (el Score determinista es insumo del sintetizador).
 // ---------------------------------------------------------------------------
 
 export type FiscalAgentMode =
@@ -53,10 +55,11 @@ export type FiscalAgentMode =
 // ---------------------------------------------------------------------------
 
 export type DianRequirementKind =
-  | 'requerimiento_ordinario' // Art. 752 E.T. — 15 días hábiles
+  | 'requerimiento_ordinario' // Art. 684 / 686 E.T. — el plazo del acto, mínimo 15 días calendario (Art. 261 Ley 223/1995)
+  | 'requerimiento_especial' // Art. 703 E.T. — respuesta en 3 meses (Art. 707), reducción Art. 709
   | 'emplazamiento_corregir' // Art. 685 E.T. — 1 mes
   | 'emplazamiento_no_declarar' // Art. 715 E.T.
-  | 'pliego_cargos' // Art. 707 E.T. — 3 meses
+  | 'pliego_cargos' // traslado de cargos — 1 mes para responder (p. ej. Arts. 651 y 860 E.T.)
   | 'liquidacion_oficial_revision' // Art. 702 E.T. (recurrible Art. 720 — 2 meses)
   | 'desconocido';
 
@@ -87,6 +90,11 @@ export interface FiscalAgentInput {
    * Módulo 5 — Tipo de requerimiento si el caller ya lo conoce.
    */
   dianRequirementKind?: DianRequirementKind;
+  /**
+   * Módulo 6 — Saldo a favor LIQUIDADO en la declaración de renta (Formulario
+   * 110), MoneyCop. Sin él la devolución es N/D (F04 es estimación contable).
+   */
+  saldoAFavorDeclaradoCents?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -200,9 +208,12 @@ export interface RiskFactorBreakdown {
 export interface RiskScoreModuleResult {
   markdown: string;
   data: {
-    score: number; // 0-100
+    score: number; // 0-100 — siempre el de computeRiskScore (no el del LLM)
     nivel: RiskNivel;
     factores: RiskFactorBreakdown[];
+    /** false ⇒ el score no se publica (sin base gravable); mostrar «No determinable». */
+    publicable: boolean;
+    noPublicableMotivo: string | null;
     interpretacion: string;
     recomendaciones: string[];
   };
@@ -218,14 +229,22 @@ export type EscenarioRiesgo = 'baja' | 'media' | 'alta';
 export interface PlaneacionEscenario {
   /** Nombre. */
   nombre: 'conservador' | 'base' | 'agresivo';
-  /** Impuesto base (F02 referencia 35%). */
+  /** Impuesto base (F02 referencia 35%) — lo fija el agente en código. */
   impuestoBase: string;
-  /** Impuesto estimado en el escenario. */
-  impuestoEscenario: string;
-  /** Ahorro estimado vs base. */
-  ahorroEstimado: string;
-  /** % de ahorro sobre base. */
-  ahorroPct: number;
+  /** Impuesto estimado en el escenario; null si no es cuantificable. */
+  impuestoEscenario: string | null;
+  /** Impuesto del escenario antes de descuentos tributarios; null si N/D. */
+  impuestoAntesDescuentos: string | null;
+  /** Descuentos por artículo (Arts. 254, 255, 256, 257, 258-1). */
+  descuentos: PlaneacionDescuentos;
+  /** 25% del impuesto antes de descuentos (Art. 258); calculado en código. */
+  tope258?: string | null;
+  /** Descuentos 255/256/257 por encima del tope (no aplicables); calculado en código. */
+  excesoTope258?: string | null;
+  /** Ahorro = base − escenario, recalculado en código; null si el escenario es N/D. */
+  ahorroEstimado: string | null;
+  /** % de ahorro sobre base; null si N/D. */
+  ahorroPct: number | null;
   /** Artículos aplicables. */
   articulosAplicables: string[];
   /** Documentación requerida. */
@@ -285,14 +304,15 @@ export interface DefensaDianModuleResult {
 export interface DevolucionesModuleResult {
   markdown: string;
   data: {
-    saldoAFavor: string;
-    viabilidad: 'alta' | 'media' | 'baja' | 'no_aplica';
+    /** Saldo a favor declarado; null = no determinable (F04 es estimación contable). */
+    saldoAFavor: string | null;
+    viabilidad: 'alta' | 'media' | 'baja' | 'no_aplica' | 'no_determinable';
     plazoDian: string;
     plazoConGarantia: string;
     documentosRequeridos: string[];
     pasosProcedimentales: string[];
     riesgosIdentificados: string[];
-    /** Norma vinculante: Art. 850 (derecho), Art. 854 (plazo solicitud), Art. 855 (plazo DIAN). */
+    /** Norma: Art. 850 (derecho), 854 (plazo solicitud), 855 (plazo DIAN), 860 (garantía). */
     normaRef: string;
   };
   warnings: string[];
@@ -307,7 +327,7 @@ export interface SupervivenciaAccionInmediata {
   accion: string;
   norma: string;
   fechaLimite: string | null;
-  impactoEstimado: string;
+  impactoEstimado: string | null;
 }
 
 export interface SupervivenciaModuleResult {
@@ -317,8 +337,9 @@ export interface SupervivenciaModuleResult {
     razonActivacion: string;
     riesgoDetectado: string;
     accionesInmediatas: SupervivenciaAccionInmediata[];
-    exposicionFiscalEstimada: string;
-    exposicionMitigada: string;
+    /** Sin cálculo determinista disponible: null (N/D). */
+    exposicionFiscalEstimada: string | null;
+    exposicionMitigada: string | null;
     /** Submódulos breves (reusa lógica/normas existente). */
     tet: { tetActual: number; brecha15Pct: number | null; impuestoAdicional: string | null };
     escudoRetenciones: { f03: string; ratioF10: number; recomendacion: string };
@@ -337,7 +358,7 @@ export interface FiscalSynthesisRecommendation {
   orden: number;
   titulo: string;
   norma: string;
-  impactoEstimado: string;
+  impactoEstimado: string | null;
   prioridad: 'alta' | 'media' | 'baja';
 }
 
@@ -353,6 +374,15 @@ export interface FiscalSynthesisResult {
 // ---------------------------------------------------------------------------
 
 export interface FiscalAgentReport {
+  /** Veredicto de los validadores deterministas conectados (Capa 2, M2, M3, M5, M6, M7). */
+  validation: {
+    veredicto: 'valida' | 'advertencia' | 'bloqueo';
+    errores: number;
+    advertencias: number;
+    checks: Array<{ name: string; passed: boolean; severity: 'error' | 'warning'; detail?: string; norma?: string }>;
+    /** Módulos sin validador conectado (vacío desde la fase 2, pendiente #8). */
+    modulosSinValidar: string[];
+  };
   ccv: CcvModuleResult;
   conciliacion: ConciliacionModuleResult | null;
   riskScore: RiskScoreModuleResult;
@@ -411,6 +441,11 @@ export interface FiscalAgentOrchestratorInput {
   instructions?: string;
   dianRequirementText?: string;
   dianRequirementKind?: DianRequirementKind;
+  /**
+   * Saldo a favor liquidado en el Formulario 110 (MoneyCop). Se reenvía a
+   * `FiscalAgentInput` para el módulo de devoluciones (tributario-modulos-02).
+   */
+  saldoAFavorDeclaradoCents?: string | null;
 }
 
 export interface FiscalAgentOrchestratorCallbacks {

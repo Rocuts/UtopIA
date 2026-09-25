@@ -50,15 +50,25 @@ El prorateo por días maneja correctamente meses parciales al inicio o fin del d
 
 | Tipo | Tasa | Base | Referencia |
 |---|---|---|---|
-| prima | 8.33% | Salarios + Aux. transporte | Ley 52/1975 |
-| cesantias | 8.33% | Salarios + Aux. transporte | Art. 249 CST |
-| intereses_cesantias | 1.00% | Saldo cesantías acumuladas | Ley 52/1975 art. 5 |
-| vacaciones | 4.17% | Salarios + Aux. transporte | Art. 186 CST |
-| salud | 8.50% | Salarios + Aux. transporte | Ley 100/1993 (empleador) |
-| pension | 12.00% | Salarios + Aux. transporte | Ley 100/1993 (empleador) |
-| arl | 0.522% | Salarios + Aux. transporte | Decreto 1295/1994 — Clase I |
-| parafiscales | 9.00% | Salarios + Aux. transporte | Ley 21/1982 |
+Cuentas y bases: ver `src/lib/db/seeds/provisions-config-co-2026.ts` (todas del
+PUC sembrado; el seed falla si una cuenta falta o existe con otro nombre).
+
+| Tipo | Tasa | Base | Referencia |
+|---|---|---|---|
+| prima | 8.3333% | Salario + aux. transporte | Art. 306 CST |
+| cesantias | 8.3333% | Salario + aux. transporte | Art. 249 CST |
+| intereses_cesantias | 1.00% | Misma base de cesantías (12 % × 8,33 %) | Ley 52/1975 |
+| vacaciones | 4.1667% | Salario ordinario (sin horas extras) | Art. 186 CST |
+| salud | 8.50% | Salario (sin aux. transporte) — exonerable 114-1 | Ley 100/1993 |
+| pension | 12.00% | Salario (sin aux. transporte) | Ley 100/1993 |
+| arl | 0.522% | Salario (sin aux. transporte) | Decreto 1772/1994 — Clase I |
+| caja | 4.00% | Salario (sin aux. transporte) | Ley 21/1982 |
+| sena | 2.00% | Salario — exonerable 114-1 | Ley 21/1982 |
+| icbf | 3.00% | Salario — exonerable 114-1 | Ley 89/1988 |
 | income_tax | 35.00% | Utilidad antes de impuestos | Art. 240 E.T. 2026 |
+
+Salud/SENA/ICBF dependen de `workspaces.empleador_beneficiario_114_1`: sin
+declarar se omiten con motivo (N/D); beneficiario → sólo trabajadores ≥ 10 SMMLV.
 
 **Caso de prueba income_tax**:
 - Utilidad antes de impuestos = $1.000.000 COP

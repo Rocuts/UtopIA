@@ -42,9 +42,36 @@ interface Props {
 
 type FilterKey = 'all' | 'critical' | PillarId;
 
+/** Claves i18n crudas (p. ej. «escudo.fiscal.alert.a5_sin_provision»): mismo criterio que AlertCenterView. */
+function esClaveI18n(s: string): boolean {
+  return /^[a-z0-9_]+(\.[a-z0-9_]+)+$/i.test(s.trim());
+}
+
+/**
+ * Texto legible del hallazgo de una alerta. Las alertas del Escudo persisten
+ * `hallazgo` = clave i18n (`fiscalAlertaToInsight`); se resuelve con el rótulo
+ * del diccionario por `vars.codigo` (el mismo de FiscalAnchorCard). Una clave
+ * sin rótulo no se pinta cruda (como AlertCenterView): `null`.
+ */
+export function hallazgoLegible(
+  alert: { hallazgo?: string | null; vars?: unknown },
+  alertasEscudo: Readonly<Record<string, string | undefined>>,
+): string | null {
+  const h = alert.hallazgo;
+  if (!h || !h.trim()) return null;
+  if (!esClaveI18n(h)) return h;
+  const vars = alert.vars as { codigo?: unknown } | null | undefined;
+  const codigo = typeof vars?.codigo === 'string' ? vars.codigo : null;
+  const label = codigo ? alertasEscudo[codigo] : undefined;
+  return typeof label === 'string' && label.trim() ? label : null;
+}
+
 export function InsightInbox({ open, onClose }: Props) {
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const isEs = language === 'es';
+  const alertasEscudo = t.elite.areas.escudo.fiscalAnchor.alertas as Readonly<
+    Record<string, string | undefined>
+  >;
   const [alerts, setAlerts] = useState<InboxAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterKey>('all');
@@ -161,7 +188,11 @@ export function InsightInbox({ open, onClose }: Props) {
                   <time className="text-[10px] text-n-500 font-mono">{formatRelative(a.createdAt, isEs)}</time>
                 </header>
                 <p className="text-sm font-medium text-n-1000 leading-snug">{a.subject}</p>
-                <p className="text-xs text-n-700 leading-relaxed mt-0.5">{a.hallazgo}</p>
+                {hallazgoLegible(a, alertasEscudo) && (
+                  <p className="text-xs text-n-700 leading-relaxed mt-0.5">
+                    {hallazgoLegible(a, alertasEscudo)}
+                  </p>
+                )}
                 <footer className="mt-2 flex items-center gap-2">
                   <button
                     type="button"

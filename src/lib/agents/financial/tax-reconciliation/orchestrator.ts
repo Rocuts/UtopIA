@@ -11,6 +11,8 @@ import type {
   TaxReconciliationReport,
   TaxReconciliationProgressEvent,
 } from './types';
+import { formato2516Threshold, type Formato2516Threshold } from './lib/deterministic';
+import { formatCopFromCents } from '../contracts/money';
 
 export interface OrchestrateTaxReconciliationOptions {
   onProgress?: (event: TaxReconciliationProgressEvent) => void;
@@ -30,6 +32,10 @@ export async function orchestrateTaxReconciliation(
 ): Promise<TaxReconciliationReport> {
   const { rawData, company, language, instructions } = request;
   const { onProgress } = options;
+  // Umbral del Formato 2516 con la UVT del año gravable objeto de conciliación
+  // (DUR 1625/2016 art. 1.7.2). Año sin UVT registrada ⇒ error explícito antes
+  // de gastar llamadas al LLM.
+  const umbral2516 = formato2516Threshold(company.fiscalPeriod);
 
   // ---------------------------------------------------------------------------
   // Stage 1: Difference Identifier
@@ -90,6 +96,7 @@ export async function orchestrateTaxReconciliation(
     differenceResult.fullContent,
     deferredTaxResult.fullContent,
     language,
+    umbral2516,
   );
 
   const report: TaxReconciliationReport = {
@@ -120,6 +127,7 @@ function buildConsolidatedReport(
   differenceContent: string,
   deferredTaxContent: string,
   language: 'es' | 'en',
+  umbral2516: Formato2516Threshold,
 ): string {
   const title =
     language === 'en'
@@ -149,9 +157,9 @@ function buildConsolidatedReport(
 | **Periodo Fiscal** | ${company.fiscalPeriod} |
 | **Fecha de Generacion** | ${date} |
 | **Generado por** | 1+1 — Tax Reconciliation Pipeline (2 Agentes Especializados) |
-| **Marco Legal** | Art. 772-1 ET, Decreto 2235/2017, Formato 2516 DIAN |
-| **Tasa Impuesto Renta** | 35% (Art. 240 ET 2026) |
-| **UVT 2026** | $52.374 COP |
+| **Marco Legal** | Art. 772-1 ET, Decreto 1998/2017 (DUR 1625/2016 arts. 1.7.1 y ss.), Formato 2516 DIAN |
+| **Tarifas del diferido** | 35% renta ordinaria (Art. 240 ET); 15% ganancia ocasional (Art. 313 ET) según forma de recuperación |
+| **UVT ${umbral2516.year}** | $${umbral2516.uvtCop.toLocaleString('es-CO')} COP |
 
 ---
 
@@ -169,6 +177,6 @@ ${deferredTaxContent}
 
 ---
 
-> **Nota Legal:** Este reporte de conciliacion fiscal fue generado por 1+1, un sistema de inteligencia artificial. Las diferencias identificadas, calculos de impuesto diferido, y asientos contables deben ser validados por un Contador Publico certificado y un asesor tributario antes de su inclusion en el Formato 2516 DIAN o cualquier declaracion tributaria. 1+1 no reemplaza la asesoria profesional. La transmision electronica del Formato 2516 es obligatoria para contribuyentes con ingresos brutos fiscales >= 45.000 UVT (~$2.356.830.000 COP 2026).
+> **Nota Legal:** Este reporte de conciliacion fiscal fue generado por 1+1, un sistema de inteligencia artificial. Las diferencias identificadas, calculos de impuesto diferido, y asientos contables deben ser validados por un Contador Publico certificado y un asesor tributario antes de su inclusion en el Formato 2516 DIAN o cualquier declaracion tributaria. 1+1 no reemplaza la asesoria profesional. La transmision electronica del Formato 2516 es obligatoria para contribuyentes con ingresos brutos fiscales del año gravable ${umbral2516.year} >= 45.000 UVT (${formatCopFromCents(BigInt(umbral2516.thresholdCents), true)}; DUR 1625/2016 art. 1.7.2).
 `;
 }

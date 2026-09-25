@@ -15,9 +15,9 @@ export type FiscalAnchorBlock = {
   f01: string;
   /** F02 — Impuesto Referencia = round(F01 × 35 / 100) en centavos. Art. 240 E.T. */
   f02: string;
-  /** F03 — Retenciones Acumuladas (Cta. 1355.*) en centavos. Crédito fiscal contra F02. */
+  /** F03 — Crédito imputable a renta (135505, 135515; 135595/1805 sólo si el nombre lo indica) en centavos. */
   f03: string;
-  /** F04 — Neto a Pagar / Saldo a Favor = F02 − F03 en centavos (negativo = saldo a favor). Art. 850 E.T. */
+  /** F04 — Posición de referencia contable = F02 − F03 en centavos. Estimación contable, NO liquidación: no es saldo a pagar ni saldo a favor (Arts. 26, 807 y 850 E.T.). */
   f04: string;
   /** F05 — Provisión IVA por Pagar (abs Cta. 2408) en centavos. */
   f05: string;
@@ -27,7 +27,7 @@ export type FiscalAnchorBlock = {
   f07: string;
   /** F08 — Total Pasivos Fiscales (abs Grupo 24 completo) en centavos. */
   f08: string;
-  /** F09 — % Carga Impuesto sobre Utilidad Neta (Clase 54 / F01 × 100, 1 decimal). */
+  /** F09 — Tasa efectiva contable: gasto de renta (grupo 54) / F01 (UAI) × 100, 1 decimal. No es la TTD. */
   f09: number;
   /** F10 — % Cobertura Retenciones (F03 / F02 × 100, 1 decimal). */
   f10: number;
@@ -65,8 +65,12 @@ export type VencimientoDian = {
   estado: 'pendiente' | 'proximo' | 'verificar' | 'vencido';
   /** Campo F## de referencia para estimar el valor. */
   baseCcv: 'F03' | 'F04' | 'F05' | 'F06' | 'F07';
-  /** Valor estimado de la obligación en centavos (string BigInt-safe). */
-  valorEstimado: string;
+  /**
+   * Valor estimado de la obligación en centavos (string BigInt-safe).
+   * `null` = N/D: con base F04 negativa no hay valor a pagar estimable (F04
+   * es una estimación contable; el saldo real sale de la declaración).
+   */
+  valorEstimado: string | null;
   /** Norma legal de respaldo. */
   norma: string;
 };

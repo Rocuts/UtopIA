@@ -21,7 +21,8 @@ import { CompanyInfoSchema, MoneyCop, NormaRef } from './base';
 // ---------------------------------------------------------------------------
 // El optimizador produce el diagnóstico tributario actual, las estrategias
 // rankeadas con ahorro proyectado en COP, la proyección consolidada y la hoja
-// de ruta de implementación. El cálculo dual TMT (parág. 6 Art. 240 E.T.) es
+// de ruta de implementación. El cálculo dual de la Tasa de Tributación Depurada
+// (TTD, Art. 240 par. 6 E.T.) es
 // invariante crítico — vive en `currentDiagnosis.dualCalculation`.
 // ---------------------------------------------------------------------------
 
@@ -43,20 +44,22 @@ export const TaxRegimeSchema = z.enum([
 ]);
 
 /**
- * Cálculo dual Tarifa General 35% (Art. 240) vs Tarifa Mínima de Tributación
- * 15% (parág. 6 Art. 240 — Ley 2277/2022). El impuesto a cargo del periodo es
- * MAX(ordinaria, tmt). Si la entidad cae en una excepción (RTE, SIMPLE, ZESE,
- * ZOMAC), `tmtAplicable=false` y `tmtExemptionReason` debe citar la base.
+ * Impuesto básico ordinario (Art. 240) y Tasa de Tributación Depurada (parág.
+ * 6 Art. 240 — Ley 2277/2022). La TTD es ID/UD: impuesto depurado sobre
+ * utilidad depurada, NO utilidad contable × 15%. Sin ID/UD verificados el
+ * impuesto adicional, la aplicabilidad y el impuesto a cargo final son N/D
+ * (`null`). El sistema recalcula el impuesto básico y fuerza esos `null`
+ * después del LLM (auditoría 2026-09, tributario-modulos-08).
  */
 export const DualCalculationSchema = z.object({
-  rentaOrdinaria35Cents: MoneyCop.describe('Renta líquida gravable × 35% (Art. 240 E.T.)'),
-  tributacionMinima15Cents: MoneyCop.describe('Utilidad contable depurada × 15% (parág. 6 Art. 240 E.T.)'),
-  impuestoACargoCents: MoneyCop.describe('MAX(ordinaria, TMT) — el mayor de los dos'),
-  tmtAplicable: z.boolean().describe('false si la entidad cae en alguna excepción del parág. 6 Art. 240'),
+  rentaOrdinaria35Cents: MoneyCop.describe('Renta líquida gravable × 35% (Art. 240 E.T.) — impuesto básico ordinario'),
+  tributacionMinima15Cents: MoneyCop.nullable().describe('Impuesto adicional por TTD = UD × 15% − ID (parág. 6 Art. 240). null sin ID/UD verificados'),
+  impuestoACargoCents: MoneyCop.nullable().describe('Impuesto a cargo final. null si la TTD no es determinable'),
+  tmtAplicable: z.boolean().nullable().describe('Aplicabilidad del parág. 6 Art. 240. null si no se puede establecer con los datos'),
   tmtExemptionReason: z
     .string()
     .nullable()
-    .describe('Base legal de la excepción cuando tmtAplicable=false (Art. 19 RTE, Arts. 903-916 SIMPLE, Ley 1955/2019 Art. 268 ZESE, etc.)'),
+    .describe('Exclusión del parágrafo 6 del Art. 240 E.T. cuando tmtAplicable=false (PJ extranjera sin residencia, ZESE con tarifa 0%, ZOMAC, parágrafos 1, 5 y 7, UD ≤ 0, Art. 32); RTE y SIMPLE no son sujetos del Art. 240'),
 });
 
 export type DualCalculationJson = z.infer<typeof DualCalculationSchema>;
@@ -65,9 +68,10 @@ export const CurrentDiagnosisSchema = z.object({
   currentRegime: TaxRegimeSchema.describe('Régimen tributario actual identificado'),
   effectiveTaxRatePct: z
     .number()
-    .describe('Tasa efectiva actual = Impuesto a cargo / UAI × 100. Usa null si UAI no es positiva.'),
+    .nullable()
+    .describe('Tasa efectiva actual = Impuesto a cargo / UAI × 100. null si UAI no es positiva o el impuesto a cargo es N/D.'),
   taxableIncomeCents: MoneyCop.describe('Renta líquida gravable depurada del periodo'),
-  accountingProfitBeforeTaxCents: MoneyCop.describe('Utilidad contable antes de impuestos (UAI) — base de la TMT'),
+  accountingProfitBeforeTaxCents: MoneyCop.describe('UAI contable — punto de partida de la utilidad depurada; no es base fiscal ni la TTD'),
   dualCalculation: DualCalculationSchema,
   currentBenefitsUsed: z
     .array(
@@ -115,16 +119,16 @@ export const TaxRecommendationSchema = z.object({
 export type TaxRecommendationJson = z.infer<typeof TaxRecommendationSchema>;
 
 /**
- * Comparación escenario actual vs optimizado. Es una invariante: el ahorro
- * proyectado total debe coincidir con la suma de `estimatedSavingsCents` de
- * las recomendaciones (el orchestrator valida esto post-LLM).
+ * Comparación escenario actual vs optimizado. El ahorro total y el impuesto
+ * optimizado se recalculan en código (Σ estimatedSavingsCents; actual −
+ * ahorro) — tax-planning/lib/deterministic.ts.
  */
 export const SavingsProjectionSchema = z.object({
   currentScenarioTaxCents: MoneyCop.describe('Impuesto a cargo actual estimado'),
   optimizedScenarioTaxCents: MoneyCop.describe('Impuesto a cargo proyectado tras estrategias'),
   totalAnnualSavingsCents: MoneyCop.describe('Suma de ahorros de las recomendaciones — invariante'),
-  effectiveRateBeforePct: z.number().describe('Tasa efectiva ANTES de optimización'),
-  effectiveRateAfterPct: z.number().describe('Tasa efectiva DESPUÉS de optimización'),
+  effectiveRateBeforePct: z.number().nullable().describe('Tasa ANTES de optimización (impuesto actual / UAI). null si UAI ≤ 0'),
+  effectiveRateAfterPct: z.number().nullable().describe('Tasa DESPUÉS de optimización (impuesto optimizado / UAI). null si UAI ≤ 0'),
   assumptions: z.array(z.string().min(1)).describe('Supuestos del modelo de proyección (macro, sectoriales)'),
 });
 
@@ -280,18 +284,23 @@ export const RegulatoryRiskAssessmentSchema = z.object({
     .describe('true si supera el test de propósito comercial razonable del Art. 869 E.T.'),
   rationale: z.string().min(1).describe('Argumento que sustenta el nivel de riesgo'),
   /**
-   * Defensa Art. 647 E.T. — diferencia de criterio. Si la estrategia se
-   * cuestiona por la DIAN, este es el argumento para anular la sanción de
-   * inexactitud (100%). DEBE invocarse cuando hay base doctrinal o
-   * jurisprudencial razonable.
+   * Art. 647 E.T. (parágrafo) — no se configura inexactitud cuando el menor
+   * valor a pagar o el mayor saldo a favor de la declaración proviene de una
+   * interpretación razonable en la apreciación o interpretación del derecho
+   * aplicable, SIEMPRE que los hechos y cifras declarados sean completos y
+   * verdaderos. Sólo aplica a declaraciones tributarias; no anula la sanción
+   * por hechos omitidos o cifras inexactas, ni el mayor impuesto ni los
+   * intereses. `true` sólo con sustento doctrinal o jurisprudencial razonable.
    */
   art647DefenseAvailable: z
     .boolean()
-    .describe('true si la diferencia de criterio (Art. 647 E.T.) es invocable en caso de requerimiento'),
+    .describe(
+      'true sólo si el menor impuesto de la declaración resultaría de una interpretación razonable del derecho aplicable (Art. 647 E.T.) y los hechos y cifras declarados son completos y verdaderos',
+    ),
   art647DefenseRationale: z
     .string()
     .nullable()
-    .describe('Sustento doctrinal/jurisprudencial para la diferencia de criterio. Null si no aplica.'),
+    .describe('Sustento doctrinal/jurisprudencial de la interpretación razonable (Art. 647 E.T.). Null si no aplica.'),
   checklist: z.array(ComplianceCheckItemSchema),
 });
 

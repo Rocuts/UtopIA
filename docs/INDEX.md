@@ -19,13 +19,32 @@ Guía de navegación rápida. **Fuente de verdad es el código** — cuando este
 
 | Documento | Qué encontrarás |
 |-----------|----------------|
-| [spec/financial-pipeline-v2.1.md](spec/financial-pipeline-v2.1.md) | Pipeline NIIF → Strategy → Governance + Parte IV/V (dictámenes + meta-auditoría) |
-| [spec/financial-report-v8.1.md](spec/financial-report-v10.1.md) | Editor Jefe HTML 12-slide — formato de salida autorizado |
+| [spec/financial-pipeline-v2.1.md](spec/financial-pipeline-v2.1.md) | Pipeline NIIF → Strategy → Governance + Parte IV/V (dictámenes + meta-auditoría). Las enmiendas 1–14 del 2026-09-24 prevalecen sobre el cuerpo (12: comparativos del EFE/ECP y ORI = Δ grupo 38; 13: Transparencia 90/10; 14: plazo corriente/no corriente, un código por renglón, revaluación en el EFE) |
+| [spec/financial-report-v10.1.md](spec/financial-report-v10.1.md) | Editor Jefe HTML (plantilla editorial A4 de 15 páginas) — formato de salida autorizado; sustituye a v8.1 |
+| [spec/api-clientes-v1.md](spec/api-clientes-v1.md) | API público `/api/v1`: decisiones de diseño y contrato (`tb-2026-09-24.3`: `unit`, `maturity_overrides`, fecha de corte) |
 | [spec/zod-strict-mode-2026.md](spec/zod-strict-mode-2026.md) | Reglas Zod para schemas LLM (`experimental_output`) |
 | [ESCUDO_SURVIVAL_MODE_SPEC.md](ESCUDO_SURVIVAL_MODE_SPEC.md) | Spec modo supervivencia DIAN (Ola Escudo) |
 | [DOCUMENT_PROCESSING_MODULE_SPEC.md](DOCUMENT_PROCESSING_MODULE_SPEC.md) | Pipeline OCR → extracción → vectorstore |
 | [PYME_MODULE_SPEC.md](PYME_MODULE_SPEC.md) | Módulo Contabilidad Pyme — libros, entries, OCR-promote |
 | [D5_3_FORENSIC_AUDIT.md](D5_3_FORENSIC_AUDIT.md) | Dictamen D5.3 Auditoría Forense — spec funcional |
+
+## Auditoría integral vigente (2026-09-24)
+
+| Documento | Qué encontrarás |
+|-----------|----------------|
+| [reviews/auditoria-integral-niif-2026-09-24.md](reviews/auditoria-integral-niif-2026-09-24.md) | **Empieza aquí.** Auditoría multiagente con verificación adversarial y re-auditorías: qué estaba mal en `dea0329`, qué se corrigió en las fases 1 y 2 (código final `54802609`), decisiones normativas, límites, pendientes con dueño y operación antes de desplegar |
+| [reviews/auditoria-integral-niif-2026-09-24-anexo.md](reviews/auditoria-integral-niif-2026-09-24-anexo.md) | Índice de los 269 hallazgos de la fase 1 (estado tras la fase 2), los hallazgos bajos atendidos en la fase 2 y los 55 de la re-auditoría final con su commit |
+| [agents/HANDOFF.md](agents/HANDOFF.md) | Continuidad: estado verificado, operación pendiente y próxima tarea |
+| [agents/MAP.md](agents/MAP.md) | Mapa de lectura por tarea: puntos de entrada y pruebas dirigidas |
+
+Dónde está documentado cada frente nuevo de la fase 2:
+
+| Frente | Documento |
+|---|---|
+| Procedencia servidor de informes (`src/lib/reports/`: versión persistida, `reportRef`, huellas, sello, re-render de las Partes) | [ARCHITECTURE.md](ARCHITECTURE.md) (sección *Server-side report provenance*) y fila de `agents/MAP.md` |
+| Comparativos del EFE/ECP, ORI y plazo corriente/no corriente | Enmiendas 12 y 14 de [spec/financial-pipeline-v2.1.md](spec/financial-pipeline-v2.1.md) |
+| Validador de prosa (notas, acta, Parte II, HTML) | Sección *Fase 2* del informe; límites en el encabezado de `src/lib/agents/financial/validators/narrative-anchors.ts` |
+| Ingesta con unidad confirmada, vencimientos declarados y fecha de corte | [API_CLIENTES.md](API_CLIENTES.md) (API v1) y fila de ingesta de `agents/MAP.md` (upload, `/niif`, intake) |
 
 ## Auditorías (2026-08)
 
@@ -34,7 +53,7 @@ Guía de navegación rápida. **Fuente de verdad es el código** — cuando este
 
 | Documento | Qué encontrarás |
 |-----------|----------------|
-| [AUDITORIA_CALCULOS_2026-08.md](AUDITORIA_CALCULOS_2026-08.md) | **Empieza aquí.** ¿Los cálculos dan los números reales? Veredicto por superficie, nota 3/10 global, lista priorizada |
+| [AUDITORIA_CALCULOS_2026-08.md](AUDITORIA_CALCULOS_2026-08.md) | Histórico. ¿Los cálculos dan los números reales? Veredicto por superficie, nota 3/10 global, lista priorizada |
 | [AUDITORIA_CALCULOS_2026-08_ANEXO.md](AUDITORIA_CALCULOS_2026-08_ANEXO.md) | Inventario cifra por cifra (DETERMINISTA / ANCLADA / LIBRE) y los 91 hallazgos con su escenario numérico |
 | [INSUMOS_REQUERIDOS_2026-08.md](INSUMOS_REQUERIDOS_2026-08.md) | Qué hace falta de fuera del repo: balances reales, 3 decisiones de negocio, 3 de infraestructura |
 | [SESION_EXACTITUD_2026-08.md](SESION_EXACTITUD_2026-08.md) | La ola que hizo determinista el Balance primario: convención de signos, reconciliador, desglose, sello |
@@ -69,6 +88,7 @@ Guía de navegación rápida. **Fuente de verdad es el código** — cuando este
 | Documento | Qué encontrarás |
 |-----------|----------------|
 | [SMOKE_TEST_GUIDE.md](SMOKE_TEST_GUIDE.md) | Checklist smoke-test manual antes de deploy |
+| [API_CLIENTES.md](API_CLIENTES.md) | API público `/api/v1`: llaves, webhooks, runbook y contrato vigente del recurso `trial-balances` |
 | [RAG_PGVECTOR.md](RAG_PGVECTOR.md) | Setup Neon pgvector, embeddings, fallback HNSWLib |
 | [MULTI_AGENT_PLAYBOOK_2026.md](MULTI_AGENT_PLAYBOOK_2026.md) | Patrones de orquestación multi-agente |
 | [repo-analysis-agents.md](repo-analysis-agents.md) | Agentes de análisis de repo (graphify, semantic search) |

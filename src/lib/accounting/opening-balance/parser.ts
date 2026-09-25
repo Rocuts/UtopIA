@@ -18,10 +18,12 @@
 // ---------------------------------------------------------------------------
 
 import {
+  isDebitNaturePuc,
   parseTrialBalanceCSV,
   preprocessTrialBalance,
   type RawAccountRow,
 } from '@/lib/preprocessing/trial-balance';
+import { xlsxRowToCsvLine } from '@/lib/upload/xlsx-csv';
 import {
   OpeningBalanceError,
   OPENING_ERR,
@@ -105,14 +107,21 @@ function parseCSVContent(csvText: string): ParseFileResult {
   // Solo nos interesan las hojas (Auxiliar o transaccionales) del periodo
   // mas reciente disponible.
   const preprocessed = preprocessTrialBalance(rows);
+  assertNoParseIssues(rows, preprocessed.primary.period);
   const lines = rowsToOpeningLines(rows, preprocessed.primary.period, warnings);
 
   return { lines, warnings };
 }
 
 // ---------------------------------------------------------------------------
-// XLSX path (multi-hoja: cada hoja se concatena como CSV con header propio)
+// XLSX path — UNA sola hoja (auditoría ingesta-28)
 // ---------------------------------------------------------------------------
+// Antes se concatenaban las filas de TODAS las hojas: una copia ("Balance" y
+// "Balance (2)") o un comparativo sin año en el encabezado duplicaba el
+// asiento de apertura sin error, porque cada copia cuadra por sí sola. Ahora
+// se usa la PRIMERA hoja con filas de balance reconocibles y se advierte qué
+// hojas se ignoraron; si otra hoja repite códigos de la elegida, se avisa
+// expresamente que es una copia/comparativo.
 
 async function parseXLSXContent(buffer: Buffer): Promise<ParseFileResult> {
   const warnings: string[] = [];
@@ -138,22 +147,19 @@ async function parseXLSXContent(buffer: Buffer): Promise<ParseFileResult> {
     );
   }
 
-  const aggregated: RawAccountRow[] = [];
+  let aggregated: RawAccountRow[] = [];
+  let chosenSheet: string | null = null;
+  const ignoredSheets: Array<{ name: string; overlapping: number }> = [];
 
   workbook.eachSheet((worksheet) => {
-    if (!companyName && worksheet.name) {
-      // Heuristica suave: usamos el nombre de la primera hoja con datos
-      // como "companyName" tentativo. No es definitivo — el frontend puede
-      // sobreescribirlo con el campo de razon social del wizard.
-      companyName = worksheet.name;
-    }
 
     const csvRows: string[] = [];
     worksheet.eachRow((row) => {
-      const values = row.values as unknown[];
-      // ExcelJS devuelve un array sparse 1-indexed; saltamos values[0].
-      const csv = values.slice(1).map(cellToCSV).join(',');
-      if (csv.trim().length > 0) csvRows.push(csv);
+      // Mismo serializador que /api/upload (ingesta-02): enteros tal cual, no
+      // enteros redondeados a centavos (sin ruido IEEE-754 que el parser de
+      // texto leería como miles) y escape RFC 4180 también para ';'.
+      const csv = xlsxRowToCsvLine(row.values as unknown[], csvRows.length === 0);
+      if (csv.replace(/,/g, '').trim().length > 0) csvRows.push(csv);
     });
 
     if (csvRows.length < 2) return; // Hoja vacia o solo header.
@@ -166,8 +172,28 @@ async function parseXLSXContent(buffer: Buffer): Promise<ParseFileResult> {
       );
       return;
     }
-    aggregated.push(...sheetRows);
+    if (chosenSheet === null) {
+      chosenSheet = worksheet.name;
+      // Heuristica suave: nombre de la hoja usada como "companyName"
+      // tentativo; el frontend puede sobreescribirlo.
+      companyName = worksheet.name || undefined;
+      aggregated = sheetRows;
+      return;
+    }
+    const chosenCodes = new Set(aggregated.map((r) => r.code));
+    const overlapping = sheetRows.filter((r) => chosenCodes.has(r.code)).length;
+    ignoredSheets.push({ name: worksheet.name, overlapping });
   });
+
+  for (const ig of ignoredSheets) {
+    warnings.push(
+      ig.overlapping > 0
+        ? `Hoja "${ig.name}" ignorada: repite ${ig.overlapping} código(s) de la hoja "${chosenSheet}" ` +
+            `(copia o comparativo). Sólo se importa una hoja para no duplicar saldos.`
+        : `Hoja "${ig.name}" ignorada: sólo se importa la primera hoja con balance ("${chosenSheet}"). ` +
+            `Si el balance está repartido en varias hojas, consolídelo en una.`,
+    );
+  }
 
   if (aggregated.length === 0) {
     throw new OpeningBalanceError(
@@ -178,6 +204,7 @@ async function parseXLSXContent(buffer: Buffer): Promise<ParseFileResult> {
   }
 
   const preprocessed = preprocessTrialBalance(aggregated);
+  assertNoParseIssues(aggregated, preprocessed.primary.period);
   const lines = rowsToOpeningLines(
     aggregated,
     preprocessed.primary.period,
@@ -192,10 +219,17 @@ async function parseXLSXContent(buffer: Buffer): Promise<ParseFileResult> {
 // ---------------------------------------------------------------------------
 
 /**
+ * Naturaleza PUC por clase y grupo (ingesta-29). La regla vive en el
+ * preprocesador para que el parser de balances y este importador usen la
+ * misma; se reexporta por compatibilidad con los consumidores existentes.
+ */
+export { isDebitNaturePuc };
+
+/**
  * Filtra hojas (transactional o level === 'Auxiliar') y enruta el saldo
- * neto al lado correcto segun la naturaleza PUC:
- *   - Clases 1, 5, 6, 7 son deudoras por naturaleza -> saldo positivo va a debit.
- *   - Clases 2, 3, 4 son acreedoras por naturaleza -> saldo positivo va a credit.
+ * neto al lado correcto segun la naturaleza PUC (`isDebitNaturePuc`):
+ *   - Deudoras -> saldo positivo va a debit.
+ *   - Acreedoras -> saldo positivo va a credit.
  *
  * Cuando el balance preprocessed ya viene con la convencion "saldo neto
  * positivo = saldo natural" (asi lo emite el preprocessor), basta con
@@ -245,8 +279,7 @@ function rowsToOpeningLines(
       continue;
     }
 
-    const classCode = parseInt(r.code[0], 10);
-    const isDebitNature = classCode === 1 || classCode >= 5;
+    const isDebitNature = isDebitNaturePuc(r.code);
 
     // El preprocesor entrega un saldo "natural" firmado. Si es positivo,
     // va al lado de la naturaleza. Si es negativo, invertimos el lado
@@ -306,39 +339,35 @@ function stripBOM(text: string): string {
   return text.replace(/^﻿/, '');
 }
 
-/**
- * Convierte una celda de ExcelJS a un campo CSV escapado. Reusa el patron
- * de /api/upload/route.ts pero reducido a lo que el preprocessor de
- * balance necesita (no necesitamos Date — los balances son numericos).
- */
-function cellToCSV(v: unknown): string {
-  let s = '';
-  if (v === null || v === undefined) s = '';
-  else if (typeof v === 'string') s = v;
-  else if (typeof v === 'number') s = Number.isFinite(v) ? String(v) : '';
-  else if (typeof v === 'boolean') s = v ? 'true' : 'false';
-  else if (v instanceof Date) s = v.toISOString().slice(0, 10);
-  else if (typeof v === 'object') {
-    const obj = v as Record<string, unknown>;
-    if ('result' in obj) {
-      const r = obj.result;
-      s = r === null || r === undefined ? '' : String(r);
-    } else if ('text' in obj && typeof obj.text === 'string') {
-      s = obj.text;
-    } else if (Array.isArray(obj.richText)) {
-      s = (obj.richText as { text?: string }[])
-        .map((x) => x.text ?? '')
-        .join('');
-    } else if ('error' in obj && typeof obj.error === 'string') {
-      s = obj.error;
-    } else s = '';
-  } else s = String(v);
+/** Máximo de problemas de lectura citados en el mensaje de error. */
+const MAX_PARSE_ISSUES_SHOWN = 10;
 
-  // Escape para CSV: si contiene coma, comilla o salto de linea, envolver.
-  if (s.includes(',') || s.includes('"') || s.includes('\n')) {
-    return '"' + s.replace(/"/g, '""') + '"';
+/**
+ * Los problemas de lectura del parser (celda de saldo ilegible, fila con
+ * columnas desplazadas, columnas de saldo ambiguas) bloquean la importación
+ * (ingesta-02). Antes se ignoraban: la fila quedaba sin saldo y se omitía
+ * como "saldo cero", así que el asiento de apertura perdía la cuenta en
+ * silencio.
+ */
+function assertNoParseIssues(rows: RawAccountRow[], period: string): void {
+  const messages = new Set<string>();
+  for (const row of rows) {
+    for (const issue of row.parseIssues ?? []) {
+      if (issue.period === null || issue.period === period) messages.add(issue.message);
+    }
   }
-  return s;
+  if (messages.size === 0) return;
+  const all = [...messages];
+  const shown = all.slice(0, MAX_PARSE_ISSUES_SHOWN);
+  const rest = all.length - shown.length;
+  throw new OpeningBalanceError(
+    OPENING_ERR.PARSE_FAILED,
+    'El balance tiene valores que no se pudieron leer sin adivinar; corrija el archivo y ' +
+      'vuelva a importarlo. ' +
+      shown.join(' ') +
+      (rest > 0 ? ` … y ${rest} problema(s) de lectura más.` : ''),
+    { parseIssues: all },
+  );
 }
 
 /**

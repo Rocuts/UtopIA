@@ -16,18 +16,37 @@
      Art. 908 par. 4 E.T. → 3.500 UVT. Es una responsabilidad DISTINTA del
      tope de pertenencia al régimen; nunca deben confundirse.
 
-   ⚠️ LO QUE SIGUE SIENDO ILUSTRATIVO (no alimenta ninguna recomendación):
-   la carga del régimen ordinario se modela con un solo tramo marginal del
-   Art. 241 E.T. y con una tarifa de ICA que NO tiene valor nacional único
-   (Ley 14 de 1983, arts. 32-33: la fija cada concejo municipal). Por eso
-   `compare()` devuelve `recommended: null` cuando falta un dato territorial
-   verificado, en lugar de recomendar régimen con supuestos inventados.
+   RÉGIMEN ORDINARIO (auditoría 2026-09, tributario-calc-11): la renta se
+   liquida con la tabla COMPLETA del Art. 241 E.T. para personas naturales o
+   con la tarifa del 35 % del Art. 240 E.T. para personas jurídicas, y el
+   resultado rotula cuál aplicó. Antes se usaba un único tramo del 19 %, que
+   subestimaba el impuesto ordinario hasta en un 37 %. El margen de utilidad y
+   la tarifa de ICA (Ley 14 de 1983, arts. 32-33: la fija cada concejo) son
+   datos del usuario: sin ellos `compare()` marca la cifra ordinaria como NO
+   disponible (`ordinarioDisponible: false` + motivo) y no recomienda régimen.
    ============================================================ */
 
 // ---- Constantes 2026 ----
 /** Res. DIAN 000238 del 15-dic-2025 — UVT año gravable 2026. */
 export const UVT_2026 = 52374;
 export const SMMLV_2026 = 1750905;
+
+/**
+ * SMMLV por año con fuente verificada en el repo (2026: Decreto 1469/2025,
+ * `SMMLV_2026`). Fuente ÚNICA para las provisiones de nómina (Art. 114-1
+ * E.T., `accounting/adjustments/provisions/employer.ts`) y el umbral de
+ * SAGRILAFT (`fiscal-opinion/sagrilaft.ts`). Un año que no esté aquí es N/D:
+ * nunca se sustituye por el SMMLV de otro año (re-auditoría 2026-09, NM-15).
+ */
+export const SMMLV_POR_ANIO: Readonly<Record<number, number>> = Object.freeze({
+  2026: SMMLV_2026,
+});
+
+/** SMMLV del año, o `null` si el repo no tiene la constante verificada. */
+export function smmlvVerificado(anio: number | null | undefined): number | null {
+  if (typeof anio !== 'number') return null;
+  return SMMLV_POR_ANIO[anio] ?? null;
+}
 
 /**
  * Tope de ingresos brutos para PERTENECER al Régimen Simple.
@@ -51,6 +70,37 @@ export const UMBRAL_NO_RESPONSABLE_IVA_UVT = 3_500;
 export const TOPE_ORD_UVT = 1400; // 1.400 UVT = $73.323.600
 /** Art. 241 E.T. — primer tramo de la tabla marginal, tarifa 0%. */
 export const RENTA_EXENTA_UVT = 1090;
+
+/**
+ * Tabla del Art. 241 E.T. (mod. art. 34 Ley 2010 de 2019), vigente para el
+ * año gravable 2026. `baseUvt` es el impuesto acumulado de los tramos
+ * anteriores (116, 788, 2.296, 5.901 y 10.352 UVT).
+ */
+export const ART_241_TRAMOS: ReadonlyArray<{
+  desdeUvt: number;
+  hastaUvt: number;
+  tarifa: number;
+  baseUvt: number;
+}> = [
+  { desdeUvt: 0, hastaUvt: 1_090, tarifa: 0, baseUvt: 0 },
+  { desdeUvt: 1_090, hastaUvt: 1_700, tarifa: 0.19, baseUvt: 0 },
+  { desdeUvt: 1_700, hastaUvt: 4_100, tarifa: 0.28, baseUvt: 116 },
+  { desdeUvt: 4_100, hastaUvt: 8_670, tarifa: 0.33, baseUvt: 788 },
+  { desdeUvt: 8_670, hastaUvt: 18_970, tarifa: 0.35, baseUvt: 2_296 },
+  { desdeUvt: 18_970, hastaUvt: 31_000, tarifa: 0.37, baseUvt: 5_901 },
+  { desdeUvt: 31_000, hastaUvt: Number.POSITIVE_INFINITY, tarifa: 0.39, baseUvt: 10_352 },
+];
+
+/** Art. 240 E.T. — tarifa general de renta de personas jurídicas (Ley 2277/2022). */
+export const TARIFA_RENTA_PJ_ART_240 = 0.35;
+
+/** Impuesto de renta de persona natural residente — Art. 241 E.T. (COP). */
+export function impuestoArt241(rentaLiquidaGravableCop: number): number {
+  const u = uvt(Math.max(0, rentaLiquidaGravableCop));
+  const tramo =
+    ART_241_TRAMOS.find((t) => u <= t.hastaUvt) ?? ART_241_TRAMOS[ART_241_TRAMOS.length - 1];
+  return ((u - tramo.desdeUvt) * tramo.tarifa + tramo.baseUvt) * UVT_2026;
+}
 
 /**
  * Grupos de actividad del Art. 908 E.T. vigentes tras C-540/2023.
@@ -297,9 +347,20 @@ export function computeRST(
 // Régimen ordinario (base comparable con el SIMPLE)
 // ---------------------------------------------------------------------------
 
+export type TipoContribuyenteRenta = 'persona_natural' | 'persona_juridica';
+
 export interface OrdinarioOptions {
-  /** Utilidad / ventas (default 0.35 — supuesto de demostración). */
+  /**
+   * Utilidad / ventas, dato del usuario. Sin él se usa 0,35 como supuesto de
+   * demostración y la cifra queda marcada `margenSupuesto: true`.
+   */
   margin?: number;
+  /**
+   * Persona natural → tabla del Art. 241 E.T.; persona jurídica → 35 %
+   * (Art. 240 E.T.). Default: persona natural (el caso típico de la balanza
+   * SIMPLE de la pyme); el resultado rotula siempre cuál se aplicó.
+   */
+  tipoContribuyente?: TipoContribuyenteRenta;
   /**
    * Tarifa de ICA municipal como fracción de los ingresos. SIN default:
    * la fija cada concejo dentro de los rangos de la Ley 14 de 1983 arts.
@@ -315,6 +376,12 @@ export interface OrdinarioBreakdown {
   /** null cuando no se suministró la tarifa municipal. */
   ica: number | null;
   renta: number;
+  /** Tipo de contribuyente con que se liquidó la renta. */
+  tipoContribuyente: TipoContribuyenteRenta;
+  /** Rótulo de la tarifa aplicada (Art. 241 tabla PN / Art. 240 35 % PJ). */
+  baseLegalRenta: string;
+  /** true cuando el margen de utilidad no lo dio el usuario (supuesto 35 %). */
+  margenSupuesto: boolean;
   advertencias: string[];
 }
 
@@ -330,30 +397,60 @@ export function computeOrdinario(
   annualSales: number,
   opts: OrdinarioOptions = {},
 ): OrdinarioBreakdown {
+  const margenSupuesto = opts.margin == null;
   const margin = opts.margin ?? 0.35;
+  const tipoContribuyente: TipoContribuyenteRenta = opts.tipoContribuyente ?? 'persona_natural';
   const advertencias: string[] = [];
 
+  // Utilidad = ventas × margen: aproximación de la renta líquida gravable (no
+  // descuenta rentas exentas, deducciones ni compensaciones del caso real).
   const utilidad = annualSales * margin;
-  const utilidadUVT = uvt(utilidad);
   const renta =
-    utilidadUVT <= RENTA_EXENTA_UVT
-      ? 0
-      : (utilidadUVT - RENTA_EXENTA_UVT) * UVT_2026 * 0.19; // primer tramo gravado Art. 241 E.T.
+    tipoContribuyente === 'persona_juridica'
+      ? utilidad * TARIFA_RENTA_PJ_ART_240
+      : impuestoArt241(utilidad);
+  const baseLegalRenta =
+    tipoContribuyente === 'persona_juridica'
+      ? 'Persona jurídica — tarifa general del 35 % (Art. 240 E.T.)'
+      : 'Persona natural residente — tabla marginal completa del Art. 241 E.T. (0 % a 39 %)';
+
   advertencias.push(
-    'Renta estimada con un único tramo marginal del Art. 241 E.T. y margen ' +
-      'supuesto: cifra de demostración, no liquidación oficial.',
+    `Renta estimada sobre utilidad = ventas × margen (${baseLegalRenta}): ` +
+      'estimación, no liquidación oficial.',
   );
+  if (margenSupuesto) {
+    advertencias.push(
+      'Margen de utilidad NO suministrado: se usó 35 % como supuesto de demostración. ' +
+        'La cifra ordinaria no es del cliente hasta que confirme su margen.',
+    );
+  }
 
   if (opts.icaRate == null) {
     advertencias.push(
       'ICA no calculado: la tarifa la fija cada concejo municipal (Ley 14 de ' +
         '1983, arts. 32-33). No hay tarifa nacional única que se pueda suponer.',
     );
-    return { total: renta, ica: null, renta, advertencias };
+    return {
+      total: renta,
+      ica: null,
+      renta,
+      tipoContribuyente,
+      baseLegalRenta,
+      margenSupuesto,
+      advertencias,
+    };
   }
 
   const ica = annualSales * opts.icaRate;
-  return { total: ica + renta, ica, renta, advertencias };
+  return {
+    total: ica + renta,
+    ica,
+    renta,
+    tipoContribuyente,
+    baseLegalRenta,
+    margenSupuesto,
+    advertencias,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -445,6 +542,16 @@ export interface CompareResult {
   semaforo: Semaforo;
   /** Semáforo de responsabilidad de IVA / INC (3.500 UVT). */
   semaforoIvaInc: Semaforo;
+  /**
+   * false cuando la cifra ordinaria depende de supuestos (margen de utilidad o
+   * tarifa de ICA no suministrados por el usuario): la UI debe mostrar N/D con
+   * `ordinarioMotivoND` en lugar del número.
+   */
+  ordinarioDisponible: boolean;
+  /** Motivo de la no disponibilidad; null cuando la cifra está disponible. */
+  ordinarioMotivoND: string | null;
+  /** Rótulo de la tarifa de renta aplicada (Art. 241 PN / Art. 240 PJ). */
+  ordinarioBaseLegal: string;
   advertencias: string[];
 }
 
@@ -465,6 +572,16 @@ export function compare(annualSales: number, opts: CompareOptions = {}): Compare
   const semaforoIvaInc = semaforoResponsabilidadIvaInc(annualSales);
   const advertencias = [...simple.advertencias, ...ord.advertencias];
 
+  const faltantes = [
+    ord.margenSupuesto ? 'margen de utilidad del negocio' : null,
+    opts.icaRate == null ? 'tarifa de ICA del municipio' : null,
+  ].filter((x): x is string => x !== null);
+  const ordinarioDisponible = faltantes.length === 0;
+  const ordinarioMotivoND = ordinarioDisponible
+    ? null
+    : `N/D: falta ${faltantes.join(' y ')} (dato del usuario). Sin él la cifra del régimen ordinario sería un supuesto, no la del cliente.`;
+  const ordinarioBaseLegal = ord.baseLegalRenta;
+
   // Excluido del SIMPLE: la comparación no existe, solo queda el ordinario.
   if (!simple.aplicaSimple) {
     return {
@@ -475,12 +592,17 @@ export function compare(annualSales: number, opts: CompareOptions = {}): Compare
       savings: 0,
       semaforo,
       semaforoIvaInc,
+      ordinarioDisponible,
+      ordinarioMotivoND,
+      ordinarioBaseLegal,
       advertencias,
     };
   }
 
+  // Además de los datos territoriales, el margen de utilidad debe ser del
+  // usuario: recomendar con un margen inventado es recomendar con supuestos.
   const datosTerritorialesVerificados =
-    opts.icaRate != null && (!opts.aportesPension || opts.icaConsolidadoRate != null);
+    ordinarioDisponible && (!opts.aportesPension || opts.icaConsolidadoRate != null);
 
   return {
     rst: simple.impuesto,
@@ -494,6 +616,9 @@ export function compare(annualSales: number, opts: CompareOptions = {}): Compare
     savings: datosTerritorialesVerificados ? Math.abs(ord.total - simple.impuesto) : 0,
     semaforo,
     semaforoIvaInc,
+    ordinarioDisponible,
+    ordinarioMotivoND,
+    ordinarioBaseLegal,
     advertencias,
   };
 }

@@ -107,13 +107,13 @@ export function SintetizadorCard({ data, loading, t, language = 'es' }: Sintetiz
                   <div className="p-3 rounded-md bg-[rgb(239_68_68_/_0.08)] ring-1 ring-[rgb(239_68_68_/_0.2)]">
                     <span className="block text-xs text-n-500 mb-0.5">{t.exposicionLabel}</span>
                     <span className="font-bold text-danger tabular-nums text-lg">
-                      {fmtCop(data.data.exposicionFiscalEstimada)}
+                      {data.data.exposicionFiscalEstimada === null ? (language === 'es' ? 'N/D' : 'N/A') : fmtCop(data.data.exposicionFiscalEstimada)}
                     </span>
                   </div>
                   <div className="p-3 rounded-md bg-[rgb(34_197_94_/_0.08)] ring-1 ring-[rgb(34_197_94_/_0.2)]">
                     <span className="block text-xs text-n-500 mb-0.5">{t.reduccionLabel}</span>
                     <span className="font-bold text-success tabular-nums text-lg">
-                      {fmtCop(data.data.exposicionMitigada)}
+                      {data.data.exposicionMitigada === null ? (language === 'es' ? 'N/D' : 'N/A') : fmtCop(data.data.exposicionMitigada)}
                     </span>
                   </div>
                 </div>
@@ -135,9 +135,11 @@ export function SintetizadorCard({ data, loading, t, language = 'es' }: Sintetiz
                           </span>
                           <div className="flex-1 min-w-0">
                             <span className="font-medium text-n-800">{a.accion}</span>
-                            <span className="ml-1.5 text-success text-xs font-medium tabular-nums">
-                              ({fmtCop(a.impactoEstimado)})
-                            </span>
+                            {a.impactoEstimado !== null && (
+                              <span className="ml-1.5 text-success text-xs font-medium tabular-nums">
+                                ({fmtCop(a.impactoEstimado)})
+                              </span>
+                            )}
                             <span className="ml-1.5">
                               <NormaCitation norma={a.norma} />
                             </span>

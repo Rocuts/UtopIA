@@ -32,11 +32,12 @@ const mockedOrchestrate = vi.mocked(orchestrateFinancialReport);
 
 function buildHappyReport(): FinancialReport {
   return {
+    // Identidad = la del JSON validado del fixture. Antes el encabezado decía
+    // 'Demo SAS' 2026 y los estados 'Empresa Prueba SAS' 2025; el gate ahora
+    // bloquea esa discrepancia (reportes-export-10).
     company: {
-      name: 'Demo SAS',
-      nit: '900123456-7',
+      ...makeExportableReport().company,
       entityType: 'SAS',
-      fiscalPeriod: '2026',
     },
     niifAnalysis: {
       ...makeExportableReport().niifAnalysis,
@@ -66,8 +67,25 @@ function buildHappyReport(): FinancialReport {
   };
 }
 
+// El balance enviado tiene que ser el MISMO del que salen las cifras del
+// informe (`makeExportableReport`, Activo $10.000): la exportación cruza el
+// JSON NIIF contra las anclas del rawData y rechaza (422) un informe ajeno al
+// balance (pipeline-flujo-07).
 const validBody = {
-  rawData: 'Codigo,Nombre,Saldo\n1,Activo,1000000000\n',
+  rawData: [
+    'codigo,nombre,nivel,transaccional,saldo 2025',
+    '110505,Caja,Auxiliar,1,1700',
+    '130505,Clientes,Auxiliar,1,8300',
+    '220505,Proveedores,Auxiliar,1,4000',
+    '311505,Capital,Auxiliar,1,3000',
+    '330505,Reserva legal,Auxiliar,1,500',
+    '370505,Utilidades acumuladas,Auxiliar,1,500',
+    '360505,Utilidad del ejercicio,Auxiliar,1,2000',
+    '410505,Ventas,Auxiliar,1,7000',
+    '510505,Sueldos,Auxiliar,1,2000',
+    '530505,Intereses,Auxiliar,1,1000',
+    '613505,CMV,Auxiliar,1,2000',
+  ].join('\n'),
   company: {
     name: 'Demo SAS',
     nit: '900123456-7',

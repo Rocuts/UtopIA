@@ -30,18 +30,46 @@
 
 import { upload } from '@vercel/blob/client';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
+import type { UploadUnitInfo } from '@/lib/upload/ingest-directives';
 
 export interface UploadDocumentResult {
   success: boolean;
   filename: string;
   chunks: number;
+  /**
+   * Texto para el chat. En un balance preprocesado lleva el informe de
+   * validación antepuesto: NO es re-parseable como CSV.
+   */
   extractedText: string;
+  /**
+   * Texto extraído sin el informe (CSV original o bloques `[period=…]` del
+   * XLSX). Es el `rawData` que espera /api/financial-report/niif. Opcional
+   * sólo por compatibilidad con despliegues anteriores.
+   */
+  rawData?: string;
   validationReport?: string;
   detectedCaseType: string | null;
   isTrialBalance: boolean;
   preprocessed: PreprocessedBalance | null;
   detectedPeriods: string[];
+  ingestWarnings?: string[];
+  ingestErrors?: string[];
+  /**
+   * P4-a: unidad de los importes que declara el balance y la confirmada.
+   * Opcional sólo por compatibilidad con despliegues anteriores.
+   */
+  unit?: UploadUnitInfo | null;
   message: string;
+}
+
+/** Opciones de la subida. */
+export interface UploadDocumentOptions {
+  /**
+   * Unidad CONFIRMADA por el usuario (P4-a): 1 (pesos), 1000 (miles) o
+   * 1000000 (millones). El servidor reexpresa en centavos exactos y devuelve
+   * `rawData` con la directiva de la unidad. Sólo para balances CSV/XLSX.
+   */
+  unitMultiplier?: 1 | 1000 | 1000000;
 }
 
 /**
@@ -70,9 +98,10 @@ export async function uploadDocument(
   file: File,
   context: string,
   onProgress?: (pct: number) => void,
+  options: UploadDocumentOptions = {},
 ): Promise<UploadDocumentResult> {
   if (file.size <= DIRECT_UPLOAD_MAX_BYTES) {
-    return uploadDirect(file, context, onProgress);
+    return uploadDirect(file, context, onProgress, options);
   }
 
   // El reintento SOLO cubre el paso 1 (subir a Blob). Si envolviera también el
@@ -91,12 +120,12 @@ export async function uploadDocument(
     // límite duro cambiaría un mensaje accionable por un 413 mudo de la
     // plataforma, que ni siquiera llega al handler.
     if (file.size <= DIRECT_UPLOAD_MAX_BYTES) {
-      return uploadDirect(file, context, onProgress);
+      return uploadDirect(file, context, onProgress, options);
     }
     throw new BlobUnavailableError(file, error);
   }
 
-  return processBlob(blobUrl, context, file.name);
+  return processBlob(blobUrl, context, file.name, options);
 }
 
 /**
@@ -110,12 +139,16 @@ async function uploadDirect(
   file: File,
   context: string,
   onProgress?: (pct: number) => void,
+  options: UploadDocumentOptions = {},
 ): Promise<UploadDocumentResult> {
   onProgress?.(0);
 
   const form = new FormData();
   form.append('file', file);
   form.append('context', context);
+  if (options.unitMultiplier !== undefined) {
+    form.append('unitMultiplier', String(options.unitMultiplier));
+  }
 
   // No hay eventos de progreso reales con fetch(): el archivo es pequeño y la
   // subida es un único round-trip, así que reportamos hitos para que la UI del
@@ -152,11 +185,17 @@ async function processBlob(
   blobUrl: string,
   context: string,
   filename: string,
+  options: UploadDocumentOptions = {},
 ): Promise<UploadDocumentResult> {
   const res = await fetch('/api/upload', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ blobUrl, context, filename }),
+    body: JSON.stringify({
+      blobUrl,
+      context,
+      filename,
+      ...(options.unitMultiplier !== undefined ? { unitMultiplier: options.unitMultiplier } : {}),
+    }),
   });
   return readUploadResponse(res);
 }

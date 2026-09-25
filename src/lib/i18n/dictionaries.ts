@@ -282,6 +282,130 @@ export const dict = {
         'La mayoría de las empresas operan mirando el retrovisor: ven lo que gastaron, lo que pagaron y lo que quedó. Con 1+1, cambiamos la perspectiva 180°. Hemos estructurado su ecosistema empresarial en cuatro pilares de alto impacto. No hablamos de contabilidad o impuestos; hablamos de Resiliencia, Valor, Integridad y Futuro.',
       niifEliteCTA: 'Informe NIIF Elite',
       niifEliteCTALong: 'Informe NIIF Elite en determinado periodo',
+      // Centro de Alertas (/workspace/alertas). Re-auditoría e2e-niif-15
+      // (2026-09): sólo alertas reales del Centinela; nada de maquetas.
+      alertCenter: {
+        eyebrow: 'Sentinel · Centro de Alertas',
+        title: 'Centro de Alertas',
+        subtitle:
+          'Alertas activas registradas por el Centinela y El Escudo para su empresa (pendientes, pospuestas y escaladas), filtradas por área.',
+        filters: {
+          todas: 'Todas',
+          escudo: 'Escudo',
+          valor: 'Valor',
+          verdad: 'Verdad',
+          futuro: 'Futuro',
+        },
+        inboxTitle: 'Alertas activas',
+        criticalCount: '{n} críticas',
+        loading: 'Cargando alertas…',
+        empty: 'Sin alertas activas',
+        emptyBody:
+          'Las alertas aparecen cuando el Centinela o El Escudo detectan hallazgos en los informes de su empresa. No mostramos alertas de ejemplo.',
+        emptyFilter: 'No hay alertas activas en esta área.',
+        error: 'No fue posible cargar las alertas. Intente de nuevo más tarde.',
+        severity: {
+          critico: 'Crítica',
+          advertencia: 'Advertencia',
+          informativo: 'Informativa',
+        },
+        status: {
+          pending: 'Pendiente',
+          snoozed: 'Pospuesta',
+          escalated: 'Escalada',
+          resolved: 'Resuelta',
+        },
+        subscriptionsTitle: 'Suscripciones',
+      },
+      // Auditoría WP07 (2026-09): estados honestos de dato. Ninguna cifra
+      // literal se presenta como dato del cliente.
+      dataStatus: {
+        notAvailable: 'N/D',
+        reason: 'Motivo',
+        demoBadge: 'Demostración',
+        moduleInPreparation: 'Módulo en preparación',
+        moduleInPreparationNotice: 'Módulo en preparación — sin datos de su empresa',
+        moduleInPreparationBody:
+          'Esta sección todavía no está conectada a datos de su empresa. No mostramos cifras, casos ni estados hasta que exista una fuente verificada.',
+        startAnalysis: 'Iniciar análisis con sus datos',
+        openModule: 'Abrir',
+        backTo: 'Volver a',
+        noCompanyData: 'Sin datos de su empresa — genere un Informe NIIF para ver cifras reales.',
+        generateReport: 'Generar Informe',
+        goToCommandCenter: 'Ver en el Centro de Mando',
+        valor: {
+          exitValueLabel: 'Valor de salida (patrimonio)',
+          exitValueReason:
+            'Requiere deuda financiera neta y supuestos de valoración confirmados. Un múltiplo sin restar la deuda neta no es valor del patrimonio, y no hay DCF ejecutado.',
+          evEbitLabel: 'Valor empresa · EV/EBIT 6× (heurístico)',
+          evEbitReason: 'Requiere EBIT operacional positivo.',
+          ebitLabel: 'EBIT operacional',
+          equityBookLabel: 'Patrimonio contable',
+          waccLabel: 'WACC',
+          waccReason: 'No capturado',
+          assumptionsNote:
+            'Referencias por método, no una valoración: el múltiplo 6× es un supuesto heurístico (PYME servicios, rango 4–8×) y el patrimonio contable no es valor de mercado.',
+        },
+        verdad: {
+          scoreNiifLabel: 'Score de calidad NIIF (rúbrica de controles)',
+          complianceLabel: 'Score de cumplimiento (auditoría completa)',
+          scoreReason:
+            'Requiere un Informe NIIF o una auditoría completa con puntuaciones, hallazgos y dictamen.',
+          opinionsTitle: 'Dictámenes',
+          opinionsEmpty:
+            'No hay dictámenes emitidos para su empresa. Los dictámenes se generan desde el flujo de Dictamen de Revisoría Fiscal.',
+        },
+        futuro: {
+          runwayLabel: 'Runway de caja · escenario base',
+          runwayReason:
+            'Se calcula desde el libro mayor en el Centro de Mando; esta vista no tiene una proyección de su empresa.',
+          monteCarloTitle: 'Simulación Monte Carlo',
+          monteCarloEmpty:
+            'Sin simulación ejecutada sobre sus datos. El escenario simulado se calcula en el Centro de Mando con su balance.',
+        },
+        escenarios: {
+          subtitle: 'Escenarios deterministas ilustrativos · Base / Optimista / Pesimista · entradas editables',
+          badge: 'Ilustrativo — supuestos del simulador; no son datos de su empresa',
+          narrative:
+            'El futuro no es una línea; es un abanico. Mueva el crecimiento y los costos variables y vea cómo reaccionan tres escenarios deterministas. No hay probabilidades: son ejercicios de sensibilidad.',
+          baseRevenue: 'Ingresos base ilustrativos (Año 0)',
+          assumptions: 'Horizonte 5 años · Capex 8 % de ingresos · Overhead 12 % · sin impuestos ni capital de trabajo',
+          baseDescription: 'Escenario central con las entradas del simulador.',
+          cumulativeLabel: 'EBITDA − capex acumulado (5 años)',
+        },
+        macro: {
+          eyebrow: 'El Futuro — Macroeconomía',
+          title: 'Macroeconomía',
+          lede: 'Indicadores oficiales de Colombia con su fuente y fecha de vigencia. Sin dato verificado se muestra N/D.',
+          back: 'Volver a El Futuro',
+          trm: 'TRM (COP por USD)',
+          ipc: 'Inflación anual (IPC)',
+          tasa: 'Tasa de intervención BanRep',
+          source: 'Fuente',
+          asOf: 'Vigencia',
+          fetchedAt: 'Consultado',
+          stale: 'Último valor disponible — la consulta más reciente falló',
+          loading: 'Consultando fuentes oficiales…',
+          error: 'No fue posible consultar el servicio de indicadores.',
+          sourceSuperfinanciera: 'Superintendencia Financiera (datos.gov.co)',
+          sourceDane: 'DANE (datos.gov.co)',
+          sourceBanrep: 'Banco de la República',
+          noProjections:
+            'Esta sección no publica proyecciones ni recomendaciones: requerirían fuentes citadas y fechadas y se rotularían como escenario.',
+        },
+        escudo: {
+          effectiveRateLabel: 'Tasa efectiva contable (gasto 54 / UAI)',
+          effectiveRateReason: 'Requiere utilidad antes de impuestos positiva.',
+          taxCreditsLabel: 'Saldos a favor',
+          taxCreditsReason: 'Requiere liquidación fiscal verificada',
+          upcomingDeadlinesLabel: 'Vencimientos próximos',
+          dianRiskLabel: 'Riesgo DIAN',
+          riskNotDeterminable: 'No determinable',
+          riskNotDeterminableReason:
+            'Sin utilidad antes de impuestos en el periodo (F01, UAI contable = $0; no es base fiscal): el score de riesgo no tiene qué medir.',
+          period: 'Periodo',
+        },
+      },
       areas: {
         escudo: {
           concept: 'El Escudo',
@@ -322,6 +446,7 @@ export const dict = {
               title: 'Modo Supervivencia Élite',
               subtitle: 'Optimización fiscal y protección patrimonial en tiempo real',
               intro: 'Cinco análisis paralelos sobre tu balance bajo la normativa tributaria colombiana 2026.',
+              blockedReasonsTitle: 'Motivos por los que el balance no se puede usar',
               statusLabels: {
                 idle: 'Listo para analizar',
                 running: 'Analizando...',
@@ -342,12 +467,12 @@ export const dict = {
               cards: {
                 tet: {
                   title: 'Tasa Efectiva de Tributación',
-                  metric: 'TET',
+                  metric: 'TET contable',
                   norma: 'Art. 240 E.T.',
                 },
                 retention: {
                   title: 'Escudo de Retenciones',
-                  metric: 'Saldo a favor proyectado',
+                  metric: 'Saldo a favor (requiere declaración)',
                   norma: 'Art. 670 E.T.',
                 },
                 antiDian: {
@@ -363,7 +488,7 @@ export const dict = {
                 dividend: {
                   title: 'Optimización de Dividendos',
                   metric: 'Ahorro vs distribuir',
-                  norma: 'Art. 242 / Art. 36-3 E.T.',
+                  norma: 'Art. 242 E.T.',
                 },
               },
               synthesis: {
@@ -388,8 +513,8 @@ export const dict = {
             disclaimer: 'Referencia antes de depuraciones fiscales. El valor mostrado es una proyección bruta UAI × tarifa nominal (Art. 240 E.T.) y NO constituye liquidación oficial del Impuesto de Renta. El impuesto definitivo requiere conciliación contable→fiscal (Art. 26 E.T.), aplicación de descuentos (Arts. 254-260 E.T.), verificación de la Tasa de Tributación Depurada del 15% (parágrafo 6 Art. 240 E.T., Ley 2277/2022) y validación del régimen tarifario aplicable. Determinación final requiere intervención de contador público y/o revisor fiscal.',
             f01: {
               title: 'UAI Contable',
-              description: 'Base del impuesto de renta',
-              norma: 'Art. 240 E.T.',
+              description: 'Utilidad contable antes de impuestos — no es base fiscal (requiere depuración)',
+              norma: 'Art. 26 E.T.',
             },
             f02: {
               title: 'Impuesto Referencia (35%)',
@@ -397,14 +522,14 @@ export const dict = {
               norma: 'Art. 240 E.T.',
             },
             f03: {
-              title: 'Retenciones Acumuladas',
-              description: 'Crédito fiscal contra impuesto',
-              norma: 'Cta. 1355',
+              title: 'Crédito de Renta',
+              description: 'Retenciones y anticipos de renta (sin ReteIVA, ReteICA ni otros impuestos)',
+              norma: 'Ctas. 135505 / 135515',
             },
             f04: {
-              title: 'Neto a Pagar / Saldo a Favor',
-              description: 'F02 − F03 (negativo = favor)',
-              norma: 'Art. 850 E.T.',
+              title: 'Posición de Referencia Contable',
+              description: 'F02 − F03 · estimación contable, no liquidación (no es saldo a pagar ni a favor)',
+              norma: 'Arts. 26 y 807 E.T. (requiere depuración)',
             },
             f05: {
               title: 'Provisión IVA por Pagar',
@@ -427,9 +552,9 @@ export const dict = {
               norma: 'Cta. 24XX',
             },
             f09: {
-              title: 'Carga sobre Utilidad Neta',
-              description: 'Clase 54 / F01 × 100',
-              norma: 'Art. 240 E.T.',
+              title: 'Tasa efectiva contable',
+              description: 'Gasto de renta (grupo 54) / UAI × 100 — no es la TTD (Art. 240 par. 6 E.T.)',
+              norma: 'Razón contable (impuesto/UAI)',
             },
             f10: {
               title: 'Cobertura de Retenciones',
@@ -446,8 +571,8 @@ export const dict = {
               vencido: 'Vencido',
             },
             alertas: {
-              A5_SIN_PROVISION: 'Impuesto de Renta sin provisionar — riesgo Art. 647 E.T.',
-              SALDO_A_FAVOR: 'Saldo a favor disponible',
+              A5_SIN_PROVISION: 'Sin gasto de renta causado — requiere depuración fiscal (Art. 26 E.T.); informativo, sin cifra estimada',
+              SALDO_A_FAVOR: 'Posible saldo a favor (estimación contable, no liquidación) — verificar contra la declaración',
               VENCIMIENTO_15D: 'Vencimiento próximo (≤15 días)',
               F10_BAJA: 'Eficiencia fiscal baja',
               ICA_ESTIMACION_SIN_CIIU: 'ICA estimado sin CIIU verificado — Decreto 352/2002',
@@ -487,13 +612,13 @@ export const dict = {
               header: 'CONTEXTO FISCAL AUTOMÁTICO',
               f01: 'F01 UAI Contable',
               f02: 'F02 Impuesto Referencia (35%)',
-              f03: 'F03 Retenciones Acumuladas',
-              f04: 'F04 Neto a Pagar/Saldo a Favor',
+              f03: 'F03 Crédito de renta (retenciones y anticipos de renta)',
+              f04: 'F04 Posición de referencia contable (estimación, no liquidación)',
               f05: 'F05 Provisión IVA',
               f06: 'F06 Retefuente por Declarar',
               f07: 'F07 ICA Retenido',
               f08: 'F08 Total Pasivos Fiscales',
-              f09: 'F09 Carga sobre Utilidad Neta',
+              f09: 'F09 Tasa efectiva contable (grupo 54 / UAI)',
               f10: 'F10 Cobertura de Retenciones',
               score: 'Score DIAN',
               alertasLabel: 'Alertas',
@@ -505,11 +630,18 @@ export const dict = {
             intro: 'Siete módulos de análisis fiscal sobre tu balance bajo la normativa tributaria colombiana 2026. Selecciona el modo según tu necesidad.',
             selectMode: 'Modo de análisis',
             uploadLabel: 'Cargar balance de prueba',
+            saldoDeclarado: {
+              label: 'Saldo a favor declarado — Formulario 110 (opcional)',
+              help: 'Saldo a favor liquidado en su declaración de renta. Sin él, la devolución queda N/D: la posición contable (F04) no es la declaración.',
+              placeholder: 'Ej. 12.345.678,90',
+              invalid: 'Monto no válido: use pesos colombianos (ej. 12.345.678,90), sin signo negativo.',
+            },
             runButton: 'Ejecutar análisis',
             analyzing: 'Analizando...',
             cancel: 'Cancelar',
             runAgain: 'Analizar de nuevo',
             errorTitle: 'Error en análisis',
+            blockedReasonsTitle: 'Motivos por los que el balance no se puede usar',
             modes: {
               quick: 'Rápido',
               full: 'Completo',
@@ -535,19 +667,19 @@ export const dict = {
                 subtitle: 'F01-F10 · Capa 1 Agente Fiscal',
                 f01: 'UAI Contable',
                 f02: 'Impuesto Referencia (35%)',
-                f03: 'Retenciones Acumuladas',
-                f04: 'Neto a Pagar / Saldo a Favor',
+                f03: 'Crédito de Renta',
+                f04: 'Posición de Referencia Contable (estimación)',
                 f05: 'Provisión IVA',
                 f06: 'Retefuente por Declarar',
                 f07: 'ICA Retenido',
                 f08: 'Total Pasivos Fiscales',
-                f09: 'Carga sobre Utilidad',
+                f09: 'Tasa efectiva contable',
                 f10: 'Cobertura de Retenciones',
                 colConcepto: 'Concepto',
                 colValor: 'Valor',
                 colNorma: 'Norma',
                 tableLabel: 'Cuadro de control de variables fiscales F01-F10',
-                alertaTasaMinima: 'Alerta tasa mínima (Art. 10 Ley 2277/2022):',
+                alertaTasaMinima: 'Tasa de Tributación Depurada (Art. 240 par. 6 E.T.):',
                 eficiencia: 'Eficiencia fiscal',
               },
               riskScore: {
@@ -592,8 +724,8 @@ export const dict = {
               cards: {
                 tet: {
                   title: 'Tasa Efectiva de Tributación',
-                  metric: 'TET actual',
-                  norma: 'Art. 240 par.6 E.T.',
+                  metric: 'TET contable actual',
+                  norma: 'Razón contable (impuesto/UAI)',
                 },
                 retention: {
                   title: 'Escudo de Retenciones',
@@ -613,7 +745,7 @@ export const dict = {
                 dividend: {
                   title: 'Optimización de Dividendos',
                   metric: 'Recomendación',
-                  norma: 'Arts. 36-3 / 242 E.T.',
+                  norma: 'Arts. 242 y 242-1 E.T.',
                 },
               },
               synthesis: {
@@ -862,6 +994,71 @@ export const dict = {
         match_heuristic: 'Heurístico',
         no_account: 'Sin cuenta — se omitirá',
       },
+      empleados: {
+        employerTitle: 'Condición del empleador (Art. 114-1 E.T.)',
+        employerHelp:
+          'La exoneración de salud (8,5 %), SENA (2 %) e ICBF (3 %) por trabajadores que devenguen menos de 10 SMMLV aplica a sociedades y personas jurídicas declarantes de renta y a personas naturales empleadoras con dos o más trabajadores. Mientras no la declare, se liquida sin exoneración.',
+        employerLabel: '¿Su empresa es beneficiaria?',
+        employerUnset: 'Sin declarar (se liquida sin exoneración)',
+        employerYes: 'Sí — sociedad/PJ declarante de renta o persona natural con 2 o más trabajadores',
+        employerNo: 'No es beneficiaria',
+        employerSaving: 'Guardando…',
+        employerError: 'No se pudo guardar la condición del empleador.',
+        salarioIntegral: 'Salario integral (CST art. 132)',
+        salarioIntegralHelp: 'Mínimo 13 SMMLV; incluye prestaciones y la base de aportes es el 70 %.',
+        salarioIntegralMin: 'El salario integral no puede ser inferior a 13 SMMLV ({min}).',
+        salarioIntegralSaveError:
+          'No se pudo actualizar el salario integral. Revise que el salario sea de al menos 13 SMMLV.',
+        estadoAplicada: 'Exonerado Art. 114-1: sin aportes de salud del empleador, SENA ni ICBF.',
+        estadoNoAplicaSalario: 'Sin exoneración 114-1: devenga 10 SMMLV o más, o tiene salario integral.',
+        estadoNoBeneficiario: 'Sin exoneración 114-1: se declaró que el empleador no es beneficiario.',
+        estadoSinConfirmar:
+          'Condición del empleador sin declarar: se liquida SIN exoneración. Si es beneficiario, ahorraría {cop} al mes.',
+        exoneradoTag: 'exonerado 114-1',
+        fspLabel: 'Fondo de Solidaridad Pensional',
+        totalIncompleto: 'Total incompleto: no incluye el Fondo de Solidaridad Pensional (N/D).',
+        notasTitle: 'Supuestos y datos faltantes',
+        notAvailable: 'N/D',
+      },
+      pagos: {
+        tipoContribuyente: 'Tipo de contribuyente',
+        personaNatural: 'Persona natural',
+        personaJuridica: 'Persona jurídica',
+        margen: 'Margen de utilidad (%)',
+        margenPlaceholder: 'Ej. 15',
+        ica: 'Tarifa de ICA de su municipio (por mil)',
+        icaPlaceholder: 'Ej. 9,66',
+        inputsHelp:
+          'El margen y la tarifa de ICA son datos suyos: sin ellos la cifra del régimen ordinario sería un supuesto y se muestra como N/D.',
+        notAvailable: 'N/D',
+        ordinarioND: 'N/D: falta {faltantes} (dato suyo). Sin él la cifra del régimen ordinario sería un supuesto.',
+        faltaMargen: 'el margen de utilidad',
+        faltaIca: 'la tarifa de ICA del municipio',
+        faltaY: ' y ',
+        baseLegalPN: 'Persona natural residente — tabla marginal del Art. 241 E.T. (0 % a 39 %)',
+        baseLegalPJ: 'Persona jurídica — tarifa general del 35 % (Art. 240 E.T.)',
+        advertencias: 'Advertencias del cálculo',
+        noRecomendacion: 'Comparación de referencia, no una recomendación',
+        noRecomendacionBody:
+          'Falta {faltantes}. Como optar por el Régimen Simple es irrevocable durante el año gravable (Art. 909 E.T.), no le señalamos un ganador sin esos datos. Consúltelo con su contador.',
+        noRecomendacionPension:
+          'Tiene aportes a pensión que se descuentan del SIMPLE y falta el componente de ICA consolidado de su municipio (Art. 903 par. 4 E.T.). Consúltelo con su contador.',
+        saveDisabled: 'Para guardar la comparación complete el margen y la tarifa de ICA.',
+      },
+      // ICU-08 (re-auditoría 2026-09-24): MiHistoricoView estaba sólo en español.
+      historico: {
+        title: 'Histórico',
+        locale: 'es-CO',
+        ingresos6m: 'Ingresos 6 meses',
+        egresos6m: 'Egresos 6 meses',
+        margenAcumulado: 'Margen acumulado',
+        ultimos6: 'Últimos 6 meses',
+        actualizar: 'Actualizar',
+        ingresos: 'Ingresos',
+        egresos: 'Egresos',
+        cargando: 'Cargando…',
+        sinDatos: 'Sin datos',
+      },
     },
     settings: {
       title: 'Configuración',
@@ -1004,6 +1201,57 @@ export const dict = {
       validationDescriptionRequired: 'Ingrese una descripción para el asiento',
       successDraft: 'Asiento guardado como borrador',
       successPosted: 'Asiento posteado correctamente',
+      validationAmountInvalid:
+        'Monto no interpretable en la línea {n}: escríbalo como 1.234.567,89 (punto de miles, coma decimal). No se envía hasta corregirlo.',
+      validationAmountNegative:
+        'Los montos de débito y crédito no pueden ser negativos (línea {n}).',
+      journalList: 'Asientos contables',
+      journalListDesc: 'Listado y búsqueda de los asientos del libro diario',
+      bankReconciliation: 'Conciliación bancaria',
+      bankReconciliationDesc: 'Saldo en libros frente al extracto bancario del período',
+      periods: {
+        title: 'Periodos fiscales',
+        month13: 'Cierre anual',
+        month13Option: 'Cierre anual (13) — 31 de diciembre',
+        annualCloseHint:
+          'El cierre anual se ejecuta sobre el período 13 del año (31 de diciembre): ábralo con «Abrir nuevo periodo» → mes 13 y use «Cierre anual». Los cierres mensuales no trasladan resultados a patrimonio.',
+        annualCloseAction: 'Cierre anual',
+        annualCloseTitle: 'Cierre anual del ejercicio',
+        annualCloseDescription: 'Vas a ejecutar el cierre anual {year} sobre el período 13 (31 de diciembre).',
+        annualCloseBody:
+          'El workflow de cierre ejecuta el health check (cuadratura, conciliación bancaria, borradores pendientes), genera el asiento de cierre que cancela las cuentas de resultado (clases 4, 5 y 6) contra 360505 Utilidad del ejercicio o 361005 Pérdida del ejercicio, bloquea el período 13 y calcula su hash de integridad. El bloqueo es terminal.',
+        annualCloseConfirm:
+          'Acepto que el cierre anual trasladará el resultado del ejercicio a patrimonio y bloqueará el período 13.',
+        annualCloseRun: 'Ejecutar cierre anual',
+        annualCloseStarted: 'Cierre anual {year} iniciado. El período 13 quedará bloqueado cuando termine el workflow.',
+        annualCloseAlreadyRunning: 'Ya hay un cierre en curso para este período.',
+        monthlyCloseTitle: 'Cerrar periodo contable',
+        monthlyCloseDescription: 'Vas a cerrar {period}.',
+        monthlyCloseBody:
+          'El cierre mensual marca el período como cerrado y bloquea nuevos asientos. No genera asiento de cierre ni traslada resultados a patrimonio: eso ocurre en el cierre anual (período 13). Es reversible con «Reabrir» hasta que se bloquee.',
+        monthlyCloseConfirm: 'Acepto que este cierre bloqueará nuevos asientos en el período.',
+        closeRun: 'Cerrar periodo',
+        running: 'Ejecutando…',
+        closed: 'Periodo {period} cerrado',
+        alreadyClosed: 'El periodo ya estaba cerrado.',
+        networkError: 'Falla de red.',
+        errorPrefix: 'Error',
+        cancel: 'Cancelar',
+        periodLabel: 'Periodo',
+        currentStatus: 'Estado actual',
+      },
+      reconciliation: {
+        notReconcilable: 'No conciliable — sin extracto del período',
+        reason: 'Motivo',
+        notAvailable: 'N/D',
+      },
+    },
+    erp: {
+      recordsRead: '{n} registros leídos desde {provider}',
+      notPersistedNote:
+        'La conexión funciona, pero estos datos todavía no se guardan ni se usan en reportes. Para un reporte NIIF, cargue el balance de prueba desde el formulario del reporte.',
+      close: 'Cerrar',
+      lastRead: 'Última lectura',
     },
     /**
      * Superficie de intake: chasis StepWizard + vista previa + modal + los 5
@@ -1498,6 +1746,104 @@ export const dict = {
       rawDataMissing:
         'Debe cargar un archivo o pegar su balance de prueba para generar el reporte.',
       rawDataFromFile: 'Datos contables tomados del archivo cargado.',
+      // P4-a — unidad declarada "en miles / millones" con confirmación.
+      unitTitle: 'Unidad de las cifras',
+      unitDeclared: 'El archivo declara las cifras en {unit} de pesos:',
+      unitExplain:
+        'UtopIA no reexpresa cifras sin su confirmación. Elija la unidad en la que están los importes; con miles o millones el servidor los convierte a pesos en centavos exactos y el informe lo indica.',
+      unitPesos: 'Pesos (sin reexpresar)',
+      unitMiles: 'Miles (× 1.000)',
+      unitMillones: 'Millones (× 1.000.000)',
+      unitConfirming: 'Reprocesando el balance con la unidad elegida…',
+      unitConfirmed: 'Unidad confirmada: {unit}. El informe indicará que las cifras se reexpresaron por su confirmación.',
+      unitConfirmedPesos: 'Confirmó que los importes ya están en pesos; no se reexpresan.',
+      unitChange: 'Cambiar unidad',
+      unitError: 'No se pudo reprocesar el balance con la unidad elegida.',
+      unitManualLabel: 'Unidad de los importes pegados',
+      // ICU-07 — lista de faltantes del paso "Revisar".
+      missingBanner: 'Falta(n) {n} campo(s) requerido(s) para continuar:',
+      missingCompanyName: 'Razón Social',
+      missingNit: 'NIT',
+      missingFiscalPeriod: 'Periodo Fiscal',
+      missingNiifGroup: 'Grupo NIIF',
+      missingRawData: 'Balance de prueba / datos contables',
+      missingUnit: 'Unidad de las cifras (pesos / miles / millones)',
+      unitManualNone: 'Pesos (predeterminado)',
+      unitNameMiles: 'miles',
+      unitNameMillones: 'millones',
+      unitNamePesos: 'pesos',
+      // P4-b — excepciones de vencimiento por cuenta.
+      maturityTitle: 'Excepciones de vencimiento (opcional)',
+      maturityHint:
+        'Por defecto la clasificación corriente / no corriente es por grupo PUC (activo 11-14 / 15-19; pasivo 21-26 / 27-29). Declare aquí las cuentas cuyo vencimiento real es distinto; el código más específico prevalece y el informe revela cada excepción con su monto.',
+      maturityCodeLabel: 'Código PUC',
+      maturityCodePlaceholder: 'p. ej. 2105',
+      maturityTermLabel: 'Vencimiento',
+      maturityCurrent: 'Corriente',
+      maturityNonCurrent: 'No corriente',
+      maturityAdd: 'Agregar excepción',
+      maturityRemove: 'Quitar',
+      maturityEmpty: 'Sin excepciones: se usa la clasificación por grupo PUC.',
+      maturityInvalidCode: 'Escriba un código PUC de 2 a 20 dígitos (p. ej. 2105).',
+      maturityInvalidClass: 'Sólo cuentas de activo (clase 1) o de pasivo (clase 2).',
+      maturityMax: 'Máximo {max} excepciones.',
+      // I3-2 (auditoria-calidad-31) — régimen del impuesto de renta.
+      regimenTitle: 'Régimen del impuesto de renta',
+      regimenHint:
+        'En el Régimen Simple de Tributación (Art. 903 E.T.), que sustituye el impuesto de renta, el informe no exige la Tasa de Tributación Depurada (par. 6 Art. 240 E.T.). Si no lo indica, se evalúa como régimen ordinario.',
+      regimenNone: 'Sin indicar',
+      regimenOrdinario: 'Ordinario',
+      regimenSimple: 'Régimen Simple (RST)',
+    },
+    /**
+     * Procedencia servidor de informes (fase 2, P1). Textos que imprimen los
+     * artefactos (Excel, PDF, HTML) y avisos de la UI del pipeline NIIF.
+     * Marcadores `{...}` se sustituyen en `src/lib/reports/provenance-stamp.ts`.
+     */
+    reportProvenance: {
+      verifiedTitle: 'PROCEDENCIA VERIFICADA',
+      verifiedBody:
+        'Generado desde la versión persistida y autorizada del informe para esta empresa. Las cifras enviadas con la solicitud no sustituyen a las persistidas.',
+      unverifiedTitle: 'PROCEDENCIA NO VERIFICADA',
+      unverifiedBody:
+        'Generado sin una versión persistida del informe en el servidor. Las cifras sólo se validaron contra lo enviado en esta solicitud (y contra su balance de prueba, si lo traía): no se puede demostrar que correspondan a una versión autorizada de la empresa.',
+      versionLine: 'Versión del informe: {reportId} (persistida el {createdAt})',
+      reportHashLine: 'Huella SHA-256 del informe: {hash}',
+      sourceHashLine: 'Huella SHA-256 del balance preprocesado: {hash}',
+      sourceMissingLine: 'Balance preprocesado: no disponible en la versión persistida',
+      rawDataHashLine: 'Huella SHA-256 del balance recibido: {hash}',
+      contractRenderedLine:
+        'Reglas aplicadas: versión persistida con el contrato {contract}, re-renderizada con {rendered} · preprocesador {preprocessor}',
+      verifiedDraftTitle: 'PROCEDENCIA VERIFICADA — BORRADOR (VALIDACIÓN PENDIENTE)',
+      unverifiedDraftTitle: 'PROCEDENCIA NO VERIFICADA — BORRADOR (VALIDACIÓN PENDIENTE)',
+      draftLine:
+        'Versión marcada BORRADOR por decisión del usuario ("Continuar de todas formas"): no es un documento definitivo y no debe firmarse en este estado.',
+      draftNotEmittableLine:
+        'Documento marcado BORRADOR: el HTML no superó la verificación numérica automática contra el informe (ver el aviso BORRADOR). No es un documento definitivo y no debe firmarse en este estado.',
+      draftWatermarkLine:
+        'Documento con la marca {mark}: no es un documento definitivo y no debe firmarse en este estado.',
+      userEditsDroppedLine:
+        'Las ediciones aplicadas en el navegador ("Aplicar al reporte") no se incluyen en este documento: el servidor produce el texto de las Partes desde sus cifras estructuradas.',
+      uiUserEdited:
+        'Este informe tiene ediciones aplicadas desde el chat. Se ven aquí, pero las descargas no las incluyen: el servidor produce el texto de las Partes desde sus cifras estructuradas.',
+      scopeLine:
+        'Alcance del sello: cubre las cifras de los estados financieros y las anclas que el código verifica contra el balance. La narrativa generada por IA (notas, acta, análisis) va rotulada "no auditada": el código sólo contrasta las cifras que puede anclar al balance y el resto no queda certificado por este sello.',
+      adjustmentsLine:
+        'Ajustes del Doctor de Datos: las cifras incluyen {count} ajuste(s) confirmado(s) por el usuario sobre el balance recibido (detalle en el anexo de ajustes).',
+      sourceHashAdjustedLine: 'Huella SHA-256 del balance preprocesado (con los ajustes confirmados): {hash}',
+      rawDataHashBeforeAdjustmentsLine: 'Huella SHA-256 del balance recibido (antes de los ajustes confirmados): {hash}',
+      adjustmentsAnnexTitle: 'Ajustes confirmados por el usuario (Doctor de Datos) incluidos en las cifras',
+      adjId: 'id',
+      adjAccount: 'Cuenta',
+      adjPrevious: 'Saldo previo',
+      adjAmount: 'Monto del ajuste',
+      adjNew: 'Saldo nuevo',
+      adjRationale: 'Razón',
+      uiUnverified:
+        'Procedencia no verificada: este informe no tiene una versión persistida en el servidor; las descargas lo indicarán.',
+      uiVerified: 'Versión persistida {reportId}',
+      htmlMissingSource:
+        'No se puede generar el HTML: esta sesión ya no tiene el balance preprocesado de la corrida (se pierde al recargar la página) y el informe no tiene una versión persistida en el servidor. Vuelva a generar el informe para habilitar el HTML.',
     },
   },
   en: {
@@ -1783,6 +2129,130 @@ export const dict = {
         'Most companies operate looking in the rear-view mirror: what was spent, what was paid, what remained. With 1+1, we flip the perspective 180°. We have structured your business ecosystem into four high-impact pillars. We do not talk about accounting or taxes; we talk about Resilience, Value, Integrity, and the Future.',
       niifEliteCTA: 'IFRS Elite Report',
       niifEliteCTALong: 'IFRS Elite Report for a specific period',
+      // Alert Center (/workspace/alertas). Re-audit e2e-niif-15 (2026-09):
+      // only real Sentinel alerts; no mock-ups.
+      alertCenter: {
+        eyebrow: 'Sentinel · Alert Center',
+        title: 'Alert Center',
+        subtitle:
+          'Active alerts recorded by the Sentinel and the Shield for your company (pending, snoozed and escalated), filtered by area.',
+        filters: {
+          todas: 'All',
+          escudo: 'Shield',
+          valor: 'Value',
+          verdad: 'Truth',
+          futuro: 'Future',
+        },
+        inboxTitle: 'Active alerts',
+        criticalCount: '{n} critical',
+        loading: 'Loading alerts…',
+        empty: 'No active alerts',
+        emptyBody:
+          'Alerts appear when the Sentinel or the Shield detect findings in your company reports. We do not show sample alerts.',
+        emptyFilter: 'No active alerts in this area.',
+        error: 'Alerts could not be loaded. Please try again later.',
+        severity: {
+          critico: 'Critical',
+          advertencia: 'Warning',
+          informativo: 'Informational',
+        },
+        status: {
+          pending: 'Pending',
+          snoozed: 'Snoozed',
+          escalated: 'Escalated',
+          resolved: 'Resolved',
+        },
+        subscriptionsTitle: 'Subscriptions',
+      },
+      // WP07 audit (2026-09): honest data states. No literal figure is shown
+      // as client data.
+      dataStatus: {
+        notAvailable: 'N/A',
+        reason: 'Reason',
+        demoBadge: 'Demo',
+        moduleInPreparation: 'Module in preparation',
+        moduleInPreparationNotice: 'Module in preparation — no data from your company',
+        moduleInPreparationBody:
+          'This section is not yet connected to your company data. We show no figures, cases or statuses until a verified source exists.',
+        startAnalysis: 'Start analysis with your data',
+        openModule: 'Open',
+        backTo: 'Back to',
+        noCompanyData: 'No data from your company — generate an IFRS Report to see real figures.',
+        generateReport: 'Generate Report',
+        goToCommandCenter: 'View in the Command Center',
+        valor: {
+          exitValueLabel: 'Exit value (equity)',
+          exitValueReason:
+            'Requires net financial debt and confirmed valuation assumptions. A multiple without subtracting net debt is not equity value, and no DCF has been run.',
+          evEbitLabel: 'Enterprise value · EV/EBIT 6× (heuristic)',
+          evEbitReason: 'Requires positive operating EBIT.',
+          ebitLabel: 'Operating EBIT',
+          equityBookLabel: 'Book equity',
+          waccLabel: 'WACC',
+          waccReason: 'Not captured',
+          assumptionsNote:
+            'Per-method references, not a valuation: the 6× multiple is a heuristic assumption (SME services, 4–8× range) and book equity is not market value.',
+        },
+        verdad: {
+          scoreNiifLabel: 'IFRS quality score (controls rubric)',
+          complianceLabel: 'Compliance score (complete audit)',
+          scoreReason:
+            'Requires an IFRS Report or a complete audit with scores, findings and opinion.',
+          opinionsTitle: 'Opinions',
+          opinionsEmpty:
+            'No opinions have been issued for your company. Opinions are generated from the Statutory Audit Opinion flow.',
+        },
+        futuro: {
+          runwayLabel: 'Cash runway · base scenario',
+          runwayReason:
+            'It is computed from the ledger in the Command Center; this view has no projection for your company.',
+          monteCarloTitle: 'Monte Carlo simulation',
+          monteCarloEmpty:
+            'No simulation has been run on your data. The simulated scenario is computed in the Command Center from your trial balance.',
+        },
+        escenarios: {
+          subtitle: 'Illustrative deterministic scenarios · Base / Optimistic / Pessimistic · editable inputs',
+          badge: 'Illustrative — simulator assumptions; not your company data',
+          narrative:
+            'The future is not a line; it is a fan. Move growth and variable costs and watch three deterministic scenarios react. There are no probabilities: these are sensitivity exercises.',
+          baseRevenue: 'Illustrative base revenue (Year 0)',
+          assumptions: '5-year horizon · Capex 8% of revenue · Overhead 12% · no taxes or working capital',
+          baseDescription: 'Central scenario with the simulator inputs.',
+          cumulativeLabel: 'EBITDA − capex, cumulative (5 years)',
+        },
+        macro: {
+          eyebrow: 'The Future — Macroeconomics',
+          title: 'Macroeconomics',
+          lede: 'Official Colombian indicators with their source and effective date. Without verified data we show N/A.',
+          back: 'Back to The Future',
+          trm: 'FX rate (COP per USD)',
+          ipc: 'Annual inflation (CPI)',
+          tasa: 'BanRep policy rate',
+          source: 'Source',
+          asOf: 'Effective date',
+          fetchedAt: 'Retrieved',
+          stale: 'Last available value — the latest query failed',
+          loading: 'Querying official sources…',
+          error: 'The indicators service could not be reached.',
+          sourceSuperfinanciera: 'Financial Superintendence (datos.gov.co)',
+          sourceDane: 'DANE (datos.gov.co)',
+          sourceBanrep: 'Banco de la República',
+          noProjections:
+            'This section publishes no projections or recommendations: they would require cited, dated sources and a scenario label.',
+        },
+        escudo: {
+          effectiveRateLabel: 'Book effective tax rate (expense 54 / EBT)',
+          effectiveRateReason: 'Requires positive earnings before taxes.',
+          taxCreditsLabel: 'Tax credits',
+          taxCreditsReason: 'Requires a verified tax computation',
+          upcomingDeadlinesLabel: 'Upcoming deadlines',
+          dianRiskLabel: 'DIAN risk',
+          riskNotDeterminable: 'Not determinable',
+          riskNotDeterminableReason:
+            'No pre-tax income for the period (F01, book PBT = $0; not the tax base): the risk score has nothing to measure.',
+          period: 'Period',
+        },
+      },
       areas: {
         escudo: {
           concept: 'The Shield',
@@ -1823,6 +2293,7 @@ export const dict = {
               title: 'Elite Survival Mode',
               subtitle: 'Real-time tax optimization and asset protection',
               intro: 'Five parallel analyses of your balance sheet under Colombian 2026 tax regulations.',
+              blockedReasonsTitle: 'Why the trial balance cannot be used',
               statusLabels: {
                 idle: 'Ready to analyze',
                 running: 'Analyzing...',
@@ -1843,12 +2314,12 @@ export const dict = {
               cards: {
                 tet: {
                   title: 'Effective Tax Rate',
-                  metric: 'TET',
+                  metric: 'Accounting TET',
                   norma: 'Art. 240 E.T.',
                 },
                 retention: {
                   title: 'Retention Shield',
-                  metric: 'Projected balance in favor',
+                  metric: 'Credit balance (requires tax return)',
                   norma: 'Art. 670 E.T.',
                 },
                 antiDian: {
@@ -1864,7 +2335,7 @@ export const dict = {
                 dividend: {
                   title: 'Dividend Optimizer',
                   metric: 'Savings vs distributing',
-                  norma: 'Art. 242 / Art. 36-3 E.T.',
+                  norma: 'Art. 242 E.T.',
                 },
               },
               synthesis: {
@@ -1889,8 +2360,8 @@ export const dict = {
             disclaimer: 'Reference figures before tax adjustments. The value shown is a gross projection (Pre-tax Income × nominal rate, Art. 240 Tax Statute) and does NOT constitute an official Income Tax liquidation. Final tax liability requires book-to-tax reconciliation (Art. 26), application of tax credits (Arts. 254-260), verification of the 15% Depurated Tax Rate (Art. 240 par. 6, Law 2277/2022), and validation of the applicable tariff regime. Final determination requires intervention by a certified public accountant and/or statutory auditor.',
             f01: {
               title: 'Pre-tax Income',
-              description: 'Income tax base',
-              norma: 'Art. 240 E.T.',
+              description: 'Book pre-tax income — not the tax base (requires tax reconciliation)',
+              norma: 'Art. 26 E.T.',
             },
             f02: {
               title: 'Reference Tax (35%)',
@@ -1898,14 +2369,14 @@ export const dict = {
               norma: 'Art. 240 E.T.',
             },
             f03: {
-              title: 'Accumulated Withholdings',
-              description: 'Tax credit against liability',
-              norma: 'Acct. 1355',
+              title: 'Income-Tax Credit',
+              description: 'Income-tax withholdings and advances (excludes VAT, ICA and other taxes)',
+              norma: 'Accts. 135505 / 135515',
             },
             f04: {
-              title: 'Net Payable / Credit Balance',
-              description: 'F02 − F03 (negative = credit)',
-              norma: 'Art. 850 E.T.',
+              title: 'Accounting Reference Position',
+              description: 'F02 − F03 · accounting estimate, not a tax assessment (neither payable nor credit balance)',
+              norma: 'Arts. 26 & 807 E.T. (requires tax reconciliation)',
             },
             f05: {
               title: 'VAT Payable Provision',
@@ -1928,9 +2399,9 @@ export const dict = {
               norma: 'Acct. 24XX',
             },
             f09: {
-              title: 'Tax Burden on Net Income',
-              description: 'Class 54 / F01 × 100',
-              norma: 'Art. 240 E.T.',
+              title: 'Accounting effective tax rate',
+              description: 'Income tax expense (group 54) / pre-tax income × 100 — not the TTD (Art. 240 par. 6 Tax Statute)',
+              norma: 'Accounting ratio (tax/PBT)',
             },
             f10: {
               title: 'Withholding Coverage',
@@ -1947,8 +2418,8 @@ export const dict = {
               vencido: 'Overdue',
             },
             alertas: {
-              A5_SIN_PROVISION: 'Income Tax not provisioned — Art. 647 Tax Statute risk',
-              SALDO_A_FAVOR: 'Credit balance available',
+              A5_SIN_PROVISION: 'No income tax expense recorded — requires tax reconciliation (Art. 26 Tax Statute); informational, no estimated figure',
+              SALDO_A_FAVOR: 'Possible credit balance (accounting estimate, not an assessment) — verify against the tax return',
               VENCIMIENTO_15D: 'Deadline approaching (≤15 days)',
               F10_BAJA: 'Low fiscal efficiency',
               ICA_ESTIMACION_SIN_CIIU: 'ICA estimated without verified CIIU code — Decree 352/2002',
@@ -1988,13 +2459,13 @@ export const dict = {
               header: 'AUTOMATIC TAX CONTEXT',
               f01: 'F01 Pre-tax Income',
               f02: 'F02 Reference Tax (35%)',
-              f03: 'F03 Accumulated Withholdings',
-              f04: 'F04 Net Payable / Credit Balance',
+              f03: 'F03 Income-tax credit (withholdings and advances)',
+              f04: 'F04 Accounting reference position (estimate, not an assessment)',
               f05: 'F05 VAT Provision',
               f06: 'F06 Withholding Tax to File',
               f07: 'F07 ICA Withheld',
               f08: 'F08 Total Tax Liabilities',
-              f09: 'F09 Tax Burden on Net Income',
+              f09: 'F09 Accounting effective tax rate (group 54 / PBT)',
               f10: 'F10 Withholding Coverage',
               score: 'DIAN Score',
               alertasLabel: 'Alerts',
@@ -2006,11 +2477,18 @@ export const dict = {
             intro: 'Seven fiscal analysis modules over your balance sheet under 2026 Colombian tax regulations. Select a mode based on your needs.',
             selectMode: 'Analysis mode',
             uploadLabel: 'Upload trial balance',
+            saldoDeclarado: {
+              label: 'Declared refund balance — Form 110 (optional)',
+              help: 'Refund balance assessed in your income tax return. Without it the refund stays N/A: the accounting position (F04) is not the return.',
+              placeholder: 'E.g. 12.345.678,90',
+              invalid: 'Invalid amount: use Colombian pesos (e.g. 12.345.678,90), no negative sign.',
+            },
             runButton: 'Run analysis',
             analyzing: 'Analyzing...',
             cancel: 'Cancel',
             runAgain: 'Analyze again',
             errorTitle: 'Analysis error',
+            blockedReasonsTitle: 'Why the trial balance cannot be used',
             modes: {
               quick: 'Quick',
               full: 'Full',
@@ -2036,19 +2514,19 @@ export const dict = {
                 subtitle: 'F01-F10 · Fiscal Agent Layer 1',
                 f01: 'Pre-tax Income',
                 f02: 'Reference Tax (35%)',
-                f03: 'Accumulated Withholdings',
-                f04: 'Net Payable / Credit Balance',
+                f03: 'Income-Tax Credit',
+                f04: 'Accounting Reference Position (estimate)',
                 f05: 'VAT Provision',
-                f06: 'ICA Provision',
-                f07: 'Property / Vehicles',
+                f06: 'Withholding Tax to File',
+                f07: 'ICA Withheld',
                 f08: 'Total Tax Liabilities',
-                f09: 'Tax Burden on Income',
+                f09: 'Accounting effective tax rate',
                 f10: 'Withholding Coverage',
                 colConcepto: 'Item',
                 colValor: 'Value',
                 colNorma: 'Norm',
                 tableLabel: 'Fiscal variable control table F01-F10',
-                alertaTasaMinima: 'Minimum rate alert (Art. 10 Law 2277/2022):',
+                alertaTasaMinima: 'Adjusted Tax Rate (TTD, Art. 240 par. 6 Tax Statute):',
                 eficiencia: 'Fiscal efficiency',
               },
               riskScore: {
@@ -2093,8 +2571,8 @@ export const dict = {
               cards: {
                 tet: {
                   title: 'Effective Tax Rate',
-                  metric: 'Current TET',
-                  norma: 'Art. 240 par.6 T.S.',
+                  metric: 'Current accounting TET',
+                  norma: 'Accounting ratio (tax/PBT)',
                 },
                 retention: {
                   title: 'Withholding Shield',
@@ -2114,7 +2592,7 @@ export const dict = {
                 dividend: {
                   title: 'Dividend Optimizer',
                   metric: 'Recommendation',
-                  norma: 'Arts. 36-3 / 242 T.S.',
+                  norma: 'Arts. 242 & 242-1 T.S.',
                 },
               },
               synthesis: {
@@ -2363,6 +2841,70 @@ export const dict = {
         match_heuristic: 'Heuristic',
         no_account: 'No account — will be skipped',
       },
+      empleados: {
+        employerTitle: 'Employer status (Art. 114-1 Tax Code)',
+        employerHelp:
+          'The exemption from health (8.5%), SENA (2%) and ICBF (3%) contributions for workers earning less than 10 monthly minimum wages applies to companies and legal entities that file income tax and to individual employers with two or more workers. Until you declare it, costs are computed without the exemption.',
+        employerLabel: 'Is your business eligible?',
+        employerUnset: 'Not declared (computed without the exemption)',
+        employerYes: 'Yes — company/legal entity filing income tax, or individual employer with 2 or more workers',
+        employerNo: 'Not eligible',
+        employerSaving: 'Saving…',
+        employerError: 'The employer status could not be saved.',
+        salarioIntegral: 'Integral salary (Labor Code art. 132)',
+        salarioIntegralHelp: 'Minimum 13 monthly minimum wages; it includes benefits and the contribution base is 70%.',
+        salarioIntegralMin: 'An integral salary cannot be lower than 13 monthly minimum wages ({min}).',
+        salarioIntegralSaveError:
+          'The integral salary could not be updated. Check that the salary is at least 13 monthly minimum wages.',
+        estadoAplicada: 'Art. 114-1 exemption applied: no employer health, SENA or ICBF contributions.',
+        estadoNoAplicaSalario: 'No 114-1 exemption: earns 10 minimum wages or more, or has an integral salary.',
+        estadoNoBeneficiario: 'No 114-1 exemption: the employer was declared not eligible.',
+        estadoSinConfirmar:
+          'Employer status not declared: computed WITHOUT the exemption. If eligible, you would save {cop} per month.',
+        exoneradoTag: '114-1 exempt',
+        fspLabel: 'Pension Solidarity Fund',
+        totalIncompleto: 'Incomplete total: excludes the Pension Solidarity Fund (N/A).',
+        notasTitle: 'Assumptions and missing data',
+        notAvailable: 'N/A',
+      },
+      pagos: {
+        tipoContribuyente: 'Taxpayer type',
+        personaNatural: 'Individual',
+        personaJuridica: 'Legal entity',
+        margen: 'Profit margin (%)',
+        margenPlaceholder: 'E.g. 15',
+        ica: 'Municipal ICA rate (per thousand)',
+        icaPlaceholder: 'E.g. 9,66',
+        inputsHelp:
+          'Margin and ICA rate are your data: without them the ordinary-regime figure would be an assumption and is shown as N/A.',
+        notAvailable: 'N/A',
+        ordinarioND: 'N/A: missing {faltantes} (your data). Without it the ordinary-regime figure would be an assumption.',
+        faltaMargen: 'the profit margin',
+        faltaIca: 'the municipal ICA rate',
+        faltaY: ' and ',
+        baseLegalPN: 'Resident individual — marginal table of Art. 241 Tax Code (0% to 39%)',
+        baseLegalPJ: 'Legal entity — general 35% rate (Art. 240 Tax Code)',
+        advertencias: 'Calculation warnings',
+        noRecomendacion: 'Reference comparison, not a recommendation',
+        noRecomendacionBody:
+          'Missing {faltantes}. Since opting into the Simple Regime is irrevocable for the tax year (Art. 909 Tax Code), we do not pick a winner without that data. Check with your accountant.',
+        noRecomendacionPension:
+          'You have pension contributions deductible from the SIMPLE tax and the consolidated municipal ICA component is missing (Art. 903 par. 4 Tax Code). Check with your accountant.',
+        saveDisabled: 'To save the comparison, fill in the margin and the ICA rate.',
+      },
+      historico: {
+        title: 'History',
+        locale: 'en-US',
+        ingresos6m: 'Income, 6 months',
+        egresos6m: 'Expenses, 6 months',
+        margenAcumulado: 'Cumulative margin',
+        ultimos6: 'Last 6 months',
+        actualizar: 'Refresh',
+        ingresos: 'Income',
+        egresos: 'Expenses',
+        cargando: 'Loading…',
+        sinDatos: 'No data',
+      },
     },
     settings: {
       title: 'Settings',
@@ -2504,6 +3046,57 @@ export const dict = {
       validationDescriptionRequired: 'Enter a description for the entry',
       successDraft: 'Entry saved as draft',
       successPosted: 'Entry posted successfully',
+      validationAmountInvalid:
+        'Unreadable amount on line {n}: type it in Colombian format 1.234.567,89 (dot for thousands, comma for decimals). Nothing is sent until it is fixed.',
+      validationAmountNegative:
+        'Debit and credit amounts cannot be negative (line {n}).',
+      journalList: 'Journal entries',
+      journalListDesc: 'List and search the journal entries',
+      bankReconciliation: 'Bank reconciliation',
+      bankReconciliationDesc: 'Book balance against the bank statement of the period',
+      periods: {
+        title: 'Fiscal periods',
+        month13: 'Year-end close',
+        month13Option: 'Year-end close (13) — December 31',
+        annualCloseHint:
+          'The year-end close runs on period 13 of the year (December 31): open it with "Open new period" → month 13 and use "Year-end close". Monthly closes do not transfer results to equity.',
+        annualCloseAction: 'Year-end close',
+        annualCloseTitle: 'Fiscal year-end close',
+        annualCloseDescription: 'You are about to run the {year} year-end close on period 13 (December 31).',
+        annualCloseBody:
+          'The close workflow runs the health check (balance, bank reconciliation, pending drafts), posts the closing entry that clears the income-statement accounts (classes 4, 5 and 6) against 360505 Profit for the year or 361005 Loss for the year, locks period 13 and computes its integrity hash. The lock is terminal.',
+        annualCloseConfirm:
+          'I accept that the year-end close will transfer the result for the year to equity and lock period 13.',
+        annualCloseRun: 'Run year-end close',
+        annualCloseStarted: '{year} year-end close started. Period 13 will be locked when the workflow finishes.',
+        annualCloseAlreadyRunning: 'A close is already running for this period.',
+        monthlyCloseTitle: 'Close accounting period',
+        monthlyCloseDescription: 'You are about to close {period}.',
+        monthlyCloseBody:
+          'The monthly close marks the period as closed and blocks new entries. It does not post a closing entry nor transfer results to equity: that happens in the year-end close (period 13). It can be undone with "Reopen" until the period is locked.',
+        monthlyCloseConfirm: 'I accept this close will block new entries in the period.',
+        closeRun: 'Close period',
+        running: 'Running…',
+        closed: 'Period {period} closed',
+        alreadyClosed: 'Period was already closed.',
+        networkError: 'Network failure.',
+        errorPrefix: 'Error',
+        cancel: 'Cancel',
+        periodLabel: 'Period',
+        currentStatus: 'Current status',
+      },
+      reconciliation: {
+        notReconcilable: 'Not reconcilable — no bank statement for the period',
+        reason: 'Reason',
+        notAvailable: 'N/A',
+      },
+    },
+    erp: {
+      recordsRead: '{n} records read from {provider}',
+      notPersistedNote:
+        'The connection works, but this data is not stored or used in reports yet. For an IFRS report, upload the trial balance from the report form.',
+      close: 'Close',
+      lastRead: 'Last read',
     },
     intake: {
       common: {
@@ -2960,6 +3553,99 @@ export const dict = {
       rawDataMissing:
         'You must upload a file or paste your trial balance to generate the report.',
       rawDataFromFile: 'Accounting data taken from the uploaded file.',
+      // P4-a — declared "in thousands / millions" unit with confirmation.
+      unitTitle: 'Amount unit',
+      unitDeclared: 'The file states its amounts in {unit} of pesos:',
+      unitExplain:
+        'UtopIA never restates amounts without your confirmation. Choose the unit the amounts are in; with thousands or millions the server converts them to pesos in exact cents and the report says so.',
+      unitPesos: 'Pesos (no restatement)',
+      unitMiles: 'Thousands (× 1,000)',
+      unitMillones: 'Millions (× 1,000,000)',
+      unitConfirming: 'Reprocessing the trial balance with the chosen unit…',
+      unitConfirmed: 'Unit confirmed: {unit}. The report will state that amounts were restated on your confirmation.',
+      unitConfirmedPesos: 'You confirmed the amounts are already in pesos; they are not restated.',
+      unitChange: 'Change unit',
+      unitError: 'The trial balance could not be reprocessed with the chosen unit.',
+      unitManualLabel: 'Unit of the pasted amounts',
+      // ICU-07 — missing-fields list of the "Review" step.
+      missingBanner: '{n} required field(s) missing to continue:',
+      missingCompanyName: 'Company name',
+      missingNit: 'NIT (tax ID)',
+      missingFiscalPeriod: 'Fiscal period',
+      missingNiifGroup: 'NIIF group',
+      missingRawData: 'Trial balance / accounting data',
+      missingUnit: 'Amount unit (pesos / thousands / millions)',
+      unitManualNone: 'Pesos (default)',
+      unitNameMiles: 'thousands',
+      unitNameMillones: 'millions',
+      unitNamePesos: 'pesos',
+      // P4-b — per-account maturity overrides.
+      maturityTitle: 'Maturity overrides (optional)',
+      maturityHint:
+        'By default current / non-current classification follows the PUC group (assets 11-14 / 15-19; liabilities 21-26 / 27-29). Declare here the accounts whose actual maturity differs; the most specific code wins and the report discloses each override with its amount.',
+      maturityCodeLabel: 'PUC code',
+      maturityCodePlaceholder: 'e.g. 2105',
+      maturityTermLabel: 'Maturity',
+      maturityCurrent: 'Current',
+      maturityNonCurrent: 'Non-current',
+      maturityAdd: 'Add override',
+      maturityRemove: 'Remove',
+      maturityEmpty: 'No overrides: PUC-group classification applies.',
+      maturityInvalidCode: 'Enter a PUC code of 2 to 20 digits (e.g. 2105).',
+      maturityInvalidClass: 'Only asset (class 1) or liability (class 2) accounts.',
+      maturityMax: 'At most {max} overrides.',
+      // I3-2 (auditoria-calidad-31) — income tax regime.
+      regimenTitle: 'Income tax regime',
+      regimenHint:
+        'Under the Simple Taxation Regime (Art. 903 of the Tax Code), which replaces income tax, the report does not require the Adjusted Tax Rate (par. 6, Art. 240 of the Tax Code). If you do not specify it, the ordinary regime is assumed.',
+      regimenNone: 'Not specified',
+      regimenOrdinario: 'Ordinary',
+      regimenSimple: 'Simple Regime (RST)',
+    },
+    reportProvenance: {
+      verifiedTitle: 'VERIFIED PROVENANCE',
+      verifiedBody:
+        'Generated from the persisted, authorized version of this company report. Figures sent with the request do not replace the persisted ones.',
+      unverifiedTitle: 'UNVERIFIED PROVENANCE',
+      unverifiedBody:
+        'Generated without a persisted version of the report on the server. Figures were only validated against what this request sent (and against its trial balance, if it included one): they cannot be shown to match an authorized version for the company.',
+      versionLine: 'Report version: {reportId} (persisted {createdAt})',
+      reportHashLine: 'Report SHA-256 fingerprint: {hash}',
+      sourceHashLine: 'Preprocessed trial balance SHA-256 fingerprint: {hash}',
+      sourceMissingLine: 'Preprocessed trial balance: not available in the persisted version',
+      rawDataHashLine: 'Received trial balance SHA-256 fingerprint: {hash}',
+      contractRenderedLine:
+        'Rules applied: version persisted under contract {contract}, re-rendered with {rendered} · preprocessor {preprocessor}',
+      verifiedDraftTitle: 'VERIFIED PROVENANCE — DRAFT (VALIDATION PENDING)',
+      unverifiedDraftTitle: 'UNVERIFIED PROVENANCE — DRAFT (VALIDATION PENDING)',
+      draftLine:
+        'Version marked DRAFT by the user ("Continue anyway"): it is not a final document and must not be signed in this state.',
+      draftNotEmittableLine:
+        'Document marked DRAFT: the HTML did not pass the automatic numeric verification against the report (see the DRAFT notice). It is not a final document and must not be signed in this state.',
+      draftWatermarkLine:
+        'Document marked {mark}: it is not a final document and must not be signed in this state.',
+      userEditsDroppedLine:
+        'Edits applied in the browser ("Apply to report") are not included in this document: the server produces the text of the Parts from their structured figures.',
+      uiUserEdited:
+        'This report has edits applied from the chat. They show here, but downloads do not include them: the server produces the text of the Parts from their structured figures.',
+      scopeLine:
+        'Seal scope: it covers the figures of the financial statements and the anchors the code verifies against the trial balance. The AI-generated narrative (notes, minutes, analysis) is labelled "not audited": the code only checks the figures it can anchor to the trial balance, and the rest is not certified by this seal.',
+      adjustmentsLine:
+        'Data Doctor adjustments: the figures include {count} adjustment(s) confirmed by the user on the received trial balance (details in the adjustments annex).',
+      sourceHashAdjustedLine: 'Preprocessed trial balance SHA-256 fingerprint (with the confirmed adjustments): {hash}',
+      rawDataHashBeforeAdjustmentsLine: 'Received trial balance SHA-256 fingerprint (before the confirmed adjustments): {hash}',
+      adjustmentsAnnexTitle: 'Adjustments confirmed by the user (Data Doctor) included in the figures',
+      adjId: 'id',
+      adjAccount: 'Account',
+      adjPrevious: 'Previous balance',
+      adjAmount: 'Adjustment',
+      adjNew: 'New balance',
+      adjRationale: 'Rationale',
+      uiUnverified:
+        'Unverified provenance: this report has no persisted version on the server; downloads will say so.',
+      uiVerified: 'Persisted version {reportId}',
+      htmlMissingSource:
+        'The HTML cannot be generated: this session no longer holds the run\'s preprocessed trial balance (it is lost on page reload) and the report has no persisted version on the server. Regenerate the report to enable the HTML.',
     },
   },
 };

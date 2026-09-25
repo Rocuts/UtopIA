@@ -21,9 +21,13 @@ import {
 } from '../contracts/governance-report';
 import { formatCopFromCents, parseMoneyCop } from '../contracts/money';
 import {
+  buildActaExpectedArithmetic,
   buildGovernancePrompt,
+  convocatoriaCitationFor,
+  normalizeTipoSocietario,
   type GovernanceEliteContext,
 } from '../prompts/governance-specialist.prompt';
+import { buildDegradationNotice } from './reconcile-anchors';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import type { ReportMode } from '../contracts/base';
 import type { z } from 'zod';
@@ -94,7 +98,10 @@ export async function runGovernanceSpecialist(
     detail: 'Redactando notas contables y acta de asamblea...',
   });
 
-  const { json } = await callFinancialAgent({
+  // Degradación visible (pipeline-flujo-15): mismo patrón que el Analista
+  // NIIF — el aviso de `callFinancialAgent` se reenvía como progreso y la
+  // sección viaja marcada en el cuerpo.
+  const agentResult = await callFinancialAgent({
     agentName: 'governance-specialist',
     // PREMIUM (gpt-5.5): produce notas a EEFF (14 secciones) + acta — schema
     // muy rico, amerita el techo de 128K output del modelo premium.
@@ -104,9 +111,26 @@ export async function runGovernanceSpecialist(
     userContent,
     ...MODELS_CONFIG.governanceSpecialist,
     signal,
+    onDegraded: (info) => onProgress?.({ type: 'stage_progress', stage: 3, detail: info.message }),
   });
+  const json = agentResult.json;
 
-  const result = toGovernanceResult(json);
+  // La MISMA aritmética del acta que viajó al prompt y contra la que el
+  // orquestador reconcilia: si dice que la capitalización no aplica, el acta
+  // no imprime un monto a capitalizar aunque el modelo emita applies=true
+  // (pipeline-flujo-12). El JSON conserva lo emitido para que el reconciliador
+  // selle la desviación.
+  const actaEsperada = buildActaExpectedArithmetic(company, preprocessed);
+  const result = toGovernanceResult(json, company, {
+    capitalizationApplies: actaEsperada ? actaEsperada.capitalizationApplies : null,
+  });
+  if (agentResult.meta?.degraded === true) {
+    const notice = governanceDegradationNotice(language);
+    result.degraded = true;
+    result.financialNotes = `${notice}\n${result.financialNotes}`;
+    result.shareholderMinutes = `${notice}\n${result.shareholderMinutes}`;
+    result.fullContent = `${notice}\n${result.fullContent}`;
+  }
 
   // Validador anti-evasivo (post-generación) — Wave 2.F3 refactor.
   // Ahora opera sobre el JSON estructurado y exonera `disclaimers[]` por
@@ -129,14 +153,225 @@ export async function runGovernanceSpecialist(
 }
 
 // ---------------------------------------------------------------------------
+// Render de la Parte III desde el JSON persistido (I3: procedencia del Markdown)
+// ---------------------------------------------------------------------------
+// Las notas, el acta, el checklist y los avisos son una función determinista
+// del JSON validado, del tipo societario y grupo NIIF de la empresa y de la
+// aritmética del acta (`capitalizationApplies`). El servidor vuelve a producir
+// ese Markdown en /consolidate y /export (src/lib/reports/part-markdown.ts)
+// en lugar de aceptar el que reenvía el navegador.
+// ---------------------------------------------------------------------------
+
+/**
+ * Sello aritmético del acta (I5-7): lo antepone `runGovernancePhase` cuando la
+ * destinación no coincide con la aritmética determinista (`anchored`) o no
+ * pudo contrastarse con ella (sin preprocesado), y el re-render del servidor
+ * (`renderGovernancePart`, part-markdown.ts) con la MISMA función.
+ */
+export function actaArithmeticSeal(motivos: readonly string[], anchored: boolean, language: 'es' | 'en'): string {
+  const es = language === 'es';
+  if (anchored) {
+    return [
+      es ? '> ## ACTA CON SALVEDADES — INTEGRIDAD ARITMÉTICA' : '> ## MINUTES WITH QUALIFICATIONS — ARITHMETIC INTEGRITY',
+      '>',
+      es
+        ? '> Las cifras del acta no coinciden con la aritmética determinista sobre la ' +
+          'utilidad del ejercicio. Este documento NO es firmable ni inscribible tal como está:'
+        : '> The minutes figures do not match the deterministic arithmetic over the ' +
+          'period result. This document is NOT signable as issued:',
+      '>',
+      ...motivos.map((m) => `> - ${m}`),
+      '',
+    ].join('\n');
+  }
+  return [
+    es ? '> ## ACTA CON SALVEDADES — CIFRAS SIN VERIFICAR' : '> ## MINUTES WITH QUALIFICATIONS — UNVERIFIED FIGURES',
+    '>',
+    es
+      ? '> El acta propone cifras de destinación que no pudieron contrastarse con una ' +
+        'aritmética determinista sobre la utilidad del ejercicio. Este documento NO es firmable ' +
+        'ni inscribible tal como está:'
+      : '> The minutes propose allocation figures that could not be checked against ' +
+        'deterministic arithmetic over the period result. This document is NOT signable as issued:',
+    '>',
+    ...motivos.map((m) => `> - ${m}`),
+    '',
+  ].join('\n');
+}
+
+/** Aviso de sección degradada de la Parte III (mismo texto en la fase y en el servidor). */
+export function governanceDegradationNotice(language: 'es' | 'en'): string {
+  return buildDegradationNotice(
+    [language === 'es' ? 'Gobierno corporativo (Parte III)' : 'Corporate governance (Part III)'],
+    language,
+  );
+}
+
+/**
+ * Markdown de la Parte III desde su JSON (el adaptador de la fase, sin sellos).
+ * `capitalizationApplies` es el de `buildActaExpectedArithmetic` (`null` sin
+ * balance preprocesado).
+ */
+export function renderGovernanceResult(
+  json: GovernanceReportJson,
+  company: Partial<CompanyInfo> | undefined,
+  capitalizationApplies: boolean | null,
+): GovernanceResult {
+  return toGovernanceResult(json, company, { capitalizationApplies });
+}
+
+// ---------------------------------------------------------------------------
+// Firmantes del acta desde el intake (procedencia-R2-04)
+// ---------------------------------------------------------------------------
+// El acta imprimía nombre, identificación y T.P. de los firmantes y del Revisor
+// Fiscal tal como los escribía el modelo en el JSON de la Parte III, sin
+// cruzarlos con los de la empresa: un PDF "procedencia verificada" podía
+// nombrar como Representante Legal y Revisor Fiscal a personas ajenas al
+// intake mientras su propio bloque de firmas imprimía las del intake. La
+// identidad de un firmante no es un juicio del modelo: sale del intake
+// (`company.signatories` o los campos legacy) y, si el intake no la trae, se
+// imprime "a completar al firmar". Presidente y Secretario de la asamblea no
+// tienen campo en el intake: siempre "a completar al firmar".
+// ---------------------------------------------------------------------------
+
+/** Identidad de un firmante según el intake (`null` = sin dato). */
+interface IntakeSignatory {
+  name: string;
+  /** C.C. del Representante Legal (sin prefijo). */
+  cedula: string | null;
+  /** T.P. del Revisor Fiscal / Contador (`12345-T`). */
+  tp: string | null;
+}
+
+interface IntakeSignatories {
+  representanteLegal: IntakeSignatory | null;
+  revisorFiscal: IntakeSignatory | null;
+  contadorPublico: IntakeSignatory | null;
+}
+
+function nonEmpty(v: unknown): string | null {
+  return typeof v === 'string' && v.trim().length > 0 ? v.trim() : null;
+}
+
+/**
+ * Firmantes declarados en el intake: forma canónica `signatories` primero y
+ * los campos legacy (`legalRepresentative`, `fiscalAuditor`, `accountant` y sus
+ * identificaciones) como respaldo — misma precedencia que el bloque de firmas
+ * del PDF (`signatoriesFromCompany`). Un nombre sin T.P. se conserva: la T.P.
+ * sale "a completar".
+ */
+export function intakeSignatories(company: Partial<CompanyInfo> | undefined): IntakeSignatories {
+  const c = company ?? {};
+  const s = c.signatories;
+  const rlName = nonEmpty(s?.representanteLegal?.nombre) ?? nonEmpty(c.legalRepresentative);
+  const rfName = nonEmpty(s?.revisorFiscal?.nombre) ?? nonEmpty(c.fiscalAuditor);
+  const cpName = nonEmpty(s?.contadorPublico?.nombre) ?? nonEmpty(c.accountant);
+  return {
+    representanteLegal: rlName
+      ? { name: rlName, cedula: nonEmpty(s?.representanteLegal?.cedula) ?? nonEmpty(c.legalRepresentativeId), tp: null }
+      : null,
+    revisorFiscal: rfName
+      ? { name: rfName, cedula: null, tp: nonEmpty(s?.revisorFiscal?.tp) ?? nonEmpty(c.fiscalAuditorTp) }
+      : null,
+    contadorPublico: cpName
+      ? { name: cpName, cedula: null, tp: nonEmpty(s?.contadorPublico?.tp) ?? nonEmpty(c.accountantTp) }
+      : null,
+  };
+}
+
+const TP_RE = /^\d+-T$/i;
+
+/**
+ * JSON de la Parte III con la identidad de los firmantes tomada del intake:
+ * `shareholderMinutes.signatures`, `fiscalReviewerOpinion.reviewerName/Tp` y
+ * los espejos `signatories` / `company.signatories`. Lo que el intake no trae
+ * queda en `null` (el render imprime "a completar al firmar"). El resto del
+ * JSON no cambia.
+ */
+export function withIntakeSignatories(
+  json: GovernanceReportJson,
+  company: Partial<CompanyInfo> | undefined,
+): GovernanceReportJson {
+  const intake = intakeSignatories(company);
+  const minutes = json.shareholderMinutes;
+  const signatures = minutes.signatures.map((sig) => {
+    switch (sig.role) {
+      case 'representante_legal':
+        return {
+          ...sig,
+          name: intake.representanteLegal?.name ?? null,
+          identification: intake.representanteLegal?.cedula ? `C.C. ${intake.representanteLegal.cedula}` : null,
+        };
+      case 'revisor_fiscal':
+        return {
+          ...sig,
+          name: intake.revisorFiscal?.name ?? null,
+          identification: intake.revisorFiscal?.tp ? `T.P. ${intake.revisorFiscal.tp}` : null,
+        };
+      case 'contador_publico':
+        return {
+          ...sig,
+          name: intake.contadorPublico?.name ?? null,
+          identification: intake.contadorPublico?.tp ? `T.P. ${intake.contadorPublico.tp}` : null,
+        };
+      default:
+        // Presidente y Secretario de la asamblea: sin campo en el intake.
+        return { ...sig, name: null, identification: null };
+    }
+  });
+  // Espejo del contrato (`SignatoriesSchema`): la T.P. debe tener el formato
+  // de la Junta Central; sin él el slot queda en null (nunca un JSON inválido).
+  const withTp = (p: IntakeSignatory | null) =>
+    p && p.tp && TP_RE.test(p.tp) ? { nombre: p.name, tp: p.tp } : null;
+  const mirror = {
+    representanteLegal: intake.representanteLegal ? { nombre: intake.representanteLegal.name } : null,
+    revisorFiscal: withTp(intake.revisorFiscal),
+    contadorPublico: withTp(intake.contadorPublico),
+  };
+  const hasMirror = mirror.representanteLegal !== null || mirror.revisorFiscal !== null || mirror.contadorPublico !== null;
+  return {
+    ...json,
+    signatories: hasMirror ? mirror : null,
+    company: { ...json.company, signatories: hasMirror ? mirror : null },
+    shareholderMinutes: {
+      ...minutes,
+      signatures,
+      fiscalReviewerOpinion: {
+        ...minutes.fiscalReviewerOpinion,
+        reviewerName: intake.revisorFiscal?.name ?? null,
+        reviewerTp: intake.revisorFiscal?.tp ?? null,
+      },
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Adapter local privado: GovernanceReportJson -> GovernanceResult legacy
 // ---------------------------------------------------------------------------
 
-function renderFinancialNotes(notes: readonly FinancialNote[]): string {
+/**
+ * Nota de preparación IFRS 18: sólo aplica al Grupo 1. Para Grupo 2/3 (o
+ * grupo no informado, que el pipeline trata como Grupo 2) la nota no se
+ * incluye (Corrección 6 v2.1 + Pass-3 NIIF "IFRS 18 NUNCA mencionada"); si
+ * el modelo la emite igual, se trata como omitida. Sin esta salvaguarda el
+ * gate V8 bloquea todo informe de Grupo 2 que obedezca al prompt anterior.
+ */
+const IFRS18_NOTE_TITLE_RX = /\b(?:IFRS|NIIF)\s*18\b/i;
+
+function isOmittedNote(n: FinancialNote, niifGroup: number | null | undefined): boolean {
+  if (n.materiality === 'omitted') return true;
+  if (niifGroup !== 1 && IFRS18_NOTE_TITLE_RX.test(n.title)) return true;
+  return false;
+}
+
+function renderFinancialNotes(
+  notes: readonly FinancialNote[],
+  niifGroup: number | null | undefined,
+): string {
   const lines: string[] = ['## 1. NOTAS A LOS ESTADOS FINANCIEROS'];
   const sorted = [...notes].sort((a, b) => a.number - b.number);
   for (const n of sorted) {
-    if (n.materiality === 'omitted') continue;
+    if (isOmittedNote(n, niifGroup)) continue;
     lines.push('', `### Nota ${n.number}: ${n.title}`);
     lines.push(n.body);
     if (n.normReference) lines.push(`_Norma:_ ${n.normReference}`);
@@ -144,7 +379,24 @@ function renderFinancialNotes(notes: readonly FinancialNote[]): string {
   return lines.join('\n');
 }
 
-function renderShareholderMinutes(minutes: ShareholderMinutes, company: GovernanceReportJson['company']): string {
+/** Rótulo con signo del resultado del ejercicio (NIIF: pérdida entre paréntesis). */
+function resultadoDelEjercicioLine(netIncomeCop: string): string {
+  const net = parseMoneyCop(netIncomeCop);
+  const label = net < BigInt(0) ? 'Pérdida neta del ejercicio' : 'Utilidad neta del ejercicio';
+  return `${label}: ${formatCopFromCents(net, false)}`;
+}
+
+/** Cifra con signo (paréntesis NIIF para negativos) — nunca valor absoluto. */
+function signedCop(value: string): string {
+  return formatCopFromCents(parseMoneyCop(value), false);
+}
+
+function renderShareholderMinutes(
+  minutes: ShareholderMinutes,
+  company: GovernanceReportJson['company'],
+  entityType: string | null | undefined,
+  expectedCapitalizationApplies: boolean | null = null,
+): string {
   const lines: string[] = [];
   lines.push(`## 2. ACTA DE ${minutes.assemblyType.toUpperCase()} ORDINARIA`);
   lines.push('');
@@ -153,10 +405,13 @@ function renderShareholderMinutes(minutes: ShareholderMinutes, company: Governan
   if (minutes.city) lines.push(`Ciudad: ${minutes.city}`);
   if (minutes.meetingDate) lines.push(`Fecha: ${minutes.meetingDate}`);
 
-  // Why: Art. 424 C.Co. — declaración de convocatoria precede al quorum
-  // porque sin convocatoria válida la asamblea es impugnable.
+  // Why: la declaración de convocatoria precede al quorum porque sin
+  // convocatoria válida la asamblea es impugnable. La norma depende del tipo
+  // societario: SAS → estatutos + Art. 20 Ley 1258/2008; S.A. → Art. 424
+  // C.Co.; Ltda. → estatutos + Arts. 181-186 C.Co. (prompts-normativa-13).
+  const citation = convocatoriaCitationFor(normalizeTipoSocietario(entityType));
   lines.push('', '### Verificación de Convocatoria', minutes.convocationStatement);
-  lines.push('_Norma:_ Art. 424 Código de Comercio.');
+  lines.push(`_Norma:_ ${citation.charAt(0).toUpperCase()}${citation.slice(1)}.`);
 
   lines.push('', '### Quorum', minutes.quorumStatement);
 
@@ -173,29 +428,34 @@ function renderShareholderMinutes(minutes: ShareholderMinutes, company: Governan
 
   lines.push('', '### Destinación del resultado del ejercicio');
   const dist = minutes.resultDistribution;
-  lines.push(
-    `Utilidad Neta del Ejercicio: ${formatCopFromCents(parseMoneyCop(dist.netIncomeCop), true)}`,
-  );
+  // El reconciliador exige que netIncomeCop sea la cifra FIRMADA de los
+  // totales vinculantes; imprimirla en valor absoluto convertía una pérdida
+  // en "utilidad" en un documento para firma (auditoria-calidad-01).
+  lines.push(resultadoDelEjercicioLine(dist.netIncomeCop));
   if (dist.applies && dist.lines.length > 0) {
     lines.push('');
     lines.push('| Concepto | Monto | Norma |');
     lines.push('|---|---:|---|');
     for (const ln of dist.lines) {
       lines.push(
-        `| ${ln.label} | ${formatCopFromCents(parseMoneyCop(ln.amountCop), true)} | ${ln.normReference} |`,
+        `| ${ln.label} | ${signedCop(ln.amountCop)} | ${ln.normReference} |`,
       );
     }
   } else if (dist.neutralProposalText) {
     lines.push('', dist.neutralProposalText);
   }
 
-  if (minutes.capitalizationProposal.applies) {
+  // Sin ancla (`null`) se respeta lo emitido: el orquestador lo sella como
+  // cifra sin verificar. Con ancla que dice "no aplica", no se imprime.
+  if (minutes.capitalizationProposal.applies && expectedCapitalizationApplies !== false) {
     lines.push(
       '',
-      '### Proposición — Capitalización 40% de utilidades retenidas acumuladas',
+      // v2.5 #13: la base es la utilidad neta del ejercicio, no el saldo
+      // acumulado del PUC 36 (pipeline-flujo-18).
+      '### Proposición — Capitalización del 40% de la utilidad neta del ejercicio',
       minutes.capitalizationProposal.body,
-      `_Base:_ ${formatCopFromCents(parseMoneyCop(minutes.capitalizationProposal.retainedEarningsBaseCop), true)}`,
-      `_Monto a capitalizar:_ ${formatCopFromCents(parseMoneyCop(minutes.capitalizationProposal.capitalizationAmountCop), true)}`,
+      `_Base (utilidad neta del ejercicio):_ ${signedCop(minutes.capitalizationProposal.retainedEarningsBaseCop)}`,
+      `_Monto a capitalizar:_ ${signedCop(minutes.capitalizationProposal.capitalizationAmountCop)}`,
       `_Fundamento:_ ${minutes.capitalizationProposal.legalReference}`,
     );
   }
@@ -222,17 +482,14 @@ function renderShareholderMinutes(minutes: ShareholderMinutes, company: Governan
   const op = minutes.fiscalReviewerOpinion;
   lines.push('', '### Dictamen del Revisor Fiscal');
   if (op.applies) {
-    const opTypeLabel = {
-      favorable: 'favorable',
-      con_salvedades: 'con salvedades',
-      desfavorable: 'desfavorable',
-      abstension: 'abstención',
-    } as const;
+    // El acta NO anticipa la opinión: el dictamen lo emite el Revisor Fiscal
+    // (Arts. 207-209 C.Co.) y la auditoría Parte IV lleva su propia opinión
+    // con salvaguardas. Publicar aquí el tipo que redactó el modelo de
+    // Governance producía dos "dictámenes" contradictorios (auditoria-calidad-18).
     lines.push(
-      `${op.reviewerName ?? '— (a completar al firmar)'}${op.reviewerTp ? ` — T.P. ${op.reviewerTp}` : ''}, Revisor Fiscal de ${company.name} (NIT ${company.nit}), emite dictamen ${op.opinionType ? opTypeLabel[op.opinionType] : 'pendiente'}.`,
+      `${op.reviewerName ?? '— (a completar al firmar)'}${op.reviewerTp ? ` — T.P. ${op.reviewerTp}` : ''}, Revisor Fiscal de ${company.name} (NIT ${company.nit}): dictamen pendiente de emisión por el Revisor Fiscal. El acta no anticipa ni califica su opinión.`,
     );
-    if (op.opinionBody) lines.push('', op.opinionBody);
-    lines.push('', '_Sustento normativo:_ Ley 43 de 1990, Art. 207-209 C.Co., NIA 700/705/706.');
+    lines.push('', '_Sustento normativo:_ Arts. 207-209 C.Co., Ley 43 de 1990, NIA 700/705/706.');
   } else {
     lines.push(op.exemptionReason ?? 'Entidad no obligada a Revisor Fiscal por umbral Art. 203 C.Co.');
   }
@@ -285,9 +542,42 @@ function renderDisclaimers(json: GovernanceReportJson): string {
   return lines.join('\n');
 }
 
-function toGovernanceResult(json: GovernanceReportJson): GovernanceResult {
-  const financialNotes = renderFinancialNotes(json.financialNotes);
-  const shareholderMinutes = renderShareholderMinutes(json.shareholderMinutes, json.company);
+/**
+ * El JSON expuesto a consumidores downstream tampoco lleva la opinión que el
+ * modelo de Governance haya redactado para el Revisor Fiscal.
+ */
+function withoutReviewerOpinion(json: GovernanceReportJson): GovernanceReportJson {
+  const op = json.shareholderMinutes.fiscalReviewerOpinion;
+  if (op.opinionType === null && op.opinionBody === null) return json;
+  return {
+    ...json,
+    shareholderMinutes: {
+      ...json.shareholderMinutes,
+      fiscalReviewerOpinion: { ...op, opinionType: null, opinionBody: null },
+    },
+  };
+}
+
+function toGovernanceResult(
+  rawJson: GovernanceReportJson,
+  company?: Partial<CompanyInfo>,
+  options: {
+    /** `capitalizationApplies` de la aritmética determinista del acta; `null` = sin ancla. */
+    capitalizationApplies?: boolean | null;
+  } = {},
+): GovernanceResult {
+  // Firmantes del intake (R2-04): el acta y el JSON expuesto no llevan la
+  // identidad que escribió el modelo.
+  const json = withIntakeSignatories(withoutReviewerOpinion(rawJson), company);
+  const niifGroup = company?.niifGroup ?? json.company.niifGroup;
+  const entityType = company?.entityType ?? json.company.entityType;
+  const financialNotes = renderFinancialNotes(json.financialNotes, niifGroup);
+  const shareholderMinutes = renderShareholderMinutes(
+    json.shareholderMinutes,
+    json.company,
+    entityType,
+    options.capitalizationApplies ?? null,
+  );
   const complianceChecklist = renderComplianceChecklist(json);
   const disclaimers = renderDisclaimers(json);
   const preparerNotes = renderPreparerNotes(json);
@@ -437,3 +727,9 @@ function detectForbiddenPhrasesInJson(json: GovernanceReportJson): EvasiveHit[] 
   }
   return hits;
 }
+
+// ---------------------------------------------------------------------------
+// Test-only re-export — el adapter es interno; la superficie pública es
+// `runGovernanceSpecialist` (una llamada LLM). No importar fuera de tests.
+// ---------------------------------------------------------------------------
+export const __test_toGovernanceResult = toGovernanceResult;

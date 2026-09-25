@@ -19,7 +19,12 @@
 // ---------------------------------------------------------------------------
 
 import type { PUCClass } from '@/lib/preprocessing/trial-balance';
+import {
+  isAmbiguousNatureAccount,
+  isContraAsset,
+} from '@/lib/preprocessing/curator-rules/contra-asset-registry';
 
+import { forensicIntegrityScore, margenBruto as computeMargenBruto } from './shared-metrics';
 import type {
   ExecutiveCard,
   PillarStatus,
@@ -53,34 +58,94 @@ function safeDelta(curr: number | null, prev: number | null): number | null {
 // ---------------------------------------------------------------------------
 
 interface SignAudit {
-  saldosNegativosActivo: number;
-  saldosPositivosPasivo: number;
+  saldosContrariosActivo: number;
+  saldosContrariosPasivo: number;
+  saldosContrariosPatrimonio: number;
   totalCuentasAnalizadas: number;
 }
 
+/** Umbral de materialidad (COP) para considerar un saldo "contrario". */
+const SIGN_TOLERANCE = 1000;
+
 /**
- * Cuenta cuentas con signo incorrecto en Clases 1 y 2 (excluyendo virtuales).
- * - Clase 1 (Activo): saldo esperado ≥ 0; anómalos son los < -1000.
- * - Clase 2 (Pasivo): saldo esperado ≤ 0; anómalos son los > 1000.
+ * Cuentas de patrimonio de naturaleza DÉBITO (Decreto 2650/1993): pérdida del
+ * ejercicio (3610), pérdidas acumuladas (3710) y capital por suscribir /
+ * suscrito por cobrar (310510 / 310515, marcadas "(DB)" en el catálogo).
+ */
+const EQUITY_DEBIT_NATURE_PREFIXES = ['3610', '3710', '310510', '310515'] as const;
+
+function isEquityDebitNature(code: string): boolean {
+  return EQUITY_DEBIT_NATURE_PREFIXES.some((p) => code.startsWith(p));
+}
+
+/**
+ * Cuenta saldos contrarios a la naturaleza esperada (ratios-kpis-09).
+ *
+ * Convención del preprocesador (CSV `normalizeSignConvention` y DB
+ * `naturalSide`): cada clase llega como MAGNITUD de su naturaleza — activos
+ * positivos (débito), pasivos y patrimonio positivos (crédito). Por eso:
+ *   - Activo (clase 1): anómalo si < −1.000, salvo correctoras (1592, 1597-1599,
+ *     1399, 1499, 1698, 1798… ver contra-asset-registry), que son anómalas si
+ *     > +1.000 (saldo débito). 1596 sin desglose (naturaleza mixta) se omite.
+ *   - Pasivo (clase 2): anómalo si < −1.000 (saldo débito).
+ *   - Patrimonio (clase 3): anómalo si < −1.000, salvo las cuentas de
+ *     naturaleza débito (pérdidas, capital por suscribir), anómalas si > +1.000.
+ * Las cuentas virtuales del Curator no se analizan.
  */
 function countAccountsWithIncorrectSign(
   snapshot: PillarsAggregateInput['snapshot'],
 ): SignAudit {
-  const clase1 = snapshot.classes.find((c) => c.code === 1);
-  const clase2 = snapshot.classes.find((c) => c.code === 2);
+  const leaves = (code: number) =>
+    (snapshot.classes.find((c) => c.code === code)?.accounts ?? []).filter(
+      (a) => !isVirtualCuratorAccount(a.code),
+    );
 
-  const activos = (clase1?.accounts ?? []).filter(
-    (a) => !isVirtualCuratorAccount(a.code),
-  );
-  const pasivos = (clase2?.accounts ?? []).filter(
-    (a) => !isVirtualCuratorAccount(a.code),
-  );
+  const activos = leaves(1).filter((a) => !isAmbiguousNatureAccount(a.code));
+  const pasivos = leaves(2);
+  const patrimonio = leaves(3);
 
-  const saldosNegativosActivo = activos.filter((a) => a.balance < -1000).length;
-  const saldosPositivosPasivo = pasivos.filter((a) => a.balance > 1000).length;
-  const totalCuentasAnalizadas = activos.length + pasivos.length;
+  const saldosContrariosActivo = activos.filter((a) =>
+    isContraAsset(a.code) ? a.balance > SIGN_TOLERANCE : a.balance < -SIGN_TOLERANCE,
+  ).length;
+  const saldosContrariosPasivo = pasivos.filter((a) => a.balance < -SIGN_TOLERANCE).length;
+  const saldosContrariosPatrimonio = patrimonio.filter((a) =>
+    isEquityDebitNature(a.code) ? a.balance > SIGN_TOLERANCE : a.balance < -SIGN_TOLERANCE,
+  ).length;
+  const totalCuentasAnalizadas = activos.length + pasivos.length + patrimonio.length;
 
-  return { saldosNegativosActivo, saldosPositivosPasivo, totalCuentasAnalizadas };
+  return {
+    saldosContrariosActivo,
+    saldosContrariosPasivo,
+    saldosContrariosPatrimonio,
+    totalCuentasAnalizadas,
+  };
+}
+
+/**
+ * Índice de Consistencia 0-100. Componentes: saldos con naturaleza correcta
+ * (50 %), cuadratura de la ecuación (30 %) e integridad de terceros (20 %).
+ * Un componente SIN DATO (terceros null) se excluye y los pesos restantes se
+ * renormalizan: nunca aporta puntos que no se midieron.
+ */
+function computeConsistencia(
+  audit: VerdadExecutiveCardsAudit,
+  activo: number,
+): number {
+  const contrarios =
+    audit.saldosContrariosActivo + audit.saldosContrariosPasivo + audit.saldosContrariosPatrimonio;
+  const signoCorrecto = 1 - contrarios / Math.max(audit.totalCuentasAnalizadas, 1);
+  const cuadratura =
+    Math.abs(audit.equationGap) <= 1000
+      ? 1
+      : 1 - Math.min(Math.abs(audit.equationGap) / Math.max(activo, 1), 1);
+  const parts: Array<{ v: number; w: number }> = [
+    { v: signoCorrecto, w: 0.5 },
+    { v: cuadratura, w: 0.3 },
+  ];
+  if (audit.integridadTerceros !== null) parts.push({ v: audit.integridadTerceros, w: 0.2 });
+  const totalW = parts.reduce((s, p) => s + p.w, 0);
+  const raw = parts.reduce((s, p) => s + p.v * p.w, 0) / totalW;
+  return Math.min(100, Math.max(0, raw * 100));
 }
 
 // ---------------------------------------------------------------------------
@@ -144,8 +209,12 @@ function buildVerdadAudit(
   const equationGap = ct.activo - ct.pasivo - ct.patrimonio;
 
   // ── Integridad de saldos ─────────────────────────────────────────────────
-  const { saldosNegativosActivo, saldosPositivosPasivo, totalCuentasAnalizadas } =
-    countAccountsWithIncorrectSign(snapshot);
+  const {
+    saldosContrariosActivo,
+    saldosContrariosPasivo,
+    saldosContrariosPatrimonio,
+    totalCuentasAnalizadas,
+  } = countAccountsWithIncorrectSign(snapshot);
 
   // ── Findings del Curator ──────────────────────────────────────────────────
   const allFindings = curatorRes?.findings ?? [];
@@ -161,28 +230,27 @@ function buildVerdadAudit(
   // ── Anomalías de variación ────────────────────────────────────────────────
   const anomaliasVariacion = countAnomalies(snapshot, comparative);
 
-  // ── Margen bruto (Ingresos − Costos C6) / Ingresos ───────────────────────
-  const clase6 = snapshot.classes.find((c) => c.code === 6);
-  const totalIngresos = ct.ingresos;
-  const totalCostos = clase6?.auxiliaryTotal ?? 0;
-  let margenBruto: number | null = null;
-  if (totalIngresos > 0) {
-    margenBruto = (totalIngresos - totalCostos) / totalIngresos;
-  }
+  // ── Margen bruto sobre ingresos operacionales netos (41 − 4175) ─────────
+  // Misma utilidad bruta que el preprocesador (41 − 4175 − clases 6 y 7); la Σ
+  // de la clase 4 inflaba el margen con devoluciones y el grupo 42
+  // (ratios-kpis-04). Sin grupo 41 ⇒ N/D (no se marca omisión de costos).
+  const margenBruto = computeMargenBruto(snapshot);
   const posibleOmisionCostos = margenBruto !== null && margenBruto > 0.95;
 
   // ── Forensic ─────────────────────────────────────────────────────────────
-  const forensicScore: number | null =
-    forensic && Number.isFinite(forensic.score) ? forensic.score : null;
+  // Sólo un escaneo con cobertura completa es score de integridad
+  // (auditoria-calidad-19).
+  const forensicScore = forensicIntegrityScore(forensic);
 
-  // integridadTerceros: ForensicSummary no expone este campo en el tipo público;
-  // lo dejamos null salvo que venga extendido en runtime (no penaliza si no hay datos).
+  // integridadTerceros: ForensicSummary no expone este campo. Sin dato ⇒ null y
+  // el índice de consistencia EXCLUYE el componente (no lo cuenta como 100 %).
   const integridadTerceros: number | null = null;
 
   return {
     equationGap,
-    saldosNegativosActivo,
-    saldosPositivosPasivo,
+    saldosContrariosActivo,
+    saldosContrariosPasivo,
+    saldosContrariosPatrimonio,
     totalCuentasAnalizadas,
     reclasificacionesR1,
     discrepanciasPreprocessing,
@@ -251,26 +319,7 @@ export function computeVerdadExecutiveCards(
   const ecuacionStatus_ = ecuacionStatus(equationGapValue, ct.activo);
 
   // ─── 2. Índice de Consistencia ────────────────────────────────────────────
-  // Component: saldos con signo correcto
-  const signoCorrecto =
-    1 -
-    (audit.saldosNegativosActivo + audit.saldosPositivosPasivo) /
-      Math.max(audit.totalCuentasAnalizadas, 1);
-
-  // Component: cuadratura de ecuación
-  let cuadratura: number;
-  if (Math.abs(equationGapValue) <= 1000) {
-    cuadratura = 1.0;
-  } else {
-    cuadratura = 1 - Math.min(Math.abs(equationGapValue) / Math.max(ct.activo, 1), 1);
-  }
-
-  // Component: integridad de terceros (null → no penalizar → 1.0)
-  const terceros: number = audit.integridadTerceros ?? 1.0;
-
-  const consistenciaRaw =
-    signoCorrecto * 0.5 + cuadratura * 0.3 + terceros * 0.2;
-  const consistenciaValue = Math.min(100, Math.max(0, consistenciaRaw * 100));
+  const consistenciaValue = computeConsistencia(audit, ct.activo);
 
   // ─── 3. Anomalías de Clasificación ───────────────────────────────────────
   const anomaliasCount =
@@ -294,28 +343,8 @@ export function computeVerdadExecutiveCards(
 
     prevEquacionGap = prevAudit.equationGap;
 
-    // Consistencia previa
-    const prevSignoCorrecto =
-      1 -
-      (prevAudit.saldosNegativosActivo + prevAudit.saldosPositivosPasivo) /
-        Math.max(prevAudit.totalCuentasAnalizadas, 1);
-    const prevCuadratura =
-      Math.abs(prevAudit.equationGap) <= 1000
-        ? 1.0
-        : 1 -
-          Math.min(
-            Math.abs(prevAudit.equationGap) /
-              Math.max(comparative.controlTotals.activo, 1),
-            1,
-          );
-    const prevTerceros: number = prevAudit.integridadTerceros ?? 1.0;
-    prevConsistencia = Math.min(
-      100,
-      Math.max(
-        0,
-        (prevSignoCorrecto * 0.5 + prevCuadratura * 0.3 + prevTerceros * 0.2) * 100,
-      ),
-    );
+    // Consistencia previa (misma función)
+    prevConsistencia = computeConsistencia(prevAudit, comparative.controlTotals.activo);
 
     // Anomalías previas: métrica ya usa comparative, así que usamos la del snapshot
     // comparativo contra null (sin doble-período anterior).
@@ -359,13 +388,13 @@ export function computeVerdadExecutiveCards(
     status: consistenciaStatus(consistenciaValue),
     deltaVsComparative: safeDelta(consistenciaValue, prevConsistencia),
     descriptionEs:
-      'Score 0-100 que combina saldos con signo correcto, cuadratura de la ecuación contable e integridad de terceros.',
+      'Score 0-100: saldos con la naturaleza esperada por clase (pasivo y patrimonio crédito; correctoras al contrario), cuadratura de la ecuación e integridad de terceros cuando hay dato.',
     descriptionEn:
-      'Score 0-100 combining correct-sign balances, equation balance, and third-party integrity.',
+      'Score 0-100: balances with the nature expected per class (liabilities and equity credit; contra accounts the opposite), equation balance and third-party integrity when available.',
     formulaEs:
-      'Saldos OK (50%) + Cuadratura (30%) + Terceros válidos (20%) × 100',
+      'Naturaleza OK (50%) + Cuadratura (30%) + Terceros (20%) × 100; sin dato de terceros el componente se excluye y los pesos se renormalizan',
     formulaEn:
-      'Sign-OK balances (50%) + Equation balance (30%) + Valid third parties (20%) × 100',
+      'Nature-OK balances (50%) + Equation balance (30%) + Third parties (20%) × 100; without third-party data the component is excluded and weights renormalized',
   };
 
   const anomalias: ExecutiveCard = {

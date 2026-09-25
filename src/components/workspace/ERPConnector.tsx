@@ -17,8 +17,8 @@ import {
   Download,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useWorkspace } from '@/context/WorkspaceContext';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { useLanguage } from '@/context/LanguageContext';
 import type { ERPProvider } from '@/lib/erp/types';
 import { ERPLogo } from './ERPLogo';
 
@@ -229,6 +229,7 @@ interface ConnectFormProps {
 }
 
 function ConnectForm({ provider, onClose, onConnected }: ConnectFormProps) {
+  const { t } = useLanguage();
   const [status, setStatus] = useState<ConnectionStatus>('idle');
   const [error, setError] = useState('');
   const [fields, setFields] = useState<Record<string, string>>({});
@@ -325,7 +326,7 @@ function ConnectForm({ provider, onClose, onConnected }: ConnectFormProps) {
             type="button"
             onClick={onClose}
             className="p-1 text-n-700 hover:text-n-1000 transition-colors"
-            aria-label="Cerrar"
+            aria-label={t.erp.close}
           >
             <X className="w-4 h-4" aria-hidden="true" />
           </button>
@@ -482,8 +483,24 @@ interface SyncModalProps {
   onSyncComplete: (recordCount: number) => void;
 }
 
+// Clave de la UI → syncType de /api/erp/sync.
+const SYNC_TYPE_BY_OPTION = {
+  trialBalance: 'trial_balance',
+  chartOfAccounts: 'chart_of_accounts',
+  journalEntries: 'journal_entries',
+  invoices: 'invoices',
+  contacts: 'contacts',
+} as const;
+
+interface SyncOutcome {
+  success: boolean;
+  recordCount: number;
+  /** Motivo por el que el "balance" leído no es un balance de prueba completo. */
+  trialBalanceNote: string | null;
+}
+
 function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
-  const { openIntakeForType } = useWorkspace();
+  const { t } = useLanguage();
   const [syncOptions, setSyncOptions] = useState({
     trialBalance: true,
     chartOfAccounts: false,
@@ -493,7 +510,7 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
   });
   const [year, setYear] = useState(new Date().getFullYear());
   const [syncing, setSyncing] = useState(false);
-  const [result, setResult] = useState<{ success: boolean; recordCount: number } | null>(null);
+  const [result, setResult] = useState<SyncOutcome | null>(null);
   const [error, setError] = useState('');
   const dialogRef = useRef<HTMLDivElement>(null);
   const yearSelectId = useId();
@@ -505,13 +522,18 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
     setResult(null);
 
     try {
+      // Contrato de /api/erp/sync: el servidor usa las credenciales del vault
+      // de este workspace; el navegador no reenvía secretos.
+      const syncTypes = (Object.keys(SYNC_TYPE_BY_OPTION) as Array<keyof typeof SYNC_TYPE_BY_OPTION>)
+        .filter(key => syncOptions[key])
+        .map(key => SYNC_TYPE_BY_OPTION[key]);
       const response = await fetch('/api/erp/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           provider: provider.id,
-          options: syncOptions,
-          year,
+          syncTypes,
+          period: String(year),
         }),
       });
 
@@ -522,19 +544,18 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
       }
 
       const count = data.recordCount ?? 0;
-      setResult({ success: true, recordCount: count });
+      const tb = data.data?.trialBalance;
+      const trialBalanceNote = tb && tb.balanceStatus !== 'complete'
+        ? (tb.balanceStatusReason as string | null) ?? 'El ERP no entregó un balance de prueba completo.'
+        : null;
+      setResult({ success: true, recordCount: count, trialBalanceNote });
       onSyncComplete(count);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error de sincronización');
-      setResult({ success: false, recordCount: 0 });
+      setResult({ success: false, recordCount: 0, trialBalanceNote: null });
     } finally {
       setSyncing(false);
     }
-  };
-
-  const handleCreateReport = () => {
-    onClose();
-    openIntakeForType('niif_report');
   };
 
   const anySelected = Object.values(syncOptions).some(Boolean);
@@ -567,7 +588,7 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
             type="button"
             onClick={onClose}
             className="p-1 text-n-700 hover:text-n-1000 transition-colors"
-            aria-label="Cerrar"
+            aria-label={t.erp.close}
           >
             <X className="w-4 h-4" aria-hidden="true" />
           </button>
@@ -579,18 +600,25 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
               <CheckCircle className="w-10 h-10 text-success mx-auto" />
               <div>
                 <p className="text-sm font-semibold text-success">
-                  {result.recordCount} registros sincronizados
+                  {t.erp.recordsRead
+                    .replace('{n}', String(result.recordCount))
+                    .replace('{provider}', provider.name)}
                 </p>
-                <p className="text-xs text-n-600 mt-1">
-                  Datos importados exitosamente desde {provider.name}
-                </p>
+                {/* Honestidad: la lectura no se guarda ni alimenta reportes. */}
+                <p className="text-xs text-n-700 mt-1">{t.erp.notPersistedNote}</p>
               </div>
+              {result.trialBalanceNote && (
+                <div className="flex items-start gap-2 text-left text-xs text-n-800 bg-warning/10 border border-warning/30 rounded-lg px-3 py-2">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden="true" />
+                  <span>{result.trialBalanceNote}</span>
+                </div>
+              )}
               <button
                 type="button"
-                onClick={handleCreateReport}
-                className="px-5 py-2.5 rounded-lg text-xs font-semibold bg-gold-500 hover:bg-gold-600 text-n-0 transition-colors"
+                onClick={onClose}
+                className="px-5 py-2.5 rounded-lg text-xs font-semibold border border-n-200 text-n-800 hover:text-n-1000 hover:bg-n-50 transition-colors"
               >
-                Crear Reporte NIIF con estos datos
+                {t.erp.close}
               </button>
             </div>
           ) : (
@@ -695,6 +723,7 @@ interface ProviderCardViewProps {
 }
 
 function ProviderCardView({ provider, connection, onConnect, onSync, onDisconnect }: ProviderCardViewProps) {
+  const { t } = useLanguage();
   const isConnected = !!connection;
 
   return (
@@ -738,7 +767,7 @@ function ProviderCardView({ provider, connection, onConnect, onSync, onDisconnec
       {isConnected && connection.lastSync && (
         <div className="flex items-center gap-1.5 mt-2 text-2xs text-success">
           <RefreshCw className="w-3 h-3" />
-          Última sync: {formatSyncDate(connection.lastSync)}
+          {t.erp.lastRead}: {formatSyncDate(connection.lastSync)}
         </div>
       )}
 

@@ -11,7 +11,9 @@
 //   - event: module_complete   { stage, data: <module result> }
 //   - event: report            FiscalAgentReport
 //   - event: done              { partial }
-//   - event: error             { error, detail }
+//   - event: error             { error, detail, code?, reasons? }
+//     (balance bloqueado: code 'BALANCE_VALIDATION_FAILED' + reasons, como /niif;
+//     por JSON la misma forma con status 422)
 //
 // `maxDuration` 800s para acomodar el modo `full` (7 módulos + synth en
 // paralelo + secuencial — el cuello de botella es Promise.all sobre los 7).
@@ -27,6 +29,10 @@ import {
 import { fiscalAgentRequestSchema } from '@/lib/validation/schemas';
 import { logActivity } from '@/lib/db/activity-log';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
+import {
+  EscudoBalanceBloqueadoError,
+  escudoBalanceBloqueadoPayload,
+} from '@/lib/agents/financial/escudo-survival/lib/balance-ingesta';
 
 export const runtime = 'nodejs';
 export const maxDuration = 800;
@@ -36,6 +42,7 @@ export async function POST(req: Request) {
   if (!gate.ok) return gate.response;
 
   const startedAt = Date.now();
+  let requestLanguage: 'es' | 'en' = 'es';
   try {
     const body = (await req.json()) as unknown;
     const parsed = fiscalAgentRequestSchema.safeParse(body);
@@ -56,7 +63,9 @@ export async function POST(req: Request) {
       instructions,
       dianRequirementText,
       dianRequirementKind,
+      saldoAFavorDeclaradoCents,
     } = parsed.data;
+    requestLanguage = language;
 
     const wantsStream =
       req.headers.get('X-Stream') === 'true' ||
@@ -71,6 +80,7 @@ export async function POST(req: Request) {
         instructions,
         dianRequirementText,
         dianRequirementKind,
+        saldoAFavorDeclaradoCents,
         startedAt,
       });
     }
@@ -83,6 +93,7 @@ export async function POST(req: Request) {
       instructions,
       dianRequirementText,
       dianRequirementKind,
+      saldoAFavorDeclaradoCents,
     });
 
     void logActivity({
@@ -103,6 +114,14 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ report });
   } catch (error) {
+    // Balance que no sirve de base para cifras fiscales: 422 con los motivos,
+    // mismo contrato que /niif (I4-escudo 1). No es un error del servidor.
+    if (error instanceof EscudoBalanceBloqueadoError) {
+      logBalanceBloqueado(error, startedAt);
+      return NextResponse.json(escudoBalanceBloqueadoPayload(error, requestLanguage), {
+        status: 422,
+      });
+    }
     console.error(
       '[escudo/fiscal] API error:',
       error instanceof Error ? error.message : error,
@@ -122,6 +141,19 @@ export async function POST(req: Request) {
   }
 }
 
+/** Bitácora del bloqueo del balance (advertencia, no error del servidor). */
+function logBalanceBloqueado(error: EscudoBalanceBloqueadoError, startedAt: number): void {
+  void logActivity({
+    category: 'financial',
+    action: 'escudo.fiscal.validation_failed',
+    level: 'warn',
+    message: 'Balance de prueba bloqueado como base de las cifras fiscales',
+    durationMs: Date.now() - startedAt,
+    resourceType: 'escudo_fiscal',
+    metadata: { reasons: error.reasons },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // SSE streaming
 // ---------------------------------------------------------------------------
@@ -133,14 +165,11 @@ function handleStreaming(args: {
   mode: z.infer<typeof fiscalAgentRequestSchema>['mode'];
   instructions: string | undefined;
   dianRequirementText: string | undefined;
-  dianRequirementKind:
-    | 'requerimiento_ordinario'
-    | 'emplazamiento_corregir'
-    | 'emplazamiento_no_declarar'
-    | 'pliego_cargos'
-    | 'liquidacion_oficial_revision'
-    | 'desconocido'
-    | undefined;
+  // Derivado del schema: una lista escrita a mano dejó por fuera el
+  // requerimiento especial (Art. 703 E.T.) — auditoría tributario-modulos-13.
+  dianRequirementKind: z.infer<typeof fiscalAgentRequestSchema>['dianRequirementKind'];
+  /** Saldo a favor del Formulario 110 (MoneyCop) — tributario-modulos-02. */
+  saldoAFavorDeclaradoCents: string | undefined;
   startedAt: number;
 }) {
   const {
@@ -151,6 +180,7 @@ function handleStreaming(args: {
     instructions,
     dianRequirementText,
     dianRequirementKind,
+    saldoAFavorDeclaradoCents,
     startedAt,
   } = args;
   const encoder = new TextEncoder();
@@ -173,6 +203,7 @@ function handleStreaming(args: {
             instructions,
             dianRequirementText,
             dianRequirementKind,
+            saldoAFavorDeclaradoCents,
           },
           {
             onProgress: (event: FiscalAgentProgressEvent) => {
@@ -200,16 +231,24 @@ function handleStreaming(args: {
           },
         });
       } catch (error) {
+        if (error instanceof EscudoBalanceBloqueadoError) {
+          // Mismo contrato que el 422 de /niif por SSE: code + reasons.
+          send('error', escudoBalanceBloqueadoPayload(error, language));
+          logBalanceBloqueado(error, startedAt);
+          return;
+        }
         console.error(
           '[escudo/fiscal] Pipeline error:',
           error instanceof Error ? error.message : error,
         );
+        const friendly = toFriendlyError(error, language);
         send('error', {
           error:
             language === 'en'
               ? 'Fiscal agent execution failed.'
               : 'La ejecución del Agente Fiscal falló.',
-          detail: toFriendlyError(error).message,
+          detail: friendly.message,
+          code: friendly.code,
         });
         void logActivity({
           category: 'financial',

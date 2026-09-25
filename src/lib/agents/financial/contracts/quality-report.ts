@@ -106,21 +106,25 @@ export type PriorityRecommendationJson = z.infer<typeof PriorityRecommendationSc
 // Output completo del Quality Meta-Auditor
 // ---------------------------------------------------------------------------
 
+// overallScore y grade son la estimación del modelo y NO se publican tal cual:
+// el adapter (quality/agent.ts deriveQualityScore) los recalcula desde el score
+// global v2.1 de las dimensiones y los cortes A+ ≥ 95 … F < 60
+// (auditoria-calidad-10). El esquema no cambia de forma (strict mode).
 export const QualityReportSchema = z.object({
   overallScore: z
     .number()
     .int()
     .min(0)
     .max(100)
-    .describe('Score global 0-100 ponderando todas las dimensiones'),
-  grade: QualityGradeEnum,
+    .describe('Score global 0-100 estimado desde las dimensiones (el sistema lo recalcula desde el promedio de las dimensiones evaluadas)'),
+  grade: QualityGradeEnum.describe('Grade coherente con overallScore: A+ ≥95, A ≥90, B ≥80, C ≥70, D ≥60, F <60 (el sistema lo recalcula)'),
   executiveSummary: z
     .string()
     .min(1)
     .describe('Resumen ejecutivo de 3-4 parrafos sobre la calidad del reporte'),
   dimensions: z
     .array(QualityDimensionSchema)
-    .describe('14 dimensiones (D1..D14) con score y findings/recommendations'),
+    .describe('Dimensiones evaluables (D1..D14) con score y findings/recommendations; una dimension sin base (p. ej. D14 sin comparativo) se omite y el sistema la marca N/D'),
   dataQuality: DataQualityMetricsSchema,
   aiGovernance: AIGovernanceMetricsSchema,
   ifrs18Readiness: IFRS18ReadinessSchema,

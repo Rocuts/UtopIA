@@ -98,6 +98,21 @@ export interface TaxRuleTriggers {
    * lleva por tercero).
    */
   advisory?: string;
+  /**
+   * La regla aplica, pero su cifra NO puede contabilizarse sin revisión
+   * humana: el generador la emite con confianza 0, sin `JournalLineInput` y
+   * sin afectar el total (igual que un empate de exclusión mutua), y adjunta
+   * `message`. Participa en la exclusión mutua, así que desplaza a las tarifas
+   * planas de su grupo.
+   *   - Sin `unlessTreatments`: siempre requiere revisión (p. ej. rentas de
+   *     trabajo no laborales que van por la tabla del Art. 383 E.T.).
+   *   - Con `unlessTreatments`: requiere revisión salvo que el caller declare
+   *     TODAS esas etiquetas (p. ej. que el comprador es agente retenedor de ICA).
+   */
+  manualReview?: {
+    message: string;
+    unlessTreatments?: string[];
+  };
 }
 
 /**
@@ -117,6 +132,21 @@ export const TAX_TREATMENT = {
   HONORARIOS: 'honorarios',
   /** El beneficiario NO está obligado a declarar renta. */
   BENEFICIARIO_NO_DECLARANTE: 'beneficiario_no_declarante',
+  /**
+   * Honorarios/comisiones a PERSONA NATURAL cuyo contrato y pagos acumulados
+   * del año con este agente retenedor NO superan 3.300 UVT → 10 %
+   * (DUR 1625/2016 Art. 1.2.4.3.1). El motor no lleva el acumulado: se declara.
+   */
+  HONORARIOS_PN_HASTA_3300_UVT: 'honorarios_pn_hasta_3300_uvt',
+  /**
+   * Renta de trabajo no laboral de persona natural que NO solicitó costos y
+   * deducciones: la retención se liquida con la tabla del Art. 383 E.T.
+   * (par. 2 mod. art. 8 Ley 2277/2022; DUR 1625/2016 Art. 1.2.4.1.17 par. 4
+   * mod. Decreto 2231/2023), no con la tarifa plana del Art. 392.
+   */
+  RENTA_TRABAJO_TABLA_383: 'renta_trabajo_tabla_383',
+  /** El comprador (workspace) es agente retenedor de ICA en el municipio del tercero. */
+  AGENTE_RETENEDOR_ICA: 'agente_retenedor_ica',
 } as const;
 
 export type TaxTreatmentTag =
@@ -137,7 +167,11 @@ export interface TaxEvaluationInput {
   transactionType: TaxTransactionType;
   /** Subtotal (base gravable) en COP, NUMERIC string para precisión. */
   subtotalCop: string;
-  /** Año del UVT a aplicar (default: año de `transactionDate`). */
+  /**
+   * Año del UVT con el que se convierten las bases mínimas en UVT
+   * (default: año de `transactionDate` en hora de Colombia, America/Bogota). La vigencia de las reglas la sigue
+   * fijando `transactionDate`.
+   */
   uvtYear?: number;
   /** ISO date — define qué reglas con valid_from/valid_until aplican. */
   transactionDate?: Date;
@@ -145,7 +179,12 @@ export interface TaxEvaluationInput {
   thirdPartyId?: string;
   /** Cuenta contable (gasto / ingreso / activo) ya determinada por el caller. */
   baseAccountCode?: string;
-  /** Cuando el subtotal ya incluye el impuesto, indicarlo para back-calcular base. */
+  /**
+   * `true` cuando `subtotalCop` es el valor TOTAL con IVA incluido: el motor
+   * obtiene la base gravable como total / (1 + tarifa de IVA aplicable)
+   * (Art. 447 E.T.) y liquida todo sobre esa base. Si la tarifa de IVA no es
+   * determinable (reglas en conflicto) la evaluación se rechaza.
+   */
   amountIncludesTax?: boolean;
   /** Para overrides forzados (ej. usuario marcó "no aplicar IVA"). */
   excludeTaxTypes?: TaxType[];

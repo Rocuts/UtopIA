@@ -87,6 +87,18 @@ function stubPreprocessed(opts: {
   const equityAccounts = opts.equityAccounts ?? [['3115', 'Capital social', 600_000_000]];
   const totalEquity = opts.totalEquity ?? equityAccounts.reduce((a, [, , b]) => a + b, 0);
   const totalProduction = opts.totalProduction ?? 0;
+  const netIncome = 1_500_000_000 - 500_000_000 - 700_000_000 - totalProduction;
+  // Normativa-metricas NM-04: el .xlsx lee los totales POSTERIORES al curator
+  // (`controlTotals`), la misma base de las anclas y del PDF. Un preprocesado
+  // coherente tiene esos totales iguales a la suma de sus clases; la fixture
+  // anterior los dejaba distintos (activo 1.000 M en controlTotals frente a
+  // 111 M en las cuentas), un estado que el preprocesador no produce.
+  const coherentTotals = stubControlTotals({
+    activo: 111_111_111,
+    pasivo: 222_222_222,
+    patrimonio: totalEquity,
+    utilidadNeta: netIncome,
+  });
 
   const snap: PeriodSnapshot = {
     period: '2026',
@@ -99,7 +111,9 @@ function stubPreprocessed(opts: {
       pucClass(6, 'Costos', [['6135', 'Costo de ventas', 700_000_000]]),
       pucClass(7, 'Producción', [['7105', 'Materia prima', 100_000_000]]),
     ],
-    controlTotals: opts.controlTotals ?? stubControlTotals(),
+    controlTotals: opts.controlTotals
+      ? { ...opts.controlTotals, activo: 111_111_111, pasivo: 222_222_222, patrimonio: totalEquity, utilidadNeta: netIncome }
+      : coherentTotals,
     equityBreakdown: {},
     summary: {
       totalAssets: 111_111_111,
@@ -109,7 +123,7 @@ function stubPreprocessed(opts: {
       totalExpenses: 500_000_000,
       totalCosts: 700_000_000,
       totalProduction,
-      netIncome: 1_500_000_000 - 500_000_000 - 700_000_000 - totalProduction,
+      netIncome,
       equationBalance: 0,
       equationBalanced: true,
     },
@@ -198,10 +212,14 @@ function stubNiifJson(): NiifReportJson {
       modeBanner: null,
     },
     cashFlow: {
+      netChangeComparative: null,
+      cashOpeningComparative: null,
+      cashClosingComparative: null,
+      comparativeNote: null,
       sections: [
-        { section: 'operating', lines: [], netFlow: '0' },
-        { section: 'investing', lines: [], netFlow: '0' },
-        { section: 'financing', lines: [], netFlow: '0' },
+        { section: 'operating', lines: [], netFlow: '0', netFlowComparative: null },
+        { section: 'investing', lines: [], netFlow: '0', netFlowComparative: null },
+        { section: 'financing', lines: [], netFlow: '0', netFlowComparative: null },
       ],
       netChange: '0',
       cashOpening: '0',
@@ -209,7 +227,7 @@ function stubNiifJson(): NiifReportJson {
       methodNote: 'indirect',
       degeneracyFlag: null,
     },
-    equityChanges: { rows: [], notes: [] },
+    equityChanges: { comparativeRows: null, comparativeNote: null, rows: [], notes: [] },
     technicalNotes: [],
     curatorFlags: {
       equityConvergenceApplied: false,

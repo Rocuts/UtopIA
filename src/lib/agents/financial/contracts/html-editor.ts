@@ -163,13 +163,99 @@ export type HtmlEditorMetadata = z.infer<typeof HtmlEditorMetadataSchema>;
 // La validación Zod garantiza que ningún campo crítico viaja como `undefined`
 // hacia el prompt — el modelo no puede inventar lo que no recibe.
 
+// ---------------------------------------------------------------------------
+// `company` tal como lo envía la UI (auditoría 2026-09, e2e-niif-13)
+// ---------------------------------------------------------------------------
+//
+// PipelineWorkspace reenvía `backendReport.company`, que es el `CompanyInfo`
+// del pipeline (types.ts): claves opcionales AUSENTES en vez de `null`, los
+// firmantes como strings legacy (`legalRepresentative`, `fiscalAuditor` +
+// `fiscalAuditorTp`, `accountant` + `accountantTp`) y `comparativePeriod: ''`
+// cuando el usuario no declara comparativo. `CompanyInfoSchema` (espejo del
+// contrato hacia el LLM) exige las claves nullables presentes, así que /html
+// respondía 400 a TODA llamada de la UI ("company.signatories: expected
+// object, received undefined").
+//
+// Este normalizador es la frontera única: ausente o vacío → `null`, periodo
+// 'AAAA-MM' → 'AAAA', y firmantes estructurados desde los strings legacy con
+// la MISMA precedencia que `signatoriesFromCompany` (la forma canónica
+// `signatories` gana). Un T.P. que no cumple el formato de la Junta Central no
+// se inventa: el slot legacy queda en `null` (placeholder de firma). Es
+// idempotente: un `company` ya normalizado pasa igual (runHtmlEditor re-valida).
+
+function blankToNull(v: unknown): unknown {
+  if (v === undefined) return null;
+  if (typeof v === 'string' && v.trim() === '') return null;
+  return v;
+}
+
+function yearOnly(v: unknown): unknown {
+  const b = blankToNull(v);
+  if (typeof b !== 'string') return b;
+  const m = /^\s*(\d{4})(?:\s*[-/].*)?\s*$/.exec(b);
+  return m ? m[1] : b;
+}
+
+const TP_FORMAT = /^\d+-T$/i;
+
+function legacySignatory(nombre: unknown, tp?: unknown): { nombre: string; tp?: string } | null {
+  if (typeof nombre !== 'string' || !nombre.trim()) return null;
+  if (tp === undefined) return { nombre: nombre.trim() };
+  if (typeof tp !== 'string' || !TP_FORMAT.test(tp.trim())) return null;
+  return { nombre: nombre.trim(), tp: tp.trim() };
+}
+
+function normalizeSignatories(c: Record<string, unknown>): unknown {
+  const s = c.signatories;
+  if (s && typeof s === 'object' && !Array.isArray(s)) {
+    const canonical = s as Record<string, unknown>;
+    return {
+      representanteLegal: canonical.representanteLegal ?? null,
+      revisorFiscal: canonical.revisorFiscal ?? null,
+      contadorPublico: canonical.contadorPublico ?? null,
+    };
+  }
+  const fromLegacy = {
+    representanteLegal: legacySignatory(c.legalRepresentative),
+    revisorFiscal: legacySignatory(c.fiscalAuditor, c.fiscalAuditorTp ?? ''),
+    contadorPublico: legacySignatory(c.accountant, c.accountantTp ?? ''),
+  };
+  return Object.values(fromLegacy).some((v) => v !== null) ? fromLegacy : null;
+}
+
+/** Normaliza el `company` de la UI al contrato `CompanyInfoSchema` (e2e-niif-13). */
+export function normalizeHtmlCompanyInput(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+  const c = raw as Record<string, unknown>;
+  const group = typeof c.niifGroup === 'string' && /^[123]$/.test(c.niifGroup.trim())
+    ? Number(c.niifGroup.trim())
+    : blankToNull(c.niifGroup);
+  return {
+    ...c,
+    entityType: blankToNull(c.entityType),
+    sector: blankToNull(c.sector),
+    niifGroup: group,
+    fiscalPeriod: yearOnly(c.fiscalPeriod),
+    comparativePeriod: yearOnly(c.comparativePeriod),
+    city: blankToNull(c.city),
+    signatories: normalizeSignatories(c),
+  };
+}
+
 export const HtmlEditorInputSchema = z.object({
   niifReport: NiifReportSchema,
   strategyReport: StrategyReportSchema,
   governanceReport: GovernanceReportSchema,
-  company: CompanyInfoSchema,
+  company: z.preprocess(normalizeHtmlCompanyInput, CompanyInfoSchema),
   metadata: HtmlEditorMetadataSchema,
   language: z.enum(['es', 'en']).default('es'),
+  /**
+   * Preprocesado JSON-safe que la UI ya envía (el mismo que usó /niif). No va
+   * al prompt: `runHtmlEditor` lo revive para que el validador cruce en prosa
+   * los conceptos que el JSON NIIF no trae (ingresos, EBITDA, ROE —
+   * e2e-niif-11). Sin él, esos cruces no se hacen (no se inventa ancla).
+   */
+  preprocessed: z.unknown(),
 });
 export type HtmlEditorInput = z.infer<typeof HtmlEditorInputSchema>;
 
@@ -315,4 +401,64 @@ export function collectBindingFigures(niifReport: NiifReportJson): BindingFigure
   ];
 
   return candidates.filter((f): f is BindingFigure => f !== null);
+}
+
+/**
+ * Cifras vinculantes del ACTA (auditoría 2026-09, pipeline-flujo-09): la
+ * utilidad del acta, cada renglón de destinación y la capitalización. Antes el
+ * Editor Jefe las convertía de centavos a pesos por su cuenta y un desliz ×100
+ * en el documento que se firma e inscribe sólo producía un aviso.
+ *
+ * Lectura defensiva: `governanceReport` llega como `unknown` a los
+ * consumidores que no validan el schema completo.
+ */
+export function collectActaBindingFigures(governanceReport: unknown): BindingFigure[] {
+  const gov = governanceReport as {
+    shareholderMinutes?: {
+      resultDistribution?: {
+        netIncomeCop?: unknown;
+        applies?: unknown;
+        lines?: Array<{ label?: unknown; amountCop?: unknown }>;
+      };
+      capitalizationProposal?: {
+        applies?: unknown;
+        retainedEarningsBaseCop?: unknown;
+        capitalizationAmountCop?: unknown;
+      };
+    };
+  } | null;
+  const minutes = gov?.shareholderMinutes;
+  if (!minutes) return [];
+  const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+  const out: Array<BindingFigure | null> = [];
+  const rd = minutes.resultDistribution;
+  if (rd) {
+    out.push(
+      toBindingFigure(
+        'shareholderMinutes.resultDistribution.netIncomeCop',
+        'Acta — Utilidad Neta del Ejercicio',
+        str(rd.netIncomeCop),
+      ),
+    );
+    for (const [i, line] of (Array.isArray(rd.lines) ? rd.lines : []).entries()) {
+      out.push(
+        toBindingFigure(
+          `shareholderMinutes.resultDistribution.lines[${i}].amountCop`,
+          `Acta — ${typeof line?.label === 'string' ? line.label : `renglón ${i + 1}`}`,
+          str(line?.amountCop),
+        ),
+      );
+    }
+  }
+  const cap = minutes.capitalizationProposal;
+  if (cap && cap.applies === true) {
+    out.push(
+      toBindingFigure(
+        'shareholderMinutes.capitalizationProposal.capitalizationAmountCop',
+        'Acta — Monto a capitalizar',
+        str(cap.capitalizationAmountCop),
+      ),
+    );
+  }
+  return out.filter((f): f is BindingFigure => f !== null);
 }

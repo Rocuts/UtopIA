@@ -10,14 +10,29 @@
 // Principios de diseño:
 //   - DETERMINÍSTICO: misma entrada → mismo output (no LLM).
 //   - NO DESTRUCTIVO: sólo lectura. NO muta `metrics` ni `snapshot`.
-//   - TOLERANCIA CALIBRADA: $1.000 COP absolutos para cifras grandes;
-//     0,1 puntos porcentuales para ratios. Por debajo, asumimos redondeo.
+//   - TOLERANCIA CALIBRADA: $1.000 COP absolutos para cifras grandes de las
+//     tarjetas; 0,1 puntos porcentuales para ratios. La ecuación patrimonial y
+//     el patrimonio se comparan en centavos con tolerancia 0, igual que el
+//     gate de emisión (auditoria-calidad-29).
+//   - `info` es informativo: no rompe `inSync`.
 //   - RAÍZ ÚNICA DE VERDAD: el PeriodSnapshot post-Curator (R8 garantiza
 //     `controlTotals.utilidadNeta` sincronizada con P&L de clases 4-7).
+//   - MISMAS FUNCIONES QUE LAS TARJETAS (ratios-kpis-05/10/15): el valor
+//     esperado se recalcula con `computeEbitda` y `shared-metrics`, nunca con
+//     fórmulas paralelas (UN + saldo del pasivo 24, UN × 35 %, (11+12)/mes ×
+//     30). Las métricas fiscales heurísticas son N/D y no se "verifican".
 // ---------------------------------------------------------------------------
 
 import type { PeriodSnapshot } from '@/lib/preprocessing/trial-balance';
+import { formatCopFromCents } from '@/lib/agents/financial/contracts/money';
 
+import { computeEbitda, computeEbitdaMargin } from './ebitda';
+import {
+  capacidadInversion,
+  diasAutonomia,
+  ingresosNetosPeriodo,
+  pruebaAcida,
+} from './shared-metrics';
 import type { PillarMetrics, PillarsResult } from './types';
 
 // ---------------------------------------------------------------------------
@@ -44,11 +59,14 @@ export interface SyncFinding {
 }
 
 export interface SyncReport {
-  /** True si TODOS los chequeos pasaron dentro de tolerancia. */
+  /**
+   * True si ningún chequeo produjo un hallazgo `warning` o `critical`. Los
+   * hallazgos `info` se listan pero no desincronizan el tablero.
+   */
   inSync: boolean;
   /** Severidad agregada (peor de los hallazgos). */
   severity: SyncSeverity;
-  /** Hallazgos por campo (vacío si inSync=true). */
+  /** Hallazgos por campo (sólo `info` si inSync=true). */
   findings: SyncFinding[];
   /** Acción sugerida cuando NO está en sync. */
   recommendedActionEs: string;
@@ -110,7 +128,7 @@ export function validateDashboardIntegrity(
   findings.push(...checkEquityCoherence(snapshot));
 
   const severity = aggregateSeverity(findings);
-  const inSync = severity === 'ok';
+  const inSync = severity === 'ok' || severity === 'info';
 
   return {
     inSync,
@@ -139,14 +157,13 @@ function checkExecutiveCards(
   const claseGastos = snapshot.classes.find((c) => c.code === 5);
   const claseCostos = snapshot.classes.find((c) => c.code === 6);
 
-  // ── EBITDA ────────────────────────────────────────────────────────────
-  const utilOp = ct.utilidadNeta + ct.impuestosCuenta24;
-  const dep = sumByPrefix(claseGastos?.accounts, '5160');
-  const amort = sumByPrefix(claseGastos?.accounts, '5165');
-  const expectedEbitda = utilOp + dep + amort;
-  const driftEbitda = (cards.ebitda.value ?? 0) - expectedEbitda;
+  // ── EBITDA (definición única — ./ebitda.ts) ────────────────────────────
+  // Sin grupo 41 el EBITDA es N/D: no hay valor esperado contra el cual medir.
+  const ebitdaRes = computeEbitda(snapshot);
+  const expectedEbitda = ebitdaRes.ebitda;
+  const driftEbitda = safeDelta(cards.ebitda.value, expectedEbitda);
 
-  if (Math.abs(driftEbitda) > COP_TOLERANCE) {
+  if (driftEbitda !== null && Math.abs(driftEbitda) > COP_TOLERANCE) {
     findings.push({
       code: 'EBITDA_DRIFT',
       severity: 'warning',
@@ -163,8 +180,8 @@ function checkExecutiveCards(
     });
   }
 
-  // ── WAOO / Margen EBITDA ───────────────────────────────────────────────
-  const expectedWaoo = ct.ingresos > 0 ? expectedEbitda / ct.ingresos : null;
+  // ── WAOO / Margen EBITDA (sobre ingresos operacionales netos) ──────────
+  const expectedWaoo = computeEbitdaMargin(ebitdaRes);
   const driftWaoo = safeDelta(cards.waoo.value, expectedWaoo);
   if (driftWaoo !== null && Math.abs(driftWaoo) > RATIO_TOLERANCE) {
     findings.push({
@@ -186,7 +203,8 @@ function checkExecutiveCards(
   // ── Ratio Operativo ────────────────────────────────────────────────────
   const totalGastos = claseGastos?.auxiliaryTotal ?? 0;
   const totalCostos = claseCostos?.auxiliaryTotal ?? 0;
-  const expectedRatio = ct.ingresos > 0 ? (totalGastos + totalCostos) / ct.ingresos : null;
+  const ingresosNetos = ingresosNetosPeriodo(ct);
+  const expectedRatio = ingresosNetos > 0 ? (totalGastos + totalCostos) / ingresosNetos : null;
   const driftRatio = safeDelta(cards.ratio.value, expectedRatio);
   if (driftRatio !== null && Math.abs(driftRatio) > RATIO_TOLERANCE) {
     findings.push({
@@ -239,15 +257,11 @@ function checkEscudoCards(
   const findings: SyncFinding[] = [];
   const ct = snapshot.controlTotals;
 
-  // ── Cobertura de Pasivos ───────────────────────────────────────────────
-  // El motor recalcula desde classes con prefijos estrictos 11+12+13 / 21-24,
-  // que puede diferir del controlTotals.activoCorriente/pasivoCorriente
-  // (que usa grupos más amplios). Aquí validamos contra el audit, que es la
-  // fuente exacta del cómputo.
-  const expectedCobertura =
-    cards.audit.pasivoCorriente > 0
-      ? cards.audit.activoCorriente / cards.audit.pasivoCorriente
-      : null;
+  // ── Cobertura de Pasivos (prueba ácida — shared-metrics) ───────────────
+  // La tarjeta es la prueba ácida sobre controlTotals: (AC − inventarios 14) /
+  // PC. Antes se comparaba contra AC / PC (razón corriente) y toda empresa con
+  // inventario salía "desincronizada".
+  const expectedCobertura = pruebaAcida(ct);
   const driftCobertura = safeDelta(cards.cobertura_pasivos.value, expectedCobertura);
   if (driftCobertura !== null && Math.abs(driftCobertura) > RATIO_TOLERANCE) {
     findings.push({
@@ -267,27 +281,8 @@ function checkEscudoCards(
   }
 
   // ── Reserva Fiscal ─────────────────────────────────────────────────────
-  // = provisión24 − utilidadNeta × 35%. Validamos contra impuestosCuenta24
-  // y utilidadNeta del snapshot directamente.
-  const rentaTeorica = Math.max(0, ct.utilidadNeta * 0.35);
-  const expectedReserva = ct.impuestosCuenta24 - rentaTeorica;
-  const driftReserva = safeDelta(cards.reserva_fiscal.value, expectedReserva);
-  if (driftReserva !== null && Math.abs(driftReserva) > COP_TOLERANCE) {
-    findings.push({
-      code: 'RESERVA_FISCAL_DRIFT',
-      severity: 'warning',
-      field: 'Reserva Fiscal',
-      displayed: cards.reserva_fiscal.value,
-      expected: expectedReserva,
-      drift: driftReserva,
-      messageEs:
-        `Reserva Fiscal mostrada ($${formatCop(cards.reserva_fiscal.value)}) difiere de la recalculada ` +
-        `($${formatCop(expectedReserva)}) por $${formatCop(Math.abs(driftReserva))}.`,
-      messageEn:
-        `Displayed Tax Reserve ($${formatCop(cards.reserva_fiscal.value)}) differs from recomputed ` +
-        `($${formatCop(expectedReserva)}) by $${formatCop(Math.abs(driftReserva))}.`,
-    });
-  }
+  // Sin check: la tarjeta es N/D por política (ratios-kpis-10). No existe una
+  // base fiscal verificada contra la cual recalcularla (antes: UN × 35 %).
 
   // ── Brecha Escudo ──────────────────────────────────────────────────────
   // = caja(11) − proveedores(2205). Validamos contra el audit.
@@ -311,14 +306,11 @@ function checkEscudoCards(
     });
   }
 
-  // ── Autonomía Financiera (días) ─────────────────────────────────────────
-  // value = (caja + inversiones12) / promedioEgresosMensuales × 30.
-  // Tolerancia más laxa (1 día) porque el cálculo tiene redondeos por mes/30.
-  if (cards.audit.promedioEgresosMensuales > 0) {
-    const expectedAutonomia =
-      ((cards.audit.efectivoCuenta11 + cards.audit.inversionesTemporales12) /
-        cards.audit.promedioEgresosMensuales) *
-      30;
+  // ── Autonomía Financiera (días) — shared-metrics.diasAutonomia ─────────
+  // Efectivo PUC 11 (menos CapEx ≤ 6 meses) / egresos diarios del periodo,
+  // base 365. Tolerancia de 1 día.
+  const expectedAutonomia = diasAutonomia(snapshot, cards.audit.proyectosFuturoCop ?? 0).value;
+  if (expectedAutonomia !== null) {
     const driftAutonomia = safeDelta(cards.autonomia.value, expectedAutonomia);
     if (driftAutonomia !== null && Math.abs(driftAutonomia) > 1) {
       findings.push({
@@ -439,13 +431,11 @@ function checkFuturoCards(
   snapshot: PeriodSnapshot,
 ): SyncFinding[] {
   const findings: SyncFinding[] = [];
-  const ct = snapshot.controlTotals;
 
-  // ── Capacidad de Inversión ────────────────────────────────────────────
-  // = caja − provRenta − reserva60d. Validamos contra el audit.
-  const provRenta = Math.max(0, ct.utilidadNeta) * cards.audit.tasaRenta;
-  const reserva60d = (ct.gastos / 365) * 60;
-  const expectedCapInv = ct.efectivoCuenta11 - provRenta - reserva60d;
+  // ── Capacidad de Inversión (shared-metrics.capacidadInversion) ─────────
+  // Misma función que pilar y tarjeta (ratios-kpis-19). Hoy es N/D sin base
+  // fiscal verificada ⇒ no hay valor esperado (antes: caja − UN × 35 % − 60 d).
+  const expectedCapInv = capacidadInversion(snapshot).value;
   const driftCapInv = safeDelta(cards.capacidad_inversion.value, expectedCapInv);
   if (driftCapInv !== null && Math.abs(driftCapInv) > COP_TOLERANCE) {
     findings.push({
@@ -465,26 +455,8 @@ function checkFuturoCards(
   }
 
   // ── Provisión Tributaria Futura ────────────────────────────────────────
-  // = utilidadProyectadaAnual × 35%. Validamos contra el audit que ya tiene
-  // utilidadProyectadaAnual computada con el CAGR.
-  const expectedProvTrib = cards.audit.utilidadProyectadaAnual * cards.audit.tasaRenta;
-  const driftProvTrib = safeDelta(cards.provision_tributaria.value, expectedProvTrib);
-  if (driftProvTrib !== null && Math.abs(driftProvTrib) > COP_TOLERANCE) {
-    findings.push({
-      code: 'PROVISION_TRIBUTARIA_DRIFT',
-      severity: 'warning',
-      field: 'Provisión Tributaria Futura',
-      displayed: cards.provision_tributaria.value,
-      expected: expectedProvTrib,
-      drift: driftProvTrib,
-      messageEs:
-        `Provisión Tributaria mostrada ($${formatCop(cards.provision_tributaria.value)}) difiere del recalculado ` +
-        `($${formatCop(expectedProvTrib)}) por $${formatCop(Math.abs(driftProvTrib))}.`,
-      messageEn:
-        `Displayed Future Tax Provision ($${formatCop(cards.provision_tributaria.value)}) differs from recomputed ` +
-        `($${formatCop(expectedProvTrib)}) by $${formatCop(Math.abs(driftProvTrib))}.`,
-    });
-  }
+  // Sin check: N/D por política (ratios-kpis-10); antes se "verificaba" contra
+  // UN proyectada × 35 %.
 
   // ── CAGR sanity check (rango razonable) ────────────────────────────────
   // CAGR puede ser cualquier valor (incluso negativo), pero >5x o <-1 son sospechosos.
@@ -539,28 +511,33 @@ function checkValorKpis(
   const findings: SyncFinding[] = [];
   const ct = snapshot.controlTotals;
 
-  // Margen Neto Real (KPI 1) — recalculo simple. Reclass impact se ignora aquí
-  // por simplicidad: si difiere de forma material, es desync; si difiere por
-  // R1 reclassifications, lo tolera (el dashboard respeta el Curator).
+  // Margen Neto (KPI 1) — el mismo KPI del preprocesador (controlTotals.
+  // margenNeto = UN / ingresos netos). Desde NM-03 el pilar no ajusta por
+  // reclasificaciones R1 (no tocan el P&G): cualquier diferencia es desync.
   const margenKpi = valor.kpis.find((k) => k.key === 'margen_neto_real');
-  if (margenKpi && ct.ingresos > 0) {
-    const expectedMargen = ct.utilidadNeta / ct.ingresos;
+  const ingresosNetos = ingresosNetosPeriodo(ct);
+  const expectedMargen =
+    typeof ct.margenNeto === 'number' && Number.isFinite(ct.margenNeto)
+      ? ct.margenNeto / 100
+      : ct.margenNeto === undefined && ingresosNetos > 0
+        ? ct.utilidadNeta / ingresosNetos
+        : null;
+  if (margenKpi && expectedMargen !== null) {
     const drift = safeDelta(margenKpi.value, expectedMargen);
-    // Tolerancia más laxa (1pp) para acomodar reclass impact de R1.
-    if (drift !== null && Math.abs(drift) > 0.01) {
+    if (drift !== null && Math.abs(drift) > 1e-9) {
       findings.push({
         code: 'MARGEN_NIIF_DRIFT',
         severity: 'info',
-        field: 'Margen Neto Real (NIIF)',
+        field: 'Margen Neto (NIIF)',
         displayed: margenKpi.value,
         expected: expectedMargen,
         drift,
         messageEs:
-          `Margen Neto NIIF mostrado (${formatPct(margenKpi.value)}) difiere del crudo ` +
-          `(${formatPct(expectedMargen)}). Probable ajuste por reclasificaciones del Curator (R1).`,
+          `Margen Neto mostrado (${formatPct(margenKpi.value)}) difiere del margen neto del ` +
+          `preprocesador (${formatPct(expectedMargen)}).`,
         messageEn:
-          `Displayed NIIF Net Margin (${formatPct(margenKpi.value)}) differs from raw ` +
-          `(${formatPct(expectedMargen)}). Likely Curator R1 reclassification adjustment.`,
+          `Displayed Net Margin (${formatPct(margenKpi.value)}) differs from the preprocessor ` +
+          `net margin (${formatPct(expectedMargen)}).`,
       });
     }
   }
@@ -568,11 +545,30 @@ function checkValorKpis(
   return findings;
 }
 
+// ---------------------------------------------------------------------------
+// Ecuación patrimonial y patrimonio — misma regla que el gate de emisión
+// ---------------------------------------------------------------------------
+// auditoria-calidad-29: estos dos chequeos toleraban max(0,01 % del activo;
+// $1.000) y $1.000, mientras V1/V4 de `auditReportEmittable` exigen 0
+// centavos. Un descuadre de $999.999 salía "inSync" en el tablero y bloqueado
+// en la emisión. Ahora comparan en centavos BigInt con tolerancia 0, con las
+// mismas fuentes que V1 (`controlTotals.cents`) y V4 (summary.totalEquity
+// redondeado al centavo).
+
+const ZERO_CENTS = BigInt(0);
+
+function pesosToCents(value: number): bigint {
+  return BigInt(Math.round(value * 100));
+}
+
 function checkAccountingEquation(snapshot: PeriodSnapshot): SyncFinding[] {
   const ct = snapshot.controlTotals;
-  const gap = ct.activo - ct.pasivo - ct.patrimonio;
-  const tolerance = Math.max(Math.abs(ct.activo) * 0.0001, COP_TOLERANCE);
-  if (Math.abs(gap) <= tolerance) return [];
+  const cents = ct.cents;
+  const gapCents = cents
+    ? cents.activo - cents.pasivo - cents.patrimonio
+    : pesosToCents(ct.activo) - pesosToCents(ct.pasivo) - pesosToCents(ct.patrimonio);
+  if (gapCents === ZERO_CENTS) return [];
+  const gap = Number(gapCents) / 100;
 
   return [
     {
@@ -584,17 +580,20 @@ function checkAccountingEquation(snapshot: PeriodSnapshot): SyncFinding[] {
       drift: gap,
       messageEs:
         `Ecuación contable descuadrada post-Curator: Activo ($${formatCop(ct.activo)}) ≠ Pasivo + Patrimonio ` +
-        `($${formatCop(ct.pasivo + ct.patrimonio)}). Diferencia: $${formatCop(gap)}. R8 Cierre Virtual debió cuadrar al centavo.`,
+        `($${formatCop(ct.pasivo + ct.patrimonio)}). Diferencia: ${formatCopFromCents(gapCents)}. R8 Cierre Virtual debió cuadrar al centavo.`,
       messageEn:
         `Accounting equation off post-Curator: Assets ($${formatCop(ct.activo)}) ≠ Liabilities + Equity ` +
-        `($${formatCop(ct.pasivo + ct.patrimonio)}). Difference: $${formatCop(gap)}.`,
+        `($${formatCop(ct.pasivo + ct.patrimonio)}). Difference: ${formatCopFromCents(gapCents)}.`,
     },
   ];
 }
 
 function checkEquityCoherence(snapshot: PeriodSnapshot): SyncFinding[] {
-  const drift = snapshot.controlTotals.patrimonio - snapshot.summary.totalEquity;
-  if (Math.abs(drift) <= COP_TOLERANCE) return [];
+  const ct = snapshot.controlTotals;
+  const patrimonioCents = ct.cents ? ct.cents.patrimonio : pesosToCents(ct.patrimonio);
+  const driftCents = patrimonioCents - pesosToCents(snapshot.summary.totalEquity);
+  if (driftCents === ZERO_CENTS) return [];
+  const drift = Number(driftCents) / 100;
 
   return [
     {
@@ -617,16 +616,6 @@ function checkEquityCoherence(snapshot: PeriodSnapshot): SyncFinding[] {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function sumByPrefix(
-  accounts: { code: string; balance: number }[] | undefined,
-  prefix: string,
-): number {
-  if (!accounts) return 0;
-  return accounts
-    .filter((a) => a.code.startsWith(prefix))
-    .reduce((s, a) => s + a.balance, 0);
-}
 
 function safeDelta(curr: number | null, prev: number | null): number | null {
   if (curr === null || prev === null) return null;

@@ -115,12 +115,17 @@ export type ConciliacionModuleSchema = z.infer<typeof conciliacionModuleSchema>;
 // ---------------------------------------------------------------------------
 
 export const riskFactorSchema = z.object({
+  // Los 7 códigos que emite `computeRiskScore` (auditoría 2026-09,
+  // tributario-modulos-05): con 5 el modelo reetiquetaba sin_provision_renta
+  // y cobertura_retenciones_baja.
   factor: z.enum([
     'tet_baja',
+    'sin_provision_renta',
     'margen_alto',
     'costo_bajo',
     'crecimiento_inusual',
     'saldo_favor_sin_solicitar',
+    'cobertura_retenciones_baja',
   ]),
   descripcion: z.string().min(1).max(300),
   puntos: z.number(),
@@ -145,12 +150,31 @@ export type RiskScoreModuleSchema = z.infer<typeof riskScoreModuleSchema>;
 // Módulo 4 — Planeación Tributaria
 // ---------------------------------------------------------------------------
 
+/**
+ * Descuentos tributarios del escenario por artículo (fase 2 de la auditoría
+ * 2026-09-24, pendiente #8): sin el desglose el tope conjunto del Art. 258 no
+ * es verificable. null = el escenario no toma ese descuento.
+ */
+export const planeacionDescuentosSchema = z.object({
+  art254Cents: moneyCop.nullable(),
+  art255Cents: moneyCop.nullable(),
+  art256Cents: moneyCop.nullable(),
+  art257Cents: moneyCop.nullable(),
+  art258_1Cents: moneyCop.nullable(),
+});
+
 export const planeacionEscenarioSchema = z.object({
   nombre: z.enum(['conservador', 'base', 'agresivo']),
   impuestoBase: moneyCop,
-  impuestoEscenario: moneyCop,
-  ahorroEstimado: moneyCop,
-  ahorroPct: z.number(),
+  // null cuando el escenario no es cuantificable con los datos (N/D ≠ 0).
+  // impuestoBase, ahorroEstimado y ahorroPct los recalcula el agente en código;
+  // impuestoEscenario también cuando hay impuesto antes de descuentos (tope
+  // del Art. 258 aplicado en código — tools/planeacion-tope-258.ts).
+  impuestoEscenario: moneyCop.nullable(),
+  impuestoAntesDescuentos: moneyCop.nullable(),
+  descuentos: planeacionDescuentosSchema,
+  ahorroEstimado: moneyCop.nullable(),
+  ahorroPct: z.number().nullable(),
   articulosAplicables: z.array(citaNormativa).max(20),
   documentacionRequerida: z.array(z.string().min(1).max(300)).max(20),
   riesgo: z.enum(['baja', 'media', 'alta']),
@@ -182,6 +206,7 @@ export const defensaDianModuleSchema = z.object({
   data: z.object({
     tipoRequerimiento: z.enum([
       'requerimiento_ordinario',
+      'requerimiento_especial',
       'emplazamiento_corregir',
       'emplazamiento_no_declarar',
       'pliego_cargos',
@@ -210,8 +235,10 @@ export type DefensaDianModuleSchema = z.infer<typeof defensaDianModuleSchema>;
 export const devolucionesModuleSchema = z.object({
   markdown: markdownString,
   data: z.object({
-    saldoAFavor: moneyCop,
-    viabilidad: z.enum(['alta', 'media', 'baja', 'no_aplica']),
+    // Saldo a favor DECLARADO; null = no determinable sin la declaración
+    // (F04 es estimación contable). El agente lo sobrescribe con analyzeRefund.
+    saldoAFavor: moneyCop.nullable(),
+    viabilidad: z.enum(['alta', 'media', 'baja', 'no_aplica', 'no_determinable']),
     plazoDian: z.string().min(1).max(200),
     plazoConGarantia: z.string().min(1).max(200),
     documentosRequeridos: z.array(z.string().min(1).max(300)).max(20),
@@ -233,7 +260,8 @@ export const supervivenciaAccionSchema = z.object({
   accion: z.string().min(1).max(500),
   norma: citaNormativa,
   fechaLimite: z.string().min(1).max(40).nullable(),
-  impactoEstimado: moneyCop,
+  // null si el impacto no es cuantificable con los datos (N/D ≠ 0).
+  impactoEstimado: moneyCop.nullable(),
 });
 
 export const supervivenciaModuleSchema = z.object({
@@ -243,8 +271,9 @@ export const supervivenciaModuleSchema = z.object({
     razonActivacion: z.string().min(1).max(2_000),
     riesgoDetectado: z.string().min(1).max(2_000),
     accionesInmediatas: z.array(supervivenciaAccionSchema).max(10),
-    exposicionFiscalEstimada: moneyCop,
-    exposicionMitigada: moneyCop,
+    // Sin cálculo determinista disponible: el agente las fuerza a null (N/D).
+    exposicionFiscalEstimada: moneyCop.nullable(),
+    exposicionMitigada: moneyCop.nullable(),
     tet: z.object({
       tetActual: z.number(),
       brecha15Pct: z.number().nullable(),
@@ -281,7 +310,8 @@ export const synthesisRecommendationSchema = z.object({
   orden: z.number(),
   titulo: z.string().min(1).max(300),
   norma: citaNormativa,
-  impactoEstimado: moneyCop,
+  // null si el impacto no es cuantificable con los datos (N/D ≠ 0).
+  impactoEstimado: moneyCop.nullable(),
   prioridad: z.enum(['alta', 'media', 'baja']),
 });
 
