@@ -1,6 +1,7 @@
 # Continuidad — exactitud financiera y normativa del SaaS
 
-Actualizado: 2026-09-24. Alcance: auditoría integral multiagente desde **main** `dea0329` (PR #14 fusionada), con foco en
+Actualizado: 2026-09-25 (continuación: procedencia de las Partes IV/V sobre main `b2ec2b8c`, ver *Referencias*).
+Alcance previo: auditoría integral multiagente desde **main** `dea0329` (PR #14 fusionada), con foco en
 el módulo NIIF (balance de prueba → estados → informe → exportaciones), métricas, tributario, laboral, valoración y
 normativa; fase 1 (hallazgos y correcciones) y fase 2 (cierre de pendientes y re-auditoría final). Informe y evidencia:
 [auditoría integral 2026-09-24](../reviews/auditoria-integral-niif-2026-09-24.md).
@@ -21,6 +22,11 @@ normativa; fase 1 (hallazgos y correcciones) y fase 2 (cierre de pendientes y re
   de 1 centavo del cliente bloqueadas y 0/89.238 pares compensados que pasan.
 - Enmiendas de criterio: `docs/spec/financial-pipeline-v2.1.md`, enmiendas 1–14 del 2026-09-24 (prevalecen sobre el
   cuerpo).
+- Continuación 2026-09-25: rama `claude/audit-provenance-reports-gmtj5v` sobre main `b2ec2b8c` (PR #17 fusionada),
+  commit de código `175c8a22`; PR en borrador, no fusionada ni desplegada. Persiste las Partes IV/V atadas a la
+  versión y las exporta por referencia. Sustituye a la PR #16 (mismo objetivo sobre un almacén que main no adoptó);
+  la PR #15 queda en conflicto con main y su decisión corresponde a su autor.
+  [Contrato, evidencia y límites](../reviews/audit-provenance-on-main-2026-09-25.md).
 
 ## Lo que ya se implementó (no rehacer sin regresión probada)
 
@@ -37,6 +43,12 @@ normativa; fase 1 (hallazgos y correcciones) y fase 2 (cierre de pendientes y re
   `/export`, `/html` y `/api/escudo/fiscal-anchor`; sello verificado / no verificado / BORRADOR; Markdown de las
   Partes I–III re-renderizado desde el JSON; veredictos del servidor que sólo endurecen; preprocesado re-derivado en
   todas las rutas de análisis; Partes IV/V sobre el consolidado del servidor.
+- Partes IV/V persistidas (`src/lib/reports/audit-result-*.ts`): con `reportRef`, `/financial-audit` y
+  `/financial-quality` corren sobre la versión persistida y guardan el resultado antes de responder, atado a
+  `{reportId, reportHash}` (la Parte V además a la Parte IV que leyó); `/export` sólo incluye resultados por
+  referencia, del mismo workspace y versión, completos y emparejados en ambos sentidos, y sólo entonces abre el
+  gate `assuranceProvenance` del composer. Excel con hojas `Auditoria`/`Meta-auditoria`; el sello acredita la
+  procedencia, no el contenido. La UI ya no hereda la auditoría del informe anterior tras recargar.
 - Narrativa: validador de prosa en notas, acta y Parte II (corpus de 89 frases honestas y 58 falsas); KPIs sin ancla
   N/D; R6–R8 del HTML con ORI y comparativos fila por fila.
 - Métricas: EBITDA único, ingresos operacionales netos como denominador, anualización y N/D con motivo; formato es-CO.
@@ -60,7 +72,8 @@ normativa; fase 1 (hallazgos y correcciones) y fase 2 (cierre de pendientes y re
 
 Ver la sección *Pendientes* del informe (cada uno con motivo y dueño). Los más relevantes: filas de dinero del
 dashboard de la Parte II sin ancla (exigen N/D en el contrato), límites del validador de prosa (inglés, redacciones
-fuera de sus listas), Partes IV/V no persistidas con la versión, aislamiento probado sin sesión real, saldos acumulados
+fuera de sus listas), `/api/fiscal-audit-opinion` con la Parte IV como texto del cliente, reintentos de generación de
+las Partes IV/V que vuelven a correr los agentes, aislamiento probado sin sesión real, saldos acumulados
 de ERPs que sólo entregan movimientos, nómina de independientes, normas 2026 sin fuente primaria, y verificación con el
 LLM real y visual del PDF/Excel.
 
@@ -71,6 +84,13 @@ fixtures de tres cortes: correr `/niif` → `/strategy` → `/governance` → `/
 tasa de sellos y de falsos positivos del validador de prosa, E21 y E27 sobre salidas reales, y revisar visualmente el
 PDF y el Excel producidos. Todo lo anterior se probó con salidas simuladas y un corpus sintético. Empezar por las filas
 "Validador de prosa" y "Aritmética y contrato NIIF" de `MAP.md`.
+
+**Sin acceso al LLM real**, la siguiente tarea ejecutable es la idempotencia de generación de las Partes IV/V: hoy
+reintentar `/financial-audit` o `/financial-quality` con la misma referencia vuelve a correr los agentes y crea otra
+fila, y `fetchJSONWithRetry` puede duplicar la meta-auditoría si se pierde la respuesta tras guardar. Reutilizar el
+resultado completo ya persistido para la misma versión (y para la Parte V, la misma Parte IV) salvo petición
+explícita de regenerar, con pruebas de reintento, concurrencia y respuesta perdida. Entradas: fila "Procedencia de
+las Partes IV/V" de `MAP.md`.
 
 ## Cómo ahorrar contexto al continuar
 
