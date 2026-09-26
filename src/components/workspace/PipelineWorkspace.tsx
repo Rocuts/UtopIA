@@ -780,9 +780,14 @@ export function buildQualityRequestBody(args: {
   adjustmentLedger?: AdjustmentLedger | null;
 }): Record<string, unknown> {
   // Procedencia servidor (Parte V): con versión persistida viajan sólo
-  // referencias; el servidor evalúa esa versión y la Parte IV persistida.
+  // referencias; el servidor evalúa esa versión y la Parte IV persistida. Si
+  // hay una Parte IV en pantalla que NO quedó guardada (sin `auditRef`), por
+  // referencia la meta-auditoría la ignoraría y saldría calificada y exportable
+  // como si no existiera: viaja por el camino anterior, con su contenido, y
+  // queda sin persistir, igual que esa Parte IV.
   const ref = readReportRef(args.report);
-  if (ref) {
+  const unsavedAudit = !!args.auditReport && !args.auditReport.auditRef;
+  if (ref && !unsavedAudit) {
     const auditRef = args.auditReport?.auditRef;
     return { reportRef: ref, language: args.language, ...(auditRef ? { auditRef } : {}) };
   }

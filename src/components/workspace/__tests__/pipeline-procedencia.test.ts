@@ -216,9 +216,20 @@ describe('Partes IV/V: cuerpos por referencia', () => {
     expect(buildQualityRequestBody({
       report: persisted(), auditReport: audit({ auditRef: AUDIT_REF }), language: 'en', preprocessed: { periods: [] },
     })).toEqual({ reportRef: REF, language: 'en', auditRef: AUDIT_REF });
-    // Una Parte IV sin referencia (no guardada) no se nombra.
-    expect(buildQualityRequestBody({ report: persisted(), auditReport: audit(), language: 'es', preprocessed: null }))
+    // Sin Parte IV, por referencia.
+    expect(buildQualityRequestBody({ report: persisted(), auditReport: null, language: 'es', preprocessed: null }))
       .toEqual({ reportRef: REF, language: 'es' });
+  });
+
+  it('una Parte IV en pantalla que no quedó guardada viaja con su contenido, no se ignora', () => {
+    // Por referencia la meta-auditoría la ignoraría y saldría calificada y
+    // exportable como si no hubiera Parte IV.
+    const report = persisted();
+    const shown = audit({ auditComplete: true });
+    const body = buildQualityRequestBody({ report, auditReport: shown, language: 'es', preprocessed: null });
+    expect(body.reportRef).toBeUndefined();
+    expect(body.auditReport).toBe(shown);
+    expect(body.report).toBe(report);
   });
 
   it('sin versión persistida conservan el camino anterior (contenido, procedencia no verificada)', () => {

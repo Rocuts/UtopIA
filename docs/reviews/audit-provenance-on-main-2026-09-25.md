@@ -62,12 +62,12 @@ de versiones como en la PR #16, ni la nota de "sólo contenido NIIF" que aquella
 
 | Comprobación | Resultado |
 |---|---|
-| `npx vitest run` | 537 archivos / 5.430 aprobadas, 26 omitidas: la línea base de main (535 / 5.404 / 23) más 26 nuevas; las 3 pruebas de Postgres nuevas se omiten sin base, como las de main |
-| `audit-results.route.test.ts` | 13 pruebas con el fake de `reports` de main (evalúa las condiciones SQL reales del store) y **el composer PDF real**; sólo el render binario está controlado |
+| `npx vitest run` | 537 archivos / 5.432 aprobadas, 26 omitidas: la línea base de main (535 / 5.404 / 23) más 28 nuevas; las 3 pruebas de Postgres nuevas se omiten sin base, como las de main |
+| `audit-results.route.test.ts` | 14 pruebas con el fake de `reports` de main (evalúa las condiciones SQL reales del store) y **el composer PDF real**; sólo el render binario está controlado |
 | `audit-result-store.db.test.ts` y el de main | 6 aprobadas contra PostgreSQL 16 local con todas las migraciones (sólo fallan las líneas de pgvector de 0004, como documenta el harness) |
 | `audit-sheets.test.ts` | 8 pruebas contra ExcelJS real y el composer real |
-| `pipeline-procedencia.test.ts` | 5 pruebas nuevas de los cuerpos del cliente, el aviso y la limpieza |
-| Mutaciones | 14 del servidor y 5 del cliente: cada protección retirada hace fallar la prueba que la nombra; el filtro por workspace también se comprobó contra Postgres real |
+| `pipeline-procedencia.test.ts` | 6 pruebas nuevas de los cuerpos del cliente, el aviso y la limpieza |
+| Mutaciones | 15 del servidor y 6 del cliente: cada protección retirada hace fallar la prueba que la nombra; el filtro por workspace también se comprobó contra Postgres real |
 | `tsc`, `lint:strict-mode`, `npm run build` | Correctos (build con las credenciales ficticias del CI) |
 | `npm run lint` | 0 errores; ningún aviso nuevo en los archivos tocados (los dos de `PipelineWorkspace.tsx` ya estaban en main) |
 
@@ -76,6 +76,25 @@ composer pero no establecía `assuranceProvenance`: con el composer real se habr
 igualmente y el PDF habría salido sin las Partes IV/V. Todas las pruebas de ruta pasaban porque
 simulaban el composer. Se detectó al probar el render con el composer real; ahora las pruebas
 de ruta lo usan y una mutación que retira esa línea hace fallar dos pruebas.
+
+## Revisión adversarial (parcial)
+
+Se lanzaron cuatro revisores independientes (cliente, rutas, veracidad de sello y avisos,
+almacén). **Sólo dos terminaron** (cliente y rutas); los de veracidad y almacén, y todos los
+verificadores, fallaron por un límite de uso. Sus cuatro hallazgos se contrastaron a mano con
+el código: tres son reales (uno aparecía dos veces) y se corrigieron con prueba y mutación:
+
+1. **`auditFocus` en el camino persistido (media).** Entraba textual en el prompt de los cuatro
+   auditores sin quedar en el sobre ni en el sello: un cliente podía dirigir una Parte IV que
+   luego salía sellada como producida sobre la versión del servidor. Ahora ese camino responde
+   400 `AUDIT_FOCUS_NOT_ALLOWED`; la UI nunca lo enviaba y el camino no verificado lo conserva.
+2. **Parte IV mostrada pero no guardada (baja).** Por referencia, la meta-auditoría la ignoraba
+   y salía calificada y exportable como si no existiera. Ahora esa Parte V viaja con el
+   contenido por el camino anterior y queda sin persistir, como su Parte IV.
+3. **Aviso de descarga (baja).** Decía "la descarga", pero el HTML no incluye las Partes IV/V;
+   ahora nombra el PDF y el Excel.
+
+Las dimensiones de veracidad del sello y del almacén **no tuvieron revisión independiente**.
 
 ## Límites
 

@@ -190,10 +190,17 @@ async function auditPersisted(
 ): Promise<Response> {
   const raw = (body && typeof body === 'object' ? body : {}) as { language?: unknown; auditFocus?: unknown };
   const language: 'es' | 'en' = raw.language === 'en' || raw.language === 'es' ? raw.language : persisted.language;
-  if (raw.auditFocus !== undefined && (typeof raw.auditFocus !== 'string' || raw.auditFocus.length > 2_000)) {
-    return NextResponse.json({ error: 'Invalid request format.', details: ['auditFocus'] }, { status: 400 });
+  // El enfoque entra textual en el prompt de los cuatro auditores y no queda en
+  // el sobre ni en el sello: un resultado persistido con él saldría "producido
+  // sobre esta versión" dirigido por una instrucción del cliente. La UI no lo
+  // envía por esta vía; el camino no verificado lo sigue aceptando.
+  if (raw.auditFocus !== undefined && raw.auditFocus !== null && raw.auditFocus !== '') {
+    return NextResponse.json(
+      { error: 'auditFocus is not accepted for a persisted audit.', code: 'AUDIT_FOCUS_NOT_ALLOWED' },
+      { status: 400 },
+    );
   }
-  const auditFocus = raw.auditFocus as string | undefined;
+  const auditFocus = undefined;
   const { preprocessed, provenance } = persisted;
   // Lo mismo que /export imprimiría de esta versión: Partes I–III
   // re-renderizadas por el servidor desde su JSON, con su balance.

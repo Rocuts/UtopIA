@@ -1852,11 +1852,11 @@ export const dict = {
         'Parte V (meta-auditoría generada por IA): resultado persistido {resultId} ({createdAt}), producido sobre esta misma versión del informe sin una Parte IV · huella SHA-256 {hash}. El sello acredita su procedencia, no su contenido.',
       auditContentDroppedLine:
         'Los dictámenes o la meta-auditoría enviados con la solicitud no se incluyen: este documento sólo publica resultados de las Partes IV y V persistidos y producidos sobre esta versión del informe.',
-      uiAuditIncluded: 'La descarga incluye {parts}, persistidos y producidos sobre esta versión del informe.',
+      uiAuditIncluded: 'El PDF y el Excel incluyen {parts}, persistidos y producidos sobre esta versión del informe (el HTML no los incluye).',
       uiAuditPartIv: 'los dictámenes (Parte IV)',
       uiAuditPartV: 'la meta-auditoría (Parte V)',
       uiAuditExcluded:
-        'Resultados que se ven en pantalla pero no entran en la descarga ({parts}): no quedaron guardados como resultado completo de esta versión. Vuelva a ejecutarlos para incluirlos.',
+        'Resultados que se ven en pantalla pero no entran en el PDF ni en el Excel ({parts}): no quedaron guardados como resultado completo de esta versión. Vuelva a ejecutarlos para incluirlos.',
     },
   },
   en: {
@@ -3667,11 +3667,11 @@ export const dict = {
         'Part V (AI-generated meta-audit): persisted result {resultId} ({createdAt}), produced on this same report version without a Part IV · SHA-256 fingerprint {hash}. The seal attests to its provenance, not its content.',
       auditContentDroppedLine:
         'Opinions or meta-audit sent with the request are not included: this document only publishes Part IV and V results persisted and produced on this report version.',
-      uiAuditIncluded: 'The download includes {parts}, persisted and produced on this report version.',
+      uiAuditIncluded: 'The PDF and Excel files include {parts}, persisted and produced on this report version (the HTML does not include them).',
       uiAuditPartIv: 'the opinions (Part IV)',
       uiAuditPartV: 'the meta-audit (Part V)',
       uiAuditExcluded:
-        'Results shown on screen but not part of the download ({parts}): they were not saved as a complete result for this version. Run them again to include them.',
+        'Results shown on screen but not included in the PDF or Excel ({parts}): they were not saved as a complete result for this version. Run them again to include them.',
     },
   },
 };

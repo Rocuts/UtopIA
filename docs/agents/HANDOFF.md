@@ -23,7 +23,8 @@ normativa; fase 1 (hallazgos y correcciones) y fase 2 (cierre de pendientes y re
 - Enmiendas de criterio: `docs/spec/financial-pipeline-v2.1.md`, enmiendas 1–14 del 2026-09-24 (prevalecen sobre el
   cuerpo).
 - Continuación 2026-09-25: rama `claude/audit-provenance-reports-gmtj5v` sobre main `b2ec2b8c` (PR #17 fusionada),
-  commit de código `175c8a22`; PR en borrador, no fusionada ni desplegada. Persiste las Partes IV/V atadas a la
+  commit de código `175c8a22` más las correcciones de su revisión adversarial (parcial: dos de cuatro revisores
+  no corrieron); PR en borrador, no fusionada ni desplegada. Persiste las Partes IV/V atadas a la
   versión y las exporta por referencia. Sustituye a la PR #16 (mismo objetivo sobre un almacén que main no adoptó);
   la PR #15 queda en conflicto con main y su decisión corresponde a su autor.
   [Contrato, evidencia y límites](../reviews/audit-provenance-on-main-2026-09-25.md).
