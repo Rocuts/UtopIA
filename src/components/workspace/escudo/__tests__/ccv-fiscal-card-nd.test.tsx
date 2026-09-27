@@ -1,6 +1,7 @@
 // Tarjeta del Módulo 1 (CCV): una eficiencia fiscal null es N/D (es) / N/A
-// (en) con su motivo, en un distintivo neutro. Sin rama propia, null caía en
-// el else del distintivo y se pintaba como "Baja" en rojo.
+// (en) con su motivo, en un distintivo neutro y sin ícono. Sin rama propia,
+// null caía en el else del distintivo y se pintaba como "Baja" en rojo; con el
+// ícono de "media" se leería como media.
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -34,36 +35,43 @@ function badge(html: string): string {
   return spans[spans.length - 1];
 }
 
+/** Un N/D no se parece a ninguna clase: color neutro y sin ícono. */
+function expectNeutral(b: string) {
+  expect(b).toContain('text-n-800');
+  expect(b).not.toMatch(/text-(danger|warning|success)/);
+  expect(b).not.toContain('<svg');
+}
+
 describe('CcvFiscalCard — eficiencia fiscal N/D', () => {
-  it('es: null se muestra N/D, neutro y con su motivo', () => {
+  it('es: null se muestra N/D, neutro, sin ícono y con su motivo', () => {
     const html = render('es', null);
     const b = badge(html);
     expect(b).toContain('N/D');
     expect(b).not.toMatch(/Baja|Media|Alta/);
-    expect(b).not.toContain('text-danger');
-    expect(b).not.toContain('text-warning');
-    expect(b).toContain('text-n-800');
+    expectNeutral(b);
     expect(html).toContain('No determinable: el impuesto de referencia (F02) no es positivo');
   });
 
-  it('en: null se muestra N/A, no la etiqueta en español ni una clase', () => {
+  it('en: null se muestra N/A, neutro, sin ícono y con su motivo', () => {
     const html = render('en', null);
     const b = badge(html);
     expect(b).toContain('N/A');
     expect(b).not.toContain('N/D');
     expect(b).not.toMatch(/Low|Medium|High/);
+    expectNeutral(b);
     expect(html).toContain('Not determinable: the reference tax (F02) is not positive');
   });
 
   it.each([
-    ['alta', 'Alta', 'text-success'],
-    ['media', 'Media', 'text-warning'],
-    ['baja', 'Baja', 'text-danger'],
-  ] as const)('una clase determinada (%s) se sigue mostrando igual y sin motivo N/D', (clase, etiqueta, color) => {
+    ['alta', 'Alta', 'text-success', 'lucide-trending-up'],
+    ['media', 'Media', 'text-warning', 'lucide-minus'],
+    ['baja', 'Baja', 'text-danger', 'lucide-trending-down'],
+  ] as const)('una clase determinada (%s) se sigue mostrando igual y sin motivo N/D', (clase, etiqueta, color, icono) => {
     const html = render('es', clase);
     const b = badge(html);
     expect(b).toContain(etiqueta);
     expect(b).toContain(color);
+    expect(b).toContain(icono);
     expect(html).not.toContain('No determinable');
   });
 });
