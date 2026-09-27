@@ -111,13 +111,13 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 /**
  * Normaliza un identificador que va a viajar a una columna `uuid`.
  *
- * Por qué existe: `getCurrentWorkspaceId()` devuelve la cookie
- * `utopia_workspace_id` TAL CUAL en el camino anónimo
- * (src/lib/db/workspace.ts:155 — `requireWorkspace()` sí la valida contra
- * `UUID_V4_RE` en la línea 159, `getCurrentWorkspaceId()` no). Un valor corrupto
- * llegaría al `INSERT` y Postgres abortaría con `invalid input syntax for type
- * uuid` — la fila se perdería igual, pero con un error opaco. Filtrando aquí,
- * el caso cae en la vía degradada con una razón legible.
+ * Por qué existe: defensa en profundidad. `getCurrentWorkspaceId()` ya valida
+ * el formato y resuelve contra la DB (src/lib/db/workspace.ts), pero el
+ * identificador puede llegar por otros caminos (contexto de telemetría,
+ * llamadores futuros). Un valor corrupto llegaría al `INSERT` y Postgres
+ * abortaría con `invalid input syntax for type uuid` — la fila se perdería
+ * igual, pero con un error opaco. Filtrando aquí, el caso cae en la vía
+ * degradada con una razón legible.
  */
 export function asTelemetryUuid(value: unknown): string | null {
   return typeof value === 'string' && UUID_RE.test(value) ? value : null;

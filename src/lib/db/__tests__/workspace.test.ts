@@ -19,6 +19,11 @@
 //       devolver filas distintas entre requests (cambio de plan, VACUUM,
 //       índice nuevo) — el usuario "cambiaría de empresa" sin hacer nada.
 //
+//   (4) La fase la decide `isAuthConfigured()`, como en el proxy y en
+//       `requireAuthSession()`: con cualquiera de los nombres de secreto que
+//       acepta BetterAuth el tenant sale de la sesión, y sin sesión válida los
+//       tres resolutores fallan cerrado, sin leer la cookie anónima.
+//
 // Todo el I/O está mockeado; el WHERE y el ORDER BY se inspeccionan
 // renderizando el SQL de Drizzle con PgDialect.
 // ---------------------------------------------------------------------------
@@ -39,7 +44,8 @@ let setThrows = false;
 
 vi.mock('next/headers', () => ({
   headers: async () => new Headers(),
-  cookies: async () => ({
+  // vi.fn: las pruebas de fase 2 comprueban que el jar ni se abre.
+  cookies: vi.fn(async () => ({
     get: (name: string) =>
       cookieValue === undefined ? undefined : { name, value: cookieValue },
     set: (name: string, value: string, options: Record<string, unknown>) => {
@@ -51,13 +57,21 @@ vi.mock('next/headers', () => ({
         throw new Error('Cookies can only be modified in a Server Action or Route Handler');
       }
     },
-  }),
+  })),
 }));
 
-// BetterAuth — sesión controlable desde el test.
+// BetterAuth — sesión controlable desde el test (también su fallo).
 let mockSession: { user: { id: string } } | null = null;
+let sessionLookupThrows = false;
 vi.mock('@/lib/auth/config', () => ({
-  auth: { api: { getSession: async () => mockSession } },
+  auth: {
+    api: {
+      getSession: vi.fn(async () => {
+        if (sessionLookupThrows) throw new Error('session store unavailable');
+        return mockSession;
+      }),
+    },
+  },
 }));
 
 // ---------------------------------------------------------------------------
@@ -96,22 +110,38 @@ vi.mock('@/lib/db/client', () => ({
 }));
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
+import { cookies } from 'next/headers';
+import { auth } from '@/lib/auth/config';
 import {
   getOrCreateWorkspace,
   requireWorkspace,
   getCurrentWorkspaceId,
+  WorkspaceAuthRequiredError,
 } from '../workspace';
 
 const dialect = new PgDialect();
 function sqlText(fragment: unknown): string {
   return dialect.sqlToQuery(fragment as SQL).sql.toLowerCase();
 }
+function sqlParams(fragment: unknown): unknown[] {
+  return dialect.sqlToQuery(fragment as SQL).params;
+}
 
 const VALID_UUID = '11111111-1111-4111-8111-111111111111';
 const WS_ROW = { id: VALID_UUID, name: 'ACME SAS', userId: null };
 const NOVENTA_DIAS = 60 * 60 * 24 * 90;
 
-const ORIGINAL_SECRET = process.env.BETTER_AUTH_SECRET;
+// Los nombres que acepta `isAuthConfigured()` (src/lib/auth/enabled.ts).
+const SECRET_NAMES = ['BETTER_AUTH_SECRET', 'AUTH_SECRET', 'BETTER_AUTH_SECRETS'] as const;
+
+/** Fase 1 por defecto, aunque el entorno del desarrollador exporte un secreto. */
+function stubPhase(secretName: (typeof SECRET_NAMES)[number] | null, value = 'secreto-de-test') {
+  for (const name of SECRET_NAMES) vi.stubEnv(name, '');
+  if (secretName) vi.stubEnv(secretName, value);
+}
+
+const getSession = vi.mocked(auth.api.getSession);
+const cookiesFn = vi.mocked(cookies);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -121,12 +151,12 @@ beforeEach(() => {
   cookieValue = undefined;
   setThrows = false;
   mockSession = null;
-  delete process.env.BETTER_AUTH_SECRET;
+  sessionLookupThrows = false;
+  stubPhase(null);
 });
 
 afterEach(() => {
-  if (ORIGINAL_SECRET === undefined) delete process.env.BETTER_AUTH_SECRET;
-  else process.env.BETTER_AUTH_SECRET = ORIGINAL_SECRET;
+  vi.unstubAllEnvs();
 });
 
 // ---------------------------------------------------------------------------
@@ -204,7 +234,7 @@ describe('cookie utopia_workspace_id', () => {
 
 describe('selección determinista por user_id', () => {
   beforeEach(() => {
-    process.env.BETTER_AUTH_SECRET = 'secret-de-test';
+    stubPhase('BETTER_AUTH_SECRET');
     mockSession = { user: { id: 'u-1' } };
   });
 
@@ -225,4 +255,134 @@ describe('selección determinista por user_id', () => {
       expect(order).toContain('created_at');
     });
   }
+});
+
+// ---------------------------------------------------------------------------
+// (4) Contrato de fases: la misma fuente que el proxy y requireAuthSession().
+// ---------------------------------------------------------------------------
+
+const RESOLVERS: Array<[string, () => Promise<unknown>]> = [
+  ['getOrCreateWorkspace', () => getOrCreateWorkspace()],
+  ['requireWorkspace', () => requireWorkspace()],
+  ['getCurrentWorkspaceId', () => getCurrentWorkspaceId()],
+];
+
+const SESSION_ROW = { id: '22222222-2222-4222-8222-222222222222', name: 'Cuenta', userId: 'u-1' };
+
+describe.each(SECRET_NAMES)('fase 2 con %s — sesión válida', (secretName) => {
+  beforeEach(() => {
+    stubPhase(secretName);
+    mockSession = { user: { id: 'u-1' } };
+    // La cookie anónima apunta a OTRO workspace: no debe consultarse.
+    cookieValue = VALID_UUID;
+  });
+
+  it.each(RESOLVERS)('%s() resuelve por user_id de la sesión, sin abrir la cookie', async (_n, run) => {
+    selectRows = [SESSION_ROW];
+
+    const result = await run();
+
+    expect(getSession).toHaveBeenCalledTimes(1);
+    expect(cookiesFn).not.toHaveBeenCalled();
+    expect(setCalls).toHaveLength(0);
+    expect(captures).toHaveLength(1);
+    // El mock de la DB ignora el WHERE: se afirma sobre la consulta, no sobre la fila.
+    const where = sqlText(captures[0].where);
+    expect(where).toContain('"user_id" =');
+    expect(where).not.toContain('is null');
+    expect(sqlParams(captures[0].where)).toEqual(['u-1']);
+    expect(result === SESSION_ROW || result === SESSION_ROW.id).toBe(true);
+  });
+});
+
+describe.each(SECRET_NAMES)('fase 2 con %s — sin sesión falla cerrado', (secretName) => {
+  beforeEach(() => {
+    stubPhase(secretName);
+    mockSession = null;
+    // Una cookie anónima válida y sin reclamar: en fase 1 se resolvería.
+    cookieValue = VALID_UUID;
+    selectRows = [WS_ROW];
+  });
+
+  it('requireWorkspace() devuelve null sin consultar la cookie ni la DB', async () => {
+    expect(await requireWorkspace()).toBeNull();
+    expect(getSession).toHaveBeenCalledTimes(1);
+    expect(cookiesFn).not.toHaveBeenCalled();
+    expect(captures).toHaveLength(0);
+  });
+
+  it('getCurrentWorkspaceId() devuelve null sin consultar la cookie ni la DB', async () => {
+    expect(await getCurrentWorkspaceId()).toBeNull();
+    expect(getSession).toHaveBeenCalledTimes(1);
+    expect(cookiesFn).not.toHaveBeenCalled();
+    expect(captures).toHaveLength(0);
+  });
+
+  it('getOrCreateWorkspace() lanza WorkspaceAuthRequiredError sin leer, crear ni fijar cookie', async () => {
+    const err = await getOrCreateWorkspace().then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(WorkspaceAuthRequiredError);
+    // Tres rutas devuelven err.message en su 500: el texto es contrato.
+    expect((err as Error).message).toBe('Authentication required.');
+    expect(cookiesFn).not.toHaveBeenCalled();
+    expect(captures).toHaveLength(0);
+    expect(insertReturning).not.toHaveBeenCalled();
+    expect(setCalls).toHaveLength(0);
+  });
+});
+
+describe('fase 2 — la lectura de la sesión falla', () => {
+  it.each([
+    ['BETTER_AUTH_SECRET', 'secreto-de-test'],
+    // Mal formado para la rotación: BetterAuth lanza al leer la sesión.
+    ['BETTER_AUTH_SECRETS', 'malformado'],
+  ] as const)('con %s: los tres resolutores fallan cerrado', async (secretName, value) => {
+    stubPhase(secretName, value);
+    sessionLookupThrows = true;
+    cookieValue = VALID_UUID;
+    selectRows = [WS_ROW];
+
+    expect(await requireWorkspace()).toBeNull();
+    expect(await getCurrentWorkspaceId()).toBeNull();
+    await expect(getOrCreateWorkspace()).rejects.toBeInstanceOf(WorkspaceAuthRequiredError);
+
+    expect(getSession).toHaveBeenCalledTimes(3);
+    expect(cookiesFn).not.toHaveBeenCalled();
+    expect(captures).toHaveLength(0);
+    expect(insertReturning).not.toHaveBeenCalled();
+    expect(setCalls).toHaveLength(0);
+  });
+});
+
+describe('fase 1 — sin ningún secreto', () => {
+  it.each(RESOLVERS)('%s() no consulta la sesión y sigue el camino cookie', async (_n, run) => {
+    cookieValue = VALID_UUID;
+    selectRows = [WS_ROW];
+    // Aunque hubiera una sesión, en fase 1 no se lee.
+    mockSession = { user: { id: 'u-1' } };
+
+    const result = await run();
+
+    expect(getSession).not.toHaveBeenCalled();
+    expect(cookiesFn).toHaveBeenCalledTimes(1);
+    expect(captures).toHaveLength(1);
+    const where = sqlText(captures[0].where);
+    expect(where).toContain('"id" =');
+    expect(where).toContain('is null');
+    expect(result === WS_ROW || result === WS_ROW.id).toBe(true);
+  });
+
+  it('getOrCreateWorkspace() sin cookie crea el workspace anónimo y fija la cookie', async () => {
+    selectRows = [];
+
+    const ws = await getOrCreateWorkspace();
+
+    expect(ws).toEqual({ id: 'ws-nuevo' });
+    expect(insertReturning).toHaveBeenCalledTimes(1);
+    expect(setCalls).toHaveLength(1);
+    expect(setCalls[0].value).toBe('ws-nuevo');
+    expect(getSession).not.toHaveBeenCalled();
+  });
 });

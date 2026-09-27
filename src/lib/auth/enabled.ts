@@ -1,9 +1,10 @@
 // ---------------------------------------------------------------------------
 // isAuthConfigured — única fuente de verdad del contrato de fases de auth.
 //
-//   Fase 1 (BETTER_AUTH_SECRET ausente): la app corre anónima (cookie
+//   Fase 1 (ninguno de SECRET_VARS presente): la app corre anónima (cookie
 //     `utopia_workspace_id`). BetterAuth NO se monta.
-//   Fase 2 (BETTER_AUTH_SECRET presente): BetterAuth es la autoridad.
+//   Fase 2 (alguno presente): BetterAuth es la autoridad; la cookie anónima
+//     deja de identificar al tenant (src/lib/db/workspace.ts).
 //
 // Por qué existe este módulo y no un `process.env` inline: BetterAuth 1.6
 // NO lanza al construirse — `betterAuth()` devuelve un objeto cuyo
