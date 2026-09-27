@@ -135,7 +135,8 @@ export interface CcvModuleResult {
     f09Pct: number;
     f10Pct: number;
     alertaTasaMinima: CcvAlertaTasaMinima;
-    eficienciaFiscal: 'alta' | 'media' | 'baja';
+    /** null = N/D: sin impuesto de referencia positivo o sin cobertura válida. */
+    eficienciaFiscal: 'alta' | 'media' | 'baja' | null;
   };
   warnings: string[];
 }

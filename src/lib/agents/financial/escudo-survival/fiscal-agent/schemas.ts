@@ -65,7 +65,7 @@ export const ccvModuleSchema = z.object({
     f09Pct: z.number(),
     f10Pct: z.number(),
     alertaTasaMinima: ccvAlertaTasaMinimaSchema,
-    eficienciaFiscal: z.enum(['alta', 'media', 'baja']),
+    eficienciaFiscal: z.enum(['alta', 'media', 'baja']).nullable(),
   }),
   warnings: z.array(warningString).max(20),
 });

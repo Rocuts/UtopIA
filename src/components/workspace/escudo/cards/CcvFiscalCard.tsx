@@ -94,10 +94,15 @@ export function CcvFiscalCard({ data, loading, error, t, language = 'es' }: CcvF
       ]
     : [];
 
+  // null = N/D (sin impuesto de referencia positivo o sin cobertura válida):
+  // sin ícono ni color de clase, para que no se lea como media ni baja.
+  const eficiencia = data?.data.eficienciaFiscal ?? null;
   const EficienciaIcon =
-    data?.data.eficienciaFiscal === 'alta'
+    eficiencia === null
+      ? null
+      : eficiencia === 'alta'
       ? TrendingUp
-      : data?.data.eficienciaFiscal === 'baja'
+      : eficiencia === 'baja'
       ? TrendingDown
       : Minus;
 
@@ -213,23 +218,36 @@ export function CcvFiscalCard({ data, loading, error, t, language = 'es' }: CcvF
           )}
 
           {/* Eficiencia fiscal badge */}
-          <div className="flex items-center justify-between gap-3 pt-1">
-            <span className="text-xs text-n-500">{t.eficiencia}</span>
-            <span
-              className={cn(
-                'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium uppercase tracking-label',
-                data.data.eficienciaFiscal === 'alta'
-                  ? 'bg-[rgb(34_197_94_/_0.12)] text-success ring-1 ring-[rgb(34_197_94_/_0.3)]'
-                  : data.data.eficienciaFiscal === 'media'
-                  ? 'bg-[rgb(234_179_8_/_0.14)] text-warning ring-1 ring-[rgb(234_179_8_/_0.35)]'
-                  : 'bg-[rgb(239_68_68_/_0.14)] text-danger ring-1 ring-[rgb(239_68_68_/_0.4)]',
-              )}
-            >
-              {EficienciaIcon && <EficienciaIcon className="h-3 w-3" strokeWidth={2} aria-hidden="true" />}
-              {language === 'es'
-                ? data.data.eficienciaFiscal === 'alta' ? 'Alta' : data.data.eficienciaFiscal === 'media' ? 'Media' : 'Baja'
-                : data.data.eficienciaFiscal === 'alta' ? 'High' : data.data.eficienciaFiscal === 'media' ? 'Medium' : 'Low'}
-            </span>
+          <div className="flex flex-col gap-1 pt-1">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs text-n-500">{t.eficiencia}</span>
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium uppercase tracking-label',
+                  eficiencia === null
+                    ? 'bg-n-100 text-n-800 ring-1 ring-n-300'
+                    : eficiencia === 'alta'
+                    ? 'bg-[rgb(34_197_94_/_0.12)] text-success ring-1 ring-[rgb(34_197_94_/_0.3)]'
+                    : eficiencia === 'media'
+                    ? 'bg-[rgb(234_179_8_/_0.14)] text-warning ring-1 ring-[rgb(234_179_8_/_0.35)]'
+                    : 'bg-[rgb(239_68_68_/_0.14)] text-danger ring-1 ring-[rgb(239_68_68_/_0.4)]',
+                )}
+              >
+                {EficienciaIcon && <EficienciaIcon className="h-3 w-3" strokeWidth={2} aria-hidden="true" />}
+                {eficiencia === null
+                  ? language === 'es' ? 'N/D' : 'N/A'
+                  : language === 'es'
+                  ? eficiencia === 'alta' ? 'Alta' : eficiencia === 'media' ? 'Media' : 'Baja'
+                  : eficiencia === 'alta' ? 'High' : eficiencia === 'media' ? 'Medium' : 'Low'}
+              </span>
+            </div>
+            {eficiencia === null && (
+              <p className="text-xs text-n-700">
+                {language === 'es'
+                  ? 'No determinable: el impuesto de referencia (F02) no es positivo o la cobertura (F10) no es válida.'
+                  : 'Not determinable: the reference tax (F02) is not positive or the coverage (F10) is not valid.'}
+              </p>
+            )}
           </div>
         </div>
       ) : null}
