@@ -54,7 +54,7 @@ cifra. Los umbrales 80/50 no están certificados como medida de eficiencia tribu
 | Mutaciones | 10 del resolutor, 14 de la eficiencia y 2 de la tarjeta: cada una hace fallar al menos una prueba |
 | `tsc`, `lint:strict-mode` | Correctos |
 | `npm run lint` | 0 errores, 158 avisos (los mismos de `main`) |
-| `npm run build` | Ver la PR (credenciales ficticias del CI) |
+| `npm run build` | Correcto con las credenciales ficticias del CI (145 páginas generadas) |
 
 ## Revisión adversarial
 
