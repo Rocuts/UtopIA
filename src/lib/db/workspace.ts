@@ -1,6 +1,7 @@
 import 'server-only';
 import { cookies, headers } from 'next/headers';
 import { eq, and, asc, isNull } from 'drizzle-orm';
+import { isAuthConfigured } from '@/lib/auth/enabled';
 import { getDb } from './client';
 import { workspaces, type Workspace } from './schema';
 
@@ -57,19 +58,31 @@ function renewWorkspaceCookie(jar: CookieJar, id: string): void {
 // ---------------------------------------------------------------------------
 // Auth-aware workspace resolution
 //
-// When BETTER_AUTH_SECRET is set, we resolve the workspace via the
-// authenticated user (user_id column on workspaces). Otherwise we fall back
-// to the anonymous cookie tenant. Both paths remain supported so the app
-// works in dev without auth configured.
+// La fase la decide `isAuthConfigured()` (src/lib/auth/enabled.ts), la misma
+// fuente que usan el proxy, `requireAuthSession()` y /api/auth/[...all]: el
+// resolutor nunca puede ser más laxo que la puerta que tiene delante.
 //
-// Migration path for existing anonymous users:
-//   On first login, call `claimAnonymousWorkspace(userId, cookieWorkspaceId)`
-//   to link the anonymous workspace to the real user.
+//   Fase 1 (sin secreto): el tenant es la cookie anónima.
+//   Fase 2 (con secreto): el tenant es el workspace del usuario de la sesión
+//     (columna user_id). Sin sesión válida NO hay tenant: la cookie anónima
+//     deja de ser respaldo y los tres resolutores fallan cerrado.
+//
+// Los datos de la fase 1 se heredan al registrarse: el hook
+// `user.create.after` de src/lib/auth/config.ts lee la cookie por su cuenta y
+// llama a `claimAnonymousWorkspace(userId, cookieWorkspaceId)`.
 // ---------------------------------------------------------------------------
+
+/** Fase 2 sin sesión válida: no hay tenant que resolver ni que crear. */
+export class WorkspaceAuthRequiredError extends Error {
+  constructor() {
+    super('Authentication required.');
+    this.name = 'WorkspaceAuthRequiredError';
+  }
+}
 
 // Lazy import to avoid pulling pg.Pool into Edge runtimes.
 async function getAuthSession(): Promise<{ userId: string } | null> {
-  if (!process.env.BETTER_AUTH_SECRET) return null;
+  if (!isAuthConfigured()) return null;
   try {
     const { auth } = await import('@/lib/auth/config');
     const h = await headers();
@@ -83,7 +96,7 @@ async function getAuthSession(): Promise<{ userId: string } | null> {
 export async function getOrCreateWorkspace(): Promise<Workspace> {
   const db = getDb();
 
-  // ── Auth path (BETTER_AUTH_SECRET set + valid session) ──────────────────
+  // ── Auth path (isAuthConfigured() + valid session) ─────────────────────
   const session = await getAuthSession();
   if (session) {
     const found = await db
@@ -108,7 +121,11 @@ export async function getOrCreateWorkspace(): Promise<Workspace> {
     return created;
   }
 
-  // ── Anonymous cookie path (dev / no auth configured) ────────────────────
+  // Fase 2 sin sesión: ni se reutiliza ni se crea un tenant anónimo. Va antes
+  // de leer la cookie para que no haya lectura, INSERT ni Set-Cookie.
+  if (isAuthConfigured()) throw new WorkspaceAuthRequiredError();
+
+  // ── Anonymous cookie path (fase 1: auth no configurada) ─────────────────
   const jar = await cookies();
   const existingId = jar.get(COOKIE_NAME)?.value;
 
@@ -164,6 +181,10 @@ export async function getCurrentWorkspaceId(): Promise<string | null> {
   // cierra el fail-open del `catch` de `getAuthSession()`: si la lectura de
   // sesión falla de forma transitoria en fase 2, el camino cookie ya no alcanza
   // un workspace con dueño — falla cerrado.
+  //
+  // En fase 2 el camino cookie ni siquiera se consulta: sin sesión válida (o si
+  // su lectura falla) no hay tenant, tampoco uno anónimo sin reclamar.
+  if (isAuthConfigured()) return null;
   const jar = await cookies();
   const id = jar.get(COOKIE_NAME)?.value;
   if (!id || !UUID_V4_RE.test(id)) return null;
@@ -182,8 +203,9 @@ const UUID_V4_RE =
 
 /**
  * Returns the workspace for the current request, or null if unauthenticated.
- * Auth path: resolves via BetterAuth session (BETTER_AUTH_SECRET set).
- * Cookie path: resolves via httpOnly cookie (legacy / dev).
+ * Auth path: resolves via BetterAuth session (isAuthConfigured()); without a
+ * valid session it returns null and never falls back to the cookie.
+ * Cookie path: resolves via httpOnly cookie (fase 1 only).
  */
 export async function requireWorkspace(): Promise<Workspace | null> {
   const db = getDb();
@@ -200,6 +222,7 @@ export async function requireWorkspace(): Promise<Workspace | null> {
     return found[0] ?? null;
   }
 
+  if (isAuthConfigured()) return null;
   const jar = await cookies();
   const id = jar.get(COOKIE_NAME)?.value;
   if (!id || !UUID_V4_RE.test(id)) return null;
@@ -218,7 +241,8 @@ export async function requireWorkspace(): Promise<Workspace | null> {
 
 /**
  * Link an anonymous workspace to a newly-authenticated user.
- * Call this from the post-login redirect handler.
+ * Called from the BetterAuth `user.create.after` hook (src/lib/auth/config.ts),
+ * which reads the anonymous cookie itself.
  * No-op if the workspace is already claimed or doesn't exist.
  */
 export async function claimAnonymousWorkspace(

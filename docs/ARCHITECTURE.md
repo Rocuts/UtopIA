@@ -128,11 +128,11 @@ schemas (`/api/v1/openapi.json`; `openapi.test.ts` enforces route↔contract syn
 
 ## State management
 
-- **Server (MVP, no auth)**: Neon Postgres via Vercel Marketplace, accessed through Drizzle ORM (`drizzle-orm/neon-http`). Schema in `src/lib/db/schema.ts` (4 tables: `workspaces`, `erp_credentials`, `reports`, `alert_thresholds`). Lazy `getDb()` in `src/lib/db/client.ts` (no Proxy — breaks adapters that introspect methods). Tenant identification is anonymous via httpOnly cookie `utopia_workspace_id` set by `getOrCreateWorkspace()` in `src/lib/db/workspace.ts`. Migrations run with `npm run db:push` (uses `dotenv-cli` to load `.env.local`).
+- **Server (MVP, no auth)**: Neon Postgres via Vercel Marketplace, accessed through Drizzle ORM (`drizzle-orm/neon-http`). Schema in `src/lib/db/schema.ts` (4 tables: `workspaces`, `erp_credentials`, `reports`, `alert_thresholds`). Lazy `getDb()` in `src/lib/db/client.ts` (no Proxy — breaks adapters that introspect methods). Tenant identification follows the auth phase decided by `isAuthConfigured()` (`src/lib/auth/enabled.ts`): in phase 1 (no auth secret) it is anonymous via httpOnly cookie `utopia_workspace_id` set by `getOrCreateWorkspace()` in `src/lib/db/workspace.ts`; in phase 2 it is the session user's workspace (`workspaces.user_id`), and without a valid session there is no tenant (the resolvers return null or throw `WorkspaceAuthRequiredError`; the cookie is not consulted). Migrations run with `npm run db:push` (uses `dotenv-cli` to load `.env.local`).
 - **Server (legacy, in-flight)**: agent orchestrators are stateless per request. Conversation history, intake drafts, and ERP credentials live client-side and will migrate to DB incrementally.
 - **Client**: `WorkspaceContext` (active case, use case, documents, risk), `LanguageContext` (es/en), conversation history in localStorage. Intake drafts via `useIntakePersistence` (debounce 500ms).
 - SSE progress events flow from orchestrator → API route → `ChatThread.tsx` for real-time status indicators.
-- **Adding auth later**: add a `users` table + `workspace_members` join table; the cookie-based workspace flow continues to work for anonymous sessions and gets migrated on first login.
+- **Auth (phase 2)**: BetterAuth (`src/lib/auth/config.ts`). At sign-up the `user.create.after` hook links the phase-1 cookie workspace to the new account (`claimAnonymousWorkspace`); after that the cookie no longer identifies the tenant.
 
 ## Adding new agents
 

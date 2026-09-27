@@ -1,6 +1,6 @@
 # Continuidad — exactitud financiera y normativa del SaaS
 
-Actualizado: 2026-09-25 (continuación: procedencia de las Partes IV/V sobre main `b2ec2b8c`, ver *Referencias*).
+Actualizado: 2026-09-27 (continuación: arreglos de la PR #15 portados sobre main `c908b783`, ver *Referencias*).
 Alcance previo: auditoría integral multiagente desde **main** `dea0329` (PR #14 fusionada), con foco en
 el módulo NIIF (balance de prueba → estados → informe → exportaciones), métricas, tributario, laboral, valoración y
 normativa; fase 1 (hallazgos y correcciones) y fase 2 (cierre de pendientes y re-auditoría final). Informe y evidencia:
@@ -24,10 +24,13 @@ normativa; fase 1 (hallazgos y correcciones) y fase 2 (cierre de pendientes y re
   cuerpo).
 - Continuación 2026-09-25: rama `claude/audit-provenance-reports-gmtj5v` sobre main `b2ec2b8c` (PR #17 fusionada),
   commit de código `175c8a22` más las correcciones de su revisión adversarial (parcial: dos de cuatro revisores
-  no corrieron); PR en borrador, no fusionada ni desplegada. Persiste las Partes IV/V atadas a la
-  versión y las exporta por referencia. Sustituye a la PR #16 (mismo objetivo sobre un almacén que main no adoptó);
-  la PR #15 queda en conflicto con main y su decisión corresponde a su autor.
-  [Contrato, evidencia y límites](../reviews/audit-provenance-on-main-2026-09-25.md).
+  no corrieron). Persiste las Partes IV/V atadas a la versión y las exporta por referencia. Fusionada en `main` como
+  PR #18 (`c908b783`); sustituyó a la PR #16. [Contrato, evidencia y límites](../reviews/audit-provenance-on-main-2026-09-25.md).
+- Continuación 2026-09-27: la PR #15 se cerró sin fusionar; sus dos arreglos que faltaban en `main` se portaron en
+  la misma rama, reiniciada desde `c908b783`: resolución del tenant según `isAuthConfigured()` (`28370da9`) y
+  eficiencia fiscal del CCV N/D sin impuesto de referencia positivo (`b6ec5b03`, pruebas reforzadas en `29e0e7e9`).
+  PR abierta para revisión, no fusionada ni desplegada. Revisión adversarial completa (4 revisores, 2 verificadores
+  por hallazgo). [Contrato, evidencia y límites](../reviews/port-pr15-fixes-2026-09-27.md).
 
 ## Lo que ya se implementó (no rehacer sin regresión probada)
 
@@ -50,11 +53,15 @@ normativa; fase 1 (hallazgos y correcciones) y fase 2 (cierre de pendientes y re
   referencia, del mismo workspace y versión, completos y emparejados en ambos sentidos, y sólo entonces abre el
   gate `assuranceProvenance` del composer. Excel con hojas `Auditoria`/`Meta-auditoria`; el sello acredita la
   procedencia, no el contenido. La UI ya no hereda la auditoría del informe anterior tras recargar.
+- Tenant por fase de autenticación (`src/lib/db/workspace.ts`): la fase la decide `isAuthConfigured()`, como en el
+  proxy y en `requireAuthSession()`; en fase 2 sin sesión válida no hay tenant (null o `WorkspaceAuthRequiredError`)
+  y la cookie anónima no se consulta. La fase 1 no cambia.
 - Narrativa: validador de prosa en notas, acta y Parte II (corpus de 89 frases honestas y 58 falsas); KPIs sin ancla
   N/D; R6–R8 del HTML con ORI y comparativos fila por fila.
 - Métricas: EBITDA único, ingresos operacionales netos como denominador, anualización y N/D con motivo; formato es-CO.
 - Tributario/normativo: TTD N/D sin ID/UD y "no aplica" en el SIMPLE; regla única de crédito de renta; derogatorias;
-  reserva legal por tipo societario; sanciones y mora (usura del mes − 2 pp o N/D); retención 2/10 UVT; 35 % desde el
+  reserva legal por tipo societario; eficiencia fiscal del CCV N/D sin impuesto de referencia positivo (antes
+  'media' inventada); sanciones y mora (usura del mes − 2 pp o N/D); retención 2/10 UVT; 35 % desde el
   AG 2022; M3/M5/M6 conectados; ajuste de precios de transferencia N/D sin base; tope del Art. 258 por escenario;
   Capa 2 catalogada desde el corpus.
 - Contabilidad/ERP: reversos netean a cero, cierre anual en periodo 13, periodos sin solapamiento y dentro del mes,
@@ -68,13 +75,18 @@ normativa; fase 1 (hallazgos y correcciones) y fase 2 (cierre de pendientes y re
    `informe-niif-2026-09-24.4`, versión v2): lista en *Operación* del informe.
 4. Registrar cada mes la usura certificada en `TASA_USURA_CERTIFICADA` (hoy sólo 2026-08; sin ella la mora es N/D).
 5. Revisión visual de un PDF y un Excel reales.
+6. Antes de desplegar la resolución del tenant por fase, confirmar en privado qué variable de secreto de
+   autenticación usa cada entorno (sólo el nombre); el motivo se entregó al dueño fuera del repositorio.
 
 ## Pendientes
 
 Ver la sección *Pendientes* del informe (cada uno con motivo y dueño). Los más relevantes: filas de dinero del
 dashboard de la Parte II sin ancla (exigen N/D en el contrato), límites del validador de prosa (inglés, redacciones
 fuera de sus listas), `/api/fiscal-audit-opinion` con la Parte IV como texto del cliente, reintentos de generación de
-las Partes IV/V que vuelven a correr los agentes, aislamiento probado sin sesión real, saldos acumulados
+las Partes IV/V que vuelven a correr los agentes, aislamiento probado sin sesión real, F10 del CCV mostrada como
+0,0 % cuando F02 ≤ 0 (la eficiencia ya es N/D), lecturas directas del nombre del secreto fuera de los resolutores
+(asserts de arranque y facturación) por alinear con `isAuthConfigured()`, `WorkspaceAuthRequiredError` sin traducir
+a 401 en las rutas, saldos acumulados
 de ERPs que sólo entregan movimientos, nómina de independientes, normas 2026 sin fuente primaria, y verificación con el
 LLM real y visual del PDF/Excel.
 

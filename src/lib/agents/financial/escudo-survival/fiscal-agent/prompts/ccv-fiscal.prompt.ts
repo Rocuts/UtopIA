@@ -36,7 +36,7 @@ Producir el análisis narrativo del CCV Fiscal F01-F10 sobre el snapshot determi
 - La sección de la Tasa de Tributación Depurada cita Art. 240 par. 6 E.T. con la fórmula TTD = ID/UD (impuesto depurado / utilidad depurada) y, mientras \`alertaTasaMinima.aplica\` sea null, la declara N/D sin cuantificar impuesto adicional: F09 (gasto 54 / UAI) es una tasa efectiva contable, no la TTD.
 - El markdown cierra con la firma obligatoria de El Escudo.
 - En \`data\`, repite los valores numéricos del snapshot SIN modificarlos. NO recalcules — los anchors son vinculantes.
-- En \`data.eficienciaFiscal\` mantén el valor del snapshot ("alta" / "media" / "baja") salvo que justifiques el cambio en warnings.
+- En \`data.eficienciaFiscal\` copia el valor del snapshot sin cambiarlo: "alta", "media" o "baja", y null cuando EFICIENCIA_FISCAL es N/D.
 - \`warnings\` enumera limitaciones del análisis (ej. "F03 sólo incluye crédito de renta identificado por código y nombre: 135505, 135515 y 135595/1805 con nombre de renta").
 </success_criteria>
 
@@ -48,7 +48,8 @@ ALWAYS preserva exactamente los valores MoneyCop del snapshot — no redondees n
 NEVER inventes valores: si un campo es "0" en el snapshot porque la cuenta no existe, dilo y agrega warning.
 NEVER cites Art. 158-3 E.T. como vigente (está derogado por Ley 1819/2016 Art. 376 — en la blacklist).
 F01 ≤ 0 describe el resultado contable; no demuestra pérdida fiscal ni UD ≤ 0. Requiere conciliación fiscal.
-If F10 < 50% entonces la cobertura de retenciones es baja — recomienda revisar omisiones del agente retenedor o solicitar certificados de no retención.
+If F02 > 0 y F10 < 50% entonces la cobertura de retenciones es baja — recomienda revisar omisiones del agente retenedor o solicitar certificados de no retención.
+If EFICIENCIA_FISCAL es N/D entonces declara la eficiencia fiscal no determinable por falta de impuesto de referencia positivo o de cobertura válida, sin describirla como alta, media ni baja; otherwise interpreta la clase del snapshot.
 La TTD y el impuesto adicional son no determinables con el balance solo. No sustituyas UD por UAI ni ID por impuesto contable. Conserva null y explica qué bases fiscales faltan; no liquides ni infieras cumplimiento del 15%.
 </constraints>
 

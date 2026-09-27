@@ -42,14 +42,16 @@ export function buildAlertaTasaMinima(anchor: FiscalAnchorBlock): CcvAlertaTasaM
  *   50% ≤ F10 < 80%  → media
  *   F10 < 50%  → baja
  *
- * Si F02 = 0 (utilidad antes impuestos no positiva), no aplica clasificación —
- * devolvemos 'media' como placeholder neutro.
+ * Sin impuesto de referencia positivo (F02 ≤ 0) F10 no es una cobertura —
+ * el Âncora la deja en 0 por falta de denominador — y con F10 no finito o
+ * negativo tampoco hay razón válida: en ambos casos no hay clasificación y se
+ * devuelve null (N/D). Ni 'media' ni 'baja': cualquiera sería inventada.
  */
 export function clasificarEficienciaFiscal(
   anchor: FiscalAnchorBlock,
-): 'alta' | 'media' | 'baja' {
+): 'alta' | 'media' | 'baja' | null {
   const f02 = BigInt(anchor.f02);
-  if (f02 <= ZERO) return 'media';
+  if (f02 <= ZERO || !Number.isFinite(anchor.f10) || anchor.f10 < 0) return null;
   const f10 = anchor.f10;
   if (f10 >= 80) return 'alta';
   if (f10 >= 50) return 'media';
@@ -73,7 +75,8 @@ export interface CcvPrecomputedData {
   f09Pct: number;
   f10Pct: number;
   alertaTasaMinima: CcvAlertaTasaMinima;
-  eficienciaFiscal: 'alta' | 'media' | 'baja';
+  /** null = N/D: sin impuesto de referencia positivo o sin cobertura válida. */
+  eficienciaFiscal: 'alta' | 'media' | 'baja' | null;
 }
 
 /**
