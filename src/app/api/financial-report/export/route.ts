@@ -37,6 +37,9 @@ import {
   type PersistedReportResolution,
 } from '@/lib/reports/persisted-report-request';
 import { rederivePreprocessedFromRows } from '@/lib/reports/preprocessed-integrity';
+import { resolveReportWorkspaceId } from '@/lib/reports/financial-report-store';
+import { parseAuditResultRef } from '@/lib/reports/audit-result-version';
+import { loadBoundAuditResults } from '@/lib/reports/audit-result-store';
 import { versionLanguage } from '@/lib/reports/financial-report-version';
 import { readUserEdited } from '@/lib/reports/report-ref';
 import { withServerPartVerdicts } from '@/lib/reports/part-verdicts';
@@ -343,12 +346,38 @@ async function exportPersisted(
   const report = withServerRenderedPersisted(persisted.report, preprocessed, language);
   const blocked = rejectInvalidExport(report, preprocessed);
   if (blocked) return blocked;
+  // Partes IV/V: sólo resultados persistidos, por referencia, producidos sobre
+  // ESTA versión y completos. Hasta aquí el cuerpo las aportaba y el composer
+  // las descartaba (reportes-export-11: sin procedencia de servidor no se
+  // imprimen), así que ninguna descarga las incluía. Ahora el contenido del
+  // cuerpo ni siquiera llega al composer.
+  const auditRef = parseAuditResultRef(body.auditRef);
+  const qualityRef = parseAuditResultRef(body.qualityRef);
+  if (auditRef.kind === 'invalid' || qualityRef.kind === 'invalid') {
+    return NextResponse.json({ error: 'Invalid audit result reference.', code: 'AUDIT_RESULT_REF_INVALID' }, { status: 400 });
+  }
+  let bound: Extract<Awaited<ReturnType<typeof loadBoundAuditResults>>, { ok: true }> | null = null;
+  if (auditRef.kind === 'ok' || qualityRef.kind === 'ok') {
+    const loaded = await loadBoundAuditResults({
+      workspaceId: await resolveReportWorkspaceId(),
+      reportRef: { reportId: provenance.reportId, reportHash: provenance.reportHash },
+      auditRef: auditRef.kind === 'ok' ? auditRef.ref : null,
+      qualityRef: qualityRef.kind === 'ok' ? qualityRef.ref : null,
+    });
+    if (!loaded.ok) return NextResponse.json({ error: loaded.error, code: loaded.code }, { status: loaded.status });
+    bound = loaded;
+  }
+  const auditContentDropped = body.auditReport != null || body.qualityReport != null;
   // procedencia-R2-02: las cifras de la versión incluyen los ajustes
   // confirmados del Doctor de Datos; el sello los cuenta y el PDF los lista.
   const adjustments = persisted.adjustments;
+  const auditStamp = {
+    ...(bound ? { auditResults: bound.provenance } : {}),
+    ...(auditContentDropped ? { auditContentDropped: true } : {}),
+  };
   const stamp: ArtifactProvenance = isProvisionalDraft(report)
-    ? { kind: 'verified', provenance, draft: true, adjustments }
-    : { kind: 'verified', provenance, adjustments };
+    ? { kind: 'verified', provenance, draft: true, adjustments, ...auditStamp }
+    : { kind: 'verified', provenance, adjustments, ...auditStamp };
 
   if (format === 'pdf-elite') {
     let pillars = null;
@@ -367,8 +396,12 @@ async function exportPersisted(
       preprocessed: preprocessed ?? null,
       pillars,
       language,
-      auditReport: (body.auditReport as AuditReport | null | undefined) ?? null,
-      qualityReport: (body.qualityReport as QualityAssessment | null | undefined) ?? null,
+      auditReport: bound?.audit ?? null,
+      qualityReport: bound?.quality ?? null,
+      // reportes-export-11: el composer sólo imprime las Partes IV/V con esta
+      // procedencia. Se afirma únicamente para resultados persistidos que
+      // loadBoundAuditResults probó producidos sobre ESTA versión.
+      assuranceProvenance: bound ? 'server-persisted' : null,
       outputOptions: (body.outputOptions as OutputOptionsToggle | null | undefined) ?? null,
       appliedAdjustments: adjustments,
     });
@@ -381,6 +414,8 @@ async function exportPersisted(
     report: withExcelProvenance(report, stamp, language),
     preprocessed,
     language,
+    auditReport: bound?.audit ?? null,
+    qualityReport: bound?.quality ?? null,
   });
   return createExcelResponse(buffer, report.company.name, provenanceHeaders(stamp));
 }

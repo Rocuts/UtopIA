@@ -130,6 +130,15 @@ export interface AuditCoverage {
 }
 
 export interface AuditReport {
+  /**
+   * Referencia del resultado persistido (Parte IV por referencia a la versión
+   * del informe); ausente en el camino no verificado o si no se pudo guardar.
+   */
+  auditRef?: { resultId: string; resultHash: string };
+  /** `false` si un auditor falló: se muestra, pero no entra en una descarga. */
+  auditComplete?: boolean;
+  /** Si el servidor guardó el resultado y, si no, por qué. */
+  persistence?: { status: 'persisted' | 'not_persisted'; reason?: string };
   /** Company info echo */
   company: CompanyInfo;
   /** Individual auditor results */
